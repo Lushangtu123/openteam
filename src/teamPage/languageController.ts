@@ -30,6 +30,7 @@ const SKIP_SELECTOR = [
   '.message-mention',
   '.message-time-divider',
   '.reference-box',
+  '.message-search-results',
 ].join(', ')
 
 export function createLanguageSettingsController(deps: LanguageSettingsControllerDependencies): LanguageSettingsController {

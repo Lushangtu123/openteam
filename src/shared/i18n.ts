@@ -178,6 +178,15 @@ const UI_TRANSLATIONS: Record<string, string> = {
   '尚未读取消息': 'No messages read yet',
   '等待连接': 'Waiting to connect',
   '网页已连接': 'Web connected',
+  '搜索消息': 'Search messages',
+  '搜索消息（Ctrl/⌘ K）': 'Search messages (Ctrl/⌘ K)',
+  '搜索所有群聊的消息…': 'Search messages in all chats…',
+  '全部群聊': 'All chats',
+  '没有找到消息': 'No messages found',
+  '输入关键词，多个词用空格分开': 'Type keywords; separate several words with spaces',
+  '我': 'Me',
+  'AI 人员': 'AI person',
+  '系统': 'System',
   '添加图片或文件': 'Add image or file',
   '附件只在发送时上传给对应的 AI 网站或模型。': 'Attachments are uploaded to the AI site or model only when you send them.',
   '移除附件': 'Remove attachment',
@@ -892,6 +901,10 @@ function translateUiPattern(source: string): string | undefined {
   if (source.includes(' · ')) return source.split(' · ').map(part => translateUi(part, 'en')).join(' · ')
   const sendWithConnecting = source.match(/^将发送给：(.+)；正在连接：(.+)$/)
   if (sendWithConnecting) return `Will send to: ${sendWithConnecting[1]}; connecting: ${sendWithConnecting[2]}`
+  const searchCountLimited = source.match(/^找到 (\d+) 条消息，显示最近 (\d+) 条$/)
+  if (searchCountLimited) return `${searchCountLimited[1]} messages found, showing the latest ${searchCountLimited[2]}`
+  const searchCount = source.match(/^找到 (\d+) 条消息$/)
+  if (searchCount) return `${searchCount[1]} ${searchCount[1] === '1' ? 'message' : 'messages'} found`
   const uploadLimit = source.match(/^一条消息最多 (\d+) 个附件$/)
   if (uploadLimit) return `A message can have at most ${uploadLimit[1]} attachments`
   const uploadUnsupported = source.match(/^不支持这种文件：(.+)。可以上传 PNG、JPEG、WebP、GIF 图片，或文本、Markdown、代码等文本文件。$/)

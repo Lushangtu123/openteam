@@ -44,6 +44,7 @@ export interface TeamPageDomRefs {
   attachmentTrayEl: HTMLElement
   attachFileEl: HTMLButtonElement
   attachFileInputEl: HTMLInputElement
+  openMessageSearchEl: HTMLButtonElement
   themeLightEl: HTMLButtonElement
   themeDarkEl: HTMLButtonElement
   openAllNotesEl: HTMLButtonElement
@@ -215,6 +216,7 @@ export function createTeamPageDomRefs(): TeamPageDomRefs {
     attachmentTrayEl: requireElement<HTMLElement>('#attachment-tray'),
     attachFileEl: requireElement<HTMLButtonElement>('#attach-file'),
     attachFileInputEl: requireElement<HTMLInputElement>('#attach-file-input'),
+    openMessageSearchEl: requireElement<HTMLButtonElement>('#open-message-search'),
     themeLightEl: requireElement<HTMLButtonElement>('#theme-light'),
     themeDarkEl: requireElement<HTMLButtonElement>('#theme-dark'),
     openAllNotesEl: requireElement<HTMLButtonElement>('#open-all-notes'),

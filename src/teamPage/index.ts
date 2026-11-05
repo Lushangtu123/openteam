@@ -14,6 +14,7 @@ import { createExternalModelsView } from './externalModelsView'
 import { createFloatingWindowControls } from './floatingWindow'
 import { createIframeHost } from './iframeHost'
 import { applyTeamLanguage, createLanguageSettingsController } from './languageController'
+import { createMessageSearchView } from './messageSearchView'
 import { createMessagesView } from './messagesView'
 import { createNotesView } from './notesView'
 import { createPeopleLibraryView } from './peopleLibraryView'
@@ -721,6 +722,28 @@ const backupView = createBackupView({
   showSuccess,
 })
 
+const messageSearchView = createMessageSearchView({
+  openButtonEl: teamDomRefs.openMessageSearchEl,
+  getStore: () => store,
+  getCurrentChatId: () => appState.selectedChatId,
+  openMessage: openMessageInChat,
+})
+
+// Switches to the message's chat, scrolls it into view and highlights it for a moment.
+function openMessageInChat(chatId: string, messageId: string): void {
+  if (!store.chatsById[chatId]) return
+  switchChat(chatId)
+  window.requestAnimationFrame(() => {
+    const row = messagesEl.querySelector<HTMLElement>(`.message-row[data-message-id="${CSS.escape(messageId)}"]`)
+    if (!row) return
+    row.scrollIntoView({ block: 'center' })
+    row.classList.remove('message-search-hit')
+    void row.offsetWidth
+    row.classList.add('message-search-hit')
+    window.setTimeout(() => row.classList.remove('message-search-hit'), 2400)
+  })
+}
+
 async function boot(): Promise<void> {
   await resolveHostTabId()
   await primaryCoordinator.start()
@@ -732,6 +755,7 @@ async function boot(): Promise<void> {
   languageSettingsController.registerEvents()
   registerAgentControlSettings()
   backupView.registerEvents()
+  messageSearchView.registerEvents()
   registerUi()
   registerOrchestrationEvents()
   registerNotesEvents()
