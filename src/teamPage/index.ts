@@ -592,7 +592,10 @@ function registerRuntimePush(): void {
     }
     if (orchestrationModalView.handleRuntimeMessage(message)) return false
     if (message.type === 'TEAM_FRAME_ROLE_READY') iframeHost.markRoleReady(message.chatId, message.roleId)
-    if ('store' in message && message.store) {
+    if (message.type === 'GROUP_STORE_UPDATED' && message.storeSync) {
+      const syncedStore = runtimeClient.receiveStorePush(message.storeSync)
+      if (syncedStore) applyStore(syncedStore)
+    } else if ('store' in message && message.store) {
       applyStore(message.store)
     } else if (message.type.startsWith('GROUP_') || message.type.startsWith('TEAM_')) {
       refreshStore(false).catch(error => log.warn('runtime-push:refresh-failed', { type: message.type, error: error instanceof Error ? error.message : String(error) }))

@@ -1,3 +1,4 @@
+import { createStoreSyncEncoder } from '../group/storeSync'
 import type { OpenTeamStore } from '../group/types'
 import type { OpenTeamControlConnectionStatus } from '../shared/localControlProtocol'
 import { createLogger } from '../shared/logger'
@@ -11,6 +12,9 @@ export interface BroadcastStoreUpdatedOptions {
 export const GROUP_PUSH_TYPE = 'OPENTEAM_GROUP_PUSH'
 
 const hostTabIds = new Set<number>()
+// Team pages that ask for it (`storeSync: true` on their messages) receive store deltas instead
+// of the full store, which is several megabytes for a long chat history.
+const storeSync = createStoreSyncEncoder()
 
 const log = createLogger('background')
 
@@ -37,6 +41,7 @@ export function rememberHost(sender: chrome.runtime.MessageSender, explicitTabId
 
 export function forgetHostTab(tabId: number): void {
   hostTabIds.delete(tabId)
+  storeSync.forget(tabId)
 }
 
 export function listHostTabIds(): number[] {
@@ -47,10 +52,11 @@ export function listHostTabIds(): number[] {
 // host tab's top frame). Without a frameId, Chrome would also copy it into every AI-site frame
 // embedded in that tab, whose content scripts ignore it.
 export async function broadcastStoreUpdated(store: OpenTeamStore, options: BroadcastStoreUpdatedOptions = {}): Promise<void> {
-  const message = { type: 'GROUP_STORE_UPDATED', store }
-
   for (const tabId of listHostTabIds()) {
     if (tabId === options.excludeTabId) continue
+    const message = storeSync.isTracking(tabId)
+      ? { type: 'GROUP_STORE_UPDATED', storeSync: storeSync.encode(store, tabId) }
+      : { type: 'GROUP_STORE_UPDATED', store }
     try {
       await chrome.tabs.sendMessage(tabId, message, { frameId: 0 })
     } catch (error) {
@@ -58,6 +64,17 @@ export async function broadcastStoreUpdated(store: OpenTeamStore, options: Broad
       forgetHostTab(tabId)
     }
   }
+}
+
+// Replaces the store in a response to the team page with a store-sync payload, when the page asked
+// for one. Other callers (and other frames) keep receiving the full store.
+export function encodeStoreResponse(response: unknown, message: RuntimeMessage, sender: chrome.runtime.MessageSender): unknown {
+  if (!isRecord(response) || !isRecord(response.store) || message.storeSync !== true) return response
+  const tabId = sender.tab?.id
+  if (tabId === undefined || senderFrameId(sender) !== 0) return response
+  if (message.storeSyncReset === true) storeSync.reset(tabId)
+  const { store, ...rest } = response
+  return { ...rest, storeSync: storeSync.encode(store as unknown as OpenTeamStore, tabId) }
 }
 
 export async function broadcastControlStatusUpdated(controlStatus: OpenTeamControlConnectionStatus): Promise<void> {

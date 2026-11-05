@@ -424,7 +424,7 @@ function isStoreStorageKey(key: string): boolean {
 }
 
 // Compares values the way chrome.storage stores them: properties set to undefined are not stored.
-function sameStoredValue(left: unknown, right: unknown): boolean {
+export function sameStoredValue(left: unknown, right: unknown): boolean {
   if (left === right) return true
   if (typeof left !== 'object' || typeof right !== 'object' || left === null || right === null) return false
   if (Array.isArray(left) || Array.isArray(right)) {

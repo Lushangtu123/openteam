@@ -5,6 +5,7 @@ import { createMessageHandlers } from './messageHandlers'
 import {
   broadcastControlStatusUpdated as broadcastRuntimeControlStatusUpdated,
   broadcastStoreUpdated as broadcastRuntimeStoreUpdated,
+  encodeStoreResponse,
   forgetHostTab,
   rememberHost,
   requestRoleRecovery,
@@ -265,7 +266,10 @@ chrome.runtime.onMessage.addListener((message: RuntimeMessage, sender, sendRespo
 
     Promise.resolve()
       .then(() => routeMessage(message, sender))
-      .then(response => sendResponseSafely(sendResponse, responseForSender(response, senderKind)))
+      .then(response => {
+        const allowed = responseForSender(response, senderKind)
+        sendResponseSafely(sendResponse, senderKind === 'extension-page' ? encodeStoreResponse(allowed, message, sender) : allowed)
+      })
       .catch((error: unknown) => {
         const reason = errorReason(error)
         log.warn('message-handler:failed', { type: message?.type, error: reason })

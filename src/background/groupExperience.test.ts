@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { senderForMessage } from './runtimeSenderTestUtils'
 import { DEFAULT_CUSTOM_ROLE_TEMPLATES } from '../group/defaultCustomRoleTemplates'
+import type { StoreSyncPayload } from '../group/storeSync'
 import type { GroupChat, GroupMessage, GroupRole, OpenTeamStore, OrchestrationFlow, RoleTemplate } from '../group/types'
 
 const defaultCustomTemplateIds = DEFAULT_CUSTOM_ROLE_TEMPLATES.map(template => template.id)
@@ -120,6 +121,54 @@ describe('background group chat experience handlers', () => {
 
     expect(unknown.ok).toBe(false)
     expect(harness.tabsSendMessage.mock.calls.some(call => call[0] === 901)).toBe(false)
+  })
+
+  it('keeps a team page that asks for store sync current with deltas instead of full stores', async () => {
+    const store = makeStore()
+    store.chatsById['chat-1'] = makeChat('chat-1', ['role-1'])
+    store.chatOrder = ['chat-1']
+    store.rolesById['role-1'] = makeRole('chat-1', 'role-1', '工程师')
+    const harness = await setupBackground(store)
+    const { createStoreSyncDecoder } = await import('../group/storeSync')
+    const decoder = createStoreSyncDecoder()
+    const teamPage = { tab: { id: 900 } as chrome.tabs.Tab, frameId: 0 }
+    type SyncedResponse = { ok: boolean; store?: OpenTeamStore; storeSync: StoreSyncPayload }
+    const payloads: StoreSyncPayload[] = []
+    let seenPushes = 0
+    // Feeds the team page what the background sent it, pushes first, in the order they were sent.
+    const send = async (message: RuntimeMessage) => {
+      const response = await harness.invoke({ ...message, storeSync: true }, teamPage) as SyncedResponse
+      const pushes = harness.tabsSendMessage.mock.calls.filter(call => call[0] === 900 && call[1]?.type === 'GROUP_STORE_UPDATED')
+      for (const push of pushes.slice(seenPushes)) {
+        expect(push[1].store).toBeUndefined()
+        payloads.push(push[1].storeSync)
+      }
+      seenPushes = pushes.length
+      payloads.push(response.storeSync)
+      expect(response.store).toBeUndefined()
+      let latest: OpenTeamStore | undefined
+      for (const payload of payloads.splice(0)) {
+        const result = decoder.receive(JSON.parse(JSON.stringify(payload)))
+        if (result.status === 'gap') throw new Error(`gap at sequence ${payload.sequence}`)
+        latest = result.store
+      }
+      return { response, store: JSON.parse(JSON.stringify(latest)) as OpenTeamStore }
+    }
+
+    const first = await send({ type: 'GROUP_STORE_GET', storeSyncReset: true })
+    expect(first.response.storeSync.baseSequence).toBeUndefined()
+
+    const created = await send({ type: 'GROUP_CHAT_CREATE', name: '新群聊' })
+    expect(created.response.ok).toBe(true)
+    expect(created.response.storeSync.baseSequence).toBeDefined()
+    expect(created.response.storeSync.store.rolesById).toEqual({})
+    expect(created.store.chatOrder).toEqual((await harness.getStore()).chatOrder)
+    expect(created.store.rolesById['role-1'].name).toBe('工程师')
+
+    const settings = await send({ type: 'GROUP_SETTINGS_UPDATE', defaultChatSite: 'claude' })
+    expect(settings.store.settings.defaultChatSite).toBe('claude')
+    expect(settings.store).toEqual(JSON.parse(JSON.stringify(await harness.getStore())))
+    expect(seenPushes).toBeGreaterThan(0)
   })
 
   it('validates GROUP_ROLES_CREATE_BATCH as a whole batch and keeps temporary people out of the library', async () => {

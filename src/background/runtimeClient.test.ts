@@ -63,4 +63,50 @@ describe('background runtime client', () => {
     expect(tabsSendMessage).toHaveBeenCalledWith(101, { type: 'GROUP_CONTROL_STATUS_UPDATED', controlStatus })
     expect(runtimeSendMessage).toHaveBeenCalledWith({ type: 'OPENTEAM_GROUP_PUSH', payload: { type: 'GROUP_CONTROL_STATUS_UPDATED', controlStatus } })
   })
+
+  it('sends store-sync payloads to team pages that ask for them and full stores to everyone else', async () => {
+    vi.resetModules()
+    const tabsSendMessage = vi.fn().mockResolvedValue({ ok: true })
+    vi.stubGlobal('chrome', { tabs: { sendMessage: tabsSendMessage }, runtime: { sendMessage: vi.fn() } })
+    const { broadcastStoreUpdated, encodeStoreResponse, rememberHost } = await import('./runtimeClient')
+    const store = createDefaultStore()
+    const teamPage = { tab: { id: 101 } as chrome.tabs.Tab, frameId: 0 }
+    const request = { type: 'GROUP_STORE_GET', storeSync: true }
+
+    expect(encodeStoreResponse({ ok: true, store }, { type: 'GROUP_STORE_GET' }, teamPage)).toEqual({ ok: true, store })
+    expect(encodeStoreResponse({ ok: true, store }, request, { ...teamPage, frameId: 3 })).toEqual({ ok: true, store })
+    expect(encodeStoreResponse({ ok: false, error: 'x' }, request, teamPage)).toEqual({ ok: false, error: 'x' })
+
+    const first = encodeStoreResponse({ ok: true, store, bindings: [] }, request, teamPage) as Record<string, any>
+    expect(first).toMatchObject({ ok: true, bindings: [], storeSync: { sequence: 1, store } })
+    expect(first).not.toHaveProperty('store')
+    const second = encodeStoreResponse({ ok: true, store }, request, teamPage) as Record<string, any>
+    expect(second.storeSync).toMatchObject({ sequence: 2, baseSequence: 1 })
+    const reset = encodeStoreResponse({ ok: true, store }, { ...request, storeSyncReset: true }, teamPage) as Record<string, any>
+    expect(reset.storeSync.baseSequence).toBeUndefined()
+
+    rememberHost({}, 101)
+    rememberHost({}, 202)
+    await broadcastStoreUpdated(store)
+
+    expect(tabsSendMessage).toHaveBeenCalledWith(101, { type: 'GROUP_STORE_UPDATED', storeSync: expect.objectContaining({ sequence: 4, baseSequence: 3 }) }, { frameId: 0 })
+    expect(tabsSendMessage).toHaveBeenCalledWith(202, { type: 'GROUP_STORE_UPDATED', store }, { frameId: 0 })
+  })
+
+  it('forgets a team page whose tab cannot be reached', async () => {
+    vi.resetModules()
+    const tabsSendMessage = vi.fn().mockRejectedValueOnce(new Error('tab closed')).mockResolvedValue({ ok: true })
+    vi.stubGlobal('chrome', { tabs: { sendMessage: tabsSendMessage }, runtime: { sendMessage: vi.fn() } })
+    const { broadcastStoreUpdated, encodeStoreResponse, rememberHost } = await import('./runtimeClient')
+    const store = createDefaultStore()
+    const teamPage = { tab: { id: 101 } as chrome.tabs.Tab, frameId: 0 }
+    encodeStoreResponse({ ok: true, store }, { type: 'GROUP_STORE_GET', storeSync: true }, teamPage)
+
+    rememberHost({}, 101)
+    await broadcastStoreUpdated(store)
+    rememberHost({}, 101)
+    await broadcastStoreUpdated(store)
+
+    expect(tabsSendMessage).toHaveBeenLastCalledWith(101, { type: 'GROUP_STORE_UPDATED', store }, { frameId: 0 })
+  })
 })
