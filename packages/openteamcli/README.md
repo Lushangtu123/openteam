@@ -75,6 +75,12 @@ For development, install the local skill from the repository root:
 npx skills add . --skill openteam-control
 ```
 
+The daemon only accepts requests whose `Host` is `127.0.0.1`/`localhost`, and only accepts the extension WebSocket from the OpenTeam extension origin (`chrome-extension://cnccbifloajlkjglmiojkpimjciamlpe`, fixed by the manifest `key`). If you load a build with a different extension ID, allow it explicitly:
+
+```bash
+OPENTEAM_EXTENSION_ORIGINS=chrome-extension://<your-extension-id> openteamcli daemon restart
+```
+
 ## Publish Checklist
 
 Before publishing a new CLI release, bump `packages/openteamcli/package.json`; npm does not allow republishing an existing version.

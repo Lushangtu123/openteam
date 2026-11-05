@@ -75,6 +75,12 @@ npm link ./packages/openteamcli
 npx skills add . --skill openteam-control
 ```
 
+守护进程只接受 `Host` 为 `127.0.0.1`/`localhost` 的请求，并且只接受来自 OpenTeam 扩展来源（`chrome-extension://cnccbifloajlkjglmiojkpimjciamlpe`，由 manifest 的 `key` 固定）的扩展 WebSocket 连接。如果你加载的构建扩展 ID 不同，需要显式放行：
+
+```bash
+OPENTEAM_EXTENSION_ORIGINS=chrome-extension://<你的扩展ID> openteamcli daemon restart
+```
+
 ## 发布检查
 
 发布新的 CLI 版本前，先更新 `packages/openteamcli/package.json` 里的版本号；npm 不允许重复发布已经存在的版本。

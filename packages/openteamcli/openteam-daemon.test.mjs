@@ -1,11 +1,13 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { connect } from 'node:net'
-import { createServer } from 'node:http'
+import { createServer, request as httpRequest } from 'node:http'
 import { createHash } from 'node:crypto'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { DEFAULT_PORT, createControlDaemon } from './openteam-daemon.mjs'
+import { DEFAULT_EXTENSION_ORIGINS, DEFAULT_PORT, createControlDaemon, isLoopbackHostHeader } from './openteam-daemon.mjs'
+
+const EXTENSION_ORIGIN = DEFAULT_EXTENSION_ORIGINS[0]
 
 describe('openteam local daemon', () => {
   const daemons = []
@@ -28,7 +30,7 @@ describe('openteam local daemon', () => {
   it('forwards authenticated HTTP commands to the connected extension WebSocket', async () => {
     const daemon = await createControlDaemon({ port: 0, token: 'test-token', logToConsole: false })
     daemons.push(daemon)
-    const extension = new WebSocket(`ws://127.0.0.1:${daemon.port}/ext?profileId=test-profile`)
+    const extension = new WebSocket(`ws://127.0.0.1:${daemon.port}/ext?profileId=test-profile`, { headers: { Origin: EXTENSION_ORIGIN } })
     const commands = []
     extension.addEventListener('open', () => {
       extension.send(JSON.stringify({
@@ -113,6 +115,53 @@ describe('openteam local daemon', () => {
       profiles: [expect.objectContaining({ profileId: 'test-profile' })],
     })
     socket.destroy()
+  })
+
+  it('rejects extension WebSocket upgrades from web pages and keeps the real extension connected', async () => {
+    const daemon = await createControlDaemon({ port: 0, token: 'test-token', logToConsole: false })
+    daemons.push(daemon)
+    const extension = await openRawWebSocket(daemon.port, '/ext?profileId=real')
+    await waitFor(() => daemon.status().extensionConnected)
+
+    const fromWebPage = await openRawWebSocket(daemon.port, '/ext?profileId=attacker', { origin: 'https://evil.example' })
+    const withoutOrigin = await openRawWebSocket(daemon.port, '/ext?profileId=attacker', { origin: null })
+
+    expect(fromWebPage.response).toMatch(/^HTTP\/1\.1 403/)
+    expect(withoutOrigin.response).toMatch(/^HTTP\/1\.1 403/)
+    expect(daemon.status().profiles).toEqual([expect.objectContaining({ profileId: 'real' })])
+    extension.destroy()
+  })
+
+  it('accepts extension origins configured for development builds', async () => {
+    const devOrigin = 'chrome-extension://abcdefghijklmnopabcdefghijklmnop'
+    const daemon = await createControlDaemon({ port: 0, token: 'test-token', logToConsole: false, allowedExtensionOrigins: [devOrigin] })
+    daemons.push(daemon)
+
+    const socket = await openRawWebSocket(daemon.port, '/ext?profileId=dev', { origin: devOrigin })
+
+    expect(socket.response).toMatch(/^HTTP\/1\.1 101/)
+    await waitFor(() => daemon.status().extensionConnected)
+    socket.destroy()
+  })
+
+  it('rejects HTTP requests whose Host header is not loopback to block DNS rebinding', async () => {
+    const daemon = await createControlDaemon({ port: 0, token: 'test-token', logToConsole: false })
+    daemons.push(daemon)
+
+    // fetch() drops a custom Host header, so use node:http to send it as a rebinding page would.
+    const statusFor = host => new Promise((resolve, reject) => {
+      httpRequest({ host: '127.0.0.1', port: daemon.port, path: '/status', headers: { Host: host } }, response => {
+        response.resume()
+        resolve(response.statusCode)
+      }).on('error', reject).end()
+    })
+
+    expect(await statusFor(`attacker.example:${daemon.port}`)).toBe(403)
+    expect(await statusFor(`127.0.0.1:${daemon.port}`)).toBe(200)
+    expect(isLoopbackHostHeader('localhost:19305')).toBe(true)
+    expect(isLoopbackHostHeader('[::1]:19305')).toBe(true)
+    expect(isLoopbackHostHeader('127.0.0.1.attacker.example')).toBe(false)
+    expect(isLoopbackHostHeader(undefined)).toBe(false)
   })
 
   it('lists configured ACP agents without requiring an extension connection', async () => {
@@ -305,7 +354,7 @@ async function waitFor(predicate, timeoutMs = 1_000) {
   throw new Error('waitFor timed out')
 }
 
-function openRawWebSocket(port, path) {
+function openRawWebSocket(port, path, { origin = EXTENSION_ORIGIN } = {}) {
   return new Promise((resolve, reject) => {
     const socket = connect(port, '127.0.0.1')
     socket.once('error', reject)
@@ -317,15 +366,18 @@ function openRawWebSocket(port, path) {
         'Connection: Upgrade',
         'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==',
         'Sec-WebSocket-Version: 13',
+        ...(origin ? [`Origin: ${origin}`] : []),
         '',
         '',
       ].join('\r\n'))
     })
     let response = ''
     socket.on('data', chunk => {
+      if (socket.response !== undefined) return
       response += chunk.toString('utf8')
       if (!response.includes('\r\n\r\n')) return
       socket.off('error', reject)
+      socket.response = response
       resolve(socket)
     })
   })

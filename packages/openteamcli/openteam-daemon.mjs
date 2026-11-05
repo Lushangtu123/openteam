@@ -8,14 +8,18 @@ import { createServer } from 'node:http'
 export const DEFAULT_PORT = 19305
 export const DEFAULT_TOKEN_PATH = resolve(homedir(), '.openteam/control-token')
 export const DEFAULT_AGENT_CONFIG_PATH = resolve(homedir(), '.openteam/acp-agents.json')
+// The extension ID is fixed by the `key` in public/manifest.json.
+export const DEFAULT_EXTENSION_ORIGINS = ['chrome-extension://cnccbifloajlkjglmiojkpimjciamlpe']
 const DEFAULT_COMMAND_TIMEOUT_MS = 300_000
 const MAX_BODY_BYTES = 1024 * 1024
 const AGENT_CAPABILITIES = ['agent.list', 'agent.run', 'agent.cancel', 'agent.read']
+const LOOPBACK_HOSTNAMES = new Set(['127.0.0.1', 'localhost', '[::1]'])
 
 export async function createControlDaemon(options = {}) {
   const port = Number.isInteger(options.port) ? options.port : DEFAULT_PORT
   const host = options.host ?? '127.0.0.1'
   const token = options.token ?? readOrCreateToken(options.tokenPath ?? DEFAULT_TOKEN_PATH)
+  const allowedExtensionOrigins = new Set(options.allowedExtensionOrigins ?? readAllowedExtensionOrigins())
   const logToConsole = options.logToConsole ?? true
   const startedAt = Date.now()
   const logs = []
@@ -33,6 +37,10 @@ export async function createControlDaemon(options = {}) {
 
   const server = createServer(async (request, response) => {
     try {
+      if (!isLoopbackHostHeader(request.headers.host)) {
+        writeJson(response, 403, { ok: false, error: { code: 'forbidden_host', message: '只接受来自 127.0.0.1 的请求。' } })
+        return
+      }
       const url = new URL(request.url ?? '/', `http://${host}`)
       if (request.method === 'GET' && url.pathname === '/ping') {
         writeJson(response, 200, { ok: true })
@@ -84,8 +92,16 @@ export async function createControlDaemon(options = {}) {
   server.on('upgrade', (request, socket) => {
     try {
       const url = new URL(request.url ?? '/', `http://${host}`)
-      if (url.pathname !== '/ext') {
+      if (url.pathname !== '/ext' || !isLoopbackHostHeader(request.headers.host)) {
         socket.destroy()
+        return
+      }
+      // Browsers always send Origin on WebSocket handshakes and web pages cannot
+      // forge it, so this keeps websites from impersonating the extension.
+      const origin = request.headers.origin
+      if (typeof origin !== 'string' || !allowedExtensionOrigins.has(origin)) {
+        log('extension:rejected-origin', { origin: typeof origin === 'string' ? origin : null })
+        socket.end('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n')
         return
       }
       const key = request.headers['sec-websocket-key']
@@ -544,6 +560,18 @@ function extractAgentOutput(result) {
 
 function newRunId(prefix = 'agent-run') {
   return `${prefix}-${Date.now()}-${randomBytes(4).toString('hex')}`
+}
+
+function readAllowedExtensionOrigins() {
+  const envOrigins = process.env.OPENTEAM_EXTENSION_ORIGINS
+  if (!envOrigins?.trim()) return DEFAULT_EXTENSION_ORIGINS
+  return envOrigins.split(',').map(origin => origin.trim()).filter(Boolean)
+}
+
+export function isLoopbackHostHeader(value) {
+  if (typeof value !== 'string' || !value) return false
+  const hostname = value.startsWith('[') ? value.slice(0, value.indexOf(']') + 1) : value.split(':')[0]
+  return LOOPBACK_HOSTNAMES.has(hostname.toLowerCase())
 }
 
 function isAuthorized(request, token) {
