@@ -16,6 +16,7 @@ export interface LanguageSettingsController {
 const TEXT_SOURCES = new WeakMap<Text, string>()
 const ATTRIBUTE_SOURCES = new WeakMap<Element, Map<string, string>>()
 const TRANSLATED_ATTRIBUTES = ['aria-label', 'title', 'placeholder', 'data-tooltip']
+const FORM_FIELD_SELECTOR = 'input, textarea'
 const SKIP_SELECTOR = [
   'script',
   'style',
@@ -71,21 +72,26 @@ export function createLanguageSettingsController(deps: LanguageSettingsControlle
 export function applyTeamLanguage(language: TeamLanguage, root: ParentNode = document): void {
   const normalized = normalizeLanguage(language)
   const doc = root instanceof Document ? root : root.ownerDocument ?? document
-  doc.documentElement.lang = normalized
-  doc.documentElement.dataset.language = normalized
+  // Even an unchanged lang makes the browser restyle and re-lay-out the whole page, so only set it on change.
+  if (doc.documentElement.lang !== normalized) doc.documentElement.lang = normalized
+  if (doc.documentElement.dataset.language !== normalized) doc.documentElement.dataset.language = normalized
 
   const translationRoot = root instanceof Document ? root.body : root
   if (!translationRoot) return
   translateTextNodes(translationRoot, normalized, doc)
-  translateAttributes(translationRoot, normalized)
+  translateAttributes(translationRoot, normalized, doc)
 }
 
+// Both walks skip SKIP_SELECTOR subtrees (message bodies, editors) as a whole instead of visiting
+// every node inside them: the pass runs on every render, and a long chat holds tens of thousands.
 function translateTextNodes(root: ParentNode, language: TeamLanguage, doc: Document): void {
-  const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+  if (root instanceof Element && root.closest(SKIP_SELECTOR)) return
+  const walker = doc.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, {
     acceptNode(node) {
-      if (!node.textContent?.trim()) return NodeFilter.FILTER_REJECT
-      const parent = node.parentElement
-      if (!parent || parent.closest(SKIP_SELECTOR)) return NodeFilter.FILTER_REJECT
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        return (node as Element).matches(SKIP_SELECTOR) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_SKIP
+      }
+      if (!node.textContent?.trim() || !node.parentElement) return NodeFilter.FILTER_REJECT
       return NodeFilter.FILTER_ACCEPT
     },
   })
@@ -98,23 +104,45 @@ function translateTextNodes(root: ParentNode, language: TeamLanguage, doc: Docum
   for (const node of nodes) {
     const source = TEXT_SOURCES.get(node) ?? node.textContent ?? ''
     if (!TEXT_SOURCES.has(node)) TEXT_SOURCES.set(node, source)
-    node.textContent = translateTextNode(source, language)
+    // This pass runs on every render; rewriting unchanged text would invalidate layout of the whole page.
+    const translated = translateTextNode(source, language)
+    if (node.data !== translated) node.data = translated
   }
 }
 
-function translateAttributes(root: ParentNode, language: TeamLanguage): void {
-  const elements = root instanceof Element ? [root, ...root.querySelectorAll('*')] : [...root.querySelectorAll('*')]
-  for (const element of elements) {
-    if (element.closest(SKIP_SELECTOR) && !element.matches('input, textarea')) continue
+function translateAttributes(root: ParentNode, language: TeamLanguage, doc: Document): void {
+  for (const element of elementsWithTranslatedAttributes(root, doc)) {
     for (const attribute of TRANSLATED_ATTRIBUTES) {
       const value = element.getAttribute(attribute)
       if (!value) continue
       const sources = attributeSourcesFor(element)
       const source = sources.get(attribute) ?? value
       sources.set(attribute, source)
-      element.setAttribute(attribute, translateUi(source, language))
+      const translated = translateUi(source, language)
+      if (value !== translated) element.setAttribute(attribute, translated)
     }
   }
+}
+
+// Elements outside SKIP_SELECTOR subtrees, plus form fields anywhere (their placeholders are UI copy).
+function elementsWithTranslatedAttributes(root: ParentNode, doc: Document): Element[] {
+  if (root instanceof Element && root.closest(SKIP_SELECTOR)) {
+    return [...(root.matches(FORM_FIELD_SELECTOR) ? [root] : []), ...root.querySelectorAll(FORM_FIELD_SELECTOR)]
+  }
+
+  const elements: Element[] = root instanceof Element ? [root] : []
+  const walker = doc.createTreeWalker(root, NodeFilter.SHOW_ELEMENT, {
+    acceptNode(node) {
+      const element = node as Element
+      if (!element.matches(SKIP_SELECTOR) || element.matches(FORM_FIELD_SELECTOR)) return NodeFilter.FILTER_ACCEPT
+      elements.push(...element.querySelectorAll(FORM_FIELD_SELECTOR))
+      return NodeFilter.FILTER_REJECT
+    },
+  })
+  while (walker.nextNode()) {
+    elements.push(walker.currentNode as Element)
+  }
+  return elements
 }
 
 function attributeSourcesFor(element: Element): Map<string, string> {

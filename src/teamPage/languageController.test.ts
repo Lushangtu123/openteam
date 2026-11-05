@@ -26,6 +26,23 @@ describe('team page language controller', () => {
     expect(document.querySelector<HTMLButtonElement>('#agent-control-toggle')?.textContent).toBe('本机智能体控制：关闭')
   })
 
+  it('does not touch the page when the language pass has nothing to change', () => {
+    document.body.innerHTML = `
+      <button id="settings-button" aria-label="设置" title="设置">设置</button>
+      <span class="site-pill">ChatGPT</span>
+    `
+    for (const language of ['en', 'zh-CN'] as const) {
+      applyTeamLanguage(language)
+      const observer = new MutationObserver(() => undefined)
+      observer.observe(document.documentElement, { subtree: true, childList: true, attributes: true, characterData: true })
+
+      applyTeamLanguage(language)
+
+      expect(observer.takeRecords()).toEqual([])
+      observer.disconnect()
+    }
+  })
+
   it('persists language changes from the settings switch', () => {
     document.body.innerHTML = `
       <button id="language-en" aria-pressed="false">English</button>
@@ -121,5 +138,33 @@ describe('team page language controller', () => {
 
     expect(document.querySelector('.message-body')?.textContent).toBe('进行中')
     expect(document.querySelector<HTMLButtonElement>('.message-tools button')?.ariaLabel).toBe('Retry reply')
+  })
+
+  it('leaves everything inside skipped regions alone except form field placeholders', () => {
+    document.body.innerHTML = `
+      <section id="messages">
+        <div class="message-body" title="设置">进行中<span aria-label="重新回复">设置</span></div>
+        <button aria-label="重新回复">设置</button>
+      </section>
+      <div class="notes-editor">
+        <p title="设置">进行中</p>
+        <textarea placeholder="输入消息，@成员可指定回复；不 @ 仅记录到群聊。"></textarea>
+      </div>
+    `
+
+    applyTeamLanguage('en')
+
+    const body = document.querySelector<HTMLElement>('.message-body')!
+    expect(body.textContent).toBe('进行中设置')
+    expect(body.title).toBe('设置')
+    expect(body.querySelector('span')?.getAttribute('aria-label')).toBe('重新回复')
+    expect(document.querySelector('#messages > button')?.getAttribute('aria-label')).toBe('Retry reply')
+    expect(document.querySelector('#messages > button')?.textContent).toBe('Settings')
+    expect(document.querySelector<HTMLElement>('.notes-editor p')?.title).toBe('设置')
+    expect(document.querySelector<HTMLTextAreaElement>('.notes-editor textarea')?.placeholder).toBe('Type a message. Mention @members to request replies; without @ it is saved to the chat.')
+
+    applyTeamLanguage('en', body.querySelector('span')!)
+    expect(body.querySelector('span')?.textContent).toBe('设置')
+    expect(body.querySelector('span')?.getAttribute('aria-label')).toBe('重新回复')
   })
 })
