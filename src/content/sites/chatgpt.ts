@@ -123,6 +123,7 @@ export function createChatGptAdapter(options: ChatGptAdapterOptions = {}): ChatS
     findResponseContainer,
     isGenerating: isChatGptGenerating,
     checkStatus: checkChatGptStatus,
+    findEditor: () => document.querySelector<HTMLElement>(CHATGPT_SELECTORS.editor),
     stopGenerating: stopChatGptGenerating,
     fillAndSend,
     collectPromptDiagnostics,

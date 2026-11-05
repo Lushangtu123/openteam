@@ -133,6 +133,20 @@ describe('team page messages view boundary', () => {
     expect(sameNodeCount([...messagesEl.querySelectorAll('.message-time-divider')], firstDividers)).toBe(firstDividers.length)
   })
 
+  it('shows attached text files as chips that download the file', () => {
+    const { messagesEl, messages, view } = createLongChatView(1)
+    messages[0] = { ...messages[0], attachments: [{ id: 'f1', type: 'file', status: 'ready', fileName: 'notes.md', mimeType: 'text/markdown', size: 2048, text: '# 目标' }] }
+    vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: vi.fn(() => 'blob:notes'), revokeObjectURL: vi.fn() }))
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined)
+
+    view.renderMessages()
+    const chip = messagesEl.querySelector<HTMLButtonElement>('.message-file-chip')
+    expect(chip?.textContent).toBe('MDnotes.md2.0 KB')
+    chip?.click()
+
+    expect(click).toHaveBeenCalled()
+  })
+
   it('keeps every message node of a long chat cached between renders', () => {
     const { messagesEl, view } = createLongChatView(450)
     view.renderMessages()

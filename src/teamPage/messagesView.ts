@@ -2,7 +2,8 @@ import MarkdownIt from 'markdown-it'
 import { extractMarkdownFromDom } from '../content/sites/domMarkdown'
 import { DEFAULT_MESSAGE_HIGHLIGHT_COLOR, MESSAGE_HIGHLIGHT_COLORS, messageHighlightColorRgb, type MessageHighlightColor } from '../group/highlightColors'
 import { roleMentionLabel, roleMentionLabelOptionsFromSettings, roleModelLabel } from '../group/mentionParser'
-import type { GroupChat, GroupMessage, GroupRole, MessageHighlight, MessageImageAttachment, MessageReference, OpenTeamStore, OrchestrationReviewResult } from '../group/types'
+import type { GroupChat, GroupMessage, GroupRole, MessageFileAttachment, MessageHighlight, MessageImageAttachment, MessageReference, OpenTeamStore, OrchestrationReviewResult } from '../group/types'
+import { formatBytes } from './composerAttachments'
 import type { ImageAttachmentBlobRecord } from '../shared/imageAttachmentRepository'
 import type { TeamPageState } from './appState'
 import { buildChatRenderItems, getChatStartupNotice, getStoppedReplyRoles, getVisibleThinkingRoles, THINKING_TIMEOUT_MS } from './chatExperience'
@@ -224,6 +225,8 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     if (hasVisibleTextBody) bubble.append(body)
     const imageGrid = renderMessageImageGrid(message)
     if (imageGrid) bubble.append(imageGrid)
+    const fileList = renderMessageFileList(message)
+    if (fileList) bubble.append(fileList)
     const reviewSummary = renderOrchestrationReviewSummary(message)
     if (reviewSummary) bubble.append(reviewSummary)
     if (message.references?.length) bubble.append(referenceBox(message.references[0]))
@@ -331,6 +334,40 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     return grid
   }
 
+  function renderMessageFileList(message: GroupMessage): HTMLElement | undefined {
+    const files = message.attachments?.filter((attachment): attachment is MessageFileAttachment => attachment.type === 'file') ?? []
+    if (files.length === 0) return undefined
+    const list = document.createElement('div')
+    list.className = 'message-file-list'
+    for (const file of files) {
+      const chip = document.createElement('button')
+      chip.type = 'button'
+      chip.className = 'message-file-chip'
+      chip.title = `下载 ${file.fileName}`
+      const icon = document.createElement('span')
+      icon.className = 'message-file-icon'
+      icon.textContent = file.fileName.match(/\.([a-z0-9]{1,5})$/i)?.[1]?.toUpperCase() ?? 'TXT'
+      const name = document.createElement('span')
+      name.className = 'message-file-name'
+      name.textContent = file.fileName
+      const size = document.createElement('span')
+      size.className = 'message-file-size'
+      size.textContent = formatBytes(file.size)
+      chip.append(icon, name, size)
+      chip.addEventListener('click', event => {
+        event.stopPropagation()
+        const url = URL.createObjectURL(new Blob([file.text], { type: file.mimeType || 'text/plain' }))
+        const link = document.createElement('a')
+        link.href = url
+        link.download = file.fileName
+        link.click()
+        window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+      })
+      list.append(chip)
+    }
+    return list
+  }
+
   function renderImageAttachment(message: GroupMessage, attachment: MessageImageAttachment): HTMLElement {
     const tile = document.createElement('div')
     tile.className = `message-image-tile ${attachment.status === 'error' ? 'message-image-error' : 'message-image-loading'}`
@@ -356,7 +393,7 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     preview.setAttribute('aria-label', '预览图片')
     preview.disabled = true
     const image = document.createElement('img')
-    image.alt = attachment.alt || 'ChatGPT 生成图片'
+    image.alt = attachment.alt || (attachment.source === 'user-upload' ? attachment.fileName : undefined) || 'ChatGPT 生成图片'
     image.loading = 'lazy'
     image.decoding = 'async'
     if (attachment.width) image.width = attachment.width
@@ -423,7 +460,7 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
   }
 
   function releaseUnusedImageUrls(messages: GroupMessage[]): void {
-    const activeIds = new Set(messages.flatMap(message => message.attachments ?? []).filter(attachment => attachment.status === 'ready').map(attachment => attachment.id))
+    const activeIds = new Set(messages.flatMap(message => message.attachments ?? []).filter(attachment => attachment.type === 'image' && attachment.status === 'ready').map(attachment => attachment.id))
     for (const attachmentId of imageObjectUrls.keys()) {
       if (!activeIds.has(attachmentId)) releaseImageUrl(attachmentId)
     }
@@ -636,7 +673,8 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
       roleSite: roleForMessage(message)?.chatSite,
       content: message.content,
       contentFormat: message.contentFormat,
-      attachments: message.attachments,
+      // File text can be large; its id, name and size identify it well enough.
+      attachments: message.attachments?.map(attachment => attachment.type === 'file' ? { id: attachment.id, type: attachment.type, fileName: attachment.fileName, size: attachment.size } : attachment),
       createdAt: message.createdAt,
       status: message.status,
       references: message.references,

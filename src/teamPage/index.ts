@@ -7,6 +7,7 @@ import { createAllNotesView } from './allNotesView'
 import { createBackupView } from './backupView'
 import { createChatHeaderView } from './chatHeaderView'
 import { createChatListView } from './chatListView'
+import { createComposerAttachments } from './composerAttachments'
 import { createComposerView } from './composerView'
 import { createTeamPageDomRefs } from './domRefs'
 import { createExternalModelsView } from './externalModelsView'
@@ -30,7 +31,7 @@ import { emptyCard, getChatRecentSummary as getStoreChatRecentSummary, messageTi
 import { agentControlStatusState, agentControlStatusText } from './agentControlStatusView'
 import { createIndexedDbImageAttachmentRepository } from '../shared/imageAttachmentRepository'
 import { getSafeSupportedChatIframeSrcForRole } from '../group/conversationUrl'
-import { normalizeLanguage } from '../shared/i18n'
+import { normalizeLanguage, translateUi } from '../shared/i18n'
 
 const SITE_HEALTH_STATUSES: ReadonlySet<string> = new Set(['ready', 'generating', 'loading', 'error', 'blocked', 'unauthorized'])
 
@@ -255,6 +256,16 @@ const composerView = createComposerView({
   showError,
   getRoleHealth: role => roleHealth.get(role.chatId, role.id),
   localize: root => applyTeamLanguage(normalizeLanguage(store.settings.language), root),
+  attachments: createComposerAttachments({
+    trayEl: teamDomRefs.attachmentTrayEl,
+    attachButtonEl: teamDomRefs.attachFileEl,
+    fileInputEl: teamDomRefs.attachFileInputEl,
+    pasteTargetEl: messageInputEl,
+    dropTargetEl: composerFormEl,
+    ui: source => translateUi(source, normalizeLanguage(store.settings.language)),
+    showError,
+    onChange: () => renderComposerState(),
+  }),
 })
 renderComposerState = composerView.renderComposerState
 insertMention = composerView.insertMention

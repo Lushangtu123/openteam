@@ -76,6 +76,7 @@ export function createDeepSeekAdapter(options: DeepSeekAdapterOptions = {}): Cha
     readResponseMarkdown: extractMarkdownFromDom,
     findResponseContainer,
     isGenerating: isDeepSeekGenerating,
+    findEditor: () => document.querySelector<HTMLElement>(DEEPSEEK_SELECTORS.editor),
     checkStatus: context => checkSiteHealth({
       findEditor: () => document.querySelector(DEEPSEEK_SELECTORS.editor),
       isGenerating: isDeepSeekGenerating,

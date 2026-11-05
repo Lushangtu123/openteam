@@ -1,5 +1,6 @@
 import { loadStore } from '../group/store'
 import type { GroupChat, OpenTeamStore } from '../group/types'
+import { referencedImageIds } from '../group/backup'
 import { createBackupHandlers } from './backupHandlers'
 import { createChatHandlers } from './chatHandlers'
 import { createMessageHandlers } from './messageHandlers'
@@ -35,7 +36,10 @@ const log = createLogger('background')
 const CONTROL_KEEPALIVE_ALARM = 'openteam-control-keepalive'
 const CONTROL_KEEPALIVE_PERIOD_MINUTES = 0.4
 
-const sendPrompt = createPromptSender({ log })
+const sendPrompt = createPromptSender({
+  log,
+  loadImages: async ids => (await imageAttachments.loadUploads(ids)).map(({ fileName, mimeType, data }) => ({ fileName, mimeType, data })),
+})
 const promptDeliveryLimiter = createSitePromptDeliveryLimiter({ log })
 const externalModelClient = createExternalModelClient()
 const imageAttachmentRepository = createIndexedDbImageAttachmentRepository()
@@ -187,12 +191,7 @@ cleanupOrphanedImageAttachments().catch(error => {
 })
 
 async function cleanupOrphanedImageAttachments(): Promise<void> {
-  const store = await loadStore()
-  const referencedIds = new Set(Object.values(store.messagesById)
-    .flatMap(message => message.attachments ?? [])
-    .filter(attachment => attachment.status === 'ready')
-    .map(attachment => attachment.id))
-  await imageAttachmentRepository.deleteOrphans(referencedIds)
+  await imageAttachmentRepository.deleteOrphans(new Set(referencedImageIds(await loadStore())))
 }
 
 function syncControlClient(): Promise<void> {

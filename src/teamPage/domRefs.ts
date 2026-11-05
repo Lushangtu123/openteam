@@ -41,6 +41,9 @@ export interface TeamPageDomRefs {
   backupRestoreEl: HTMLButtonElement
   backupFileEl: HTMLInputElement
   backupIncludeKeysEl: HTMLInputElement
+  attachmentTrayEl: HTMLElement
+  attachFileEl: HTMLButtonElement
+  attachFileInputEl: HTMLInputElement
   themeLightEl: HTMLButtonElement
   themeDarkEl: HTMLButtonElement
   openAllNotesEl: HTMLButtonElement
@@ -209,6 +212,9 @@ export function createTeamPageDomRefs(): TeamPageDomRefs {
     backupRestoreEl: requireElement<HTMLButtonElement>('#backup-restore'),
     backupFileEl: requireElement<HTMLInputElement>('#backup-file'),
     backupIncludeKeysEl: requireElement<HTMLInputElement>('#backup-include-keys'),
+    attachmentTrayEl: requireElement<HTMLElement>('#attachment-tray'),
+    attachFileEl: requireElement<HTMLButtonElement>('#attach-file'),
+    attachFileInputEl: requireElement<HTMLInputElement>('#attach-file-input'),
     themeLightEl: requireElement<HTMLButtonElement>('#theme-light'),
     themeDarkEl: requireElement<HTMLButtonElement>('#theme-dark'),
     openAllNotesEl: requireElement<HTMLButtonElement>('#open-all-notes'),

@@ -1,4 +1,5 @@
 import type { MessageImageAttachment, ReplyImageSource } from '../group/types'
+import { base64ToBytes, bytesToBase64 } from '../shared/base64'
 import type { ImageAttachmentBlobRecord, ImageAttachmentRepository } from '../shared/imageAttachmentRepository'
 
 const MAX_IMAGE_BYTES = 25 * 1024 * 1024
@@ -23,6 +24,25 @@ export interface ImageAttachmentService {
     images: ReplyImageSource[]
   }): Promise<MessageImageAttachment[]>
   deleteByIds(ids: string[]): Promise<void>
+  // Images the user attached to a message.
+  saveUploads(input: { chatId: string; messageId: string; images: UploadedImage[] }): Promise<void>
+  // Uploaded images for delivery, in the order of `ids`.
+  loadUploads(ids: string[]): Promise<LoadedUpload[]>
+}
+
+export interface UploadedImage {
+  id: string
+  fileName: string
+  mimeType: string
+  data: string
+}
+
+export interface LoadedUpload {
+  fileName: string
+  mimeType: string
+  bytes: Uint8Array
+  // Base64 of `bytes`, for extension messages, which carry JSON.
+  data: string
 }
 
 export function createImageAttachmentService(deps: {
@@ -35,6 +55,33 @@ export function createImageAttachmentService(deps: {
   const maxImageBytes = deps.maxImageBytes ?? MAX_IMAGE_BYTES
 
   return {
+    async saveUploads(input): Promise<void> {
+      for (const image of input.images) {
+        const bytes = base64ToBytes(image.data)
+        await deps.repository.put({
+          id: image.id,
+          chatId: input.chatId,
+          messageId: input.messageId,
+          blob: new Blob([bytes], { type: image.mimeType }),
+          mimeType: image.mimeType,
+          size: bytes.length,
+          fileName: image.fileName,
+          createdAt: deps.now(),
+        })
+      }
+    },
+
+    async loadUploads(ids): Promise<LoadedUpload[]> {
+      const uploads: LoadedUpload[] = []
+      for (const id of ids) {
+        const record = await deps.repository.get(id)
+        if (!record) throw new Error('找不到要上传的图片，可能已被删除')
+        const bytes = new Uint8Array(await record.blob.arrayBuffer())
+        uploads.push({ fileName: record.fileName, mimeType: record.mimeType, bytes, data: bytesToBase64(bytes) })
+      }
+      return uploads
+    },
+
     async captureReplyImages(input): Promise<MessageImageAttachment[]> {
       const uniqueImages = deduplicateImages(input.images)
       const attachments: MessageImageAttachment[] = []

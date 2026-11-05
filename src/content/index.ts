@@ -1,5 +1,6 @@
-import type { BackgroundToRoleMessage, RoleToBackgroundMessage } from '../group/runtimeProtocol'
+import type { BackgroundToRoleMessage, PromptFile, RoleToBackgroundMessage } from '../group/runtimeProtocol'
 import { createConversationMonitor, type ConversationMonitor } from './conversationMonitor'
+import { attachFilesToComposer } from './fileUpload'
 import { registerFrameRoleHandshake } from './frameHandshake'
 import { isDirectEmbeddedFrame, isEmbeddedFrame } from './frameEnvironment'
 import { waitBeforePromptInput, PROMPT_INPUT_DELAY_MS } from './promptDelay'
@@ -95,6 +96,24 @@ function getCurrentSiteStatus(): SiteStatusInfo {
     status: siteAdapter.isGenerating() ? 'generating' : 'ready',
     timestamp: Date.now(),
   }
+}
+
+async function attachPromptFiles(files: PromptFile[] | undefined): Promise<void> {
+  if (!files?.length) return
+  if (!siteAdapter.findEditor) throw new Error(`${siteAdapter.id} 暂不支持上传图片`)
+  const editor = await waitForEditor(siteAdapter.findEditor, 15_000)
+  log.info('attach-files:start', { site: siteAdapter.id, files: files.map(file => ({ name: file.fileName, type: file.mimeType, size: file.data.length })) })
+  await attachFilesToComposer({ editor, files })
+  log.info('attach-files:done', { site: siteAdapter.id, count: files.length })
+}
+
+async function waitForEditor(find: () => HTMLElement | null, timeoutMs: number): Promise<HTMLElement> {
+  for (let waited = 0; waited <= timeoutMs; waited += 250) {
+    const editor = find()
+    if (editor) return editor
+    await new Promise(resolve => setTimeout(resolve, 250))
+  }
+  throw new Error('找不到网站的输入框，无法上传图片')
 }
 
 async function fillAndSend(content: string, autoSend = true): Promise<void> {
@@ -276,6 +295,7 @@ function handleSendPromptMessage(message: Extract<BackgroundToRoleMessage, { typ
       log.info('message:send-prompt:delay-before-input', { messageId: message.messageId, delayMs: PROMPT_INPUT_DELAY_MS })
       return waitBeforePromptInput()
     })
+    .then(() => attachPromptFiles(message.files))
     .then(() => fillAndSend(message.content, message.autoSend !== false))
     .then(() => {
       conversationMonitor?.reportConversationUpdate()

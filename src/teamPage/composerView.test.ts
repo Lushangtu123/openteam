@@ -171,6 +171,27 @@ describe('team page composer targeting', () => {
     })
   })
 
+  it('sends attachments with the message and puts them back when sending fails', async () => {
+    const { view, deps, runCommand } = createComposerHarness()
+    const uploads = [{ kind: 'text' as const, fileName: 'notes.md', mimeType: 'text/markdown', size: 4, text: '目标' }]
+    const taken = [{ key: 'attachment-1', file: new File(['目标'], 'notes.md'), kind: 'text' as const }]
+    const attachments = { register: vi.fn(), list: vi.fn(() => taken), readUploads: vi.fn(async () => uploads), take: vi.fn(() => taken), restore: vi.fn() }
+    deps.attachments = attachments
+    deps.messageInputEl.value = '先记录这个背景'
+
+    await view.submitComposerMessage()
+
+    expect(runCommand).toHaveBeenCalledWith('GROUP_MESSAGE_SEND', { chatId: 'chat-1', raw: '先记录这个背景', reference: undefined, uploads })
+    expect(attachments.take).toHaveBeenCalled()
+    expect(attachments.restore).not.toHaveBeenCalled()
+
+    runCommand.mockRejectedValueOnce(new Error('发送失败'))
+    deps.messageInputEl.value = '再发一次'
+    await expect(view.submitComposerMessage()).rejects.toThrow('发送失败')
+    expect(attachments.restore).toHaveBeenCalledWith(taken)
+    expect(deps.messageInputEl.value).toBe('再发一次')
+  })
+
   it('submits all-member messages when at least one targeted role can receive them', async () => {
     const { view, deps, runCommand, reconnectRolesForSend, showError } = createComposerHarness({
       roles: [

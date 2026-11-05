@@ -1,5 +1,6 @@
 import { formatContextMessage } from './contextSync'
 import { buildPrompt } from './promptBuilder'
+import { describeAttachments } from './messageUploads'
 import { normalizeLanguage } from '../shared/i18n'
 import type { GroupChat, GroupMessage, GroupRole, OpenTeamLanguage, OpenTeamStore } from './types'
 
@@ -109,7 +110,7 @@ function externalContextMessages(store: OpenTeamStore, chat: GroupChat, role: Gr
 function compressMessages(previousSummary: string | undefined, messages: GroupMessage[], language: OpenTeamLanguage): string {
   const bullets = messages
     .filter(message => message.content.trim())
-    .map(message => `- ${speakerLabel(message, language)}${language === 'en' ? ': ' : '：'}${compactContent(message.content)}`)
+    .map(message => `- ${speakerLabel(message, language)}${language === 'en' ? ': ' : '：'}${compactContent(message.content)}${describeAttachments(message.attachments, language)}`)
   return joinSections([
     previousSummary,
     bullets.length > 0 ? bullets.join('\n') : undefined,

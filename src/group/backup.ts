@@ -99,11 +99,11 @@ export function summarizeBackup(backup: OpenTeamBackup): BackupSummary {
   }
 }
 
-// Ids of the stored images that messages show, which are the ones worth backing up.
+// Ids of the stored images that messages show: the blobs worth backing up, and the ones to keep.
 export function referencedImageIds(store: OpenTeamStore): string[] {
   return [...new Set(Object.values(store.messagesById)
     .flatMap(message => message.attachments ?? [])
-    .filter(attachment => attachment.status === 'ready')
+    .filter(attachment => attachment.type === 'image' && attachment.status === 'ready')
     .map(attachment => attachment.id))]
 }
 

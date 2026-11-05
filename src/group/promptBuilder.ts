@@ -1,4 +1,5 @@
 import { formatContextMessage, type UnsyncedContextResult } from './contextSync'
+import { formatAttachedFilesForPrompt } from './messageUploads'
 import { PROMPT_I18N, normalizeLanguage } from '../shared/i18n'
 import type { GroupChat, GroupMessage, GroupRole, MessageReference, OpenTeamLanguage } from './types'
 
@@ -30,6 +31,7 @@ export function buildIndependentPrompt(input: BuildPromptInput): string {
     buildRoleBlock(input.role, input.includePersona ?? true, language),
     buildReferenceBlock(reference, language),
     language === 'en' ? `User message:\n${input.userMessage.content}` : `用户消息：\n${input.userMessage.content}`,
+    formatAttachedFilesForPrompt(input.userMessage, language),
     input.responseInstruction ?? independentResponseInstruction(input.role.name, Boolean(reference), language),
   ])
 }
@@ -46,6 +48,7 @@ export function buildCollaborativePrompt(input: BuildPromptInput): string {
     buildContextBlock(input, language),
     buildReferenceBlock(reference, language),
     language === 'en' ? `User latest message:\n${input.userMessage.content}` : `用户最新消息：\n${input.userMessage.content}`,
+    formatAttachedFilesForPrompt(input.userMessage, language),
     input.responseInstruction ?? collaborativeResponseInstruction(input.role.name, Boolean(reference), language),
   ])
 }

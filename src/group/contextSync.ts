@@ -1,4 +1,5 @@
 import { normalizeLanguage } from '../shared/i18n'
+import { describeAttachments } from './messageUploads'
 import type { GroupChat, GroupMessage, GroupRole, OpenTeamLanguage } from './types'
 
 export interface UnsyncedContextResult {
@@ -63,7 +64,7 @@ export function formatContextMessage(message: GroupMessage, languageInput?: Open
     : message.type === 'user'
       ? (language === 'en' ? 'User' : '用户')
       : (language === 'en' ? 'System' : '系统')
-  return `${speaker}${language === 'en' ? ': ' : '：'}${message.content}`
+  return `${speaker}${language === 'en' ? ': ' : '：'}${message.content}${describeAttachments(message.attachments, language)}`
 }
 
 function isMessageVisibleToRole(message: GroupMessage, roleId: string): boolean {

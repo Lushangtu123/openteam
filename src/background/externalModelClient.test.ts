@@ -60,6 +60,21 @@ describe('ExternalModelClient Stability Baseline', () => {
     expect(result.content).toBe('Hello World')
   })
 
+  it('sends attached images as image parts next to the prompt', async () => {
+    vi.mocked(streamText).mockReturnValue(createMockStreamResult(['ok']))
+    const client = createExternalModelClient(mockFetch)
+    const bytes = new Uint8Array([1, 2, 3])
+
+    await client.complete({ model: mockConfig, prompt: 'Describe the chart', images: [{ bytes, mimeType: 'image/png' }] })
+    await client.complete({ model: mockConfig, prompt: 'No images' })
+
+    const [withImages, withoutImages] = vi.mocked(streamText).mock.calls.map(call => call[0] as Record<string, unknown>)
+    expect(withImages.prompt).toBeUndefined()
+    expect(withImages.messages).toEqual([{ role: 'user', content: [{ type: 'text', text: 'Describe the chart' }, { type: 'image', image: bytes, mediaType: 'image/png' }] }])
+    expect(withoutImages).toMatchObject({ prompt: 'No images' })
+    expect(withoutImages.messages).toBeUndefined()
+  })
+
   it('should retry on 429 and eventually succeed', async () => {
     let callCount = 0
     vi.mocked(streamText).mockImplementation(() => {

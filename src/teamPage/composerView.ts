@@ -1,6 +1,7 @@
 import { defaultMentionTargetForMessage, parseGroupMentions, roleMentionLabel, roleMentionLabelOptionsFromSettings, roleModelLabel } from '../group/mentionParser'
 import type { GroupChat, GroupMessage, GroupRole, MessageReference, OpenTeamStore } from '../group/types'
 import type { TeamPageState } from './appState'
+import type { ComposerAttachments } from './composerAttachments'
 import { PROBLEM_HEALTH_STATUSES, rolePageHealthLabel, type RolePageHealth } from './roleHealth'
 import { getVisibleThinkingRoles, shouldAutoReconnectRole, shouldConfirmMentionWithEnter, shouldSendMessageWithEnter } from './chatExperience'
 import { runCommandWithReconnect } from './sendWithReconnect'
@@ -25,6 +26,7 @@ export interface ComposerViewDependencies {
   getRoleHealth?(role: GroupRole): RolePageHealth
   // Translates the composer after it re-renders on its own (while typing), between full renders.
   localize?(root: HTMLElement): void
+  attachments?: ComposerAttachments
 }
 
 export interface ComposerView {
@@ -191,6 +193,7 @@ export function createComposerView(deps: ComposerViewDependencies): ComposerView
   }
 
   function registerComposerEvents(): void {
+    deps.attachments?.register()
     deps.composerFormEl.addEventListener('submit', event => {
       event.preventDefault()
       if (deps.sendButtonEl.disabled && deps.state.reconnectingRoleKeys.size > 0) return
@@ -253,11 +256,15 @@ export function createComposerView(deps: ComposerViewDependencies): ComposerView
     }
 
     const reference = deps.state.selectedReference
+    // Read before the composer clears, so a file that cannot be read keeps the draft as it is.
+    const uploads = await deps.attachments?.readUploads() ?? []
+    const attached = deps.attachments?.take() ?? []
     clearComposerAfterSend(raw, reference)
     try {
-      await runCommandWithReconnect(deps, { chat, roles: targetResult.roles, type: 'GROUP_MESSAGE_SEND', payload: { chatId: chat.id, raw, reference } })
+      await runCommandWithReconnect(deps, { chat, roles: targetResult.roles, type: 'GROUP_MESSAGE_SEND', payload: { chatId: chat.id, raw, reference, ...(uploads.length > 0 ? { uploads } : {}) } })
     } catch (error) {
       restoreComposerDraft(raw, reference)
+      deps.attachments?.restore(attached)
       throw error
     }
   }

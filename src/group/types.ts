@@ -296,7 +296,7 @@ export interface GroupMessage {
   createdAt: number
   status: DeliveryStatus
   deliveryStatus?: Record<string, DeliveryStatus>
-  attachments?: MessageImageAttachment[]
+  attachments?: MessageAttachment[]
 }
 
 export interface ReplyImageSource {
@@ -310,6 +310,8 @@ export interface MessageImageAttachment {
   id: string
   type: 'image'
   status: 'ready' | 'error'
+  // 'user-upload' for images the user attached; captured site replies have no source.
+  source?: 'user-upload'
   alt?: string
   width?: number
   height?: number
@@ -318,6 +320,19 @@ export interface MessageImageAttachment {
   fileName?: string
   error?: string
 }
+
+// A text file the user attached. Its content is put into the prompt, so it is kept with the message.
+export interface MessageFileAttachment {
+  id: string
+  type: 'file'
+  status: 'ready'
+  fileName: string
+  mimeType: string
+  size: number
+  text: string
+}
+
+export type MessageAttachment = MessageImageAttachment | MessageFileAttachment
 
 export interface MessageReference {
   messageId: string

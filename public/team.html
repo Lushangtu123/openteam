@@ -162,12 +162,19 @@
         <form id="composer" class="composer">
           <div id="reference-draft" class="reference-draft" hidden></div>
           <div id="mention-panel" class="mention-panel" hidden></div>
+          <div id="attachment-tray" class="attachment-tray" hidden></div>
           <textarea id="message-input" placeholder="输入消息，@成员可指定回复；不 @ 仅记录到群聊。"></textarea>
           <div class="composer-actions">
             <div>
               <div id="target-preview" class="muted tiny">选择群聊后可发送</div>
               <div id="busy-preview" class="tiny"></div>
             </div>
+            <button id="attach-file" class="composer-attach" type="button" aria-label="添加图片或文件" data-tooltip="添加图片或文件">
+              <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
+                <path d="m15.5 7.5-6.9 6.9a2 2 0 0 0 2.83 2.83l7.07-7.07a4 4 0 0 0-5.66-5.66L5.77 11.57a6 6 0 0 0 8.49 8.49l5.3-5.31" />
+              </svg>
+            </button>
+            <input id="attach-file-input" type="file" multiple hidden>
             <button id="send-message" class="btn btn-primary" type="submit" disabled>发送</button>
           </div>
         </form>

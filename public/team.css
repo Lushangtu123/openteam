@@ -6095,3 +6095,163 @@ select:focus {
   justify-content: flex-end;
   gap: 8px;
 }
+
+/* Attachments in the composer and in messages */
+.composer-actions {
+  gap: 8px;
+}
+
+.composer-attach {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.composer-attach:hover {
+  border-color: var(--line-hover);
+  background: var(--hover);
+  color: var(--text);
+}
+
+.composer-attach svg {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.composer.drop-active {
+  border-color: rgba(var(--accent-rgb), 0.6);
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+
+.attachment-tray:not([hidden]) {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 8px;
+}
+
+.attachment-tray-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.attachment-chip {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 220px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 5px 28px 5px 5px;
+  background: var(--chip-bg);
+}
+
+.attachment-chip img,
+.attachment-chip-icon {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 7px;
+  object-fit: cover;
+}
+
+.attachment-chip-icon,
+.message-file-icon {
+  display: grid;
+  place-items: center;
+  background: var(--accent-soft);
+  color: var(--brand);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.attachment-chip-meta {
+  display: grid;
+  min-width: 0;
+}
+
+.attachment-chip-name,
+.message-file-name {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachment-chip-size,
+.message-file-size {
+  color: var(--subtle);
+  font-size: 11px;
+}
+
+.attachment-chip-remove {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.attachment-chip-remove:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.attachment-tray-hint {
+  margin: 0;
+  color: var(--subtle);
+  font-size: 11px;
+}
+
+.message-file-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.message-file-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 260px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 10px;
+  padding: 5px 10px 5px 5px;
+  background: rgba(0, 0, 0, 0.12);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.message-file-icon {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+}
+
+.message-row.user .message-file-name,
+.message-row.user .message-file-size {
+  color: inherit;
+}

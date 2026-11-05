@@ -178,6 +178,9 @@ const UI_TRANSLATIONS: Record<string, string> = {
   '尚未读取消息': 'No messages read yet',
   '等待连接': 'Waiting to connect',
   '网页已连接': 'Web connected',
+  '添加图片或文件': 'Add image or file',
+  '附件只在发送时上传给对应的 AI 网站或模型。': 'Attachments are uploaded to the AI site or model only when you send them.',
+  '移除附件': 'Remove attachment',
   '数据备份': 'Data backup',
   '导出全部数据': 'Export all data',
   '从备份恢复…': 'Restore from backup…',
@@ -889,6 +892,18 @@ function translateUiPattern(source: string): string | undefined {
   if (source.includes(' · ')) return source.split(' · ').map(part => translateUi(part, 'en')).join(' · ')
   const sendWithConnecting = source.match(/^将发送给：(.+)；正在连接：(.+)$/)
   if (sendWithConnecting) return `Will send to: ${sendWithConnecting[1]}; connecting: ${sendWithConnecting[2]}`
+  const uploadLimit = source.match(/^一条消息最多 (\d+) 个附件$/)
+  if (uploadLimit) return `A message can have at most ${uploadLimit[1]} attachments`
+  const uploadUnsupported = source.match(/^不支持这种文件：(.+)。可以上传 PNG、JPEG、WebP、GIF 图片，或文本、Markdown、代码等文本文件。$/)
+  if (uploadUnsupported) return `Unsupported file: ${uploadUnsupported[1]}. You can attach PNG, JPEG, WebP or GIF images, or text files such as text, Markdown or code.`
+  const imageTooLarge = source.match(/^图片太大：(.+)（最大 10 MB）$/)
+  if (imageTooLarge) return `Image too large: ${imageTooLarge[1]} (10 MB at most)`
+  const textTooLarge = source.match(/^文本文件太大：(.+)（最大 1 MB）$/)
+  if (textTooLarge) return `Text file too large: ${textTooLarge[1]} (1 MB at most)`
+  const unreadableText = source.match(/^无法读取文本文件：(.+)（不是 UTF-8 文本）$/)
+  if (unreadableText) return `Cannot read text file: ${unreadableText[1]} (not UTF-8 text)`
+  const download = source.match(/^下载 (.+)$/)
+  if (download) return `Download ${download[1]}`
   const backupExported = source.match(/^已导出备份：(\d+) 个群聊、(\d+) 条消息$/)
   if (backupExported) return `Backup exported: ${backupExported[1]} chats, ${backupExported[2]} messages`
   const backupReplaced = source.match(/^已用备份替换全部数据：(\d+) 个群聊$/)

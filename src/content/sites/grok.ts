@@ -85,6 +85,7 @@ export function createGrokAdapter(options: GrokAdapterOptions = {}): ChatSiteAda
     readResponseMarkdown: extractMarkdownFromDom,
     findResponseContainer,
     isGenerating: isGrokGenerating,
+    findEditor: () => findGrokEditor() ?? null,
     checkStatus: context => checkSiteHealth({
       findEditor: findGrokEditor,
       isGenerating: isGrokGenerating,

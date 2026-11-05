@@ -22,7 +22,14 @@ export class ExternalModelError extends Error {
 export interface ExternalModelCompletionInput {
   model: ExternalModelConfig
   prompt: string
+  // Images the user attached, sent with the prompt as image parts (the model must accept images).
+  images?: ExternalModelImage[]
   abortSignal?: AbortSignal
+}
+
+export interface ExternalModelImage {
+  bytes: Uint8Array
+  mimeType: string
 }
 
 export interface ExternalModelCompletionResult {
@@ -181,7 +188,7 @@ async function* streamExternalModel(input: ExternalModelCompletionInput, fetchIm
 
       const result = streamText({
         model: provider(input.model.modelName as never),
-        prompt: input.prompt,
+        ...promptOrMessages(input),
         abortSignal: input.abortSignal,
       })
 
@@ -206,6 +213,19 @@ async function* streamExternalModel(input: ExternalModelCompletionInput, fetchIm
       const delay = Math.pow(2, attempt) * 500
       await new Promise(resolve => setTimeout(resolve, delay))
     }
+  }
+}
+
+function promptOrMessages(input: ExternalModelCompletionInput) {
+  if (!input.images?.length) return { prompt: input.prompt }
+  return {
+    messages: [{
+      role: 'user' as const,
+      content: [
+        { type: 'text' as const, text: input.prompt },
+        ...input.images.map(image => ({ type: 'image' as const, image: image.bytes, mediaType: image.mimeType })),
+      ],
+    }],
   }
 }
 

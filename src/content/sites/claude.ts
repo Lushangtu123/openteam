@@ -95,6 +95,7 @@ export function createClaudeAdapter(options: ClaudeAdapterOptions = {}): ChatSit
     findResponseContainer,
     isGenerating: isClaudeGenerating,
     checkStatus: checkClaudeStatus,
+    findEditor: () => document.querySelector<HTMLElement>(CLAUDE_SELECTORS.editor),
     stopGenerating: stopClaudeGenerating,
     fillAndSend,
     collectPromptDiagnostics,

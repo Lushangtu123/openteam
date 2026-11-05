@@ -97,6 +97,7 @@ export function createGeminiAdapter(options: GeminiAdapterOptions = {}): ChatSit
     readResponseMarkdown: extractMarkdownFromDom,
     findResponseContainer,
     isGenerating: isGeminiGenerating,
+    findEditor: () => document.querySelector<HTMLElement>(GEMINI_SELECTORS.editor),
     // Signing in happens on accounts.google.com, where OpenTeam has no content script.
     checkStatus: context => checkSiteHealth({
       findEditor: () => document.querySelector(GEMINI_SELECTORS.editor),

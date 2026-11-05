@@ -2,6 +2,7 @@ import { buildUnsyncedContext } from '../group/contextSync'
 import { contextCharBudgetForRole } from '../group/contextBudget'
 import { buildExternalModelPrompt, type ExternalMemoryPatch } from '../group/externalModelContext'
 import { buildOrchestrationReviewResponseInstruction } from '../group/orchestrationPrompts'
+import { uploadedImageIds } from '../group/messageUploads'
 import { buildPrompt, roleUsesChatGptGptsPersona } from '../group/promptBuilder'
 import type { ExternalModelConfig, GroupChat, GroupMessage, GroupRole, MessageReference, OpenTeamStore } from '../group/types'
 import type { PromptDelivery } from './promptDelivery'
@@ -14,6 +15,7 @@ export interface ExternalPromptDelivery {
   replyAttemptId: string
   model: ExternalModelConfig
   prompt: string
+  imageAttachmentIds?: string[]
 }
 
 export type PreparedRolePromptDelivery = {
@@ -44,6 +46,8 @@ export function prepareRolePromptDelivery(input: PrepareRolePromptDeliveryInput)
   const replyAttemptId = input.newId('attempt')
   const responseInstruction = responseInstructionForMessage(input.userMessage, input.store.settings.language)
   const maxContextChars = contextCharBudgetForRole(input.store, input.role)
+  const imageAttachmentIds = uploadedImageIds(input.userMessage)
+  const images = imageAttachmentIds.length > 0 ? { imageAttachmentIds } : {}
 
   if (isExternalModelRole(input.role)) {
     const model = requireExternalModelForRole(input.store, input.role)
@@ -60,6 +64,7 @@ export function prepareRolePromptDelivery(input: PrepareRolePromptDeliveryInput)
         replyAttemptId,
         model,
         prompt: prompt.content,
+        ...images,
       },
     }
   }
@@ -97,6 +102,7 @@ export function prepareRolePromptDelivery(input: PrepareRolePromptDeliveryInput)
         content,
         includesPersona,
       },
+      ...images,
     },
   }
 }

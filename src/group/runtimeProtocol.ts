@@ -22,6 +22,15 @@ export type SendPromptMessage = {
   autoSend?: boolean
   includesPersona?: boolean
   isRetry?: boolean
+  // Images the user attached, to upload into the site's composer before the prompt is sent.
+  files?: PromptFile[]
+}
+
+export interface PromptFile {
+  fileName: string
+  mimeType: string
+  // Base64 of the file bytes.
+  data: string
 }
 
 export type StopGenerationMessage = {

@@ -27,6 +27,8 @@ export interface ChatSiteAdapter {
   findResponseContainer(element: Element | null): Element | null
   isGenerating(): boolean
   checkStatus?(context: SiteHealthContext): SiteStatusInfo
+  // The site's prompt input box, where attached files are pasted.
+  findEditor?(): HTMLElement | null
   stopGenerating(): Promise<boolean>
   fillAndSend(content: string, autoSend?: boolean): Promise<void>
   collectPromptDiagnostics(): Record<string, unknown>

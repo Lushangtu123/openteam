@@ -1,10 +1,12 @@
 import { extractSupportedConversationId, normalizeSupportedChatConversationUrl } from '../group/conversationUrl'
+import { readMessageUploads, type MessageUpload } from '../group/messageUploads'
+import type { LoadedUpload, UploadedImage } from './imageAttachments'
 import { normalizeMessageHighlightColor } from '../group/highlightColors'
 import { defaultMentionTargetForMessage, parseGroupMentions, roleMentionLabelOptionsFromSettings } from '../group/mentionParser'
 import { mapRuntimeRoleStatus } from '../group/runtimeProtocol'
 import type { BackgroundToRoleMessage } from '../group/runtimeProtocol'
-import type { ChatSite, ExternalModelConfig, GroupChat, GroupMessage, GroupRole, MessageImageAttachment, MessageReference, OpenTeamStore, OrchestrationFlow, ReplyImageSource, RoleSiteHealthReason, RoleSiteHealthStatus, RuntimeFrameBinding } from '../group/types'
-import { createExternalModelClient, type ExternalModelClient } from './externalModelClient'
+import type { ChatSite, GroupChat, GroupMessage, GroupRole, MessageAttachment, MessageImageAttachment, MessageReference, OpenTeamStore, OrchestrationFlow, ReplyImageSource, RoleSiteHealthReason, RoleSiteHealthStatus, RuntimeFrameBinding } from '../group/types'
+import { createExternalModelClient, type ExternalModelClient, type ExternalModelCompletionInput } from './externalModelClient'
 import type { BackgroundMessageRoute } from './messageRouter'
 import type { PromptDelivery, PromptSender } from './promptDelivery'
 import { DEFAULT_PROMPT_DELIVERY_RETRY_DELAYS_MS, sendPromptDeliveryWithRetry } from './promptDeliveryRetry'
@@ -62,6 +64,8 @@ export interface MessageHandlersDependencies {
   imageAttachments?: {
     captureReplyImages(input: { chatId: string; messageId: string; images: ReplyImageSource[] }): Promise<MessageImageAttachment[]>
     deleteByIds(ids: string[]): Promise<void>
+    saveUploads?(input: { chatId: string; messageId: string; images: UploadedImage[] }): Promise<void>
+    loadUploads?(ids: string[]): Promise<LoadedUpload[]>
   }
   deliveryRetryDelaysMs?: readonly number[]
   externalModelRetryDelaysMs?: readonly number[]
@@ -79,13 +83,17 @@ export function createMessageHandlers(deps: MessageHandlersDependencies): Backgr
     const chatId = requireString(message.chatId, '缺少群聊 ID')
     const raw = requireString(message.raw, '消息内容不能为空')
     const timestamp = deps.now()
-    deps.log.info('message-send:start', { chatId, rawLength: raw.length })
+    const uploadCheck = readMessageUploads(message.uploads)
+    if (!uploadCheck.ok) throw new Error(uploadCheck.error)
+    const uploads = uploadCheck.uploads.map(upload => ({ id: deps.newId('attachment'), upload }))
+    deps.log.info('message-send:start', { chatId, rawLength: raw.length, uploads: uploads.length })
 
     const { store, result } = await mutateStore(store => {
       const chat = requireChat(store, chatId)
       const roles = getChatRoles(store, chat)
       const parsed = parseGroupMentions(raw, roles, { ...roleMentionLabelOptionsFromSettings(store.settings), defaultTarget: defaultMentionTargetForMessage(raw, chat) })
       if (!parsed.ok) throw new Error(parsed.error)
+      if (parsed.orchestrationTarget && uploads.length > 0) throw new Error('编排任务暂不支持附件，请去掉附件后再发送')
 
       if (parsed.orchestrationTarget) {
         const flow = resolveOrchestrationMentionFlow(store, chat, parsed.orchestrationTarget)
@@ -156,6 +164,7 @@ export function createMessageHandlers(deps: MessageHandlersDependencies): Backgr
         mentionedRoleIds: parsed.mentionedRoleIds,
         mentionsAll: parsed.mentionsAll,
         references: reference ? [reference] : undefined,
+        ...(uploads.length > 0 ? { attachments: uploads.map(({ id, upload }) => uploadAttachment(id, upload)) } : {}),
         createdAt: timestamp,
         status: finalTargetRoleIds.length > 0 ? 'pending' : 'received',
         deliveryStatus: Object.fromEntries(finalTargetRoleIds.map(roleId => [roleId, unavailable.some(role => role.id === roleId) ? 'error' : 'pending'])),
@@ -214,6 +223,12 @@ export function createMessageHandlers(deps: MessageHandlersDependencies): Backgr
       return { ok: true, ...(await startOrchestrationRun(deps, orchestration)) }
     }
     const messageResult = result as { message: GroupMessage; deliveries: PromptDelivery[]; externalDeliveries: ExternalPromptDelivery[] }
+    // The images must be stored before any delivery reads them.
+    const images = uploads.flatMap(({ id, upload }) => upload.kind === 'image' ? [{ id, fileName: upload.fileName, mimeType: upload.mimeType, data: upload.data }] : [])
+    if (images.length > 0) {
+      if (!deps.imageAttachments?.saveUploads) throw new Error('当前环境不支持图片上传')
+      await deps.imageAttachments.saveUploads({ chatId, messageId: messageResult.message.id, images })
+    }
 
     deps.log.info('message-send:deliveries-ready', {
       chatId,
@@ -1116,13 +1131,18 @@ async function sendExternalModelDelivery(deps: MessageHandlersDependencies, clie
     replyMessageId = initialized.replyMessageId
     await deps.broadcastStoreUpdated(initialized.store)
 
+    const imageIds = delivery.imageAttachmentIds ?? []
+    if (imageIds.length > 0 && !deps.imageAttachments?.loadUploads) throw new Error('当前环境不支持发送图片')
+    const images = imageIds.length > 0 && deps.imageAttachments?.loadUploads
+      ? (await deps.imageAttachments.loadUploads(imageIds)).map(upload => ({ bytes: upload.bytes, mimeType: upload.mimeType }))
+      : undefined
     const retryDelays = deps.externalModelRetryDelaysMs ?? DEFAULT_EXTERNAL_MODEL_RETRY_DELAYS_MS
     for (let attemptIndex = 0; attemptIndex <= retryDelays.length; attemptIndex += 1) {
       try {
         content = ''
         const stream = typeof client.stream === 'function'
-          ? client.stream({ model: delivery.model, prompt: delivery.prompt, abortSignal: controller.signal })
-          : streamCompleteFallback(client, { model: delivery.model, prompt: delivery.prompt, abortSignal: controller.signal })
+          ? client.stream({ model: delivery.model, prompt: delivery.prompt, images, abortSignal: controller.signal })
+          : streamCompleteFallback(client, { model: delivery.model, prompt: delivery.prompt, images, abortSignal: controller.signal })
         for await (const chunk of abortableChunks(stream, controller.signal)) {
           throwIfAborted(controller.signal)
           if (!chunk) continue
@@ -1320,7 +1340,7 @@ async function markExternalAssistantStopped(
   return { store }
 }
 
-async function* streamCompleteFallback(client: ExternalModelClient, input: { model: ExternalModelConfig; prompt: string; abortSignal?: AbortSignal }): AsyncIterable<string> {
+async function* streamCompleteFallback(client: ExternalModelClient, input: ExternalModelCompletionInput): AsyncIterable<string> {
   const result = await client.complete(input)
   yield result.content
 }
@@ -1727,13 +1747,20 @@ function requireImageAttachmentService(deps: MessageHandlersDependencies): NonNu
   return deps.imageAttachments
 }
 
-function readyAttachmentIds(attachments: MessageImageAttachment[] | undefined): string[] {
-  return (attachments ?? []).filter(attachment => attachment.status === 'ready').map(attachment => attachment.id)
+function uploadAttachment(id: string, upload: MessageUpload): MessageAttachment {
+  return upload.kind === 'image'
+    ? { id, type: 'image', status: 'ready', source: 'user-upload', mimeType: upload.mimeType, size: upload.size, fileName: upload.fileName }
+    : { id, type: 'file', status: 'ready', fileName: upload.fileName, mimeType: upload.mimeType, size: upload.size, text: upload.text }
+}
+
+// Ids of the stored image blobs behind these attachments (text files have none).
+function readyAttachmentIds(attachments: MessageAttachment[] | undefined): string[] {
+  return (attachments ?? []).filter(attachment => attachment.type === 'image' && attachment.status === 'ready').map(attachment => attachment.id)
 }
 
 async function deleteReadyAttachmentsBestEffort(
   deps: MessageHandlersDependencies,
-  attachments: MessageImageAttachment[] | undefined,
+  attachments: MessageAttachment[] | undefined,
   event: string,
 ): Promise<void> {
   await deleteAttachmentIdsBestEffort(deps, readyAttachmentIds(attachments), event)

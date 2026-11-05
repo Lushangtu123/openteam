@@ -44,6 +44,22 @@ describe('background prompt delivery', () => {
     }))
   })
 
+  it('loads uploaded images and sends them along with the prompt', async () => {
+    vi.resetModules()
+    const tabsSendMessage = vi.fn().mockResolvedValue({ ok: true })
+    vi.stubGlobal('chrome', { tabs: { sendMessage: tabsSendMessage } })
+    const { createPromptSender } = await import('./promptDelivery')
+    const loadImages = vi.fn(async () => [{ fileName: 'chart.png', mimeType: 'image/png', data: 'AAAA' }])
+    const message = { type: 'TEAM_SEND_PROMPT' as const, chatId: 'chat-1', roleId: 'role-1', messageId: 'msg-1', content: '看图' }
+
+    await createPromptSender({ log: { info: vi.fn(), warn: vi.fn() }, loadImages })({ roleId: 'role-1', tabId: 101, frameId: 7, message, imageAttachmentIds: ['img-1'] })
+
+    expect(loadImages).toHaveBeenCalledWith(['img-1'])
+    expect(tabsSendMessage).toHaveBeenCalledWith(101, { ...message, files: [{ fileName: 'chart.png', mimeType: 'image/png', data: 'AAAA' }] }, { frameId: 7 })
+    await expect(createPromptSender({ log: { info: vi.fn(), warn: vi.fn() } })({ roleId: 'role-1', tabId: 101, frameId: 7, message, imageAttachmentIds: ['img-1'] }))
+      .rejects.toThrow('当前环境不支持发送图片')
+  })
+
   it('retries prompt delivery through a shared helper using the latest frame binding', async () => {
     const sendPrompt = vi.fn()
       .mockRejectedValueOnce(new Error('输入框繁忙'))

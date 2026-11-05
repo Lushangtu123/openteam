@@ -1,4 +1,4 @@
-import type { SendPromptMessage } from '../group/runtimeProtocol'
+import type { PromptFile, SendPromptMessage } from '../group/runtimeProtocol'
 import type { ChatSite } from '../group/types'
 
 export interface PromptDelivery {
@@ -7,6 +7,8 @@ export interface PromptDelivery {
   tabId: number
   frameId: number
   message: SendPromptMessage
+  // Uploaded images to load and send along with the prompt.
+  imageAttachmentIds?: string[]
 }
 
 export type PromptSender = (delivery: PromptDelivery, isTest?: boolean) => Promise<void>
@@ -16,9 +18,10 @@ export interface PromptSenderDependencies {
     info(event: string, details?: Record<string, unknown>): void
     warn(event: string, details?: Record<string, unknown>): void
   }
+  loadImages?(ids: string[]): Promise<PromptFile[]>
 }
 
-export function createPromptSender({ log }: PromptSenderDependencies): PromptSender {
+export function createPromptSender({ log, loadImages }: PromptSenderDependencies): PromptSender {
   return async (delivery, isTest = false) => {
     if (isTest) {
       log.info('prompt:send:test-mode', {
@@ -43,7 +46,10 @@ export function createPromptSender({ log }: PromptSenderDependencies): PromptSen
     })
 
     try {
-      const response = await chrome.tabs.sendMessage(delivery.tabId, delivery.message, { frameId: delivery.frameId })
+      const imageIds = delivery.imageAttachmentIds ?? []
+      if (imageIds.length > 0 && !loadImages) throw new Error('当前环境不支持发送图片')
+      const message = imageIds.length > 0 && loadImages ? { ...delivery.message, files: await loadImages(imageIds) } : delivery.message
+      const response = await chrome.tabs.sendMessage(delivery.tabId, message, { frameId: delivery.frameId })
       if (isRecord(response) && response.ok === false) {
         throw new Error(readOptionalString(response.error) ?? readOptionalString(response.message) ?? 'Gemini prompt delivery failed')
       }

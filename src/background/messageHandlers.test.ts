@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createDefaultStore } from '../group/store'
-import type { GroupChat, GroupRole, OpenTeamStore, OrchestrationFlow, RuntimeFrameBinding } from '../group/types'
+import type { GroupChat, GroupMessage, GroupRole, OpenTeamStore, OrchestrationFlow, RuntimeFrameBinding } from '../group/types'
 
 function createStoreWithReadyRole(): OpenTeamStore {
   const store = createDefaultStore()
@@ -180,6 +180,84 @@ describe('background message handlers', () => {
     expect(broadcastStoreUpdated).toHaveBeenCalledWith(expect.objectContaining({
       messagesById: expect.objectContaining({ 'msg-1': expect.any(Object) }),
     }))
+  })
+
+  it('stores attachments with the message, writes text files into the prompt and hands images to delivery', async () => {
+    vi.resetModules()
+    let draftStore: OpenTeamStore | undefined
+    vi.doMock('./storeAccess', async importOriginal => {
+      const actual = await importOriginal<typeof import('./storeAccess')>()
+      return {
+        ...actual,
+        mutateStore: vi.fn(async (mutator: (store: OpenTeamStore) => unknown) => {
+          const store = createStoreWithReadyRole()
+          const result = await mutator(store)
+          draftStore = store
+          return { store, result }
+        }),
+      }
+    })
+
+    const { createMessageHandlers } = await import('./messageHandlers')
+    const binding: RuntimeFrameBinding = { chatId: 'chat-1', roleId: 'role-1', tabId: 101, frameId: 7, ready: true, lastSeenAt: 0 }
+    const sendPrompt = vi.fn()
+    const saveUploads = vi.fn(async () => undefined)
+    let nextId = 0
+    const routes = createMessageHandlers({
+      broadcastStoreUpdated: vi.fn(),
+      getChatStatusFromRoles: () => 'ready',
+      log: { debug: vi.fn(), info: vi.fn(), warn: vi.fn() },
+      newId: vi.fn((prefix: string) => `${prefix}-${++nextId}`),
+      now: vi.fn(() => 100),
+      runtimeFrames: { bind: vi.fn(), getByAddress: vi.fn(), getByRole: vi.fn(() => binding) },
+      sendRoleMessage: vi.fn(),
+      sendError: vi.fn(),
+      sendPrompt,
+      imageAttachments: { captureReplyImages: vi.fn(), deleteByIds: vi.fn(), saveUploads },
+    })
+    const sendRoute = routes.find(route => route.type === 'GROUP_MESSAGE_SEND')
+    const uploads = [
+      { kind: 'text', fileName: 'notes.md', mimeType: 'text/markdown', size: 9, text: '季度目标：增长' },
+      { kind: 'image', fileName: 'chart.png', mimeType: 'image/png', size: 3, data: btoa('png') },
+    ]
+
+    const response = await sendRoute?.handler({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@all 看看附件', uploads }, {}) as { ok: boolean; message: GroupMessage }
+
+    expect(response.ok).toBe(true)
+    const attachments = draftStore?.messagesById[response.message.id].attachments ?? []
+    expect(attachments).toEqual([
+      { id: expect.stringMatching(/^attachment-/), type: 'file', status: 'ready', fileName: 'notes.md', mimeType: 'text/markdown', size: 21, text: '季度目标：增长' },
+      { id: expect.stringMatching(/^attachment-/), type: 'image', status: 'ready', source: 'user-upload', mimeType: 'image/png', size: 3, fileName: 'chart.png' },
+    ])
+    expect(saveUploads).toHaveBeenCalledWith({ chatId: 'chat-1', messageId: response.message.id, images: [{ id: attachments[1].id, fileName: 'chart.png', mimeType: 'image/png', data: btoa('png') }] })
+    expect(saveUploads.mock.invocationCallOrder[0]).toBeLessThan(sendPrompt.mock.invocationCallOrder[0])
+    expect(sendPrompt).toHaveBeenCalledWith(expect.objectContaining({
+      imageAttachmentIds: [attachments[1].id],
+      message: expect.objectContaining({ content: expect.stringContaining('看看附件\n\nAttached file notes.md:\n```\n季度目标：增长\n```\n\nAttached images (uploaded with this message): chart.png') }),
+    }))
+  })
+
+  it('refuses attachments that break the upload rules before storing anything', async () => {
+    vi.resetModules()
+    const mutateStore = vi.fn()
+    vi.doMock('./storeAccess', async importOriginal => ({ ...(await importOriginal<typeof import('./storeAccess')>()), mutateStore }))
+    const { createMessageHandlers } = await import('./messageHandlers')
+    const routes = createMessageHandlers({
+      broadcastStoreUpdated: vi.fn(),
+      getChatStatusFromRoles: () => 'ready',
+      log: { debug: vi.fn(), info: vi.fn(), warn: vi.fn() },
+      newId: vi.fn((prefix: string) => `${prefix}-1`),
+      now: vi.fn(() => 100),
+      runtimeFrames: { bind: vi.fn(), getByAddress: vi.fn(), getByRole: vi.fn() },
+      sendRoleMessage: vi.fn(),
+      sendError: vi.fn(),
+      sendPrompt: vi.fn(),
+    })
+    const sendRoute = routes.find(route => route.type === 'GROUP_MESSAGE_SEND')
+
+    await expect(sendRoute?.handler({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@all x', uploads: [{ kind: 'image', fileName: 'a.pdf', mimeType: 'application/pdf', data: 'AAAA' }] }, {}))
+      .rejects.toThrow('不支持这种文件：a.pdf')
+    expect(mutateStore).not.toHaveBeenCalled()
   })
 
   it('allows @all delivery when manual mention routing is required', async () => {
