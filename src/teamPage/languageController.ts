@@ -31,6 +31,9 @@ const SKIP_SELECTOR = [
   '.message-time-divider',
   '.reference-box',
   '.message-search-results',
+  '.reply-compare-question',
+  '.reply-compare-columns',
+  '.reply-compare-select',
 ].join(', ')
 
 export function createLanguageSettingsController(deps: LanguageSettingsControllerDependencies): LanguageSettingsController {

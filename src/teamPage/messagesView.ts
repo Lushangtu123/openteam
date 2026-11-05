@@ -1,9 +1,9 @@
-import MarkdownIt from 'markdown-it'
-import { extractMarkdownFromDom } from '../content/sites/domMarkdown'
 import { DEFAULT_MESSAGE_HIGHLIGHT_COLOR, MESSAGE_HIGHLIGHT_COLORS, messageHighlightColorRgb, type MessageHighlightColor } from '../group/highlightColors'
 import { roleMentionLabel, roleMentionLabelOptionsFromSettings, roleModelLabel } from '../group/mentionParser'
 import type { GroupChat, GroupMessage, GroupRole, MessageFileAttachment, MessageHighlight, MessageImageAttachment, MessageReference, OpenTeamStore, OrchestrationReviewResult } from '../group/types'
 import { formatBytes } from './composerAttachments'
+import { renderMarkdownInto } from './markdownRender'
+import { countRepliesByQuestion } from '../group/replyComparison'
 import type { ImageAttachmentBlobRecord } from '../shared/imageAttachmentRepository'
 import type { TeamPageState } from './appState'
 import { buildChatRenderItems, getChatStartupNotice, getStoppedReplyRoles, getVisibleThinkingRoles, THINKING_TIMEOUT_MS } from './chatExperience'
@@ -16,7 +16,6 @@ const AUTO_SCROLL_BOTTOM_THRESHOLD_PX = 48
 const MARK_MENU_SELECTION_GAP_PX = 12
 const MARK_MENU_FALLBACK_HEIGHT_PX = 148
 const MARK_MENU_SELECTION_SETTLE_DELAY_MS = 80
-const markdownRenderer = new MarkdownIt({ html: false, linkify: true, breaks: true })
 
 export interface MessagesViewDependencies {
   state: TeamPageState
@@ -40,6 +39,8 @@ export interface MessagesViewDependencies {
   loadImageAttachment?(id: string): Promise<ImageAttachmentBlobRecord | undefined>
   runCommand(type: string, payload?: Record<string, unknown>): Promise<void>
   render(): void
+  // Opens the side-by-side view of the replies to a question.
+  openReplyComparison?(questionId: string): void
   showError(message: string): void
   showSuccess(message: string): void
   renderOrchestrationStatus?(): HTMLElement | undefined
@@ -76,10 +77,13 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
   const imageObjectUrls = new Map<string, string>()
   const imageLoadPromises = new Map<string, Promise<string | undefined>>()
   let timeDividers = new Map<string, HTMLElement>()
+  // People who answered each question in the chat on screen, counted once per render.
+  let replyCounts = new Map<string, number>()
 
   function renderMessages(): void {
     const chat = deps.getCurrentChat()
     const messages = deps.getCurrentMessages()
+    replyCounts = countRepliesByQuestion(messages)
     releaseUnusedImageUrls(messages)
     const preserveScroll = deps.state.preserveNextMessageScroll
     const previousScrollTop = deps.messagesEl.scrollTop
@@ -253,6 +257,8 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     }
 
     stack.append(bubble)
+    const compare = compareButton(message)
+    if (compare) stack.append(compare)
     inner.append(avatar, stack)
     article.append(inner)
     cacheMessageNode(message.id, signature, article, streamingSignature)
@@ -310,12 +316,7 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
   }
 
   function renderMarkdownMessageBody(body: HTMLElement, content: string): void {
-    body.classList.add('markdown-body')
-    body.innerHTML = markdownRenderer.render(normalizeAssistantMarkdown(content))
-    for (const link of body.querySelectorAll<HTMLAnchorElement>('a[href]')) {
-      link.target = '_blank'
-      link.rel = 'noreferrer'
-    }
+    renderMarkdownInto(body, content)
   }
 
   function renderPlainMessageBody(body: HTMLElement, content: string): void {
@@ -334,6 +335,20 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
       grid.append(renderImageAttachment(message, attachment))
     }
     return grid
+  }
+
+  function compareButton(message: GroupMessage): HTMLButtonElement | undefined {
+    const count = message.type === 'user' ? replyCounts.get(message.id) ?? 0 : 0
+    if (count < 2 || !deps.openReplyComparison) return undefined
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.className = 'message-compare-btn'
+    button.textContent = `⇆ 对比 ${count} 个回复`
+    button.addEventListener('click', event => {
+      event.stopPropagation()
+      deps.openReplyComparison?.(message.id)
+    })
+    return button
   }
 
   function renderMessageFileList(message: GroupMessage): HTMLElement | undefined {
@@ -483,19 +498,6 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
 
   function shouldRenderMarkdownMessage(message: GroupMessage): boolean {
     return message.contentFormat === 'markdown' || message.type === 'assistant'
-  }
-
-  function normalizeAssistantMarkdown(content: string): string {
-    if (!looksLikeHtmlFragment(content)) return content
-
-    const template = document.createElement('template')
-    template.innerHTML = content
-    const normalized = extractMarkdownFromDom(template.content)
-    return normalized || content
-  }
-
-  function looksLikeHtmlFragment(content: string): boolean {
-    return /<(table|thead|tbody|tr|th|td|pre|code|math|mi|mn|mo|msup|msub|mfrac|semantics|annotation|annotation-xml)\b/i.test(content)
   }
 
   function createMessageIconButton(label: string, icon: MessageActionIcon, onClick: (button: HTMLButtonElement) => void, options: { activateOnPointerDown?: boolean } = {}): HTMLButtonElement {
@@ -687,6 +689,7 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
       orchestrationKind: message.orchestrationKind,
       orchestrationReviewResult: findReviewResultForMessage(message),
       highlights: deps.getStore().messageHighlightsById?.[message.id],
+      compareCount: message.type === 'user' ? replyCounts.get(message.id) ?? 0 : undefined,
       targetRoleIds: message.targetRoleIds,
       mentionedRoleIds: message.mentionedRoleIds,
       mentionsAll: message.mentionsAll,

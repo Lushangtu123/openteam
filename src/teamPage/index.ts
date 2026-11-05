@@ -15,6 +15,7 @@ import { createFloatingWindowControls } from './floatingWindow'
 import { createIframeHost } from './iframeHost'
 import { applyTeamLanguage, createLanguageSettingsController } from './languageController'
 import { createMessageSearchView } from './messageSearchView'
+import { createReplyComparisonView } from './replyComparisonView'
 import { createMessagesView } from './messagesView'
 import { createNotesView } from './notesView'
 import { createPeopleLibraryView } from './peopleLibraryView'
@@ -465,6 +466,7 @@ const messagesView = createMessagesView({
   showError,
   showSuccess,
   renderOrchestrationStatus: orchestrationStatusView.renderOrchestrationStatus,
+  openReplyComparison: questionId => replyComparisonView.open(questionId),
   log,
 })
 const renderMessages = messagesView.renderMessages
@@ -584,6 +586,7 @@ function handlePrimaryModeChange(isPrimary: boolean): void {
 
 function render(): void {
   renderSelectedChat()
+  replyComparisonView.refresh()
   renderTemplates()
   renderAgentControlSettings()
   if (!externalModelsModalEl.hidden) renderExternalModels()
@@ -718,6 +721,14 @@ const backupView = createBackupView({
     }
     applyStore(nextStore)
   },
+  showError,
+  showSuccess,
+})
+
+const replyComparisonView = createReplyComparisonView({
+  getStore: () => store,
+  runCommand,
+  copyText: text => navigator.clipboard.writeText(text),
   showError,
   showSuccess,
 })

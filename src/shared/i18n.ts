@@ -178,6 +178,20 @@ const UI_TRANSLATIONS: Record<string, string> = {
   '尚未读取消息': 'No messages read yet',
   '等待连接': 'Waiting to connect',
   '网页已连接': 'Web connected',
+  '对比回复': 'Compare replies',
+  '关闭': 'Close',
+  '正在回复…': 'Replying…',
+  '回复失败': 'Reply failed',
+  '还没有回复': 'No reply yet',
+  '这位人员没有给出回复。': 'This person did not reply.',
+  '回复到了会显示在这里。': 'The reply will show up here.',
+  '请': 'Ask',
+  '正在发送…': 'Sending…',
+  '汇总异同': 'Summarize differences',
+  '复制对比': 'Copy comparison',
+  '已复制对比内容': 'Comparison copied',
+  '至少要有两份回复才能汇总。': 'At least two replies are needed for a summary.',
+  '回复会作为附件发给这位人员，由 TA 整理共识、分歧和需要核实的地方。': 'The replies are sent to this person as an attachment, to sort out what they agree on, where they differ, and what needs checking.',
   '搜索消息': 'Search messages',
   '搜索消息（Ctrl/⌘ K）': 'Search messages (Ctrl/⌘ K)',
   '搜索所有群聊的消息…': 'Search messages in all chats…',
@@ -901,6 +915,10 @@ function translateUiPattern(source: string): string | undefined {
   if (source.includes(' · ')) return source.split(' · ').map(part => translateUi(part, 'en')).join(' · ')
   const sendWithConnecting = source.match(/^将发送给：(.+)；正在连接：(.+)$/)
   if (sendWithConnecting) return `Will send to: ${sendWithConnecting[1]}; connecting: ${sendWithConnecting[2]}`
+  const compareReplies = source.match(/^⇆ 对比 (\d+) 个回复$/)
+  if (compareReplies) return `⇆ Compare ${compareReplies[1]} replies`
+  const summaryRequested = source.match(/^已请 (.+) 汇总异同$/)
+  if (summaryRequested) return `Asked ${summaryRequested[1]} to summarize the differences`
   const searchCountLimited = source.match(/^找到 (\d+) 条消息，显示最近 (\d+) 条$/)
   if (searchCountLimited) return `${searchCountLimited[1]} messages found, showing the latest ${searchCountLimited[2]}`
   const searchCount = source.match(/^找到 (\d+) 条消息$/)

@@ -147,6 +147,25 @@ describe('team page messages view boundary', () => {
     expect(click).toHaveBeenCalled()
   })
 
+  it('offers to compare replies once two people have answered a question', () => {
+    const { messagesEl, messages, view, deps } = createLongChatView(0)
+    const openReplyComparison = vi.fn()
+    deps.openReplyComparison = openReplyComparison
+    const question = { ...makeLongChatMessage(0, '@all 能上线吗'), type: 'user' as const, roleId: undefined, roleName: undefined }
+    const answer = (index: number, roleId: string) => ({ ...makeLongChatMessage(index, `回答 ${index}`), type: 'assistant' as const, roleId, sourceMessageId: question.id, createdAt: question.createdAt + index * 1000 })
+    messages.push(question, answer(1, 'role-1'))
+
+    view.renderMessages()
+    expect(messagesEl.querySelector('.message-compare-btn')).toBeNull()
+
+    messages.push(answer(2, 'role-2'))
+    view.renderMessages()
+    const button = messagesEl.querySelector<HTMLButtonElement>(`[data-message-id="${question.id}"] .message-compare-btn`)
+    expect(button?.textContent).toBe('⇆ 对比 2 个回复')
+    button?.click()
+    expect(openReplyComparison).toHaveBeenCalledWith(question.id)
+  })
+
   it('keeps every message node of a long chat cached between renders', () => {
     const { messagesEl, view } = createLongChatView(450)
     view.renderMessages()
@@ -2285,7 +2304,7 @@ function createLongChatView(messageCount: number) {
   }
   const messagesEl = document.createElement('section')
   document.body.append(messagesEl)
-  const view = createMessagesView({
+  const deps: Parameters<typeof createMessagesView>[0] = {
     state: createTeamPageState(),
     getStore: () => store,
     messagesEl,
@@ -2308,6 +2327,7 @@ function createLongChatView(messageCount: number) {
     showError: vi.fn(),
     showSuccess: vi.fn(),
     log: { warn: vi.fn() },
-  })
-  return { messagesEl, messages, view, role }
+  }
+  const view = createMessagesView(deps)
+  return { messagesEl, messages, view, role, deps }
 }
