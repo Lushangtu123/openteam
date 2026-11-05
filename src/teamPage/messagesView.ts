@@ -74,6 +74,7 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
   let markMenuUpdateTimer: number | undefined
   const imageObjectUrls = new Map<string, string>()
   const imageLoadPromises = new Map<string, Promise<string | undefined>>()
+  let timeDividers = new Map<string, HTMLElement>()
 
   function renderMessages(): void {
     const chat = deps.getCurrentChat()
@@ -82,46 +83,55 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     const preserveScroll = deps.state.preserveNextMessageScroll
     const previousScrollTop = deps.messagesEl.scrollTop
     const shouldFollowNewReplies = isScrolledNearBottom(deps.messagesEl)
-    deps.messagesEl.replaceChildren()
 
     if (!chat) {
-      deps.messagesEl.append(deps.emptyCard('选择一个群聊', '左侧群聊列表会显示最近摘要、状态和更新时间。'))
+      reconcileChildren(deps.messagesEl, [deps.emptyCard('选择一个群聊', '左侧群聊列表会显示最近摘要、状态和更新时间。')])
       return
     }
 
+    const nodes: Node[] = []
     const orchestrationStatus = deps.renderOrchestrationStatus?.()
-    if (orchestrationStatus) deps.messagesEl.append(orchestrationStatus)
+    if (orchestrationStatus) nodes.push(orchestrationStatus)
 
     if (messages.length === 0) {
       const roles = deps.getCurrentRoles()
       const startupNotice = getChatStartupNotice(chat, roles)
       if (roles.length === 0) {
-        deps.messagesEl.append(emptyChatPeopleCard('暂无人员', '先添加人员，再开始群聊协作。'))
+        nodes.push(emptyChatPeopleCard('暂无人员', '先添加人员，再开始群聊协作。'))
       } else {
-        deps.messagesEl.append(startupNotice ? deps.emptyCard(startupNotice.title, startupNotice.body) : deps.emptyCard('等待第一条消息', '直接发送会记录消息；@ 人员或 @所有人 后触发回复。'))
+        nodes.push(startupNotice ? deps.emptyCard(startupNotice.title, startupNotice.body) : deps.emptyCard('等待第一条消息', '直接发送会记录消息；@ 人员或 @所有人 后触发回复。'))
       }
     }
 
+    const nextTimeDividers = new Map<string, HTMLElement>()
     for (const item of buildChatRenderItems(messages, deps.getCurrentRoles())) {
       if (item.type === 'time') {
-        const divider = document.createElement('div')
-        divider.className = 'message-time-divider'
-        divider.textContent = item.label
-        deps.messagesEl.append(divider)
+        const key = `${item.id}:${item.label}`
+        let divider = timeDividers.get(key)
+        if (!divider) {
+          divider = document.createElement('div')
+          divider.className = 'message-time-divider'
+          divider.textContent = item.label
+        }
+        nextTimeDividers.set(key, divider)
+        nodes.push(divider)
         continue
       }
-      deps.messagesEl.append(renderMessageNode(item.message, item.showName, item.showAvatar))
+      nodes.push(renderMessageNode(item.message, item.showName, item.showAvatar))
     }
+    timeDividers = nextTimeDividers
 
     const streamingRoleIds = new Set(messages
       .filter(message => message.type === 'assistant' && message.status === 'pending' && message.roleId)
       .map(message => message.roleId!))
     for (const role of getVisibleThinkingRoles(deps.getCurrentRoles()).filter(role => !streamingRoleIds.has(role.id))) {
-      deps.messagesEl.append(replyControlBubble(role))
+      nodes.push(replyControlBubble(role))
     }
     for (const role of getStoppedReplyRoles(deps.getCurrentRoles())) {
-      deps.messagesEl.append(replyControlBubble(role))
+      nodes.push(replyControlBubble(role))
     }
+    reconcileChildren(deps.messagesEl, nodes)
+    pruneMessageNodeCache(messages)
     scheduleThinkingTimeouts()
     if (preserveScroll || !shouldFollowNewReplies) {
       deps.messagesEl.scrollTop = previousScrollTop
@@ -248,10 +258,35 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
 
   function cacheMessageNode(messageId: string, signature: string, node: HTMLElement, streamingSignature?: string): void {
     deps.state.messageNodeCache.set(messageId, { signature, node, streamingSignature })
-    while (deps.state.messageNodeCache.size > MAX_CACHED_MESSAGE_NODES) {
-      const oldestMessageId = deps.state.messageNodeCache.keys().next().value
-      if (!oldestMessageId) return
-      deps.state.messageNodeCache.delete(oldestMessageId)
+  }
+
+  // Evicts the oldest cached nodes, but never those of the chat on screen: evicting those would
+  // rebuild (and re-render the Markdown of) every older message on each update of a long chat.
+  function pruneMessageNodeCache(visibleMessages: GroupMessage[]): void {
+    const cache = deps.state.messageNodeCache
+    if (cache.size <= MAX_CACHED_MESSAGE_NODES) return
+    const visibleIds = new Set(visibleMessages.map(message => message.id))
+    for (const messageId of cache.keys()) {
+      if (cache.size <= MAX_CACHED_MESSAGE_NODES) return
+      if (!visibleIds.has(messageId)) cache.delete(messageId)
+    }
+  }
+
+  // Puts `nodes` into `parent` in order while leaving nodes that are already in place untouched,
+  // so an update does not detach, restyle and re-lay-out every message in the list.
+  function reconcileChildren(parent: HTMLElement, nodes: Node[]): void {
+    let cursor = parent.firstChild
+    for (const node of nodes) {
+      if (node === cursor) {
+        cursor = cursor.nextSibling
+        continue
+      }
+      parent.insertBefore(node, cursor)
+    }
+    while (cursor) {
+      const next = cursor.nextSibling
+      cursor.remove()
+      cursor = next
     }
   }
 

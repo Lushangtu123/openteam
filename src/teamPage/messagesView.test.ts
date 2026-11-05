@@ -109,6 +109,42 @@ describe('team page messages view boundary', () => {
     expect(runCommand).not.toHaveBeenCalled()
   })
 
+  it('updates the message list in place instead of re-inserting unchanged messages', () => {
+    const { messagesEl, messages, view, role } = createLongChatView(40)
+    view.renderMessages()
+    const firstRows = [...messagesEl.querySelectorAll('.message-row')]
+    const firstDividers = [...messagesEl.querySelectorAll('.message-time-divider')]
+    const observer = new MutationObserver(() => undefined)
+    observer.observe(messagesEl, { childList: true })
+
+    role.status = 'ready'
+    view.renderMessages()
+    expect(observer.takeRecords()).toEqual([])
+
+    messages.push({ ...makeLongChatMessage(messages.length, 'new reply'), createdAt: messages[messages.length - 1].createdAt + 1000 })
+    view.renderMessages()
+    const records = observer.takeRecords()
+    observer.disconnect()
+
+    expect(records.flatMap(record => [...record.removedNodes])).toEqual([])
+    expect(records.flatMap(record => [...record.addedNodes]).map(node => (node as HTMLElement).dataset.messageId)).toEqual([messages[messages.length - 1].id])
+    const rows = [...messagesEl.querySelectorAll('.message-row')]
+    expect(sameNodeCount(rows, firstRows)).toBe(firstRows.length)
+    expect(sameNodeCount([...messagesEl.querySelectorAll('.message-time-divider')], firstDividers)).toBe(firstDividers.length)
+  })
+
+  it('keeps every message node of a long chat cached between renders', () => {
+    const { messagesEl, view } = createLongChatView(450)
+    view.renderMessages()
+    const firstRows = [...messagesEl.querySelectorAll('.message-row')]
+    expect(firstRows).toHaveLength(450)
+
+    view.renderMessages()
+
+    // Same node objects, not just equal markup (toEqual compares DOM nodes structurally).
+    expect(sameNodeCount([...messagesEl.querySelectorAll('.message-row')], firstRows)).toBe(450)
+  })
+
   it('renders assistant markdown even when older replies do not have a content format flag', () => {
     const now = Date.now()
     const chat: GroupChat = {
@@ -2183,3 +2219,81 @@ describe('team page messages view boundary', () => {
     expect(messagesEl.querySelector('.orchestration-message-label')?.textContent).toBe('编排 · 第 2 步 · 状态')
   })
 })
+
+function makeLongChatMessage(index: number, content = `reply ${index}`): GroupMessage {
+  return {
+    id: `msg-${index}`,
+    chatId: 'chat-1',
+    seq: index + 1,
+    type: index % 2 ? 'assistant' : 'user',
+    roleId: index % 2 ? 'role-1' : undefined,
+    roleName: index % 2 ? '工程师' : undefined,
+    content,
+    contentFormat: 'markdown',
+    // Every 10th message is more than five minutes after the previous one, so time dividers appear.
+    createdAt: 1_700_000_000_000 + index * 60_000 + Math.floor(index / 10) * 10 * 60_000,
+    status: 'received',
+  }
+}
+
+function sameNodeCount(nodes: Element[], expected: Element[]): number {
+  return expected.filter((node, index) => nodes[index] === node).length
+}
+
+function createLongChatView(messageCount: number) {
+  const messages = Array.from({ length: messageCount }, (_, index) => makeLongChatMessage(index))
+  const chat: GroupChat = {
+    id: 'chat-1',
+    name: '群聊',
+    mode: 'independent',
+    roleIds: ['role-1'],
+    messageIds: messages.map(message => message.id),
+    nextMessageSeq: messageCount + 1,
+    status: 'ready',
+    createdAt: 1,
+    updatedAt: 1,
+  }
+  const role: GroupRole = {
+    id: 'role-1',
+    chatId: chat.id,
+    name: '工程师',
+    status: 'ready',
+    contextCursor: 0,
+    createdAt: 1,
+    updatedAt: 1,
+  }
+  const store: OpenTeamStore = {
+    ...createDefaultStore(),
+    currentChatId: chat.id,
+    chatOrder: [chat.id],
+    chatsById: { [chat.id]: chat },
+    rolesById: { [role.id]: role },
+  }
+  const messagesEl = document.createElement('section')
+  document.body.append(messagesEl)
+  const view = createMessagesView({
+    state: createTeamPageState(),
+    getStore: () => store,
+    messagesEl,
+    getCurrentChat: () => chat,
+    getCurrentRoles: () => [role],
+    getCurrentMessages: () => messages,
+    emptyCard: () => document.createElement('div'),
+    openAddPersonDialog: vi.fn(),
+    roleToneClass: () => 'role-tone-1',
+    roleAvatarLabel: () => '工',
+    messageTitle: message => message.roleName ?? 'AI 人员',
+    focusRoleFrame: vi.fn(),
+    insertMention: vi.fn(),
+    setReference: vi.fn(),
+    resyncMessageReply: vi.fn(async () => undefined),
+    retryRoleReply: vi.fn(async () => undefined),
+    stopRoleReply: vi.fn(async () => undefined),
+    runCommand: vi.fn(async () => undefined),
+    render: vi.fn(),
+    showError: vi.fn(),
+    showSuccess: vi.fn(),
+    log: { warn: vi.fn() },
+  })
+  return { messagesEl, messages, view, role }
+}
