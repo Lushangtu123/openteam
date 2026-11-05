@@ -328,6 +328,8 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
 
     const grid = document.createElement('div')
     grid.className = `message-image-grid image-count-${Math.min(attachments.length, 4)}`
+    // Uploads carry no dimensions, so they keep their own size instead of filling the bubble.
+    if (attachments.every(attachment => attachment.source === 'user-upload')) grid.classList.add('message-image-grid-uploads')
     for (const attachment of attachments) {
       grid.append(renderImageAttachment(message, attachment))
     }

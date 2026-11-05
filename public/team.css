@@ -6255,3 +6255,31 @@ select:focus {
 .message-row.user .message-file-size {
   color: inherit;
 }
+
+.message-image-grid.message-image-grid-uploads {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.message-image-grid-uploads .message-image-tile,
+.message-image-grid-uploads.image-count-1 .message-image-tile {
+  min-height: 0;
+  max-width: 100%;
+}
+
+.message-image-grid-uploads .message-image-preview img,
+.message-image-grid-uploads.image-count-1 .message-image-preview img {
+  width: auto;
+  height: auto;
+  min-width: 48px;
+  min-height: 48px;
+  max-width: min(100%, 320px);
+  max-height: 240px;
+  object-fit: contain;
+}
+
+.message-row.user .message-file-icon {
+  background: rgba(255, 255, 255, 0.22);
+  color: #ffffff;
+}
