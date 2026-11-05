@@ -15,6 +15,7 @@ export const STORE_KEY = 'openteam.groupStore'
 export const META_STORE_KEY = 'openteam.meta.v2'
 export const CHAT_KEY_PREFIX = 'openteam.chat.'
 export const MESSAGE_CHUNK_KEY_PREFIX = 'openteam.messages.'
+export const STORE_WRITER_KEY = 'openteam.storeWriter'
 export const CURRENT_STORE_VERSION = 7
 export const MESSAGE_CHUNK_SIZE = 100
 
@@ -65,7 +66,24 @@ const DEFAULT_SETTINGS: OpenTeamSettings = {
   language: defaultLanguageForEnvironment(),
 }
 
+// What this context last read from or wrote to chrome.storage for the store keys. While it is
+// valid, loads skip storage entirely and saves only write the keys whose values changed. It is
+// dropped as soon as storage.onChanged reports a write from any other context.
+interface StorageSnapshot {
+  area: chrome.storage.LocalStorageArea
+  items: Map<string, unknown>
+  // Whether storage has been scanned for stale keys that never made it into `items`.
+  scanned: boolean
+}
+
+type StorageChanges = Record<string, chrome.storage.StorageChange>
+
 let storeQueue: Promise<void> = Promise.resolve()
+let snapshot: StorageSnapshot | undefined
+let snapshotGeneration = 0
+let watchedChangeEvent: unknown
+let writerRevision = 0
+const writerId = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`
 
 export function createDefaultStore(): OpenTeamStore {
   return {
@@ -94,9 +112,20 @@ export function createDefaultStore(): OpenTeamStore {
 }
 
 export async function loadStore(): Promise<OpenTeamStore> {
+  const caching = cachingAvailable()
+  const cached = caching ? usableSnapshot() : undefined
+  if (cached?.items.has(META_STORE_KEY)) {
+    return assembleV2Store(structuredClone(cached.items))
+  }
+
+  const generation = snapshotGeneration
   const metaResult = await chrome.storage.local.get(META_STORE_KEY)
   if (metaResult[META_STORE_KEY]) {
-    return loadV2Store(metaResult[META_STORE_KEY])
+    const items = await readV2Items(metaResult[META_STORE_KEY])
+    if (caching && generation === snapshotGeneration) {
+      snapshot = { area: chrome.storage.local, items: structuredClone(items), scanned: false }
+    }
+    return assembleV2Store(items)
   }
 
   const legacyResult = await chrome.storage.local.get(STORE_KEY)
@@ -110,8 +139,42 @@ export async function loadStore(): Promise<OpenTeamStore> {
 export async function saveStore(store: OpenTeamStore): Promise<void> {
   const normalized = normalizeStore(store)
   const items = buildStorageItems(normalized)
-  await chrome.storage.local.set(items)
-  await removeStaleStorageKeys(Object.keys(items))
+  const activeKeys = new Set(Object.keys(items))
+  const caching = cachingAvailable()
+  const scannedSnapshot = caching ? usableSnapshot() : undefined
+  const staleKeys = scannedSnapshot?.scanned
+    ? [...scannedSnapshot.items.keys()].filter(key => !activeKeys.has(key))
+    : await findStaleStorageKeys(activeKeys)
+
+  // Re-read after the scan: another context may have written meanwhile, and then every key is written.
+  const previous = caching ? usableSnapshot() : undefined
+  const changedItems: Record<string, unknown> = {}
+  const nextItems = new Map<string, unknown>()
+  for (const [key, value] of Object.entries(items)) {
+    const previousValue = previous?.items.get(key)
+    if (previous?.items.has(key) && sameStoredValue(previousValue, value)) {
+      nextItems.set(key, previousValue)
+    } else {
+      changedItems[key] = value
+      if (caching) nextItems.set(key, jsonClone(value))
+    }
+  }
+
+  if (caching) {
+    // Record the new state before writing, so this context's own onChanged events already match it.
+    snapshot = { area: chrome.storage.local, items: nextItems, scanned: true }
+    if (Object.keys(changedItems).length > 0 || staleKeys.length > 0) {
+      changedItems[STORE_WRITER_KEY] = { id: writerId, revision: ++writerRevision }
+    }
+  }
+
+  try {
+    if (Object.keys(changedItems).length > 0) await chrome.storage.local.set(changedItems)
+    if (staleKeys.length > 0) await chrome.storage.local.remove(staleKeys)
+  } catch (error) {
+    dropSnapshot()
+    throw error
+  }
 }
 
 export async function updateStore<T>(mutator: (draft: OpenTeamStore) => T | Promise<T>): Promise<T> {
@@ -173,16 +236,33 @@ function normalizeStore(raw: unknown): OpenTeamStore {
   return normalized
 }
 
-async function loadV2Store(rawMeta: unknown): Promise<OpenTeamStore> {
-  const meta = normalizeMetaStore(rawMeta)
-  const chatKeys = meta.chatOrder.map(chatStorageKey)
+// Reads the meta document plus every chat document and message chunk it references.
+async function readV2Items(rawMeta: unknown): Promise<Map<string, unknown>> {
+  const items = new Map<string, unknown>([[META_STORE_KEY, rawMeta]])
+  const chatKeys = normalizeMetaStore(rawMeta).chatOrder.map(chatStorageKey)
   const chatResult = await chrome.storage.local.get(chatKeys)
-  const chatDocuments = chatKeys
-    .map(key => normalizeChatDocument(chatResult[key]))
-    .filter((document): document is ChatDocument => Boolean(document))
+  const chatDocuments: ChatDocument[] = []
+  for (const key of chatKeys) {
+    if (chatResult[key] === undefined) continue
+    items.set(key, chatResult[key])
+    const document = normalizeChatDocument(chatResult[key])
+    if (document) chatDocuments.push(document)
+  }
 
   const chunkKeys = chatDocuments.flatMap(document => document.messageChunkIds.map(chunkId => messageChunkStorageKey(document.chat.id, chunkId)))
   const chunkResult = chunkKeys.length > 0 ? await chrome.storage.local.get(chunkKeys) : {}
+  for (const key of chunkKeys) {
+    if (chunkResult[key] !== undefined) items.set(key, chunkResult[key])
+  }
+  return items
+}
+
+// Builds the store from raw storage items. The result shares objects with `items`.
+function assembleV2Store(items: Map<string, unknown>): OpenTeamStore {
+  const meta = normalizeMetaStore(items.get(META_STORE_KEY))
+  const chatDocuments = meta.chatOrder
+    .map(chatId => normalizeChatDocument(items.get(chatStorageKey(chatId))))
+    .filter((document): document is ChatDocument => Boolean(document))
 
   const store = createDefaultStore()
   store.version = meta.version
@@ -207,7 +287,7 @@ async function loadV2Store(rawMeta: unknown): Promise<OpenTeamStore> {
     store.rolesById = { ...store.rolesById, ...document.rolesById }
 
     for (const chunkId of document.messageChunkIds) {
-      const chunk = normalizeMessageChunk(chunkResult[messageChunkStorageKey(document.chat.id, chunkId)])
+      const chunk = normalizeMessageChunk(items.get(messageChunkStorageKey(document.chat.id, chunkId)))
       if (!chunk || chunk.chatId !== document.chat.id) continue
 
       for (const message of chunk.messages) {
@@ -245,13 +325,14 @@ function buildStorageItems(store: OpenTeamStore): Record<string, unknown> {
     viewState: normalizeViewState(store.viewState),
   }
   const items: Record<string, unknown> = { [META_STORE_KEY]: meta }
+  const messagesByChatId = groupMessagesByChat(store)
 
   for (const chatId of chatIds) {
     const chat = store.chatsById[chatId]
     if (!chat) continue
 
     const rolesById = collectChatRoles(store, chat)
-    const messages = collectChatMessages(store, chat)
+    const messages = collectChatMessages(store, chat, messagesByChatId.get(chatId) ?? [])
     const messageChunkIds: string[] = []
 
     messages.forEach((_, index) => {
@@ -284,18 +365,82 @@ function buildStorageItems(store: OpenTeamStore): Record<string, unknown> {
   return items
 }
 
-async function removeStaleStorageKeys(activeKeys: string[]): Promise<void> {
-  const allItems = await chrome.storage.local.get(null)
-  const activeKeySet = new Set(activeKeys)
-  const staleKeys = Object.keys(allItems).filter(key => (
+async function findStaleStorageKeys(activeKeys: Set<string>): Promise<string[]> {
+  return (await listStorageKeys()).filter(key => (
     key === STORE_KEY
     || key.startsWith(CHAT_KEY_PREFIX)
     || key.startsWith(MESSAGE_CHUNK_KEY_PREFIX)
-  ) && !activeKeySet.has(key))
+  ) && !activeKeys.has(key))
+}
 
-  if (staleKeys.length > 0) {
-    await chrome.storage.local.remove(staleKeys)
+// storage.local.getKeys() (Chrome 130+) lists keys without reading every value.
+async function listStorageKeys(): Promise<string[]> {
+  const area = chrome.storage.local as chrome.storage.LocalStorageArea & { getKeys?: () => Promise<string[]> }
+  if (typeof area.getKeys === 'function') return area.getKeys()
+  return Object.keys(await area.get(null))
+}
+
+function cachingAvailable(): boolean {
+  const changeEvent = chrome.storage?.onChanged
+  if (typeof changeEvent?.addListener !== 'function') return false
+  if (watchedChangeEvent !== changeEvent) {
+    changeEvent.addListener(handleStorageChanged)
+    watchedChangeEvent = changeEvent
+    dropSnapshot()
   }
+  return true
+}
+
+function usableSnapshot(): StorageSnapshot | undefined {
+  if (snapshot && snapshot.area !== chrome.storage.local) dropSnapshot()
+  return snapshot
+}
+
+function dropSnapshot(): void {
+  snapshot = undefined
+  snapshotGeneration += 1
+}
+
+function handleStorageChanged(changes: StorageChanges, areaName: string): void {
+  if (areaName !== 'local' || !snapshot) return
+  const writer = changes[STORE_WRITER_KEY]?.newValue
+  if (isRecord(writer) && writer.id === writerId) return
+
+  const current = snapshot
+  const foreignChange = Object.entries(changes).some(([key, change]) => (
+    isStoreStorageKey(key)
+    // A removal of a key this context no longer holds is its own stale-key cleanup.
+    && !(change.newValue === undefined && !current.items.has(key))
+  ))
+  if (foreignChange) dropSnapshot()
+}
+
+function isStoreStorageKey(key: string): boolean {
+  return key === META_STORE_KEY
+    || key === STORE_KEY
+    || key === STORE_WRITER_KEY
+    || key.startsWith(CHAT_KEY_PREFIX)
+    || key.startsWith(MESSAGE_CHUNK_KEY_PREFIX)
+}
+
+// Compares values the way chrome.storage stores them: properties set to undefined are not stored.
+function sameStoredValue(left: unknown, right: unknown): boolean {
+  if (left === right) return true
+  if (typeof left !== 'object' || typeof right !== 'object' || left === null || right === null) return false
+  if (Array.isArray(left) || Array.isArray(right)) {
+    if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) return false
+    return left.every((item, index) => sameStoredValue(item, right[index]))
+  }
+  const leftRecord = left as Record<string, unknown>
+  const rightRecord = right as Record<string, unknown>
+  const leftKeys = Object.keys(leftRecord).filter(key => leftRecord[key] !== undefined)
+  const rightKeys = Object.keys(rightRecord).filter(key => rightRecord[key] !== undefined)
+  if (leftKeys.length !== rightKeys.length) return false
+  return leftKeys.every(key => sameStoredValue(leftRecord[key], rightRecord[key]))
+}
+
+function jsonClone<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T
 }
 
 function normalizeMetaStore(raw: unknown): OpenTeamMetaStore {
@@ -378,7 +523,18 @@ function collectChatRoles(store: OpenTeamStore, chat: GroupChat): Record<string,
   return Object.fromEntries(Object.entries(store.rolesById).filter(([roleId, role]) => roleIds.has(roleId) || role.chatId === chat.id))
 }
 
-function collectChatMessages(store: OpenTeamStore, chat: GroupChat): GroupMessage[] {
+function groupMessagesByChat(store: OpenTeamStore): Map<string, GroupMessage[]> {
+  const messagesByChatId = new Map<string, GroupMessage[]>()
+  for (const message of Object.values(store.messagesById)) {
+    const messages = messagesByChatId.get(message.chatId)
+    if (messages) messages.push(message)
+    else messagesByChatId.set(message.chatId, [message])
+  }
+  return messagesByChatId
+}
+
+// `messagesInChat` holds every stored message whose chatId is this chat, from groupMessagesByChat.
+function collectChatMessages(store: OpenTeamStore, chat: GroupChat, messagesInChat: GroupMessage[]): GroupMessage[] {
   const messageIds = new Set(chat.messageIds)
   const messagesById = new Map<string, GroupMessage>()
 
@@ -387,8 +543,8 @@ function collectChatMessages(store: OpenTeamStore, chat: GroupChat): GroupMessag
     if (message) messagesById.set(message.id, message)
   }
 
-  for (const message of Object.values(store.messagesById)) {
-    if (message.chatId === chat.id && !messageIds.has(message.id)) {
+  for (const message of messagesInChat) {
+    if (!messageIds.has(message.id)) {
       messagesById.set(message.id, message)
     }
   }
