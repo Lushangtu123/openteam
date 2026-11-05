@@ -458,7 +458,6 @@ export function createMessageHandlers(deps: MessageHandlersDependencies): Backgr
   const handleFrameRoleReady = async (message: RuntimeMessage, sender: chrome.runtime.MessageSender) => {
     const tabId = messageTabId(message, sender)
     if (tabId === undefined) throw new Error('缺少 sender tab')
-    rememberHost(sender, tabId)
 
     const chatId = requireString(message.chatId, '缺少群聊 ID')
     const roleId = requireString(message.roleId, '缺少人员 ID')
@@ -475,8 +474,8 @@ export function createMessageHandlers(deps: MessageHandlersDependencies): Backgr
       conversationId: message.conversationId,
       conversationUrl: message.conversationUrl,
     })
-    deps.runtimeFrames.bind({ chatId, roleId, tabId, frameId, ready: true, lastSeenAt: timestamp })
 
+    // Validate the chat and role before trusting this frame as their host.
     const { store, result } = await mutateStore(store => {
       const chat = requireChat(store, chatId)
       const role = requireRole(store, chat.id, roleId)
@@ -489,6 +488,8 @@ export function createMessageHandlers(deps: MessageHandlersDependencies): Backgr
       chat.updatedAt = timestamp
       return { role, replyHistory: getRoleReplyHistory(store, chat, role.id) }
     })
+    rememberHost(sender, tabId)
+    deps.runtimeFrames.bind({ chatId, roleId, tabId, frameId, ready: true, lastSeenAt: timestamp })
 
     deps.log.info('frame-ready:store-updated', { chatId, roleId, roleName: result.role.name, status: result.role.status, replyHistoryCount: result.replyHistory.length, binding: deps.runtimeFrames.getByRole(chatId, roleId) })
     await deps.broadcastStoreUpdated(store)

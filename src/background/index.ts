@@ -12,6 +12,7 @@ import {
   type RuntimeMessage,
 } from './runtimeClient'
 import { createMessageRouter } from './messageRouter'
+import { classifyRuntimeSender, isRuntimeMessageAllowed, responseForSender } from './senderPolicy'
 import { createExternalModelHandlers } from './externalModelHandlers'
 import { createExternalModelClient } from './externalModelClient'
 import { createPromptSender } from './promptDelivery'
@@ -255,9 +256,16 @@ chrome.runtime.onMessage.addListener((message: RuntimeMessage, sender, sendRespo
       return true
     }
 
+    const senderKind = classifyRuntimeSender(sender, chrome.runtime.getURL('').replace(/\/$/, ''))
+    if (!isRuntimeMessageAllowed(message?.type, senderKind)) {
+      log.debug('message-handler:sender-rejected', { type: message?.type, senderKind, senderUrl: sender.url, tabUrl: sender.tab?.url })
+      sendResponseSafely(sendResponse, { ok: false, error: 'OpenTeam rejected a message from an untrusted context' })
+      return true
+    }
+
     Promise.resolve()
       .then(() => routeMessage(message, sender))
-      .then(response => sendResponseSafely(sendResponse, response))
+      .then(response => sendResponseSafely(sendResponse, responseForSender(response, senderKind)))
       .catch((error: unknown) => {
         const reason = errorReason(error)
         log.warn('message-handler:failed', { type: message?.type, error: reason })

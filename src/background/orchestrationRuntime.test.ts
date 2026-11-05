@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { senderForMessage } from './runtimeSenderTestUtils'
 import type { GroupChat, GroupRole, OpenTeamStore, OrchestrationFlow } from '../group/types'
 
 type RuntimeMessage = { type: string; [key: string]: unknown }
@@ -38,7 +39,7 @@ async function setupBackground(initialStore: OpenTeamStore) {
   return {
     tabsSendMessage,
     getStore: loadStore,
-    invoke: (message: RuntimeMessage, sender = { tab: { id: 900 } as chrome.tabs.Tab, frameId: 0, url: 'https://gemini.google.com/app/test' }) => new Promise(resolve => listeners[0](message, sender, resolve)),
+    invoke: (message: RuntimeMessage, sender = { tab: { id: 900 } as chrome.tabs.Tab, frameId: 0, url: 'https://gemini.google.com/app/test' }) => new Promise(resolve => listeners[0](message, senderForMessage(message, sender), resolve)),
   }
 }
 

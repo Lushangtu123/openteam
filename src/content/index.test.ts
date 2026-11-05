@@ -37,6 +37,7 @@ async function bootContentEntrypoint(options: { embedded: boolean; directEmbedde
   const sendRuntimeMessage = vi.fn(async (_message: RoleToBackgroundMessage) => ({ ok: true }))
   vi.stubGlobal('chrome', {
     runtime: {
+      getURL: vi.fn((path: string) => `chrome-extension://test/${path}`),
       onMessage: {
         addListener: vi.fn(),
       },

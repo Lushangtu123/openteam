@@ -310,6 +310,7 @@ function startOpenTeam(): void {
         siteAdapter,
         roleSession,
         log,
+        extensionOrigin: chrome.runtime.getURL('').replace(/\/$/, ''),
         seedStoredRoleReplies: replies => replyObserver?.seedStoredRoleReplies(replies),
         sendRuntimeMessage: message => sendBackgroundMessage(message),
       })

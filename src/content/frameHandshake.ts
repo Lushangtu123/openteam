@@ -9,10 +9,13 @@ export function registerFrameRoleHandshake(options: {
   siteAdapter: ChatSiteAdapter
   roleSession: RoleSession
   log: ContentLogger
+  extensionOrigin: string
   seedStoredRoleReplies(replies: string[] | undefined): void
   sendRuntimeMessage<T>(message: RoleToBackgroundMessage): Promise<T>
 }): void {
   window.addEventListener('message', event => {
+    // Only the OpenTeam page that embeds this frame may assign it a role.
+    if (event.source !== window.parent || event.origin !== options.extensionOrigin) return
     if (!event.data || typeof event.data !== 'object') return
     if (event.data.type !== FRAME_ASSIGN_MESSAGE) return
 

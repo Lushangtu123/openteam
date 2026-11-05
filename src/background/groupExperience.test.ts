@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { senderForMessage } from './runtimeSenderTestUtils'
 import { DEFAULT_CUSTOM_ROLE_TEMPLATES } from '../group/defaultCustomRoleTemplates'
 import type { GroupChat, GroupMessage, GroupRole, OpenTeamStore, OrchestrationFlow, RoleTemplate } from '../group/types'
 
@@ -14,6 +15,7 @@ type BackgroundHarness = {
   runtimeSendMessage: ReturnType<typeof vi.fn>
   getStore: () => Promise<OpenTeamStore>
   invoke: (message: RuntimeMessage, sender?: MessageSender) => Promise<unknown>
+  invokeRaw: (message: RuntimeMessage, sender: MessageSender) => Promise<unknown>
 }
 
 async function setupBackground(initialStore?: OpenTeamStore): Promise<BackgroundHarness> {
@@ -75,12 +77,51 @@ async function setupBackground(initialStore?: OpenTeamStore): Promise<Background
     getStore: loadStore,
     invoke: (message, sender = { tab: { id: 900 } as chrome.tabs.Tab, frameId: 0, url: 'https://gemini.google.com/app/test' }) =>
       new Promise(resolve => {
+        listeners[0](message, senderForMessage(message, sender), resolve)
+      }),
+    invokeRaw: (message, sender) =>
+      new Promise(resolve => {
         listeners[0](message, sender, resolve)
       }),
   }
 }
 
 describe('background group chat experience handlers', () => {
+  it('refuses privileged messages from AI-site frames and role messages from frames outside the team page', async () => {
+    const store = makeStore()
+    store.chatsById['chat-1'] = makeChat('chat-1', ['role-1'])
+    store.chatOrder = ['chat-1']
+    store.rolesById['role-1'] = makeRole('chat-1', 'role-1', '工程师')
+    const harness = await setupBackground(store)
+    const teamPageFrame = { tab: { id: 900, url: 'chrome-extension://test/team.html' } as chrome.tabs.Tab, frameId: 7, url: 'https://chatgpt.com/', origin: 'https://chatgpt.com' }
+    const framedByWebsite = { tab: { id: 555, url: 'https://evil.example/' } as chrome.tabs.Tab, frameId: 3, url: 'https://chatgpt.com/', origin: 'https://chatgpt.com' }
+
+    const storeRequest = await harness.invokeRaw({ type: 'GROUP_STORE_GET' }, teamPageFrame) as { ok: boolean; store?: OpenTeamStore }
+    const settingsChange = await harness.invokeRaw({ type: 'GROUP_SETTINGS_UPDATE', agentControlEnabled: true }, teamPageFrame) as { ok: boolean }
+    const hijack = await harness.invokeRaw({ type: 'TEAM_FRAME_ROLE_READY', chatId: 'chat-1', roleId: 'role-1', conversationId: '' }, framedByWebsite) as { ok: boolean }
+    const ready = await harness.invokeRaw({ type: 'TEAM_FRAME_ROLE_READY', chatId: 'chat-1', roleId: 'role-1', conversationId: '' }, teamPageFrame) as { ok: boolean; store?: OpenTeamStore }
+
+    expect(storeRequest).toMatchObject({ ok: false })
+    expect(storeRequest.store).toBeUndefined()
+    expect(settingsChange.ok).toBe(false)
+    expect((await harness.getStore()).settings.agentControlEnabled).toBe(false)
+    expect(hijack.ok).toBe(false)
+    expect(ready.ok).toBe(true)
+    expect(ready.store).toBeUndefined()
+    expect(harness.tabsSendMessage.mock.calls.some(call => call[0] === 555)).toBe(false)
+  })
+
+  it('does not register a host tab for frames that announce an unknown role', async () => {
+    const harness = await setupBackground(makeStore())
+    const teamPageFrame = { tab: { id: 901, url: 'chrome-extension://test/team.html' } as chrome.tabs.Tab, frameId: 7, url: 'https://chatgpt.com/', origin: 'https://chatgpt.com' }
+
+    const unknown = await harness.invokeRaw({ type: 'TEAM_FRAME_ROLE_READY', chatId: 'chat-x', roleId: 'role-x', conversationId: '' }, teamPageFrame) as { ok: boolean }
+    await harness.invoke({ type: 'GROUP_CHAT_CREATE', name: '新群聊' }, { tab: { id: 900 } as chrome.tabs.Tab, frameId: 0 })
+
+    expect(unknown.ok).toBe(false)
+    expect(harness.tabsSendMessage.mock.calls.some(call => call[0] === 901)).toBe(false)
+  })
+
   it('validates GROUP_ROLES_CREATE_BATCH as a whole batch and keeps temporary people out of the library', async () => {
     const store = makeStore()
     store.chatsById['chat-1'] = makeChat('chat-1')
@@ -645,10 +686,12 @@ describe('background group chat experience handlers', () => {
     const harness = await setupBackground(store)
 
     const response = await harness.invoke({ type: 'TEAM_SEND_ACK', chatId: 'chat-1', roleId: 'role-1', messageId: 'msg-1' }) as { ok: boolean; store: OpenTeamStore }
+    // Role frames no longer receive the store; read what was persisted.
+    const responseStore = await harness.getStore()
 
     expect(response.ok).toBe(true)
-    expect(response.store.rolesById['role-1'].contextCursor).toBe(1)
-    expect(response.store.messagesById['msg-1'].deliveryStatus?.['role-1']).toBe('sent')
+    expect(responseStore.rolesById['role-1'].contextCursor).toBe(1)
+    expect(responseStore.messagesById['msg-1'].deliveryStatus?.['role-1']).toBe('sent')
   })
 
   it('stores explicit mentions for display while sending the cleaned message content', async () => {
@@ -720,10 +763,12 @@ describe('background group chat experience handlers', () => {
     const harness = await setupBackground(store)
 
     const reply = await harness.invoke({ type: 'TEAM_ROLE_REPLY', chatId: 'chat-2', roleId: 'role-2', content: '后台回复', messageId: 'msg-user' }) as { ok: boolean; store: OpenTeamStore }
+    // Role frames no longer receive the store; read what was persisted.
+    const replyStore = await harness.getStore()
     expect(reply.ok).toBe(true)
-    const chatTwoMessageId = reply.store.chatsById['chat-2'].messageIds[1]
-    expect(reply.store.messagesById[chatTwoMessageId]).toMatchObject({ chatId: 'chat-2', type: 'assistant', content: '后台回复' })
-    expect(reply.store.viewState?.chatHasNewMessageById?.['chat-2']).toBe(true)
+    const chatTwoMessageId = replyStore.chatsById['chat-2'].messageIds[1]
+    expect(replyStore.messagesById[chatTwoMessageId]).toMatchObject({ chatId: 'chat-2', type: 'assistant', content: '后台回复' })
+    expect(replyStore.viewState?.chatHasNewMessageById?.['chat-2']).toBe(true)
 
     const renamed = await harness.invoke({ type: 'GROUP_CHAT_UPDATE', chatId: 'chat-2', patch: { name: '增长讨论', description: '新描述' } }) as { ok: boolean; chat: GroupChat }
     expect(renamed.ok).toBe(true)
@@ -762,10 +807,12 @@ describe('background group chat experience handlers', () => {
       contentFormat: 'markdown',
       messageId: 'msg-user',
     }) as { ok: boolean; store: OpenTeamStore }
+    // Role frames no longer receive the store; read what was persisted.
+    const replyStore = await harness.getStore()
 
     expect(reply.ok).toBe(true)
-    const replyMessageId = reply.store.chatsById['chat-1'].messageIds[1]
-    expect(reply.store.messagesById[replyMessageId]).toMatchObject({
+    const replyMessageId = replyStore.chatsById['chat-1'].messageIds[1]
+    expect(replyStore.messagesById[replyMessageId]).toMatchObject({
       type: 'assistant',
       content: '**结论**\n\n- 可以做',
       contentFormat: 'markdown',
@@ -1037,13 +1084,15 @@ describe('background group chat experience handlers', () => {
     const harness = await setupBackground(store)
 
     const stale = await harness.invoke({ type: 'TEAM_ROLE_REPLY', chatId: 'chat-1', roleId: 'role-1', messageId: 'msg-old', content: '旧初始化回复' }) as { ok: boolean; ignored?: boolean; store: OpenTeamStore }
+    // Role frames no longer receive the store; read what was persisted.
+    const staleStore = await harness.getStore()
 
     expect(stale.ok).toBe(true)
     expect(stale.ignored).toBe(true)
-    expect(stale.store.chatsById['chat-1'].messageIds).toEqual(['msg-old', 'msg-current'])
-    expect(stale.store.messagesById['msg-current'].deliveryStatus?.['role-1']).toBe('sent')
-    expect(stale.store.rolesById['role-1'].status).toBe('thinking')
-    expect(stale.store.rolesById['role-1'].lastPromptMessageId).toBe('msg-current')
+    expect(staleStore.chatsById['chat-1'].messageIds).toEqual(['msg-old', 'msg-current'])
+    expect(staleStore.messagesById['msg-current'].deliveryStatus?.['role-1']).toBe('sent')
+    expect(staleStore.rolesById['role-1'].status).toBe('thinking')
+    expect(staleStore.rolesById['role-1'].lastPromptMessageId).toBe('msg-current')
   })
 
   it('does not push the switched store back to the tab that already receives the command response', async () => {
@@ -1095,16 +1144,18 @@ describe('background group chat experience handlers', () => {
     const harness = await setupBackground(store)
 
     const result = await harness.invoke({ type: 'TEAM_ROLE_ERROR', chatId: 'chat-1', roleId: 'role-1', messageId: 'msg-1', reason: '人员回复超时' }) as { ok: boolean; store: OpenTeamStore }
+    // Role frames no longer receive the store; read what was persisted.
+    const resultStore = await harness.getStore()
 
     expect(result.ok).toBe(true)
-    expect(result.store.rolesById['role-1'].status).toBe('error')
-    expect(result.store.rolesById['role-1'].lastPromptMessageId).toBeUndefined()
-    expect(result.store.messagesById['msg-1'].status).toBe('error')
-    expect(result.store.messagesById['msg-1'].deliveryStatus?.['role-1']).toBe('error')
-    expect(result.store.chatsById['chat-1'].status).toBe('error')
-    expect(result.store.chatsById['chat-1'].messageIds).toHaveLength(2)
-    const timeoutReplyId = result.store.chatsById['chat-1'].messageIds[1]
-    expect(result.store.messagesById[timeoutReplyId]).toMatchObject({
+    expect(resultStore.rolesById['role-1'].status).toBe('error')
+    expect(resultStore.rolesById['role-1'].lastPromptMessageId).toBeUndefined()
+    expect(resultStore.messagesById['msg-1'].status).toBe('error')
+    expect(resultStore.messagesById['msg-1'].deliveryStatus?.['role-1']).toBe('error')
+    expect(resultStore.chatsById['chat-1'].status).toBe('error')
+    expect(resultStore.chatsById['chat-1'].messageIds).toHaveLength(2)
+    const timeoutReplyId = resultStore.chatsById['chat-1'].messageIds[1]
+    expect(resultStore.messagesById[timeoutReplyId]).toMatchObject({
       chatId: 'chat-1',
       seq: 2,
       type: 'assistant',
@@ -1113,8 +1164,8 @@ describe('background group chat experience handlers', () => {
       status: 'error',
       contentFormat: 'markdown',
     })
-    expect(result.store.messagesById[timeoutReplyId].content).toContain('回复超时')
-    expect(result.store.messagesById[timeoutReplyId].content).toContain('重新回复')
+    expect(resultStore.messagesById[timeoutReplyId].content).toContain('回复超时')
+    expect(resultStore.messagesById[timeoutReplyId].content).toContain('重新回复')
   })
 
   it('retries a visible timed-out site reply from its assistant message', async () => {
@@ -1370,15 +1421,17 @@ describe('background group chat experience handlers', () => {
       },
       { tab: { id: 101 } as chrome.tabs.Tab, frameId: 7, url: 'https://chatgpt.com/c/abc' },
     ) as { ok: boolean; message: { id: string; content: string; contentFormat?: string }; store: OpenTeamStore }
+    // Role frames no longer receive the store; read what was persisted.
+    const resultStore = await harness.getStore()
 
     expect(result.ok).toBe(true)
     expect(result.message.id).toBe('msg-1')
     expect(result.message.content).toBe('完整回复\n\n- 第一段\n- 第二段')
     expect(result.message.contentFormat).toBe('markdown')
-    expect(result.store.messagesById['msg-1'].content).toBe('完整回复\n\n- 第一段\n- 第二段')
-    expect(result.store.messagesById['msg-1'].createdAt).toBe(1)
-    expect(result.store.chatsById['chat-1'].messageIds).toEqual(['msg-1'])
-    expect(result.store.chatsById['chat-1'].nextMessageSeq).toBe(2)
+    expect(resultStore.messagesById['msg-1'].content).toBe('完整回复\n\n- 第一段\n- 第二段')
+    expect(resultStore.messagesById['msg-1'].createdAt).toBe(1)
+    expect(resultStore.chatsById['chat-1'].messageIds).toEqual(['msg-1'])
+    expect(resultStore.chatsById['chat-1'].nextMessageSeq).toBe(2)
   })
 })
 

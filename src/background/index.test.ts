@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { senderForMessage } from './runtimeSenderTestUtils'
 
 type RuntimeMessage = { type?: string; [key: string]: unknown }
 type RuntimeListener = (
@@ -59,7 +60,7 @@ async function setupBackgroundWithRouteHandler(handler: (message: RuntimeMessage
 
 function invokeRuntimeListener(listener: RuntimeListener, message: RuntimeMessage): Promise<unknown> {
   return new Promise(resolve => {
-    const keepAlive = listener(message, { tab: { id: 900 } as chrome.tabs.Tab, frameId: 0 }, resolve)
+    const keepAlive = listener(message, senderForMessage(message, { tab: { id: 900 } as chrome.tabs.Tab, frameId: 0 }), resolve)
     expect(keepAlive).toBe(true)
   })
 }
