@@ -110,6 +110,33 @@ describe('background control handlers', () => {
     }))
   })
 
+  it('redacts external model API keys from store snapshots returned to local agents', async () => {
+    const store = createDefaultStore()
+    store.settings.agentControlEnabled = true
+    store.settings.externalModelOrder = ['model-1']
+    store.settings.externalModelsById = {
+      'model-1': { id: 'model-1', name: '本地模型', format: 'openai', baseUrl: 'https://api.example.com/v1', apiKey: 'sk-secret', modelName: 'gpt', createdAt: 1, updatedAt: 1 },
+    }
+    const executor = createControlActionExecutor({
+      loadStore: async () => store,
+      routeRuntimeMessage: vi.fn(async () => ({ ok: true, store })),
+      runtimeFrames: { list: () => [] },
+      openTeamPage: vi.fn(),
+      waitFor: async () => undefined,
+      now: () => 10,
+    })
+
+    const snapshot = await executor({ id: 'cmd-1', action: 'store.get' })
+    const created = await executor({ id: 'cmd-2', action: 'chat.create', payload: { name: '评审' } })
+
+    for (const result of [snapshot, created]) {
+      expect(result.ok).toBe(true)
+      expect(JSON.stringify(result.data)).not.toContain('sk-secret')
+      expect((result.data as { store: OpenTeamStore }).store.settings.externalModelsById['model-1']).toMatchObject({ apiKey: '[redacted]', baseUrl: 'https://api.example.com/v1' })
+    }
+    expect(store.settings.externalModelsById['model-1'].apiKey).toBe('sk-secret')
+  })
+
   it('reads replies belonging to a task message without leaking later turns', () => {
     const store = createDefaultStore()
     store.chatsById['chat-1'] = {

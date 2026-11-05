@@ -48,11 +48,24 @@ export function createControlActionExecutor(deps: ControlActionExecutorDependenc
       }
 
       const data = await executeEnabledCommand(command, store, deps)
-      return controlSuccess(command.id, data)
+      return controlSuccess(command.id, withoutStoreSecrets(data))
     } catch (error) {
       return controlFailure(command.id, errorCode(error), error instanceof Error ? error.message : String(error), { recoverable: true })
     }
   }
+}
+
+// Local agents read these results into their LLM context, so never hand them API keys.
+function withoutStoreSecrets(data: unknown): unknown {
+  if (!isRecord(data) || !isRecord(data.store)) return data
+  return { ...data, store: redactStoreSecrets(data.store as unknown as OpenTeamStore) }
+}
+
+export function redactStoreSecrets(store: OpenTeamStore): OpenTeamStore {
+  const externalModelsById = Object.fromEntries(
+    Object.entries(store.settings?.externalModelsById ?? {}).map(([id, model]) => [id, { ...model, apiKey: model.apiKey ? '[redacted]' : '' }]),
+  )
+  return { ...store, settings: { ...store.settings, externalModelsById } }
 }
 
 async function executeEnabledCommand(command: ControlHttpCommand, initialStore: OpenTeamStore, deps: ControlActionExecutorDependencies): Promise<unknown> {
