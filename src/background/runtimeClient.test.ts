@@ -21,7 +21,7 @@ describe('background runtime client', () => {
     expect(listHostTabIds()).toEqual([202])
   })
 
-  it('broadcasts store updates to known hosts, prunes failed hosts, and sends runtime push payloads', async () => {
+  it('broadcasts store updates to the top frame of known hosts and prunes failed hosts', async () => {
     vi.resetModules()
     const tabsSendMessage = vi.fn()
       .mockResolvedValueOnce({ ok: true })
@@ -39,9 +39,10 @@ describe('background runtime client', () => {
     await broadcastStoreUpdated(store)
 
     expect(tabsSendMessage).toHaveBeenCalledTimes(2)
-    expect(tabsSendMessage).toHaveBeenNthCalledWith(1, 101, { type: 'GROUP_STORE_UPDATED', store })
-    expect(tabsSendMessage).toHaveBeenNthCalledWith(2, 202, { type: 'GROUP_STORE_UPDATED', store })
-    expect(runtimeSendMessage).toHaveBeenCalledWith({ type: 'OPENTEAM_GROUP_PUSH', payload: { type: 'GROUP_STORE_UPDATED', store } })
+    expect(tabsSendMessage).toHaveBeenNthCalledWith(1, 101, { type: 'GROUP_STORE_UPDATED', store }, { frameId: 0 })
+    expect(tabsSendMessage).toHaveBeenNthCalledWith(2, 202, { type: 'GROUP_STORE_UPDATED', store }, { frameId: 0 })
+    // Nothing listens for a runtime-wide copy of the store, so none is sent.
+    expect(runtimeSendMessage).not.toHaveBeenCalled()
     expect(listHostTabIds()).toEqual([101])
   })
 

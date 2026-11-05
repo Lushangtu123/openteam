@@ -43,23 +43,20 @@ export function listHostTabIds(): number[] {
   return [...hostTabIds]
 }
 
+// The store is the largest message OpenTeam sends, so it only goes to the team page itself (the
+// host tab's top frame). Without a frameId, Chrome would also copy it into every AI-site frame
+// embedded in that tab, whose content scripts ignore it.
 export async function broadcastStoreUpdated(store: OpenTeamStore, options: BroadcastStoreUpdatedOptions = {}): Promise<void> {
   const message = { type: 'GROUP_STORE_UPDATED', store }
 
   for (const tabId of listHostTabIds()) {
     if (tabId === options.excludeTabId) continue
     try {
-      await chrome.tabs.sendMessage(tabId, message)
+      await chrome.tabs.sendMessage(tabId, message, { frameId: 0 })
     } catch (error) {
       log.debug('group-store-updated:tab-failed', { tabId, error: error instanceof Error ? error.message : String(error) })
       forgetHostTab(tabId)
     }
-  }
-
-  try {
-    await chrome.runtime.sendMessage({ type: GROUP_PUSH_TYPE, payload: message })
-  } catch (error) {
-    log.debug('group-store-updated:runtime-failed', { error: error instanceof Error ? error.message : String(error) })
   }
 }
 
