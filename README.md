@@ -2,7 +2,7 @@
 
 **🌐 Language:** English | [简体中文](README.zh-CN.md)
 
-> **About this fork.** OpenTeam was created by **[afumu](https://github.com/afumu)** — the original project lives at **[afumu/openteam](https://github.com/afumu/openteam)**. All original code, design and documentation belong to afumu and the OpenTeam contributors and remain under the [PolyForm Noncommercial License 1.0.0](LICENSE) (`Required Notice: Copyright (c) 2026 OpenTeam contributors.`). This fork adds a refreshed team page UI and security hardening for the local control daemon, iframe header rules and background message handling. For the official version, releases and community, please use the original repository.
+> **About this fork.** OpenTeam was created by **[afumu](https://github.com/afumu)** — the original project lives at **[afumu/openteam](https://github.com/afumu/openteam)**. All original code, design and documentation belong to afumu and the OpenTeam contributors and remain under the [PolyForm Noncommercial License 1.0.0](LICENSE) (`Required Notice: Copyright (c) 2026 OpenTeam contributors.`). This fork adds a refreshed team page UI, security hardening for the local control daemon, iframe header rules and background message handling, and faster storage and message rendering for large chats. For the official version, releases and community, please use the original repository.
 
 > A local-first AI team workspace that turns your existing ChatGPT, Claude, Gemini, DeepSeek, and Grok web sessions into a multi-agent discussion room.
 
