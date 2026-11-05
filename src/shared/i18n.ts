@@ -178,6 +178,12 @@ const UI_TRANSLATIONS: Record<string, string> = {
   '尚未读取消息': 'No messages read yet',
   '等待连接': 'Waiting to connect',
   '网页已连接': 'Web connected',
+  '讨论分歧': 'Discuss differences',
+  '把所有回答发给回答过的人员，请 TA 们只针对不同意的地方回应': 'Send all answers to the people who answered and ask them to respond only where they disagree',
+  '至少要有两份回复才能讨论或汇总。': 'At least two replies are needed to discuss or summarize.',
+  '讨论分歧：回答过的人员会收到所有回答，只针对不同意的地方回应。汇总异同：由你选的人员整理共识、分歧和需要核实的地方。': 'Discuss differences: the people who answered get all the answers and respond only where they disagree. Summarize differences: the person you pick sorts out agreements, disagreements and what needs checking.',
+  'TA 也回答了这个问题，汇总可能偏向自己的观点。换一位没参与回答、或用不同模型的人员会更客观。': 'This person also answered, so the summary may lean toward their own view. Someone who did not answer, or who uses a different model, will be more neutral.',
+  '几位都同意，不代表一定正确：数据、引语和日期请到原始出处核实。': 'Agreement is not proof: check figures, quotes and dates against the original sources.',
   '对比回复': 'Compare replies',
   '关闭': 'Close',
   '正在回复…': 'Replying…',
@@ -190,8 +196,6 @@ const UI_TRANSLATIONS: Record<string, string> = {
   '汇总异同': 'Summarize differences',
   '复制对比': 'Copy comparison',
   '已复制对比内容': 'Comparison copied',
-  '至少要有两份回复才能汇总。': 'At least two replies are needed for a summary.',
-  '回复会作为附件发给这位人员，由 TA 整理共识、分歧和需要核实的地方。': 'The replies are sent to this person as an attachment, to sort out what they agree on, where they differ, and what needs checking.',
   '搜索消息': 'Search messages',
   '搜索消息（Ctrl/⌘ K）': 'Search messages (Ctrl/⌘ K)',
   '搜索所有群聊的消息…': 'Search messages in all chats…',
@@ -917,6 +921,8 @@ function translateUiPattern(source: string): string | undefined {
   if (sendWithConnecting) return `Will send to: ${sendWithConnecting[1]}; connecting: ${sendWithConnecting[2]}`
   const compareReplies = source.match(/^⇆ 对比 (\d+) 个回复$/)
   if (compareReplies) return `⇆ Compare ${compareReplies[1]} replies`
+  const discussionRequested = source.match(/^已请 (\d+) 位人员针对分歧讨论$/)
+  if (discussionRequested) return `Asked ${discussionRequested[1]} people to discuss their differences`
   const summaryRequested = source.match(/^已请 (.+) 汇总异同$/)
   if (summaryRequested) return `Asked ${summaryRequested[1]} to summarize the differences`
   const searchCountLimited = source.match(/^找到 (\d+) 条消息，显示最近 (\d+) 条$/)

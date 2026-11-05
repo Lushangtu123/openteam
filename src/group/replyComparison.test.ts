@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { collectReplies, comparisonSummaryRequest, countRepliesByQuestion, formatComparisonDocument } from './replyComparison'
+import { collectReplies, comparisonDiscussionRequest, comparisonSummaryRequest, countRepliesByQuestion, formatComparisonDocument, hasAnswered, pickSummarizer } from './replyComparison'
 import { createDefaultStore } from './store'
 import type { GroupMessage, OpenTeamStore } from './types'
 
@@ -56,5 +56,29 @@ describe('reply comparison', () => {
     expect(document).toBe('# 问题\n\n这个方案能上线吗？\n\n## 工程师（ChatGPT）\n\n技术上可以，注意缓存\n\n## 产品经理（ChatGPT）\n\n能，但先灰度')
     expect(comparisonSummaryRequest('回复对比.md', 'zh-CN')).toContain('附件 回复对比.md')
     expect(comparisonSummaryRequest('replies.md', 'en')).toContain('The attached replies.md')
+    expect(comparisonSummaryRequest('回复对比.md', 'zh-CN')).toContain('没有人给出来源')
+    expect(comparisonDiscussionRequest('回复对比.md', 'zh-CN')).toContain('请只针对和别人观点不同的地方回应')
+  })
+
+  it('prefers a summarizer who did not answer and uses another model', () => {
+    const { store, question } = makeStore()
+    const comparison = collectReplies(store, question)
+    const roles = () => Object.values(store.rolesById)
+    // Still replying, and failed: neither can take on a summary.
+    store.rolesById.r3.status = 'thinking'
+    store.rolesById.r4.status = 'error'
+    store.rolesById.r5 = { ...store.rolesById.r1, id: 'r5', name: '同模型旁观者' }
+    store.rolesById.r6 = { ...store.rolesById.r1, id: 'r6', name: '换模型旁观者', chatSite: 'claude' }
+
+    expect(pickSummarizer(roles(), comparison, 'deepseek')?.name).toBe('换模型旁观者')
+
+    delete store.rolesById.r6
+    expect(pickSummarizer(roles(), comparison, 'deepseek')?.name).toBe('同模型旁观者')
+
+    delete store.rolesById.r5
+    // Only people who answered are free; anyone ready will do.
+    expect(pickSummarizer(roles(), comparison, 'deepseek')?.name).toBe('工程师')
+    expect(hasAnswered(comparison, 'r1')).toBe(true)
+    expect(hasAnswered(comparison, 'r3')).toBe(false)
   })
 })

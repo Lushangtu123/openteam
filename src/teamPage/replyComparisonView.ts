@@ -1,6 +1,6 @@
 import { roleMentionLabel, roleMentionLabelOptionsFromSettings, roleModelLabel } from '../group/mentionParser'
-import { collectReplies, comparisonSummaryRequest, formatComparisonDocument, type ComparedReply, type ReplyComparison } from '../group/replyComparison'
-import type { GroupRole, OpenTeamStore } from '../group/types'
+import { collectReplies, comparisonDiscussionRequest, comparisonSummaryRequest, formatComparisonDocument, hasAnswered, pickSummarizer, type ComparedReply, type ReplyComparison } from '../group/replyComparison'
+import type { GroupRole, OpenTeamLanguage, OpenTeamStore } from '../group/types'
 import { normalizeLanguage, translateUi } from '../shared/i18n'
 import { renderMarkdownInto } from './markdownRender'
 
@@ -30,6 +30,8 @@ export function createReplyComparisonView(deps: ReplyComparisonViewDependencies)
     close()
     const comparison = comparisonFor(questionId)
     if (!comparison) return
+    // Chosen again for each question: who is best placed depends on who answered it.
+    summarizerRoleId = undefined
 
     const backdrop = document.createElement('div')
     backdrop.className = 'modal-backdrop reply-compare-modal'
@@ -150,10 +152,22 @@ export function createReplyComparisonView(deps: ReplyComparisonViewDependencies)
     const store = deps.getStore()
     const chat = store.chatsById[comparison.question.chatId]
     const roles = (chat?.roleIds ?? []).map(roleId => store.rolesById[roleId]).filter((role): role is GroupRole => Boolean(role))
-    const answered = comparison.replies.filter(reply => reply.status === 'replied').length
+    const answerers = comparison.replies.filter(reply => reply.status === 'replied' && reply.role).map(reply => reply.role as GroupRole)
+    const enough = answerers.length >= 2
     if (!summarizerRoleId || !roles.some(role => role.id === summarizerRoleId)) {
-      summarizerRoleId = (roles.find(role => role.status === 'ready') ?? roles[0])?.id
+      summarizerRoleId = pickSummarizer(roles, comparison, store.settings.defaultChatSite)?.id
     }
+
+    // Step one: let the people who answered respond to each other, only where they disagree.
+    const discuss = document.createElement('button')
+    discuss.type = 'button'
+    discuss.className = 'btn reply-compare-discuss'
+    discuss.textContent = ui('讨论分歧')
+    discuss.title = ui('把所有回答发给回答过的人员，请 TA 们只针对不同意的地方回应')
+    discuss.disabled = sending || !enough
+    discuss.addEventListener('click', () => {
+      void send(comparison, answerers, comparisonDiscussionRequest, ui(`已请 ${answerers.length} 位人员针对分歧讨论`))
+    })
 
     const label = document.createElement('label')
     label.className = 'reply-compare-summarizer'
@@ -169,38 +183,53 @@ export function createReplyComparisonView(deps: ReplyComparisonViewDependencies)
     }
     select.addEventListener('change', () => {
       summarizerRoleId = select.value
+      renderFooter(comparison)
     })
     label.append(select)
 
+    const summarizer = roles.find(role => role.id === summarizerRoleId)
     const summarize = document.createElement('button')
     summarize.type = 'button'
     summarize.className = 'btn btn-primary reply-compare-summarize'
     summarize.textContent = ui(sending ? '正在发送…' : '汇总异同')
-    summarize.disabled = sending || answered < 2 || roles.length === 0
+    summarize.disabled = sending || !enough || !summarizer
     summarize.addEventListener('click', () => {
-      void summarizeWith(comparison, roles.find(role => role.id === summarizerRoleId))
+      if (summarizer) void send(comparison, [summarizer], comparisonSummaryRequest, ui(`已请 ${summarizer.name} 汇总异同`))
     })
 
     const copy = document.createElement('button')
     copy.type = 'button'
     copy.className = 'btn btn-ghost reply-compare-copy'
     copy.textContent = ui('复制对比')
-    copy.disabled = answered === 0
+    copy.disabled = answerers.length === 0
     copy.addEventListener('click', () => {
       deps.copyText(comparisonDocument(comparison))
         .then(() => deps.showSuccess(ui('已复制对比内容')))
         .catch(error => deps.showError(error instanceof Error ? error.message : String(error)))
     })
 
-    const hint = document.createElement('p')
-    hint.className = 'reply-compare-hint'
-    hint.textContent = ui(answered < 2 ? '至少要有两份回复才能汇总。' : '回复会作为附件发给这位人员，由 TA 整理共识、分歧和需要核实的地方。')
+    const hints = document.createElement('div')
+    hints.className = 'reply-compare-hints'
+    const hint = (text: string, className = '') => {
+      const element = document.createElement('p')
+      element.className = `reply-compare-hint ${className}`.trim()
+      element.textContent = ui(text)
+      hints.append(element)
+    }
+    if (!enough) {
+      hint('至少要有两份回复才能讨论或汇总。')
+    } else {
+      hint('讨论分歧：回答过的人员会收到所有回答，只针对不同意的地方回应。汇总异同：由你选的人员整理共识、分歧和需要核实的地方。')
+      if (hasAnswered(comparison, summarizerRoleId)) hint('TA 也回答了这个问题，汇总可能偏向自己的观点。换一位没参与回答、或用不同模型的人员会更客观。', 'reply-compare-warning')
+    }
+    hint('几位都同意，不代表一定正确：数据、引语和日期请到原始出处核实。', 'reply-compare-factcheck')
 
-    opened.footer.replaceChildren(label, summarize, copy, hint)
+    opened.footer.replaceChildren(discuss, label, summarize, copy, hints)
   }
 
-  async function summarizeWith(comparison: ReplyComparison, role: GroupRole | undefined): Promise<void> {
-    if (!role || sending) return
+  // Sends the comparison as an attached file to `recipients`, with a request built for its file name.
+  async function send(comparison: ReplyComparison, recipients: GroupRole[], request: (fileName: string, language: OpenTeamLanguage) => string, success: string): Promise<void> {
+    if (recipients.length === 0 || sending) return
     const language = normalizeLanguage(deps.getStore().settings.language)
     const fileName = SUMMARY_FILE_NAME[language]
     const text = comparisonDocument(comparison)
@@ -209,11 +238,11 @@ export function createReplyComparisonView(deps: ReplyComparisonViewDependencies)
     try {
       await deps.runCommand('GROUP_MESSAGE_SEND', {
         chatId: comparison.question.chatId,
-        raw: `@${roleMentionLabel(role, mentionOptions())} ${comparisonSummaryRequest(fileName, language)}`,
+        raw: `${recipients.map(role => `@${roleMentionLabel(role, mentionOptions())}`).join(' ')} ${request(fileName, language)}`,
         uploads: [{ kind: 'text', fileName, mimeType: 'text/markdown', size: new TextEncoder().encode(text).length, text }],
       })
       close()
-      deps.showSuccess(ui(`已请 ${role.name} 汇总异同`))
+      deps.showSuccess(success)
     } catch (error) {
       deps.showError(error instanceof Error ? error.message : String(error))
     } finally {

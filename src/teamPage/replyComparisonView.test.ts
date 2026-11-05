@@ -89,13 +89,41 @@ describe('reply comparison view', () => {
     expect(document.querySelector('.reply-compare-dialog')).toBeNull()
   })
 
+  it('suggests someone who did not answer as the summarizer and warns when an answerer is picked', () => {
+    const { view } = setup()
+    view.open('q1')
+
+    const select = document.querySelector<HTMLSelectElement>('.reply-compare-select')!
+    expect(select.value).toBe('r3')
+    expect(document.querySelector('.reply-compare-warning')).toBeNull()
+    expect(document.querySelector('.reply-compare-factcheck')?.textContent).toBe('几位都同意，不代表一定正确：数据、引语和日期请到原始出处核实。')
+
+    select.value = 'r1'
+    select.dispatchEvent(new Event('change'))
+    expect(document.querySelector('.reply-compare-warning')?.textContent).toContain('TA 也回答了这个问题')
+  })
+
+  it('asks everyone who answered to respond only where they disagree', async () => {
+    const { view, runCommand, showSuccess } = setup()
+    view.open('q1')
+
+    document.querySelector<HTMLButtonElement>('.reply-compare-discuss')!.click()
+    await vi.waitFor(() => expect(runCommand).toHaveBeenCalled())
+
+    const [, payload] = runCommand.mock.calls[0] as unknown as [string, { raw: string; uploads: Array<{ fileName: string; text: string }> }]
+    expect(payload.raw).toMatch(/^@工程师（ChatGPT） @产品经理（Claude） 附件 回复对比\.md 是大家对同一个问题的回答，也包括你自己的。请只针对和别人观点不同的地方回应/)
+    expect(payload.uploads[0].text).toContain('## 产品经理（Claude）\n\n先灰度')
+    await vi.waitFor(() => expect(showSuccess).toHaveBeenCalledWith('已请 2 位人员针对分歧讨论'))
+  })
+
   it('needs two answers to summarize, copies what is there and closes with Escape', async () => {
     const { view, store, copyText } = setup()
     store.messagesById.a2.status = 'error'
     view.open('q1')
 
     expect(document.querySelector<HTMLButtonElement>('.reply-compare-summarize')?.disabled).toBe(true)
-    expect(document.querySelector('.reply-compare-hint')?.textContent).toBe('至少要有两份回复才能汇总。')
+    expect(document.querySelector<HTMLButtonElement>('.reply-compare-discuss')?.disabled).toBe(true)
+    expect(document.querySelector('.reply-compare-hint')?.textContent).toBe('至少要有两份回复才能讨论或汇总。')
     expect(columns()[1].state).toBe('回复失败')
 
     document.querySelector<HTMLButtonElement>('.reply-compare-copy')!.click()
