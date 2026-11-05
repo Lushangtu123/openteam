@@ -2,7 +2,7 @@
 
 **🌐 语言:** [English](README.md) | 简体中文
 
-> **关于此 Fork：** OpenTeam 的原作者是 **[afumu](https://github.com/afumu)**，原项目地址为 **[afumu/openteam](https://github.com/afumu/openteam)**。项目的原始代码、设计与文档均归 afumu 及 OpenTeam 贡献者所有，并继续遵循 [PolyForm Noncommercial License 1.0.0](LICENSE)（`Required Notice: Copyright (c) 2026 OpenTeam contributors.`）。本 Fork 在此基础上做了团队页界面改版，加固了本机控制守护进程、iframe 响应头规则和后台消息处理的安全性，并提升了大量聊天记录下的存储与消息渲染速度。官方版本、发布与交流群请以原仓库为准。
+> **关于此 Fork：** OpenTeam 的原作者是 **[afumu](https://github.com/afumu)**，原项目地址为 **[afumu/openteam](https://github.com/afumu/openteam)**。项目的原始代码、设计与文档均归 afumu 及 OpenTeam 贡献者所有，并继续遵循 [PolyForm Noncommercial License 1.0.0](LICENSE)（`Required Notice: Copyright (c) 2026 OpenTeam contributors.`）。本 Fork 在此基础上做了团队页界面改版，加固了本机控制守护进程、iframe 响应头规则和后台消息处理的安全性，提升了大量聊天记录下的存储与消息渲染速度，并新增了 AI 网页健康状态和全量数据备份与恢复。官方版本、发布与交流群请以原仓库为准。
 
 > 复用你已经登录的 AI 网页账号，把 ChatGPT、Claude、Gemini、DeepSeek、Grok 组织成一个本地优先的 AI 专家团。
 
