@@ -521,6 +521,28 @@ describe('IframeHost', () => {
     expect(host.getChatState('chat-1')[0].status).toBe('assigned')
   })
 
+  it('assigns the role again when a connected frame loads a new document', () => {
+    const visibleHost = document.createElement('div')
+    document.body.append(visibleHost)
+    const onEvent = vi.fn()
+    const host = createIframeHost({ visibleHost, assignIntervalMs: 50, onEvent })
+    host.activateChat(makeChat('chat-1', ['role-1']), [makeRole('chat-1', 'role-1')])
+    const iframe = host.getRoleFrame('chat-1', 'role-1')!
+    const postMessage = vi.spyOn(iframe.contentWindow!, 'postMessage')
+    dispatchIframeLoad(iframe)
+    host.markRoleReady('chat-1', 'role-1')
+    postMessage.mockClear()
+
+    // For example a logged-out page redirecting to the site's login page.
+    dispatchIframeLoad(iframe)
+    vi.advanceTimersByTime(120)
+
+    expect(onEvent).toHaveBeenCalledWith({ type: 'role-navigated', chatId: 'chat-1', roleId: 'role-1' })
+    expect(host.getChatState('chat-1')[0].status).toBe('loading')
+    expect(postMessage.mock.calls.length).toBeGreaterThanOrEqual(2)
+    expect(postMessage.mock.calls[0][0]).toMatchObject({ type: FRAME_ASSIGN_MESSAGE, chatId: 'chat-1', roleId: 'role-1' })
+  })
+
   it('does not create role iframes while disabled', () => {
     const visibleHost = document.createElement('div')
     document.body.append(visibleHost)

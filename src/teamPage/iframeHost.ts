@@ -44,6 +44,7 @@ export type IframeHostEvent =
   | { type: 'role-recovered'; chatId: string; roleId: string; iframe: HTMLIFrameElement }
   | { type: 'role-assigned'; chatId: string; roleId: string; attempts: number }
   | { type: 'role-ready'; chatId: string; roleId: string }
+  | { type: 'role-navigated'; chatId: string; roleId: string }
   | { type: 'role-disposed'; chatId: string; roleId: string }
   | { type: 'disposed' }
 
@@ -345,7 +346,7 @@ export class IframeHost {
       assignmentAttempts: 0,
     }
 
-    iframe.addEventListener('load', () => this.startAssignLoop(record))
+    iframe.addEventListener('load', () => this.handleFrameLoad(record))
     iframe.src = src
     shell.append(label, iframe)
     this.framesByRoleKey.set(roleKey(role.chatId, role.id), record)
@@ -433,6 +434,17 @@ export class IframeHost {
 
   private mountRole(record: RoleFrameRecord, group: HTMLElement): void {
     if (record.shell.parentElement !== group) group.append(record.shell)
+  }
+
+  private handleFrameLoad(record: RoleFrameRecord): void {
+    if (record.status === 'assigned' && this.framesByRoleKey.get(roleKey(record.chatId, record.roleId)) === record) {
+      // A new document replaced the connected one (a login redirect, a reload inside the page):
+      // its content script has no role yet, so assign it again.
+      record.status = 'loading'
+      record.assignmentAttempts = 0
+      this.emit({ type: 'role-navigated', chatId: record.chatId, roleId: record.roleId })
+    }
+    this.startAssignLoop(record)
   }
 
   private startAssignLoop(record: RoleFrameRecord): void {
