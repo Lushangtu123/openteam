@@ -24,9 +24,9 @@
     "@ai-sdk/anthropic": "^3.0.75",
     "@ai-sdk/openai-compatible": "^2.0.46",
     "@antv/x6": "^3.1.7",
-    "@tiptap/core": "^3.22.5",
-    "@tiptap/pm": "^3.22.5",
-    "@tiptap/starter-kit": "^3.22.5",
+    "@tiptap/core": "^3.32.2",
+    "@tiptap/pm": "^3.32.2",
+    "@tiptap/starter-kit": "^3.32.2",
     "ai": "^6.0.175",
     "markdown-it": "^14.1.1",
     "tslib": "^2.8.1"
