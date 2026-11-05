@@ -1,3 +1,4 @@
+import { isChatSite } from '../group/chatSites'
 import { extractSupportedConversationId, normalizeSupportedChatConversationUrl } from '../group/conversationUrl'
 import { readMessageUploads, type MessageUpload } from '../group/messageUploads'
 import type { LoadedUpload, UploadedImage } from './imageAttachments'
@@ -1701,8 +1702,7 @@ function readOptionalImageDimension(value: unknown): number | undefined {
 }
 
 function readSiteId(value: unknown): ChatSite | undefined {
-  if (value === 'gemini' || value === 'chatgpt' || value === 'claude' || value === 'deepseek' || value === 'grok') return value
-  return undefined
+  return isChatSite(value) ? value : undefined
 }
 
 function readSiteHealthStatus(value: unknown): RoleSiteHealthStatus | undefined {

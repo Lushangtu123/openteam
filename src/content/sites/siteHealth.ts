@@ -12,6 +12,9 @@ export interface SiteHealthProbe {
   findSiteError?(): string | undefined
   // Something drawn over the page that keeps the input box from being used (cookie banner, dialog).
   hasBlockingOverlay?(): boolean
+  // A modal dialog that must be answered before anything can be sent, even with the input box on
+  // the page behind it (Qwen asks guests to confirm their age). Returns the dialog's text.
+  findBlockingDialog?(): string | undefined
 }
 
 export interface SiteHealthContext {
@@ -39,6 +42,8 @@ export function checkSiteHealth(probe: SiteHealthProbe, context: SiteHealthConte
     if (HTTP_ERROR_TITLE.test(doc.title.trim())) return { status: 'blocked', reason: 'http-error', detail: doc.title.trim().slice(0, 80), timestamp }
   }
   if (probe.isLoginPage?.()) return { status: 'unauthorized', reason: 'login', timestamp }
+  const dialog = probe.findBlockingDialog?.()
+  if (dialog !== undefined) return { status: 'blocked', reason: 'overlay', ...(dialog ? { detail: dialog.slice(0, 160) } : {}), timestamp }
 
   const siteError = probe.findSiteError?.()
   if (siteError) return { status: 'error', reason: 'site-error', detail: siteError.slice(0, 160), timestamp }

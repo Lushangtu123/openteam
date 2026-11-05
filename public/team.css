@@ -3091,6 +3091,12 @@ select:focus {
   color: #f8fafc;
 }
 
+.site-pill-qwen {
+  border-color: rgba(124, 115, 255, 0.36);
+  background: rgba(124, 115, 255, 0.12);
+  color: #bdb8ff;
+}
+
 .site-pill-external {
   border-color: rgba(236, 113, 255, 0.34);
   background: rgba(236, 113, 255, 0.1);
@@ -5034,6 +5040,12 @@ select:focus {
 }
 
 :root[data-theme="light"] .site-pill-grok {
+  border-color: rgba(17, 24, 39, 0.12);
+  background: #f6f7f8;
+  color: #4b5563;
+}
+
+:root[data-theme="light"] .site-pill-qwen {
   border-color: rgba(17, 24, 39, 0.12);
   background: #f6f7f8;
   color: #4b5563;

@@ -1,3 +1,4 @@
+import { CHAT_SITES, chatSiteLabel, isChatSite } from '../group/chatSites'
 import { ROLE_NAME_MAX_CHARACTERS } from '../group/roleTemplates'
 import type { GeneratedPersonDraft } from '../group/personaGeneration'
 import type { ChatSite, ExternalModelConfig, GroupChat, OpenTeamStore, RoleModelSource, RoleTemplate } from '../group/types'
@@ -11,7 +12,7 @@ type AddPersonItem =
 
 const TEMPLATE_CATEGORY_ALL = '全部'
 const PEOPLE_LIBRARY_PAGE_SIZE = 5
-const VISIBLE_CHAT_SITES = ['gemini', 'chatgpt', 'claude', 'deepseek', 'grok'] as const
+const VISIBLE_CHAT_SITES = CHAT_SITES
 
 export interface PeopleLibraryViewDependencies {
   state: TeamPageState
@@ -50,11 +51,7 @@ export interface PeopleLibraryViewDependencies {
   generateTemplatePersonaEl: HTMLButtonElement
   templatePersonaGenerationStatusEl: HTMLElement
   templateFormTitleEl: HTMLElement
-  templateSiteGeminiEl: HTMLInputElement
-  templateSiteChatGptEl: HTMLInputElement
-  templateSiteClaudeEl: HTMLInputElement
-  templateSiteDeepSeekEl: HTMLInputElement
-  templateSiteGrokEl: HTMLInputElement
+  templateSiteEls: Record<ChatSite, HTMLInputElement>
   templateSiteExternalEl: HTMLInputElement
   templateExternalModelFieldEl: HTMLElement
   templateExternalModelSelectEl: HTMLSelectElement
@@ -139,12 +136,7 @@ export function createPeopleLibraryView(deps: PeopleLibraryViewDependencies): Pe
       deps.templateNameEl.value = selectedTemplate.name
       deps.templateDescriptionEl.value = selectedTemplate.description ?? ''
       deps.templatePromptEl.value = selectedTemplate.systemPrompt
-      deps.templateSiteGeminiEl.checked = !externalSelected && defaultChatSite === 'gemini'
-      deps.templateSiteChatGptEl.checked = !externalSelected && defaultChatSite === 'chatgpt'
-      deps.templateSiteClaudeEl.checked = !externalSelected && defaultChatSite === 'claude'
-      deps.templateSiteDeepSeekEl.checked = !externalSelected && defaultChatSite === 'deepseek'
-      deps.templateSiteGrokEl.checked = !externalSelected && defaultChatSite === 'grok'
-      deps.templateSiteExternalEl.checked = externalSelected
+      checkTemplateSite(externalSelected ? 'external' : defaultChatSite)
       deps.templateExternalModelSelectEl.value = selectedTemplate.defaultExternalModelId ?? firstExternalModelId() ?? ''
       deps.templateChatGptGptsUrlEl.value = selectedTemplate.chatGptGptsUrl ?? ''
       deps.templateGrokProjectUrlEl.value = selectedTemplate.grokProjectUrl ?? ''
@@ -154,12 +146,7 @@ export function createPeopleLibraryView(deps: PeopleLibraryViewDependencies): Pe
       deps.templateDescriptionEl.value = ''
       deps.templatePromptEl.value = ''
       const defaultChatSite = visibleChatSite(store.settings.defaultChatSite)
-      deps.templateSiteGeminiEl.checked = defaultChatSite === 'gemini'
-      deps.templateSiteChatGptEl.checked = defaultChatSite === 'chatgpt'
-      deps.templateSiteClaudeEl.checked = defaultChatSite === 'claude'
-      deps.templateSiteDeepSeekEl.checked = defaultChatSite === 'deepseek'
-      deps.templateSiteGrokEl.checked = defaultChatSite === 'grok'
-      deps.templateSiteExternalEl.checked = false
+      checkTemplateSite(defaultChatSite)
       deps.templateExternalModelSelectEl.value = firstExternalModelId() ?? ''
       deps.templateChatGptGptsUrlEl.value = ''
       deps.templateGrokProjectUrlEl.value = ''
@@ -758,8 +745,8 @@ export function createPeopleLibraryView(deps: PeopleLibraryViewDependencies): Pe
       defaultModelSource: readTemplateModelSource(),
       defaultChatSite: deps.templateSiteExternalEl.checked ? undefined : readTemplateChatSite(),
       defaultExternalModelId: deps.templateSiteExternalEl.checked ? deps.templateExternalModelSelectEl.value : undefined,
-      chatGptGptsUrl: deps.templateSiteChatGptEl.checked ? deps.templateChatGptGptsUrlEl.value.trim() : undefined,
-      grokProjectUrl: deps.templateSiteGrokEl.checked ? deps.templateGrokProjectUrlEl.value.trim() : undefined,
+      chatGptGptsUrl: deps.templateSiteEls.chatgpt.checked ? deps.templateChatGptGptsUrlEl.value.trim() : undefined,
+      grokProjectUrl: deps.templateSiteEls.grok.checked ? deps.templateGrokProjectUrlEl.value.trim() : undefined,
     }
   }
 
@@ -815,11 +802,12 @@ export function createPeopleLibraryView(deps: PeopleLibraryViewDependencies): Pe
   }
 
   function readTemplateChatSite(): ChatSite {
-    if (deps.templateSiteChatGptEl.checked) return 'chatgpt'
-    if (deps.templateSiteClaudeEl.checked) return 'claude'
-    if (deps.templateSiteDeepSeekEl.checked) return 'deepseek'
-    if (deps.templateSiteGrokEl.checked) return 'grok'
-    return 'gemini'
+    return CHAT_SITES.find(site => deps.templateSiteEls[site].checked) ?? 'gemini'
+  }
+
+  function checkTemplateSite(value: ChatSite | 'external'): void {
+    for (const site of CHAT_SITES) deps.templateSiteEls[site].checked = site === value
+    deps.templateSiteExternalEl.checked = value === 'external'
   }
 
   function readTemplateModelSource(): RoleModelSource {
@@ -827,11 +815,11 @@ export function createPeopleLibraryView(deps: PeopleLibraryViewDependencies): Pe
   }
 
   function syncTemplateModelFields(): void {
-    const chatGptVisible = deps.templateSiteChatGptEl.checked
+    const chatGptVisible = deps.templateSiteEls.chatgpt.checked
     deps.templateChatGptGptsFieldEl.hidden = !chatGptVisible
     deps.templateChatGptGptsFieldEl.style.display = chatGptVisible ? '' : 'none'
     if (!chatGptVisible) deps.templateChatGptGptsUrlEl.value = ''
-    const grokVisible = deps.templateSiteGrokEl.checked
+    const grokVisible = deps.templateSiteEls.grok.checked
     deps.templateGrokProjectFieldEl.hidden = !grokVisible
     deps.templateGrokProjectFieldEl.style.display = grokVisible ? '' : 'none'
     if (!grokVisible) deps.templateGrokProjectUrlEl.value = ''
@@ -841,14 +829,7 @@ export function createPeopleLibraryView(deps: PeopleLibraryViewDependencies): Pe
   }
 
   function templateSiteInputs(): HTMLInputElement[] {
-    return [
-      deps.templateSiteGeminiEl,
-      deps.templateSiteChatGptEl,
-      deps.templateSiteClaudeEl,
-      deps.templateSiteDeepSeekEl,
-      deps.templateSiteGrokEl,
-      deps.templateSiteExternalEl,
-    ]
+    return [...CHAT_SITES.map(site => deps.templateSiteEls[site]), deps.templateSiteExternalEl]
   }
 
   function renderExternalModelSelect(): void {
@@ -950,11 +931,7 @@ export function createPeopleLibraryView(deps: PeopleLibraryViewDependencies): Pe
 }
 
 function siteLabel(site: ChatSite | undefined): string {
-  if (site === 'chatgpt') return 'ChatGPT'
-  if (site === 'claude') return 'Claude'
-  if (site === 'deepseek') return 'DeepSeek'
-  if (site === 'grok') return 'Grok'
-  return 'Gemini'
+  return chatSiteLabel(site)
 }
 
 function templateModelLabel(template: RoleTemplate, store: OpenTeamStore): string {
@@ -1018,7 +995,7 @@ function renderCategoryFilter(element: HTMLElement, categories: string[], active
 }
 
 function visibleChatSite(site: ChatSite | undefined): ChatSite {
-  return site && VISIBLE_CHAT_SITES.includes(site as typeof VISIBLE_CHAT_SITES[number]) ? site : 'gemini'
+  return isChatSite(site) ? site : 'gemini'
 }
 
 function externalModels(store: OpenTeamStore): ExternalModelConfig[] {

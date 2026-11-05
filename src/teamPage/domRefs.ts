@@ -1,3 +1,5 @@
+import { CHAT_SITES, type ChatSite } from '../group/chatSites'
+
 export interface TeamPageDomRefs {
   appShellEl: HTMLElement
   closeWindowEl: HTMLButtonElement
@@ -141,11 +143,8 @@ export interface TeamPageDomRefs {
   addLibraryPeopleFormEl: HTMLFormElement
   addTemporaryPersonFormEl: HTMLFormElement
   peopleLibraryFormEl: HTMLFormElement
-  templateSiteGeminiEl: HTMLInputElement
-  templateSiteChatGptEl: HTMLInputElement
-  templateSiteClaudeEl: HTMLInputElement
-  templateSiteDeepSeekEl: HTMLInputElement
-  templateSiteGrokEl: HTMLInputElement
+  // The template editor's site radio buttons, one per site.
+  templateSiteEls: Record<ChatSite, HTMLInputElement>
   templateSiteExternalEl: HTMLInputElement
   templateExternalModelFieldEl: HTMLElement
   templateExternalModelSelectEl: HTMLSelectElement
@@ -313,11 +312,7 @@ export function createTeamPageDomRefs(): TeamPageDomRefs {
     addLibraryPeopleFormEl: requireElement<HTMLFormElement>('#add-library-people-form'),
     addTemporaryPersonFormEl: requireElement<HTMLFormElement>('#add-temporary-person-form'),
     peopleLibraryFormEl: requireElement<HTMLFormElement>('#people-library-form'),
-    templateSiteGeminiEl: requireElement<HTMLInputElement>('#template-site-gemini'),
-    templateSiteChatGptEl: requireElement<HTMLInputElement>('#template-site-chatgpt'),
-    templateSiteClaudeEl: requireElement<HTMLInputElement>('#template-site-claude'),
-    templateSiteDeepSeekEl: requireElement<HTMLInputElement>('#template-site-deepseek'),
-    templateSiteGrokEl: requireElement<HTMLInputElement>('#template-site-grok'),
+    templateSiteEls: Object.fromEntries(CHAT_SITES.map(site => [site, requireElement<HTMLInputElement>(`#template-site-${site}`)])) as Record<ChatSite, HTMLInputElement>,
     templateSiteExternalEl: requireElement<HTMLInputElement>('#template-site-external'),
     templateExternalModelFieldEl: requireElement<HTMLElement>('#template-external-model-field'),
     templateExternalModelSelectEl: requireElement<HTMLSelectElement>('#template-external-model-select'),

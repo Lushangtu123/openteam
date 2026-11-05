@@ -82,6 +82,13 @@ describe('site health check', () => {
     expect(check({ isGenerating: () => true })).toEqual({ status: 'generating' })
   })
 
+  it('reports a modal dialog in front of the input box, with its text', () => {
+    document.body.innerHTML = '<div id="prompt" contenteditable="true"></div><button>Log in</button>'
+    expect(check({ findBlockingDialog: () => 'Confirm your age to continue' })).toEqual({ status: 'blocked', reason: 'overlay', detail: 'Confirm your age to continue' })
+    expect(check({ findBlockingDialog: () => '' })).toEqual({ status: 'blocked', reason: 'overlay' })
+    expect(check({ findBlockingDialog: () => undefined })).toEqual({ status: 'ready', reason: 'guest' })
+  })
+
   it('reports an overlay or a verification widget covering a page without an input box', () => {
     expect(check({ hasBlockingOverlay: () => true })).toEqual({ status: 'blocked', reason: 'overlay' })
 

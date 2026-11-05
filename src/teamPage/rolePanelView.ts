@@ -1,10 +1,11 @@
+import { CHAT_SITES, chatSiteLabel, isChatSite } from '../group/chatSites'
 import { roleMentionLabel, roleMentionLabelOptionsFromSettings } from '../group/mentionParser'
 import type { ChatSite, ExternalModelConfig, GroupRole, OpenTeamStore, RoleModelSource, RoleStatus } from '../group/types'
 import { normalizeLanguage, translateUi } from '../shared/i18n'
 import type { TeamPageState } from './appState'
 import { PROBLEM_HEALTH_STATUSES, rolePageHealthLabel, type RolePageHealth } from './roleHealth'
 
-const VISIBLE_CHAT_SITES = ['gemini', 'chatgpt', 'claude', 'deepseek', 'grok'] as const
+const VISIBLE_CHAT_SITES = CHAT_SITES
 
 interface RolePanelIframeHost {
   recoverRole(role: GroupRole): void
@@ -415,11 +416,7 @@ function promptDetailIcon(): SVGSVGElement {
 }
 
 function siteLabel(site: ChatSite | undefined): string {
-  if (site === 'chatgpt') return 'ChatGPT'
-  if (site === 'claude') return 'Claude'
-  if (site === 'deepseek') return 'DeepSeek'
-  if (site === 'grok') return 'Grok'
-  return 'Gemini'
+  return chatSiteLabel(site)
 }
 
 function selectableModels(store: OpenTeamStore): Array<{ key: string; label: string; className: string }> {
@@ -460,7 +457,7 @@ function modelKeyForExternal(modelId: string): string {
 }
 
 function visibleChatSite(value: string | undefined): ChatSite {
-  return value === 'chatgpt' || value === 'claude' || value === 'deepseek' || value === 'grok' ? value : 'gemini'
+  return isChatSite(value) ? value : 'gemini'
 }
 
 function statusPill(status: string, label: string): HTMLElement {

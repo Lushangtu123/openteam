@@ -27,7 +27,7 @@ flowchart LR
   Background --> Frames["Runtime frame registry"]
   Frames --> Iframes["AI website iframes"]
   Background --> Content["Content script\nsrc/content"]
-  Content --> Adapter["Site adapter\nGemini / ChatGPT / Claude / DeepSeek / Grok"]
+  Content --> Adapter["Site adapter\nGemini / ChatGPT / Claude / DeepSeek / Grok / Qwen"]
   Adapter --> AIPage["AI website session"]
   AIPage --> Adapter
   Adapter --> Content
@@ -147,6 +147,10 @@ Site adapters share the interface in [src/content/sites/types.ts](../src/content
 - [src/content/sites/chatgpt.ts](../src/content/sites/chatgpt.ts)
 - [src/content/sites/claude.ts](../src/content/sites/claude.ts)
 - [src/content/sites/deepseek.ts](../src/content/sites/deepseek.ts)
+- [src/content/sites/grok.ts](../src/content/sites/grok.ts)
+- [src/content/sites/qwen.ts](../src/content/sites/qwen.ts)
+
+The list of sites, with their hosts, start pages, conversation paths and labels, lives in one registry, [src/group/chatSites.ts](../src/group/chatSites.ts); validation, labels, pickers and URL checks all read it. Adding a site takes a registry entry, an adapter registered in [src/content/sites/index.ts](../src/content/sites/index.ts) (the adapter map does not compile without one), the site's hosts in `public/manifest.json` and `public/openteam-frame-rules.json` (`src/extensionConfig.test.ts` checks both against the registry), a `template-site-<id>` radio in `public/team.html`, and a `site-pill-<id>` style.
 
 Adapter helpers such as [src/content/sites/contentEditable.ts](../src/content/sites/contentEditable.ts), [src/content/sites/domMarkdown.ts](../src/content/sites/domMarkdown.ts), [src/content/sites/domText.ts](../src/content/sites/domText.ts), and [src/content/sites/waitForElement.ts](../src/content/sites/waitForElement.ts) isolate DOM-specific operations.
 

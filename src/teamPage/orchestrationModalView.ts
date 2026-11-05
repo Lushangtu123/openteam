@@ -1,3 +1,4 @@
+import { CHAT_SITES, chatSiteLabel, isChatSite } from '../group/chatSites'
 import { BUILTIN_ORCHESTRATION_TEMPLATES, getBuiltinOrchestrationTemplate, type BuiltinOrchestrationTemplate, type OrchestrationTemplateCategory, type OrchestrationTemplateRole } from '../group/orchestrationTemplates'
 import type { ChatSite, ExternalModelConfig, GroupChat, GroupRole, OpenTeamStore, OrchestrationAutoPlanHistoryEntry, OrchestrationFlow, OrchestrationGraphSnapshot, OrchestrationStage } from '../group/types'
 import { DEFAULT_ORCHESTRATION_MAX_NODE_EXECUTIONS, DEFAULT_ORCHESTRATION_REVIEW_MAX_ATTEMPTS, MAX_ORCHESTRATION_MAX_NODE_EXECUTIONS } from '../group/types'
@@ -1202,15 +1203,12 @@ function roleModelDisplay(role: Pick<GroupRole, 'modelSource' | 'externalModelId
 }
 
 function siteLabel(site: ChatSite): string {
-  if (site === 'chatgpt') return 'ChatGPT'
-  if (site === 'claude') return 'Claude'
-  if (site === 'deepseek') return 'DeepSeek'
-  if (site === 'grok') return 'Grok'
-  return 'Gemini'
+  return chatSiteLabel(site)
 }
 
 function editableChatSites(): ChatSite[] {
-  return ['deepseek', 'grok', 'chatgpt', 'gemini', 'claude']
+  // DeepSeek first: it is the default for new people.
+  return ['deepseek', ...CHAT_SITES.filter(site => site !== 'deepseek')]
 }
 
 function externalModelLabel(model: ExternalModelConfig | undefined): string {
@@ -1218,7 +1216,7 @@ function externalModelLabel(model: ExternalModelConfig | undefined): string {
 }
 
 function visibleChatSite(site: ChatSite): ChatSite {
-  return ['gemini', 'chatgpt', 'claude', 'deepseek', 'grok'].includes(site) ? site : 'gemini'
+  return isChatSite(site) ? site : 'gemini'
 }
 
 function newId(prefix: string): string {

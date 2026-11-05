@@ -1,4 +1,5 @@
 import { PROMPT_I18N, normalizeLanguage } from '../shared/i18n'
+import { CHAT_SITES, chatSiteFromText, chatSiteLabel } from './chatSites'
 import type { ChatSite, GroupRole, OpenTeamStore, OrchestrationAutoPlanHistoryEntry, OrchestrationFlow } from './types'
 
 export type AutoOrchestrationNodeKind = 'execute' | 'review'
@@ -54,6 +55,12 @@ export interface AutoOrchestrationPromptInput {
 
 const DEFAULT_NEW_ROLE_SITE: ChatSite = 'deepseek'
 const MAX_AUTO_NODES = 8
+const PLAN_SITES = CHAT_SITES
+
+// "a、b 或 c" / "a, b, or c"
+function joinWords(words: readonly string[], separator: string, lastSeparator: string): string {
+  return words.length < 2 ? words.join('') : `${words.slice(0, -1).join(separator)}${lastSeparator}${words[words.length - 1]}`
+}
 const DEFAULT_AUTO_MAX_NODE_EXECUTIONS = 30
 
 export function buildAutoOrchestrationPrompt(input: AutoOrchestrationPromptInput): string {
@@ -72,7 +79,7 @@ export function buildAutoOrchestrationPrompt(input: AutoOrchestrationPromptInput
     '1. 如果 existingRoles 非空，优先复用 existingRoles，复用时 roles[].reuseRoleId 必须填 existingRoles 里的 id。',
     '2. 只有现有人员无法覆盖必要职责时，才创建新人员。',
     '3. 如果 existingRoles 为空，必须创建 2-5 个新人员。',
-    '4. 每个 roles[].preferredSite 必须使用 "chatgpt"、"gemini"、"claude"、"deepseek" 或 "grok"；如果用户明确要求 ChatGPT、Gemini、Claude、DeepSeek 或 Grok 站点，相关人员必须使用对应站点。',
+    `4. 每个 roles[].preferredSite 必须使用 ${joinWords(PLAN_SITES.map(site => `"${site}"`), '、', ' 或 ')}；如果用户明确要求 ${joinWords(PLAN_SITES.map(chatSiteLabel), '、', ' 或 ')} 站点，相关人员必须使用对应站点。`,
     '5. 不要创建 kind=parallel 的节点；并行通过一个节点连接多个后继节点表达。',
     '6. 多个上游节点连接到同一个节点表示汇合，该节点要等所有上游完成。',
     '7. 同一个 roleKey 不能出现在同一批可并行执行的节点中；同一人员要做多件事时必须串行。',
@@ -87,13 +94,7 @@ export function buildAutoOrchestrationPrompt(input: AutoOrchestrationPromptInput
     `16. ${PROMPT_I18N['zh-CN'].personaLanguageInstruction}`,
     '',
     '可用站点：',
-    JSON.stringify([
-      { value: 'chatgpt', label: 'ChatGPT' },
-      { value: 'gemini', label: 'Gemini' },
-      { value: 'claude', label: 'Claude' },
-      { value: 'deepseek', label: 'DeepSeek' },
-      { value: 'grok', label: 'Grok' },
-    ], null, 2),
+    JSON.stringify(PLAN_SITES.map(site => ({ value: site, label: chatSiteLabel(site) })), null, 2),
     `默认站点：${input.store.settings.defaultChatSite}`,
     '',
     '返回 JSON schema：',
@@ -167,7 +168,7 @@ function buildEnglishAutoOrchestrationPrompt(input: AutoOrchestrationPromptInput
     '1. Prefer reusing existingRoles when existingRoles is not empty. When reusing a role, roles[].reuseRoleId must be an id from existingRoles.',
     '2. Only create new people when existing people cannot cover a necessary responsibility.',
     '3. If existingRoles is empty, create 2-5 new people.',
-    '4. Each roles[].preferredSite must be "chatgpt", "gemini", "claude", "deepseek", or "grok"; if the user explicitly requests ChatGPT, Gemini, Claude, DeepSeek, or Grok, assign the relevant people to that site.',
+    `4. Each roles[].preferredSite must be ${joinWords(PLAN_SITES.map(site => `"${site}"`), ', ', ', or ')}; if the user explicitly requests ${joinWords(PLAN_SITES.map(chatSiteLabel), ', ', ', or ')}, assign the relevant people to that site.`,
     '5. Do not create kind=parallel nodes. Express parallelism by connecting one node to multiple downstream nodes.',
     '6. Multiple upstream nodes connecting to one node means a join; that node waits for all upstream nodes to finish.',
     '7. The same roleKey cannot appear in nodes that may run in parallel. If the same person must do multiple things, make them serial.',
@@ -183,13 +184,7 @@ function buildEnglishAutoOrchestrationPrompt(input: AutoOrchestrationPromptInput
     '17. Write generated role names, descriptions, systemPrompt, node titles, instructions, and review criteria in English unless the user explicitly asks for another language.',
     '',
     'Available sites:',
-    JSON.stringify([
-      { value: 'chatgpt', label: 'ChatGPT' },
-      { value: 'gemini', label: 'Gemini' },
-      { value: 'claude', label: 'Claude' },
-      { value: 'deepseek', label: 'DeepSeek' },
-      { value: 'grok', label: 'Grok' },
-    ], null, 2),
+    JSON.stringify(PLAN_SITES.map(site => ({ value: site, label: chatSiteLabel(site) })), null, 2),
     `Default site: ${input.store.settings.defaultChatSite}`,
     '',
     'Return JSON schema:',
@@ -503,14 +498,7 @@ function readNumber(value: unknown, fallback: number): number {
 }
 
 function readChatSite(value: unknown): ChatSite | undefined {
-  if (typeof value !== 'string') return undefined
-  const normalized = value.trim().toLowerCase().replace(/[\s_-]+/g, '')
-  if (normalized.includes('chatgpt') || normalized === 'gpt' || normalized === 'openai') return 'chatgpt'
-  if (normalized.includes('claude') || normalized === 'anthropic') return 'claude'
-  if (normalized.includes('gemini') || normalized === 'google') return 'gemini'
-  if (normalized.includes('deepseek')) return 'deepseek'
-  if (normalized.includes('grok') || normalized.includes('xai')) return 'grok'
-  return undefined
+  return chatSiteFromText(value)
 }
 
 function readRoleChatSite(item: Record<string, unknown>): ChatSite | undefined {

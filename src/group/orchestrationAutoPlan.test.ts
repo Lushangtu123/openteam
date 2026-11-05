@@ -65,6 +65,7 @@ describe('orchestration auto plan', () => {
         { key: 'claude', name: 'Claude 审核员', preferredSite: 'Claude' },
         { key: 'deepseek', name: 'DeepSeek 助手', preferredSite: 'DeepSeek' },
         { key: 'grok', name: 'Grok 研究员', preferredSite: 'Grok' },
+        { key: 'qwen', name: '千问顾问', preferredSite: '通义千问' },
       ],
       nodes: [
         { id: 'n1', kind: 'execute', roleKeys: ['chatgpt'], title: '写作', instruction: '写作' },
@@ -72,11 +73,12 @@ describe('orchestration auto plan', () => {
         { id: 'n3', kind: 'execute', roleKeys: ['claude'], title: '审核', instruction: '审核' },
         { id: 'n4', kind: 'execute', roleKeys: ['deepseek'], title: '整理', instruction: '整理' },
         { id: 'n5', kind: 'execute', roleKeys: ['grok'], title: '研究', instruction: '研究' },
+        { id: 'n6', kind: 'execute', roleKeys: ['qwen'], title: '建议', instruction: '建议' },
       ],
       edges: [],
     }, new Set())
 
-    expect(plan.roles.map(role => role.preferredSite)).toEqual(['chatgpt', 'gemini', 'claude', 'deepseek', 'grok'])
+    expect(plan.roles.map(role => role.preferredSite)).toEqual(['chatgpt', 'gemini', 'claude', 'deepseek', 'grok', 'qwen'])
   })
 
   it('accepts common planner site field aliases', () => {
@@ -121,12 +123,13 @@ describe('orchestration auto plan', () => {
     const prompt = buildAutoOrchestrationPrompt({ task: '做一个方案', existingRoles: [role], store })
 
     expect(prompt).toContain('优先复用 existingRoles')
-    expect(prompt).toContain('preferredSite 必须使用 "chatgpt"、"gemini"、"claude"、"deepseek" 或 "grok"')
+    expect(prompt).toContain('preferredSite 必须使用 "gemini"、"chatgpt"、"claude"、"deepseek"、"grok" 或 "qwen"')
     expect(prompt).toContain('ChatGPT')
     expect(prompt).toContain('Gemini')
     expect(prompt).toContain('Claude')
     expect(prompt).toContain('DeepSeek')
     expect(prompt).toContain('Grok')
+    expect(prompt).toContain('{\n    "value": "qwen",\n    "label": "Qwen"\n  }')
     expect(prompt).toContain('不要创建 kind=parallel')
     expect(prompt).toContain('"id": "role-1"')
   })

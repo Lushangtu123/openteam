@@ -4,7 +4,7 @@
 
 > **About this fork.** OpenTeam was created by **[afumu](https://github.com/afumu)** — the original project lives at **[afumu/openteam](https://github.com/afumu/openteam)**. All original code, design and documentation belong to afumu and the OpenTeam contributors and remain under the [PolyForm Noncommercial License 1.0.0](LICENSE) (`Required Notice: Copyright (c) 2026 OpenTeam contributors.`). This fork adds a refreshed team page UI, security hardening for the local control daemon, iframe header rules and background message handling, faster storage and message rendering for large chats, a live health status for each AI page, and full backup and restore. For the official version, releases and community, please use the original repository.
 
-> A local-first AI team workspace that turns your existing ChatGPT, Claude, Gemini, DeepSeek, and Grok web sessions into a multi-agent discussion room.
+> A local-first AI team workspace that turns your existing ChatGPT, Claude, Gemini, DeepSeek, Grok, and Qwen web sessions into a multi-agent discussion room.
 
 OpenTeam is a Manifest V3 Chrome extension. It does not require model API keys and does not spend extra OpenAI, Claude, Gemini, DeepSeek, or Grok API tokens. Instead, it reuses the AI accounts you already have open in your browser, sends tasks to those web sessions, and gathers replies from different people and models into one shared team chat.
 
@@ -29,7 +29,7 @@ Join the OpenTeam WeChat community by scanning the QR code below. If the QR code
 ## ✨ Highlights
 
 - 🚫 **0 API token workflow**: reuse AI website sessions instead of calling model APIs directly.
-- 🧩 **Multi-model discussion**: coordinate Gemini, ChatGPT, Claude, DeepSeek, Grok, and other supported web sessions in one chat.
+- 🧩 **Multi-model discussion**: coordinate Gemini, ChatGPT, Claude, DeepSeek, Grok, Qwen, and other supported web sessions in one chat.
 - 🧑‍🏫 **Built-in advisor library**: start with 38 expert and thinking-style advisor templates, or create your own people.
 - 📣 **Mention-based routing**: use `@person` to ask one member, or `@everyone` to dispatch the same task to the whole team.
 - 🔄 **Independent and collaborative modes**: compare isolated perspectives first, then let members reference, challenge, and build on each other.
@@ -58,12 +58,13 @@ Supported site types:
 | Claude | Long documents, review, structured writing, careful reasoning |
 | DeepSeek | Code, reasoning, Chinese-language work, cost-sensitive tasks |
 | Grok | Current-events research, alternative phrasing, X/Grok web-session workflows |
+| Qwen | Chinese and multilingual writing, code, long documents (chat.qwen.ai) |
 
 These are practical defaults, not rankings. Actual quality depends on model versions, account plans, task type, and input material.
 
 ## ⚠️ Disclaimer
 
-OpenTeam is an unofficial project for learning, research, and personal non-commercial use only. It is not affiliated with, endorsed by, or supported by OpenAI, Anthropic, Google, DeepSeek, xAI, or any supported AI website.
+OpenTeam is an unofficial project for learning, research, and personal non-commercial use only. It is not affiliated with, endorsed by, or supported by OpenAI, Anthropic, Google, DeepSeek, xAI, Alibaba, or any supported AI website.
 
 OpenTeam interacts with AI websites through user-authenticated browser sessions and DOM automation. Website changes, account rules, rate limits, anti-abuse systems, or terms of service may affect whether it works. You are responsible for reviewing and complying with the rules, policies, laws, and regulations that apply to your use.
 

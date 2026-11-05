@@ -10,6 +10,7 @@ import {
   createViteBuildHardeningOptions,
   hasTopLevelStaticImport,
 } from '../vite.config'
+import { CHAT_SITE_INFO, CHAT_SITES } from './group/chatSites'
 
 describe('extension security configuration', () => {
   it('pins the unpacked extension id with a stable manifest key', () => {
@@ -37,6 +38,7 @@ describe('extension security configuration', () => {
       'https://chat.deepseek.com/*',
       'https://grok.com/*',
       'https://*.grok.com/*',
+      'https://chat.qwen.ai/*',
       'https://*/*',
       'http://*/*',
     ])
@@ -89,15 +91,7 @@ describe('extension security configuration', () => {
     const manifest = JSON.parse(readFileSync(resolve(process.cwd(), 'public/manifest.json'), 'utf8')) as { key: string }
     const extensionId = extensionIdFromManifestKey(manifest.key)
 
-    expect(rules).toHaveLength(6)
-    expect(rules.map(rule => rule.condition?.urlFilter)).toEqual([
-      '||gemini.google.com/',
-      '||chatgpt.com/',
-      '||chat.openai.com/',
-      '||claude.ai/',
-      '||chat.deepseek.com/',
-      '||grok.com/',
-    ])
+    expect(rules.map(rule => rule.condition?.urlFilter)).toEqual(CHAT_SITES.flatMap(site => CHAT_SITE_INFO[site].hosts.map(host => `||${host}/`)))
 
     for (const rule of rules) {
       expect(rule.condition?.resourceTypes).toEqual(['sub_frame'])
@@ -107,6 +101,24 @@ describe('extension security configuration', () => {
       // X-Frame-Options and CSP stripped.
       expect(rule.condition?.initiatorDomains).toEqual([extensionId])
     }
+  })
+
+  it('lets every chat site in the registry run the content script inside the team page frames', () => {
+    const manifest = JSON.parse(readFileSync(resolve(process.cwd(), 'public/manifest.json'), 'utf8')) as {
+      host_permissions: string[]
+      content_scripts: Array<{ matches: string[]; all_frames?: boolean }>
+      content_security_policy: { extension_pages: string }
+    }
+    const frameSources = manifest.content_security_policy.extension_pages.match(/frame-src ([^;]*)/)?.[1].split(' ') ?? []
+
+    for (const site of CHAT_SITES) {
+      for (const host of CHAT_SITE_INFO[site].hosts) {
+        expect(manifest.host_permissions).toContain(`https://${host}/*`)
+        expect(manifest.content_scripts[0].matches).toContain(`*://${host}/*`)
+        expect(frameSources).toContain(`https://${host}`)
+      }
+    }
+    expect(manifest.content_scripts[0].all_frames).toBe(true)
   })
 
   it('only lets the OpenTeam extension origin connect to the local control daemon', () => {
