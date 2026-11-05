@@ -4,13 +4,15 @@ import { extractSupportedConversationId, getDefaultChatSiteUrl, getSafeSupported
 
 describe('chat site registry', () => {
   it('knows each site by id, host and label', () => {
-    expect(CHAT_SITES).toEqual(['gemini', 'chatgpt', 'claude', 'deepseek', 'grok', 'qwen'])
+    expect(CHAT_SITES).toEqual(['gemini', 'chatgpt', 'claude', 'deepseek', 'grok', 'qwen', 'kimi'])
     expect(isChatSite('qwen')).toBe(true)
-    expect(isChatSite('kimi')).toBe(false)
+    expect(isChatSite('kimi')).toBe(true)
+    expect(isChatSite('doubao')).toBe(false)
     expect(isChatSite(undefined)).toBe(false)
     expect(chatSiteForHostname('chat.qwen.ai')).toBe('qwen')
     expect(chatSiteForHostname('chat.openai.com')).toBe('chatgpt')
     expect(chatSiteForHostname('www.qianwen.com')).toBeUndefined()
+    expect(chatSiteForHostname('www.kimi.com')).toBe('kimi')
     expect(chatSiteLabel('qwen')).toBe('Qwen')
     expect(chatSiteLabel(undefined)).toBe('Gemini')
   })
@@ -36,6 +38,7 @@ describe('chat site registry', () => {
     expect(chatSiteConversationId('https://chat.deepseek.com/a/chat/s/c-4')).toBe('c-4')
     expect(chatSiteConversationId('https://grok.com/c/c-5')).toBe('c-5')
     expect(chatSiteConversationId('https://grok.com/chat/c-6')).toBe('c-6')
+    expect(chatSiteConversationId('https://www.kimi.com/chat/d0ilaujof8jjl1c6u7vg?chat_enter_method=history')).toBe('d0ilaujof8jjl1c6u7vg')
   })
 
   it('opens Qwen people on chat.qwen.ai', () => {
@@ -56,6 +59,8 @@ describe('chat site registry', () => {
     expect(chatSiteFromText('Deep Seek')).toBe('deepseek')
     expect(chatSiteFromText('xAI')).toBe('grok')
     expect(chatSiteFromText('Google')).toBe('gemini')
+    expect(chatSiteFromText('Moonshot Kimi')).toBe('kimi')
+    expect(chatSiteFromText('月之暗面')).toBe('kimi')
     expect(chatSiteFromText('Mistral')).toBeUndefined()
     expect(chatSiteFromText('')).toBeUndefined()
     expect(chatSiteFromText(3)).toBeUndefined()

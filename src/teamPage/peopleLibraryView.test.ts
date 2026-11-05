@@ -124,6 +124,7 @@ function setupPeopleLibraryView(options: { store: OpenTeamStore; templates: Role
       deepseek: document.createElement('input'),
       grok: templateSiteGrokEl,
       qwen: document.createElement('input'),
+      kimi: document.createElement('input'),
     },
     templateSiteExternalEl,
     templateExternalModelFieldEl,

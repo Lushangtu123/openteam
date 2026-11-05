@@ -69,7 +69,7 @@ function isVerificationPage(doc: Document): boolean {
 
 // A "Log in" / "Sign in" button or link means the page is not logged in. Logged-in pages of the
 // supported sites have none.
-function hasLoginControls(doc: Document): boolean {
+export function hasLoginControls(doc: Document = document): boolean {
   return [...doc.querySelectorAll<HTMLElement>('a, button, [role="button"]')].some(element => {
     if (element.closest('[hidden], [aria-hidden="true"]')) return false
     const label = (element.textContent?.trim() || element.getAttribute('aria-label')?.trim() || '').replace(/\s+/g, ' ')

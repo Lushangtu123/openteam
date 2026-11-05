@@ -39,6 +39,7 @@ describe('extension security configuration', () => {
       'https://grok.com/*',
       'https://*.grok.com/*',
       'https://chat.qwen.ai/*',
+      'https://www.kimi.com/*',
       'https://*/*',
       'http://*/*',
     ])

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { CHAT_SITES } from '../group/chatSites'
 
 function readTeamHtml(): string {
   return readFileSync(resolve(process.cwd(), 'public/team.html'), 'utf8')
@@ -14,10 +15,6 @@ function readTeamDocument(): string {
   return `${readTeamHtml()}\n${readTeamCss()}`
 }
 
-// Kimi was removed with its page-world bridge. Qwen came back on chat.qwen.ai, whose plain
-// textarea needs no bridge (the old www.qianwen.com adapter did).
-const REMOVED_SITE_IDS = ['ki' + 'mi']
-const removedSiteLabel = (): string => 'K' + 'imi'
 
 describe('team.html chat creation UI', () => {
   it('starts unlocked without a local invite-code activation gate', () => {
@@ -158,7 +155,7 @@ describe('team.html chat creation UI', () => {
     expect(html).not.toContain('id="default-site-chatgpt"')
     expect(html).not.toContain('id="default-site-claude"')
     expect(html).not.toContain('id="default-site-deepseek"')
-    for (const site of REMOVED_SITE_IDS) expect(html).not.toContain(`id="default-site-${site}"`)
+    for (const site of CHAT_SITES) expect(html).not.toContain(`id="default-site-${site}"`)
     expect(html).toContain('id="people-library-modal"')
     expect(html).toContain('id="people-library-list"')
     expect(html).toContain('id="people-library-search"')
@@ -175,10 +172,8 @@ describe('team.html chat creation UI', () => {
     expect(html).toContain('id="template-site-qwen"')
     expect(html).not.toMatch(/id="template-site-gemini"[^>]*checked/)
     expect(html).toMatch(/id="template-site-deepseek"[^>]*checked/)
-    for (const site of REMOVED_SITE_IDS) {
-      expect(html).not.toContain(`id="template-site-${site}"`)
-      expect(html).not.toContain(`for="template-site-${site}"`)
-    }
+    // One radio per site in the registry.
+    for (const site of CHAT_SITES) expect(html).toContain(`<input id="template-site-${site}" type="radio" name="template-chat-site" value="${site}"`)
     expect(html).toMatch(/\.site-segment\[hidden\]\s*{[^}]*display:\s*none;/s)
     expect(html).toContain('id="add-person-modal"')
     expect(html).toContain('id="add-person-category-filter"')
@@ -388,9 +383,6 @@ describe('team.html chat creation UI', () => {
     expect(source).toContain("source: 'temporary'")
     expect(source).toContain("return CHAT_SITES.find(site => deps.templateSiteEls[site].checked) ?? 'gemini'")
     expect(source).toContain('const VISIBLE_CHAT_SITES = CHAT_SITES')
-    for (const site of REMOVED_SITE_IDS) expect(source).not.toContain(`return '${site}'`)
-    expect(source).not.toContain('templateSite' + 'K' + 'imiEl')
-    expect(source).not.toContain('templateSite' + 'Q' + 'wenEl')
   })
 
   it('stores a default target site on people-library entries instead of the settings menu', () => {
@@ -402,7 +394,7 @@ describe('team.html chat creation UI', () => {
     expect(source).not.toContain("'#default-site-chatgpt'")
     expect(source).not.toContain("'#default-site-claude'")
     expect(source).not.toContain("'#default-site-deepseek'")
-    for (const site of REMOVED_SITE_IDS) expect(source).not.toContain(`'#default-site-${site}'`)
+    for (const site of CHAT_SITES) expect(source).not.toContain(`'#default-site-${site}'`)
     expect(domRefsSource).toContain('templateSiteEls: Object.fromEntries(CHAT_SITES.map(site => [site, requireElement<HTMLInputElement>(`#template-site-${site}`)]))')
     expect(source).toContain('function readTemplateChatSite(): ChatSite')
     expect(source).toContain('defaultChatSite: deps.templateSiteExternalEl.checked ? undefined : readTemplateChatSite()')
@@ -415,7 +407,6 @@ describe('team.html chat creation UI', () => {
     expect(html).not.toContain('默认站点：ChatGPT')
     expect(html).not.toContain('默认站点：Claude')
     expect(html).not.toContain('默认站点：DeepSeek')
-    expect(html).not.toContain(`默认站点：${removedSiteLabel()}`)
   })
 
   it('keeps the people-library modal as a list and opens a separate editor for creating or editing people', () => {
@@ -671,11 +662,8 @@ describe('team.html chat creation UI', () => {
     const temporaryModal = html.match(/<div id="temporary-person-modal"[\s\S]*?<div id="iframe-host"/)?.[0] ?? ''
 
     expect(addPersonModal).toContain('id="open-temporary-person"')
-    expect(addPersonModal).not.toContain('id="add-person-site-gemini"')
-    expect(addPersonModal).not.toContain('id="add-person-site-chatgpt"')
-    expect(addPersonModal).not.toContain('id="add-person-site-claude"')
-    expect(addPersonModal).not.toContain('id="add-person-site-deepseek"')
-    for (const site of REMOVED_SITE_IDS) expect(addPersonModal).not.toContain(`id="add-person-site-${site}"`)
+    // The add-person dialog builds its site choices per person in code, not as fixed radios.
+    for (const site of CHAT_SITES) expect(addPersonModal).not.toContain(`id="add-person-site-${site}"`)
     expect(addPersonModal).not.toContain('id="add-temporary-person-form"')
     expect(temporaryModal).toContain('id="add-temporary-person-form"')
     expect(temporaryModal).toContain('id="close-temporary-person"')

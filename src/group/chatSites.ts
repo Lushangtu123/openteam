@@ -1,7 +1,7 @@
 // Every AI chat site OpenTeam can open in a frame and talk to. Adding a site takes an entry here, an
 // adapter in src/content/sites/, and its hosts in public/manifest.json and
 // public/openteam-frame-rules.json (src/extensionConfig.test.ts checks those files against this list).
-export const CHAT_SITES = ['gemini', 'chatgpt', 'claude', 'deepseek', 'grok', 'qwen'] as const
+export const CHAT_SITES = ['gemini', 'chatgpt', 'claude', 'deepseek', 'grok', 'qwen', 'kimi'] as const
 
 export type ChatSite = typeof CHAT_SITES[number]
 
@@ -67,6 +67,15 @@ export const CHAT_SITE_INFO: Readonly<Record<ChatSite, ChatSiteInfo>> = {
     conversationPath: /^\/c\/([^/]+)/,
     contextChars: 256_000,
     aliases: ['qwen', 'tongyi', 'alibaba', 'aliyun', '通义', '千问'],
+  },
+  kimi: {
+    label: 'Kimi',
+    hosts: ['www.kimi.com'],
+    homeUrl: 'https://www.kimi.com/',
+    conversationPath: /^\/chat\/([^/]+)/,
+    // Prompts are pasted 1,000 characters at a time, so very long ones take a while to type in.
+    contextChars: 128_000,
+    aliases: ['kimi', 'moonshot', '月之暗面'],
   },
 }
 

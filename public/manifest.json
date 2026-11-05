@@ -28,11 +28,12 @@
     "https://grok.com/*",
     "https://*.grok.com/*",
     "https://chat.qwen.ai/*",
+    "https://www.kimi.com/*",
     "https://*/*",
     "http://*/*"
   ],
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' https://* http://127.0.0.1:* ws://127.0.0.1:*; frame-src https://gemini.google.com https://*.gemini.google.com https://chatgpt.com https://*.chatgpt.com https://chat.openai.com https://claude.ai https://chat.deepseek.com https://grok.com https://*.grok.com https://chat.qwen.ai;"
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' https://* http://127.0.0.1:* ws://127.0.0.1:*; frame-src https://gemini.google.com https://*.gemini.google.com https://chatgpt.com https://*.chatgpt.com https://chat.openai.com https://claude.ai https://chat.deepseek.com https://grok.com https://*.grok.com https://chat.qwen.ai https://www.kimi.com;"
   },
   "action": {
     "default_title": "OpenTeam"
@@ -49,7 +50,8 @@
         "*://chat.deepseek.com/*",
         "*://grok.com/*",
         "*://*.grok.com/*",
-        "*://chat.qwen.ai/*"
+        "*://chat.qwen.ai/*",
+        "*://www.kimi.com/*"
       ],
       "js": [
         "content.js"

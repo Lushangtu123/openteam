@@ -4,6 +4,7 @@ import { createChatGptAdapter } from './chatgpt'
 import { createDeepSeekAdapter } from './deepseek'
 import { createGeminiAdapter } from './gemini'
 import { createGrokAdapter } from './grok'
+import { createKimiAdapter } from './kimi'
 import { createQwenAdapter } from './qwen'
 import type { ChatSiteAdapter } from './types'
 
@@ -15,6 +16,7 @@ const ADAPTERS: Record<ChatSite, () => ChatSiteAdapter> = {
   deepseek: createDeepSeekAdapter,
   grok: createGrokAdapter,
   qwen: createQwenAdapter,
+  kimi: createKimiAdapter,
 }
 
 export function getActiveChatSiteAdapter(): ChatSiteAdapter {

@@ -27,7 +27,7 @@ flowchart LR
   Background --> Frames["Runtime frame registry"]
   Frames --> Iframes["AI 网站 iframes"]
   Background --> Content["Content script\nsrc/content"]
-  Content --> Adapter["站点适配器\nGemini / ChatGPT / Claude / DeepSeek / Grok / Qwen"]
+  Content --> Adapter["站点适配器\nGemini / ChatGPT / Claude / DeepSeek / Grok / Qwen / Kimi"]
   Adapter --> AIPage["AI 网页会话"]
   AIPage --> Adapter
   Adapter --> Content
@@ -149,6 +149,7 @@ flowchart LR
 - [src/content/sites/deepseek.ts](../src/content/sites/deepseek.ts)
 - [src/content/sites/grok.ts](../src/content/sites/grok.ts)
 - [src/content/sites/qwen.ts](../src/content/sites/qwen.ts)
+- [src/content/sites/kimi.ts](../src/content/sites/kimi.ts)
 
 站点列表（域名、起始页、会话路径、显示名）集中在 [src/group/chatSites.ts](../src/group/chatSites.ts)，校验、显示名、选择器和 URL 检查都从这里读取。新增站点需要：在这里加一项；在 [src/content/sites/index.ts](../src/content/sites/index.ts) 注册适配器（缺了无法编译）；把域名加进 `public/manifest.json` 和 `public/openteam-frame-rules.json`（`src/extensionConfig.test.ts` 会对照检查）；在 `public/team.html` 加 `template-site-<id>` 单选项；加 `site-pill-<id>` 样式。
 

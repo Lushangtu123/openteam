@@ -4,7 +4,8 @@ export async function readResponseTextFromCopyAction(options: {
   node: Node
   timeoutMs: number
   pollMs: number
-  findCopyButton(response: Element): HTMLButtonElement | undefined
+  // Usually a <button>; some sites (Kimi) use a clickable div.
+  findCopyButton(response: Element): HTMLElement | undefined
 }): Promise<string | undefined> {
   if (options.node.nodeType !== Node.ELEMENT_NODE) return undefined
 
