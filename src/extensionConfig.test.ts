@@ -82,9 +82,12 @@ describe('extension security configuration', () => {
     const rules = JSON.parse(readFileSync(resolve(process.cwd(), 'public/openteam-frame-rules.json'), 'utf8')) as Array<{
       condition?: {
         urlFilter?: string
+        initiatorDomains?: string[]
         resourceTypes?: string[]
       }
     }>
+    const manifest = JSON.parse(readFileSync(resolve(process.cwd(), 'public/manifest.json'), 'utf8')) as { key: string }
+    const extensionId = extensionIdFromManifestKey(manifest.key)
 
     expect(rules).toHaveLength(6)
     expect(rules.map(rule => rule.condition?.urlFilter)).toEqual([
@@ -100,7 +103,17 @@ describe('extension security configuration', () => {
       expect(rule.condition?.resourceTypes).toEqual(['sub_frame'])
       expect(rule.condition?.urlFilter).not.toBe('*://*/*')
       expect(rule.condition?.resourceTypes).not.toContain('main_frame')
+      // Without this, any website could frame the signed-in AI sites with their
+      // X-Frame-Options and CSP stripped.
+      expect(rule.condition?.initiatorDomains).toEqual([extensionId])
     }
+  })
+
+  it('only lets the OpenTeam extension origin connect to the local control daemon', () => {
+    const manifest = JSON.parse(readFileSync(resolve(process.cwd(), 'public/manifest.json'), 'utf8')) as { key: string }
+    const daemonSource = readFileSync(resolve(process.cwd(), 'packages/openteamcli/openteam-daemon.mjs'), 'utf8')
+
+    expect(daemonSource).toContain(`export const DEFAULT_EXTENSION_ORIGINS = ['chrome-extension://${extensionIdFromManifestKey(manifest.key)}']`)
   })
 
   it('detects compact static imports in content script output', () => {

@@ -17,6 +17,9 @@
     },
     "condition": {
       "urlFilter": "||gemini.google.com/",
+      "initiatorDomains": [
+        "cnccbifloajlkjglmiojkpimjciamlpe"
+      ],
       "resourceTypes": [
         "sub_frame"
       ]
@@ -40,6 +43,9 @@
     },
     "condition": {
       "urlFilter": "||chatgpt.com/",
+      "initiatorDomains": [
+        "cnccbifloajlkjglmiojkpimjciamlpe"
+      ],
       "resourceTypes": [
         "sub_frame"
       ]
@@ -63,6 +69,9 @@
     },
     "condition": {
       "urlFilter": "||chat.openai.com/",
+      "initiatorDomains": [
+        "cnccbifloajlkjglmiojkpimjciamlpe"
+      ],
       "resourceTypes": [
         "sub_frame"
       ]
@@ -86,6 +95,9 @@
     },
     "condition": {
       "urlFilter": "||claude.ai/",
+      "initiatorDomains": [
+        "cnccbifloajlkjglmiojkpimjciamlpe"
+      ],
       "resourceTypes": [
         "sub_frame"
       ]
@@ -109,6 +121,9 @@
     },
     "condition": {
       "urlFilter": "||chat.deepseek.com/",
+      "initiatorDomains": [
+        "cnccbifloajlkjglmiojkpimjciamlpe"
+      ],
       "resourceTypes": [
         "sub_frame"
       ]
@@ -132,6 +147,9 @@
     },
     "condition": {
       "urlFilter": "||grok.com/",
+      "initiatorDomains": [
+        "cnccbifloajlkjglmiojkpimjciamlpe"
+      ],
       "resourceTypes": [
         "sub_frame"
       ]
