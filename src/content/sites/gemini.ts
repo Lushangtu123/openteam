@@ -1,4 +1,5 @@
 import type { ReplyImageSource } from '../../group/types'
+import { checkSiteHealth } from './siteHealth'
 import type { ChatSiteAdapter, ConversationSnapshot } from './types'
 import { keepDeepestResponseContainers } from '../responseContainers'
 import { readResponseTextFromCopyAction, findClickableCopyButton } from './clipboardCopy'
@@ -96,6 +97,11 @@ export function createGeminiAdapter(options: GeminiAdapterOptions = {}): ChatSit
     readResponseMarkdown: extractMarkdownFromDom,
     findResponseContainer,
     isGenerating: isGeminiGenerating,
+    // Signing in happens on accounts.google.com, where OpenTeam has no content script.
+    checkStatus: context => checkSiteHealth({
+      findEditor: () => document.querySelector(GEMINI_SELECTORS.editor),
+      isGenerating: isGeminiGenerating,
+    }, context),
     stopGenerating: stopGeminiGenerating,
     fillAndSend,
     collectPromptDiagnostics,

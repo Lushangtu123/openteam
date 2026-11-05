@@ -1,8 +1,10 @@
 import type { SiteStatus } from '../../group/runtimeProtocol'
-import type { ReplyImageSource } from '../../group/types'
+import type { ReplyImageSource, RoleSiteHealthReason } from '../../group/types'
+import type { SiteHealthContext } from './siteHealth'
 
 export interface SiteStatusInfo {
   status: SiteStatus
+  reason?: RoleSiteHealthReason
   detail?: string
   timestamp: number
 }
@@ -24,7 +26,7 @@ export interface ChatSiteAdapter {
   readResponseMarkdown?(node: Node): string
   findResponseContainer(element: Element | null): Element | null
   isGenerating(): boolean
-  checkStatus?(): SiteStatusInfo
+  checkStatus?(context: SiteHealthContext): SiteStatusInfo
   stopGenerating(): Promise<boolean>
   fillAndSend(content: string, autoSend?: boolean): Promise<void>
   collectPromptDiagnostics(): Record<string, unknown>

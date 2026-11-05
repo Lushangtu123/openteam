@@ -1,3 +1,4 @@
+import { checkSiteHealth } from './siteHealth'
 import type { ChatSiteAdapter, ConversationSnapshot } from './types'
 import { keepDeepestResponseContainers } from '../responseContainers'
 import { findClickableCopyButton, readResponseTextFromCopyAction } from './clipboardCopy'
@@ -84,6 +85,11 @@ export function createGrokAdapter(options: GrokAdapterOptions = {}): ChatSiteAda
     readResponseMarkdown: extractMarkdownFromDom,
     findResponseContainer,
     isGenerating: isGrokGenerating,
+    checkStatus: context => checkSiteHealth({
+      findEditor: findGrokEditor,
+      isGenerating: isGrokGenerating,
+      isLoginPage: () => /^\/(sign-in|sign-up|login)\b/.test(location.pathname),
+    }, context),
     stopGenerating: stopGrokGenerating,
     fillAndSend,
     collectPromptDiagnostics,

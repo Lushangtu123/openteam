@@ -20,6 +20,15 @@ describe('shared i18n configuration', () => {
     expect(translateUi('9 个群聊 · 311 个人员库人员', 'en')).toBe('9 chats · 311 people')
   })
 
+  it('translates page health copy, including the composer warning', () => {
+    expect(translateUi('需要人机验证', 'en')).toBe('Verification required')
+    expect(translateUi('网页暂时无法接收：Product Lead（DeepSeek） 需要登录；设计师 可以发送（未登录）', 'en'))
+      .toBe('Pages that cannot receive messages right now: Product Lead（DeepSeek）: Login required; 设计师: Ready (not logged in)')
+    expect(translateUi('将发送给：工程师（DeepSeek）', 'en')).toBe('Will send to: 工程师（DeepSeek）')
+    expect(translateUi('请稍等：工程师 正在回复', 'en')).toBe('Please wait: 工程师 is replying')
+    expect(translateUi('正在回复：工程师、设计师', 'en')).toBe('Replying: 工程师、设计师')
+  })
+
   it('localizes built-in people from the same configuration', () => {
     const localized = localizeRoleTemplate({
       id: 'builtin-frankl',

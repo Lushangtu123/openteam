@@ -3,7 +3,7 @@ import { normalizeMessageHighlightColor } from '../group/highlightColors'
 import { defaultMentionTargetForMessage, parseGroupMentions, roleMentionLabelOptionsFromSettings } from '../group/mentionParser'
 import { mapRuntimeRoleStatus } from '../group/runtimeProtocol'
 import type { BackgroundToRoleMessage } from '../group/runtimeProtocol'
-import type { ChatSite, ExternalModelConfig, GroupChat, GroupMessage, GroupRole, MessageImageAttachment, MessageReference, OpenTeamStore, OrchestrationFlow, ReplyImageSource, RoleSiteHealthStatus, RuntimeFrameBinding } from '../group/types'
+import type { ChatSite, ExternalModelConfig, GroupChat, GroupMessage, GroupRole, MessageImageAttachment, MessageReference, OpenTeamStore, OrchestrationFlow, ReplyImageSource, RoleSiteHealthReason, RoleSiteHealthStatus, RuntimeFrameBinding } from '../group/types'
 import { createExternalModelClient, type ExternalModelClient } from './externalModelClient'
 import type { BackgroundMessageRoute } from './messageRouter'
 import type { PromptDelivery, PromptSender } from './promptDelivery'
@@ -596,13 +596,15 @@ export function createMessageHandlers(deps: MessageHandlersDependencies): Backgr
 
     const timestamp = deps.now()
     const detail = readOptionalString(message.detail)
-    deps.log.info('site-status:received', { ...identity, siteId, status, detail, senderUrl: sender.url })
+    const reason = readSiteHealthReason(message.reason)
+    deps.log.info('site-status:received', { ...identity, siteId, status, reason, detail, senderUrl: sender.url })
     const { store, result } = await mutateStore(store => {
       const chat = requireChat(store, identity.chatId)
       const role = requireRole(store, chat.id, identity.roleId)
       role.siteHealth = {
         siteId,
         status,
+        ...(reason ? { reason } : {}),
         ...(detail ? { detail } : {}),
         updatedAt: timestamp,
       }
@@ -1684,7 +1686,12 @@ function readSiteId(value: unknown): ChatSite | undefined {
 }
 
 function readSiteHealthStatus(value: unknown): RoleSiteHealthStatus | undefined {
-  if (value === 'ready' || value === 'generating' || value === 'error' || value === 'blocked' || value === 'unauthorized') return value
+  if (value === 'ready' || value === 'generating' || value === 'loading' || value === 'error' || value === 'blocked' || value === 'unauthorized') return value
+  return undefined
+}
+
+function readSiteHealthReason(value: unknown): RoleSiteHealthReason | undefined {
+  if (value === 'verification' || value === 'http-error' || value === 'overlay' || value === 'login' || value === 'guest' || value === 'no-editor' || value === 'site-error') return value
   return undefined
 }
 

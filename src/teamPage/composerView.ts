@@ -1,6 +1,7 @@
 import { defaultMentionTargetForMessage, parseGroupMentions, roleMentionLabel, roleMentionLabelOptionsFromSettings, roleModelLabel } from '../group/mentionParser'
 import type { GroupChat, GroupMessage, GroupRole, MessageReference, OpenTeamStore } from '../group/types'
 import type { TeamPageState } from './appState'
+import { PROBLEM_HEALTH_STATUSES, rolePageHealthLabel, type RolePageHealth } from './roleHealth'
 import { getVisibleThinkingRoles, shouldAutoReconnectRole, shouldConfirmMentionWithEnter, shouldSendMessageWithEnter } from './chatExperience'
 import { runCommandWithReconnect } from './sendWithReconnect'
 
@@ -21,6 +22,9 @@ export interface ComposerViewDependencies {
   reconnectRolesForSend(chat: GroupChat, roles: GroupRole[]): Promise<void>
   runCommand(type: string, payload?: Record<string, unknown>): Promise<void>
   showError(message: string): void
+  getRoleHealth?(role: GroupRole): RolePageHealth
+  // Translates the composer after it re-renders on its own (while typing), between full renders.
+  localize?(root: HTMLElement): void
 }
 
 export interface ComposerView {
@@ -36,6 +40,7 @@ type MentionOption =
   | { type: 'role'; role: GroupRole }
 
 export function createComposerView(deps: ComposerViewDependencies): ComposerView {
+  let healthWarningEl: HTMLElement | undefined
   function mentionLabelOptions() {
     return mentionLabelOptionsFromStore(deps.getStore())
   }
@@ -100,6 +105,27 @@ export function createComposerView(deps: ComposerViewDependencies): ComposerView
     }
 
     deps.busyPreviewEl.textContent = thinking.length > 0 ? `正在回复：${thinking.map(roleDisplayName).join('、')}` : ''
+    const unreachable = targets
+      .filter(role => role.modelSource !== 'external')
+      .map(role => ({ role, health: deps.getRoleHealth?.(role) }))
+      .filter((target): target is { role: GroupRole; health: RolePageHealth } => Boolean(target.health && PROBLEM_HEALTH_STATUSES.has(target.health.status)))
+    renderHealthWarning(unreachable.length > 0
+      ? `网页暂时无法接收：${unreachable.map(target => `${roleDisplayName(target.role)} ${rolePageHealthLabel(target.health)}`).join('；')}`
+      : '')
+    deps.localize?.(deps.composerFormEl)
+  }
+
+  // A visible strip above the input box; the target and busy previews are not shown in the layout.
+  function renderHealthWarning(text: string): void {
+    if (!healthWarningEl) {
+      if (!text) return
+      healthWarningEl = document.createElement('div')
+      healthWarningEl.className = 'composer-health-warning'
+      healthWarningEl.setAttribute('role', 'status')
+      deps.composerFormEl.insertBefore(healthWarningEl, deps.messageInputEl.parentElement === deps.composerFormEl ? deps.messageInputEl : null)
+    }
+    healthWarningEl.hidden = !text
+    healthWarningEl.textContent = text
   }
 
   function renderReferenceDraft(): void {

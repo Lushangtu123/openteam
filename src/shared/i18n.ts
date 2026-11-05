@@ -178,6 +178,38 @@ const UI_TRANSLATIONS: Record<string, string> = {
   '尚未读取消息': 'No messages read yet',
   '等待连接': 'Waiting to connect',
   '网页已连接': 'Web connected',
+  '网页未打开': 'Page not open',
+  '正在打开网页': 'Opening page',
+  '网页没有响应': 'Page not responding',
+  '正在检查网页': 'Checking page',
+  '网页加载中': 'Page loading',
+  '可以发送': 'Ready to send',
+  '可以发送（未登录）': 'Ready (not logged in)',
+  '网页回复中': 'Page replying',
+  '需要登录': 'Login required',
+  '需要人机验证': 'Verification required',
+  '网站拒绝访问': 'Site refused access',
+  '有弹窗挡住页面': 'A pop-up covers the page',
+  '页面被拦截': 'Page blocked',
+  '找不到输入框': 'Input box not found',
+  '网站报错': 'Site error',
+  '网页异常': 'Page error',
+  '页面可用': 'Page available',
+  '页面回复中': 'Page replying',
+  '页面异常': 'Page error',
+  '页面被阻止': 'Page blocked',
+  '页面加载中': 'Page loading',
+  '打开网站': 'Open site',
+  '查看网页': 'View page',
+  '重新加载': 'Reload',
+  '网页 20 秒内没有连上 OpenTeam。常见原因是网站跳转到了登录页、网络不通，或者网站拒绝在这里打开。可以先在新标签页打开网站登录，再点「重新加载」。': 'The page did not connect to OpenTeam within 20 seconds. Usually the site redirected to its login page, the network is down, or the site refuses to open here. Open the site in a new tab to log in, then click Reload.',
+  '这个网站还没有登录。请在新标签页打开网站登录，然后点「重新加载」。': 'You are not logged in to this site. Open the site in a new tab to log in, then click Reload.',
+  '网站要求完成人机验证。请在新标签页打开网站完成验证，然后点「重新加载」。': 'The site asks you to verify that you are human. Open the site in a new tab to complete it, then click Reload.',
+  '网站拒绝了这次访问，可能是网络、地区或访问频率的限制。稍后再试，或者换一个网络。': 'The site refused access, probably because of the network, region or rate limits. Try again later or from another network.',
+  '页面上有弹窗（例如 Cookie 提示）挡住了输入框。点「查看网页」把它关掉。': 'A pop-up on the page (such as a cookie notice) covers the input box. Click View page to close it.',
+  '页面里找不到输入框，可能还没加载完，或者网站改版了。可以点「重新加载」再试。': 'The page has no input box. It may not have finished loading, or the site changed its layout. Click Reload to try again.',
+  '网站显示了错误信息，消息可能发不出去。': 'The site shows an error message, so messages may not go through.',
+  '网页暂时无法使用。可以点「重新加载」再试。': 'The page cannot be used right now. Click Reload to try again.',
   '连接 API': 'API connected',
   '待唤醒': 'Pending',
   '加载中': 'Loading',
@@ -836,8 +868,27 @@ function translateUiPattern(source: string): string | undefined {
   if (source.includes(' · ')) return source.split(' · ').map(part => translateUi(part, 'en')).join(' · ')
   const sendWithConnecting = source.match(/^将发送给：(.+)；正在连接：(.+)$/)
   if (sendWithConnecting) return `Will send to: ${sendWithConnecting[1]}; connecting: ${sendWithConnecting[2]}`
+  const unreachable = source.match(/^网页暂时无法接收：(.+)$/)
+  if (unreachable) {
+    // Each entry is "<person> <status>"; status labels contain no spaces.
+    const people = unreachable[1].split('；').map(item => {
+      const person = item.match(/^(.+) (\S+)$/)
+      return person ? `${person[1]}: ${translateUi(person[2], 'en')}` : item
+    })
+    return `Pages that cannot receive messages right now: ${people.join('; ')}`
+  }
   const sendWithWaiting = source.match(/^将发送给：(.+)；跳过正在回复：(.+)$/)
   if (sendWithWaiting) return `Will send to: ${sendWithWaiting[1]}; skipping people already replying: ${sendWithWaiting[2]}`
+  const sendTo = source.match(/^将发送给：(.+)$/)
+  if (sendTo) return `Will send to: ${sendTo[1]}`
+  const autoConnecting = source.match(/^正在自动连接：(.+)$/)
+  if (autoConnecting) return `Connecting: ${autoConnecting[1]}`
+  const connectFirst = source.match(/^将先自动连接：(.+)$/)
+  if (connectFirst) return `Will connect first: ${connectFirst[1]}`
+  const waitForReply = source.match(/^请稍等：(.+) 正在回复$/)
+  if (waitForReply) return `Please wait: ${waitForReply[1]} is replying`
+  const replying = source.match(/^正在回复：(.+)$/)
+  if (replying) return `Replying: ${replying[1]}`
   return undefined
 }
 

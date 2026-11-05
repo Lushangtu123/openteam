@@ -2,6 +2,7 @@ import { roleMentionLabel, roleMentionLabelOptionsFromSettings } from '../group/
 import type { ChatSite, ExternalModelConfig, GroupRole, OpenTeamStore, RoleModelSource, RoleStatus } from '../group/types'
 import { normalizeLanguage, translateUi } from '../shared/i18n'
 import type { TeamPageState } from './appState'
+import { PROBLEM_HEALTH_STATUSES, rolePageHealthLabel, type RolePageHealth } from './roleHealth'
 
 const VISIBLE_CHAT_SITES = ['gemini', 'chatgpt', 'claude', 'deepseek', 'grok'] as const
 
@@ -26,6 +27,9 @@ export interface RolePanelViewDependencies {
   focusRoleFrame(chatId: string, roleId: string | undefined): void
   runCommand(type: string, payload?: Record<string, unknown>): Promise<void>
   showError(message: string): void
+  // Live health of a web role's page; without it the card falls back to the stored connection info.
+  getRoleHealth?(role: GroupRole): RolePageHealth
+  openRoleSite?(role: GroupRole): void
 }
 
 export interface RolePanelView {
@@ -81,9 +85,10 @@ export function createRolePanelView(deps: RolePanelViewDependencies): RolePanelV
     description.className = 'role-description'
     description.textContent = role.description || ui('未填写人员描述')
 
+    const health = role.modelSource === 'external' ? undefined : deps.getRoleHealth?.(role)
     const meta = document.createElement('div')
     meta.className = 'chat-row tiny role-meta'
-    meta.append(roleSiteControl(role), roleContextProgress(role, ui), roleConnectionStatus(role, ui))
+    meta.append(roleSiteControl(role), roleContextProgress(role, ui), health ? roleHealthBadge(health) : roleConnectionStatus(role, ui))
     main.append(row, description, meta)
 
     const actions = document.createElement('div')
@@ -95,7 +100,11 @@ export function createRolePanelView(deps: RolePanelViewDependencies): RolePanelV
     actions.append(promptDetail, refresh, jump, remove)
     card.append(avatar, main, actions)
 
-    if (role.status === 'error') {
+    const healthHelp = health ? roleHealthHelp(role, health) : undefined
+    if (healthHelp) {
+      // Below the whole card: the middle column is too narrow for advice and buttons.
+      card.append(healthHelp)
+    } else if (role.status === 'error') {
       const error = document.createElement('div')
       error.className = 'reference-box'
       error.textContent = ui('人员异常。若目标站点未登录，请打开登录页后点击恢复人员。')
@@ -193,9 +202,59 @@ export function createRolePanelView(deps: RolePanelViewDependencies): RolePanelV
     button.addEventListener('click', event => {
       event.stopPropagation()
       if (role.modelSource === 'external') return
-      deps.iframeHost.recoverRole(role)
-      deps.runCommand('GROUP_ROLE_RECOVER', { chatId: role.chatId, roleId: role.id })
-        .catch(error => deps.showError(error instanceof Error ? error.message : String(error)))
+      reloadRoleFrame(role)
+    })
+    return button
+  }
+
+  function reloadRoleFrame(role: GroupRole): void {
+    deps.iframeHost.recoverRole(role)
+    deps.runCommand('GROUP_ROLE_RECOVER', { chatId: role.chatId, roleId: role.id })
+      .catch(error => deps.showError(error instanceof Error ? error.message : String(error)))
+  }
+
+  function roleHealthBadge(health: RolePageHealth): HTMLElement {
+    const badge = document.createElement('span')
+    badge.className = `role-meta-item role-health role-health-${health.status}`
+    badge.dataset.health = health.status
+    badge.textContent = ui(rolePageHealthLabel(health))
+    if (health.detail) badge.title = health.detail
+    return badge
+  }
+
+  // What went wrong with the role's page and what the user can do about it.
+  function roleHealthHelp(role: GroupRole, health: RolePageHealth): HTMLElement | undefined {
+    if (!PROBLEM_HEALTH_STATUSES.has(health.status)) return undefined
+    const help = document.createElement('div')
+    help.className = 'reference-box role-health-help'
+    const text = document.createElement('p')
+    text.textContent = ui(roleHealthAdvice(health))
+    help.append(text)
+    if (health.detail) {
+      const detail = document.createElement('p')
+      detail.className = 'role-health-detail'
+      detail.textContent = health.detail
+      help.append(detail)
+    }
+
+    const actions = document.createElement('div')
+    actions.className = 'role-health-actions'
+    const needsSiteVisit = health.status === 'login-required' || health.status === 'unresponsive' || health.reason === 'verification'
+    if (needsSiteVisit && deps.openRoleSite) actions.append(roleHealthAction('打开网站', () => deps.openRoleSite?.(role)))
+    if (health.reason === 'overlay') actions.append(roleHealthAction('查看网页', () => deps.focusRoleFrame(role.chatId, role.id)))
+    actions.append(roleHealthAction('重新加载', () => reloadRoleFrame(role)))
+    help.append(actions)
+    return help
+  }
+
+  function roleHealthAction(label: string, run: () => void): HTMLButtonElement {
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.className = 'btn btn-ghost btn-small role-health-action'
+    button.textContent = ui(label)
+    button.addEventListener('click', event => {
+      event.stopPropagation()
+      run()
     })
     return button
   }
@@ -418,6 +477,17 @@ function roleContextProgress(role: GroupRole, ui: (source: string) => string): H
   return progress
 }
 
+function roleHealthAdvice(health: RolePageHealth): string {
+  if (health.status === 'unresponsive') return '网页 20 秒内没有连上 OpenTeam。常见原因是网站跳转到了登录页、网络不通，或者网站拒绝在这里打开。可以先在新标签页打开网站登录，再点「重新加载」。'
+  if (health.status === 'login-required') return '这个网站还没有登录。请在新标签页打开网站登录，然后点「重新加载」。'
+  if (health.reason === 'verification') return '网站要求完成人机验证。请在新标签页打开网站完成验证，然后点「重新加载」。'
+  if (health.reason === 'http-error') return '网站拒绝了这次访问，可能是网络、地区或访问频率的限制。稍后再试，或者换一个网络。'
+  if (health.reason === 'overlay') return '页面上有弹窗（例如 Cookie 提示）挡住了输入框。点「查看网页」把它关掉。'
+  if (health.reason === 'no-editor') return '页面里找不到输入框，可能还没加载完，或者网站改版了。可以点「重新加载」再试。'
+  if (health.reason === 'site-error') return '网站显示了错误信息，消息可能发不出去。'
+  return '网页暂时无法使用。可以点「重新加载」再试。'
+}
+
 function roleConnectionStatus(role: GroupRole, ui: (source: string) => string): HTMLElement {
   const status = document.createElement('span')
   status.className = 'role-meta-item'
@@ -437,6 +507,7 @@ function siteHealthLabel(status: NonNullable<GroupRole['siteHealth']>['status'])
     error: '页面异常',
     blocked: '页面被阻止',
     unauthorized: '需要登录',
+    loading: '页面加载中',
   }
   return labels[status]
 }

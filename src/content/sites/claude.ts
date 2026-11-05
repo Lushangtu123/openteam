@@ -1,3 +1,4 @@
+import { checkSiteHealth, type SiteHealthContext } from './siteHealth'
 import type { ChatSiteAdapter, ConversationSnapshot, SiteStatusInfo } from './types'
 import { keepDeepestResponseContainers } from '../responseContainers'
 import { findClickableCopyButton, readResponseTextFromCopyAction } from './clipboardCopy'
@@ -178,27 +179,11 @@ function findClaudeStopButton(): HTMLButtonElement | undefined {
   return [...document.querySelectorAll<HTMLButtonElement>('button')].find(button => buttonLabelMatches(button, /stop|stopping|停止|中止/) && isClickableButton(button))
 }
 
-function checkClaudeStatus(): SiteStatusInfo {
-  const timestamp = Date.now()
-
-  if (location.pathname.includes('/login') || location.pathname.includes('/auth')) {
-    return { status: 'unauthorized', detail: 'Session expired, please login', timestamp }
-  }
-
-  const editorExists = !!document.querySelector(CLAUDE_SELECTORS.editor)
-  const blockerExists = !!document.querySelector(CLAUDE_SELECTORS.blocker)
-
-  if (!editorExists && blockerExists) {
-    return { status: 'blocked', detail: 'Cookie banner or overlay blocking access', timestamp }
-  }
-
-  if (document.querySelector(CLAUDE_SELECTORS.loginOverlay)) {
-    return { status: 'unauthorized', detail: 'Login required', timestamp }
-  }
-
-  if (isClaudeGenerating()) {
-    return { status: 'generating', detail: 'Claude is thinking...', timestamp }
-  }
-
-  return { status: 'ready', timestamp }
+function checkClaudeStatus(context: SiteHealthContext): SiteStatusInfo {
+  return checkSiteHealth({
+    findEditor: () => document.querySelector(CLAUDE_SELECTORS.editor),
+    isGenerating: isClaudeGenerating,
+    isLoginPage: () => /^\/(login|auth|magic-link)\b/.test(location.pathname) || Boolean(document.querySelector(CLAUDE_SELECTORS.loginOverlay)),
+    hasBlockingOverlay: () => Boolean(document.querySelector(CLAUDE_SELECTORS.blocker)),
+  }, context)
 }

@@ -7,6 +7,7 @@ import { createDefaultStore } from '../group/store'
 import type { GroupChat, GroupRole, OpenTeamStore } from '../group/types'
 import { createTeamPageState } from './appState'
 import { createRolePanelView } from './rolePanelView'
+import type { RolePageHealth } from './roleHealth'
 
 describe('team page role panel view boundary', () => {
   it('keeps role panel rendering and role site switching outside the entrypoint', () => {
@@ -94,6 +95,63 @@ describe('team page role panel view boundary', () => {
 
     expect(iframeHost.recoverRole).toHaveBeenCalledWith(store.rolesById['role-1'])
     expect(runCommand).toHaveBeenCalledWith('GROUP_ROLE_RECOVER', { chatId: 'chat-1', roleId: 'role-1' })
+  })
+
+  it('shows live page health and offers fixes when the page cannot take messages', async () => {
+    const store = makeStoreWithRole()
+    const rolePanelEl = document.createElement('aside')
+    const roleSummaryEl = document.createElement('p')
+    const roleListEl = document.createElement('div')
+    const iframeHost = { recoverRole: vi.fn() }
+    const runCommand = vi.fn(async () => undefined)
+    const openRoleSite = vi.fn()
+    let health: RolePageHealth = { status: 'login-required', reason: 'login' }
+    rolePanelEl.append(roleSummaryEl, roleListEl)
+    const view = createRolePanelView({
+      state: createTeamPageState(),
+      getStore: () => store,
+      rolePanelEl,
+      roleSummaryEl,
+      roleListEl,
+      iframeHost,
+      getCurrentChat: () => store.chatsById['chat-1'],
+      getCurrentRoles: () => [store.rolesById['role-1']],
+      emptyCard: () => document.createElement('div'),
+      roleToneClass: () => 'role-tone-0',
+      roleAvatarLabel: name => name?.slice(0, 1) ?? '',
+      insertMention: vi.fn(),
+      refreshCurrentChat: vi.fn(async () => undefined),
+      focusRoleFrame: vi.fn(),
+      runCommand,
+      showError: vi.fn(),
+      getRoleHealth: () => health,
+      openRoleSite,
+    })
+
+    view.renderRolePanel()
+    expect(roleListEl.querySelector('.role-health')?.textContent).toBe('需要登录')
+    const actions = [...roleListEl.querySelectorAll<HTMLButtonElement>('.role-health-action')]
+    expect(actions.map(button => button.textContent)).toEqual(['打开网站', '重新加载'])
+    // The page's own help replaces the generic "member error" note.
+    expect(roleListEl.textContent).not.toContain('人员异常')
+
+    actions[0].click()
+    actions[1].click()
+    await Promise.resolve()
+    expect(openRoleSite).toHaveBeenCalledWith(store.rolesById['role-1'])
+    expect(iframeHost.recoverRole).toHaveBeenCalledWith(store.rolesById['role-1'])
+    expect(runCommand).toHaveBeenCalledWith('GROUP_ROLE_RECOVER', { chatId: 'chat-1', roleId: 'role-1' })
+
+    health = { status: 'blocked', reason: 'http-error', detail: 'ERROR: The request could not be satisfied' }
+    view.renderRolePanel()
+    expect(roleListEl.querySelector('.role-health')?.textContent).toBe('网站拒绝访问')
+    expect(roleListEl.querySelector('.role-health-detail')?.textContent).toBe('ERROR: The request could not be satisfied')
+    expect([...roleListEl.querySelectorAll('.role-health-action')].map(button => button.textContent)).toEqual(['重新加载'])
+
+    health = { status: 'ready', reason: 'guest' }
+    view.renderRolePanel()
+    expect(roleListEl.querySelector('.role-health')?.textContent).toBe('可以发送（未登录）')
+    expect(roleListEl.querySelector('.role-health-help')).toBeNull()
   })
 
   it('renders member deletion as a direct icon action and confirms before removing', async () => {

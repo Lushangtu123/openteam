@@ -17,7 +17,8 @@ const siteAdapter = getActiveChatSiteAdapter()
 
 let replyObserver: ReplyObserverController | undefined
 let conversationMonitor: ConversationMonitor | undefined
-let lastReportedStatus: SiteStatusInfo | undefined
+let lastReportedStatus: { key: string; status: SiteStatusInfo } | undefined
+const pageStartedAt = Date.now()
 
 const roleSession = createRoleSession({
   siteAdapter,
@@ -25,6 +26,7 @@ const roleSession = createRoleSession({
   onAssigned() {
     replyObserver?.resetForAssignedRole()
     conversationMonitor?.reportConversationUpdate(true)
+    reportSiteStatus(true)
   },
 })
 
@@ -56,34 +58,39 @@ function sendBackgroundMessage<T>(message: RoleToBackgroundMessage): Promise<T> 
 }
 
 function startStatusHeartbeat(): void {
-  const HEARTBEAT_INTERVAL_MS = 5000
+  const HEARTBEAT_INTERVAL_MS = 3000
 
-  setInterval(() => {
-    try {
-      const currentStatus = getCurrentSiteStatus()
+  setInterval(() => reportSiteStatus(false), HEARTBEAT_INTERVAL_MS)
+}
 
-      // Only report if the status or detail has changed to avoid spamming the background
-      if (
-        !lastReportedStatus ||
-        currentStatus.status !== lastReportedStatus.status ||
-        currentStatus.detail !== lastReportedStatus.detail
-      ) {
-        lastReportedStatus = currentStatus
-        sendBackgroundMessage({
-          type: 'TEAM_SITE_STATUS_UPDATE',
-          siteId: siteAdapter.id,
-          status: currentStatus.status,
-          detail: currentStatus.detail,
-        }).catch(error => log.warn('status-heartbeat:report-failed', { error: error instanceof Error ? error.message : String(error) }))
-      }
-    } catch (error) {
-      log.warn('status-heartbeat:check-failed', { error: error instanceof Error ? error.message : String(error) })
-    }
-  }, HEARTBEAT_INTERVAL_MS)
+// Reports the page's health for the role this frame was assigned: right after the assignment, and
+// then whenever it changes. Until a role is assigned there is nobody to report it for.
+function reportSiteStatus(force: boolean): void {
+  const assignedRole = roleSession.getAssignedRole()
+  const chatId = roleSession.getAssignedChatId(assignedRole)
+  if (!assignedRole || !chatId) return
+
+  try {
+    const currentStatus = getCurrentSiteStatus()
+    const key = [chatId, assignedRole.roleId, currentStatus.status, currentStatus.reason, currentStatus.detail].join('|')
+    if (!force && lastReportedStatus?.key === key) return
+    lastReportedStatus = { key, status: currentStatus }
+    sendBackgroundMessage({
+      type: 'TEAM_SITE_STATUS_UPDATE',
+      chatId,
+      roleId: assignedRole.roleId,
+      siteId: siteAdapter.id,
+      status: currentStatus.status,
+      ...(currentStatus.reason ? { reason: currentStatus.reason } : {}),
+      ...(currentStatus.detail ? { detail: currentStatus.detail } : {}),
+    }).catch(error => log.warn('status-heartbeat:report-failed', { error: error instanceof Error ? error.message : String(error) }))
+  } catch (error) {
+    log.warn('status-heartbeat:check-failed', { error: error instanceof Error ? error.message : String(error) })
+  }
 }
 
 function getCurrentSiteStatus(): SiteStatusInfo {
-  if (siteAdapter.checkStatus) return siteAdapter.checkStatus()
+  if (siteAdapter.checkStatus) return siteAdapter.checkStatus({ pageAgeMs: Date.now() - pageStartedAt })
   return {
     status: siteAdapter.isGenerating() ? 'generating' : 'ready',
     timestamp: Date.now(),

@@ -11,13 +11,14 @@ import { createTeamPageDomRefs } from './domRefs'
 import { createExternalModelsView } from './externalModelsView'
 import { createFloatingWindowControls } from './floatingWindow'
 import { createIframeHost } from './iframeHost'
-import { createLanguageSettingsController } from './languageController'
+import { applyTeamLanguage, createLanguageSettingsController } from './languageController'
 import { createMessagesView } from './messagesView'
 import { createNotesView } from './notesView'
 import { createPeopleLibraryView } from './peopleLibraryView'
 import { createOrchestrationModalView } from './orchestrationModalView'
 import { createOrchestrationStatusView } from './orchestrationStatusView'
 import { createRoleRecoveryController } from './roleRecoveryController'
+import { createRoleHealthTracker } from './roleHealth'
 import { createRolePanelView } from './rolePanelView'
 import { createTeamPageRuntimeClient, type StorePushMessage } from './runtimeClient'
 import { createTeamPagePrimaryCoordinator } from './teamPagePrimary'
@@ -27,6 +28,10 @@ import { createTeamUiController } from './teamUiController'
 import { emptyCard, getChatRecentSummary as getStoreChatRecentSummary, messageTitle, roleAvatarLabel, roleToneClass } from './viewHelpers'
 import { agentControlStatusState, agentControlStatusText } from './agentControlStatusView'
 import { createIndexedDbImageAttachmentRepository } from '../shared/imageAttachmentRepository'
+import { getSafeSupportedChatIframeSrcForRole } from '../group/conversationUrl'
+import { normalizeLanguage } from '../shared/i18n'
+
+const SITE_HEALTH_STATUSES: ReadonlySet<string> = new Set(['ready', 'generating', 'loading', 'error', 'blocked', 'unauthorized'])
 
 const appState = createTeamPageState()
 const imageAttachmentRepository = createIndexedDbImageAttachmentRepository()
@@ -58,10 +63,26 @@ const themeController = createThemeController({
 })
 themeController.initializeTheme()
 
+let roleHealthRenderPending = false
+const roleHealth = createRoleHealthTracker({
+  onChange() {
+    if (roleHealthRenderPending) return
+    roleHealthRenderPending = true
+    window.setTimeout(() => {
+      roleHealthRenderPending = false
+      renderRolePanel()
+      renderComposerState()
+      languageSettingsController.render()
+    }, 0)
+  },
+})
 const iframeHost = createIframeHost({
   visibleHost: teamDomRefs.iframeHostEl,
   onEvent(event) {
     log.debug(`iframe-host:${event.type}`, event)
+    if (event.type === 'role-created' || event.type === 'role-recovered' || event.type === 'role-navigated') roleHealth.frameOpened(event.chatId, event.roleId)
+    else if (event.type === 'role-ready') roleHealth.frameConnected(event.chatId, event.roleId)
+    else if (event.type === 'role-disposed') roleHealth.frameClosed(event.chatId, event.roleId)
   },
 })
 const primaryCoordinator = createTeamPagePrimaryCoordinator({
@@ -153,6 +174,11 @@ const rolePanelView = createRolePanelView({
   focusRoleFrame: (chatId, roleId) => roleRecoveryController.focusRoleFrame(chatId, roleId),
   runCommand,
   showError,
+  getRoleHealth: role => roleHealth.get(role.chatId, role.id),
+  openRoleSite: role => {
+    chrome.tabs.create({ url: getSafeSupportedChatIframeSrcForRole(undefined, role), active: true })
+      .catch(error => showError(error instanceof Error ? error.message : String(error)))
+  },
 })
 const renderRolePanel = rolePanelView.renderRolePanel
 const chatHeaderView = createChatHeaderView({
@@ -226,6 +252,8 @@ const composerView = createComposerView({
   reconnectRolesForSend,
   runCommand,
   showError,
+  getRoleHealth: role => roleHealth.get(role.chatId, role.id),
+  localize: root => applyTeamLanguage(normalizeLanguage(store.settings.language), root),
 })
 renderComposerState = composerView.renderComposerState
 insertMention = composerView.insertMention
@@ -578,8 +606,9 @@ function renderSelectedChat(): void {
 }
 
 function registerRuntimePush(): void {
-  chrome.runtime.onMessage.addListener((message: StorePushMessage, _sender, sendResponse) => {
+  chrome.runtime.onMessage.addListener((message: StorePushMessage, sender, sendResponse) => {
     if (!message || typeof message.type !== 'string') return false
+    if (message.type === 'TEAM_SITE_STATUS_UPDATE') recordSiteStatus(message, sender)
     if (message.type === 'GROUP_ROLE_RECOVERY_REQUEST') {
       handleRoleRecoveryRequest(message, sendResponse)
       return true
@@ -605,6 +634,18 @@ function registerRuntimePush(): void {
       if (errorMessage) showError(errorMessage)
     }
     return false
+  })
+}
+
+// Role frames report their page health to every extension page; only frames in this tab are ours.
+function recordSiteStatus(message: Extract<StorePushMessage, { type: 'TEAM_SITE_STATUS_UPDATE' }>, sender: chrome.runtime.MessageSender): void {
+  if (appState.hostTabId === undefined || sender.tab?.id !== appState.hostTabId) return
+  if (typeof message.chatId !== 'string' || typeof message.roleId !== 'string') return
+  if (!SITE_HEALTH_STATUSES.has(message.status)) return
+  roleHealth.siteReported(message.chatId, message.roleId, {
+    status: message.status,
+    ...(typeof message.reason === 'string' ? { reason: message.reason } : {}),
+    ...(typeof message.detail === 'string' ? { detail: message.detail.slice(0, 160) } : {}),
   })
 }
 

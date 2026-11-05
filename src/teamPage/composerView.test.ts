@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { createDefaultStore } from '../group/store'
 import type { GroupChat, GroupRole } from '../group/types'
 import { createTeamPageState } from './appState'
+import { applyTeamLanguage } from './languageController'
 import { createComposerView, type ComposerViewDependencies } from './composerView'
 
 describe('team page composer view boundary', () => {
@@ -92,6 +93,37 @@ describe('team page composer targeting', () => {
     pressKey(deps.messageInputEl, 'Enter')
 
     expect(deps.messageInputEl.value).toBe('@工程师（DeepSeek） ')
+  })
+
+  it('warns when a message targets a page that cannot receive it', () => {
+    const roles = [makeRole('chat-1', 'role-1', '工程师', 'ready'), makeRole('chat-1', 'role-2', '设计师', 'ready')]
+    const { view, deps } = createComposerHarness({ roles })
+    deps.getRoleHealth = role => role.id === 'role-1' ? { status: 'login-required', reason: 'login' } : { status: 'ready' }
+    deps.messageInputEl.value = '@工程师 @设计师 评估一下'
+
+    view.renderComposerState()
+
+    const warning = () => deps.composerFormEl.querySelector<HTMLElement>('.composer-health-warning')
+    expect(warning()?.textContent).toBe('网页暂时无法接收：工程师（DeepSeek） 需要登录')
+    expect(warning()?.hidden).toBe(false)
+    expect(deps.sendButtonEl.disabled).toBe(false)
+
+    deps.getRoleHealth = () => ({ status: 'ready' })
+    view.renderComposerState()
+    expect(warning()?.hidden).toBe(true)
+  })
+
+  it('translates its own re-renders while the user types', () => {
+    const { view, deps } = createComposerHarness()
+    deps.composerFormEl.append(deps.targetPreviewEl, deps.busyPreviewEl)
+    deps.getRoleHealth = () => ({ status: 'login-required', reason: 'login' })
+    deps.localize = root => applyTeamLanguage('en', root)
+    deps.messageInputEl.value = '@工程师 评估一下'
+
+    view.renderComposerState()
+
+    expect(deps.targetPreviewEl.textContent).toBe('Will send to: 工程师（DeepSeek）')
+    expect(deps.composerFormEl.querySelector('.composer-health-warning')?.textContent).toBe('Pages that cannot receive messages right now: 工程师（DeepSeek）: Login required')
   })
 
   it('previews no-mention messages as chat records without requiring ready roles', () => {

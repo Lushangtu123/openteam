@@ -5900,3 +5900,115 @@ select:focus {
 :root[data-theme] .theme-option span:last-child {
   display: none;
 }
+
+/* AI page health on role cards and in the composer */
+.role-meta-item.role-health {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.role-health::before {
+  content: '';
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgba(var(--neutral-rgb), 0.6);
+}
+
+.role-health-ready::before {
+  background: var(--success);
+}
+
+.role-health-generating::before {
+  background: rgb(var(--accent-rgb));
+}
+
+.role-health-opening::before,
+.role-health-checking::before,
+.role-health-loading::before {
+  animation: role-health-pulse 1.2s ease-in-out infinite;
+}
+
+.role-health-login-required,
+.role-health-blocked,
+.role-health-unresponsive {
+  color: var(--warning);
+}
+
+.role-health-login-required::before,
+.role-health-blocked::before,
+.role-health-unresponsive::before {
+  background: var(--warning);
+}
+
+.role-health-error {
+  color: var(--danger);
+}
+
+.role-health-error::before {
+  background: var(--danger);
+}
+
+@keyframes role-health-pulse {
+  50% {
+    opacity: 0.3;
+  }
+}
+
+.role-card > .reference-box.role-health-help,
+:root[data-theme] .role-card > .reference-box.role-health-help {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 8px;
+  margin: 0;
+  border: 1px solid color-mix(in srgb, var(--warning) 30%, transparent);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: var(--warning-soft);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.role-health-help p {
+  margin: 0;
+}
+
+.role-health-help .role-health-detail {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.role-health-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.role-health-action {
+  min-height: 26px;
+  padding: 3px 10px;
+  font-size: 12px;
+}
+
+.composer-health-warning:not([hidden]) {
+  display: block;
+  margin: 0 0 8px;
+  border: 1px solid color-mix(in srgb, var(--warning) 30%, transparent);
+  border-radius: 10px;
+  padding: 7px 10px;
+  background: var(--warning-soft);
+  color: var(--warning);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .role-health-opening::before,
+  .role-health-checking::before,
+  .role-health-loading::before {
+    animation: none;
+  }
+}

@@ -1,3 +1,4 @@
+import { checkSiteHealth } from './siteHealth'
 import type { ChatSiteAdapter, ConversationSnapshot } from './types'
 import { keepDeepestResponseContainers } from '../responseContainers'
 import { extractMarkdownFromDom } from './domMarkdown'
@@ -75,6 +76,11 @@ export function createDeepSeekAdapter(options: DeepSeekAdapterOptions = {}): Cha
     readResponseMarkdown: extractMarkdownFromDom,
     findResponseContainer,
     isGenerating: isDeepSeekGenerating,
+    checkStatus: context => checkSiteHealth({
+      findEditor: () => document.querySelector(DEEPSEEK_SELECTORS.editor),
+      isGenerating: isDeepSeekGenerating,
+      isLoginPage: () => /^\/(sign_in|sign_up|login)\b/.test(location.pathname),
+    }, context),
     stopGenerating: stopDeepSeekGenerating,
     fillAndSend,
     collectPromptDiagnostics,

@@ -1,4 +1,5 @@
 import type { ReplyImageSource } from '../../group/types'
+import { checkSiteHealth, type SiteHealthContext } from './siteHealth'
 import type { ChatSiteAdapter, ConversationSnapshot, SiteStatusInfo } from './types'
 import { keepDeepestResponseContainers } from '../responseContainers'
 import { readResponseTextFromCopyAction } from './clipboardCopy'
@@ -128,31 +129,13 @@ export function createChatGptAdapter(options: ChatGptAdapterOptions = {}): ChatS
   }
 }
 
-function checkChatGptStatus(): SiteStatusInfo {
-  const timestamp = Date.now()
-
-  // 1. Check for blockage (Cloudflare, Access Denied)
-  if (document.title.includes('Access Denied') || document.querySelector('.cloudflare-challenge')) {
-    return { status: 'blocked', detail: 'Access Denied / Cloudflare Challenge', timestamp }
-  }
-
-  // 2. Check for authentication issues
-  if (location.pathname.includes('/auth/login') || location.pathname.includes('/login')) {
-    return { status: 'unauthorized', detail: 'Session expired, please login', timestamp }
-  }
-
-  // 3. Check for explicit error messages in the UI
-  const errorEl = document.querySelector(CHATGPT_SELECTORS.errorDialog)
-  if (errorEl) {
-    return { status: 'error', detail: errorEl.textContent?.trim() || 'Unknown API Error', timestamp }
-  }
-
-  // 4. Check if generating
-  if (isChatGptGenerating()) {
-    return { status: 'generating', detail: 'AI is thinking...', timestamp }
-  }
-
-  return { status: 'ready', timestamp }
+function checkChatGptStatus(context: SiteHealthContext): SiteStatusInfo {
+  return checkSiteHealth({
+    findEditor: () => document.querySelector(CHATGPT_SELECTORS.editor),
+    isGenerating: isChatGptGenerating,
+    isLoginPage: () => /\/(auth\/)?log-?in\b/.test(location.pathname),
+    findSiteError: () => document.querySelector(CHATGPT_SELECTORS.errorDialog)?.textContent?.trim() || undefined,
+  }, context)
 }
 
 async function readResponseTextFromCopy(node: Node, timeoutMs: number, pollMs: number): Promise<string | undefined> {

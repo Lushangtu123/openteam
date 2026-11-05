@@ -572,6 +572,7 @@ describe('background message handlers', () => {
       type: 'TEAM_SITE_STATUS_UPDATE',
       siteId: 'chatgpt',
       status: 'blocked',
+      reason: 'http-error',
       detail: 'Access Denied',
     }, {
       tab: { id: 101 } as chrome.tabs.Tab,
@@ -583,9 +584,21 @@ describe('background message handlers', () => {
     expect((response.store.rolesById['role-1'] as { siteHealth?: unknown }).siteHealth).toEqual({
       siteId: 'chatgpt',
       status: 'blocked',
+      reason: 'http-error',
       detail: 'Access Denied',
       updatedAt: 100,
     })
+
+    const loading = await healthRoute?.handler({
+      type: 'TEAM_SITE_STATUS_UPDATE',
+      chatId: 'chat-1',
+      roleId: 'role-1',
+      siteId: 'chatgpt',
+      status: 'loading',
+      reason: 'not-a-reason',
+    }, { tab: { id: 101 } as chrome.tabs.Tab, frameId: 7, url: 'https://chatgpt.com/c/test' }) as { ok: boolean; store: OpenTeamStore }
+    expect(loading.ok).toBe(true)
+    expect(loading.store.rolesById['role-1'].siteHealth).toEqual({ siteId: 'chatgpt', status: 'loading', updatedAt: 100 })
     expect(broadcastStoreUpdated).toHaveBeenCalledWith(response.store)
   })
 
