@@ -43,6 +43,10 @@ describe('team page dom refs', () => {
       <button id="language-zh"></button>
       <button id="agent-control-toggle"></button>
       <p id="agent-control-status"></p>
+      <button id="backup-export"></button>
+      <button id="backup-restore"></button>
+      <input id="backup-file" type="file" />
+      <input id="backup-include-keys" type="checkbox" />
       <button id="theme-light"></button>
       <button id="theme-dark"></button>
       <button id="open-all-notes"></button>

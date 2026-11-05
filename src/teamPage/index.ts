@@ -4,6 +4,7 @@ import { createDefaultStore } from '../group/store'
 import { getAllRoleTemplates } from '../group/roleTemplates'
 import { createTeamPageState, pickSelectedChatId } from './appState'
 import { createAllNotesView } from './allNotesView'
+import { createBackupView } from './backupView'
 import { createChatHeaderView } from './chatHeaderView'
 import { createChatListView } from './chatListView'
 import { createComposerView } from './composerView'
@@ -688,6 +689,27 @@ function handleRoleRecoveryRequest(message: Extract<StorePushMessage, { type: 'G
     })
 }
 
+const backupView = createBackupView({
+  exportButtonEl: teamDomRefs.backupExportEl,
+  restoreButtonEl: teamDomRefs.backupRestoreEl,
+  fileInputEl: teamDomRefs.backupFileEl,
+  includeApiKeysEl: teamDomRefs.backupIncludeKeysEl,
+  getStore: () => store,
+  sendRuntimeMessage,
+  images: imageAttachmentRepository,
+  extensionVersion: chrome.runtime.getManifest?.().version,
+  applyRestoredStore(nextStore) {
+    // Frames and rendered messages of the old data must not survive into the restored data.
+    appState.messageNodeCache.clear()
+    for (const group of iframeHost.listChatGroups()) {
+      if (!nextStore.chatsById[group.chatId]) iframeHost.removeChat(group.chatId)
+    }
+    applyStore(nextStore)
+  },
+  showError,
+  showSuccess,
+})
+
 async function boot(): Promise<void> {
   await resolveHostTabId()
   await primaryCoordinator.start()
@@ -698,6 +720,7 @@ async function boot(): Promise<void> {
   registerAllNotesEvents()
   languageSettingsController.registerEvents()
   registerAgentControlSettings()
+  backupView.registerEvents()
   registerUi()
   registerOrchestrationEvents()
   registerNotesEvents()

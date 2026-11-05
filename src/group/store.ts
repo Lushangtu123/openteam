@@ -194,6 +194,11 @@ export function updateStoreQueued<T>(mutator: (draft: OpenTeamStore) => T | Prom
   return next
 }
 
+// Normalizes store data from outside storage (a backup file) the same way a load does.
+export function normalizeStoreData(raw: unknown): OpenTeamStore {
+  return normalizeStore(raw)
+}
+
 function normalizeStore(raw: unknown): OpenTeamStore {
   if (!isRecord(raw)) {
     return createDefaultStore()

@@ -171,6 +171,42 @@ describe('background group chat experience handlers', () => {
     expect(seenPushes).toBeGreaterThan(0)
   })
 
+  it('restores a backup from the team page by merging or replacing, and refuses it from AI-site frames', async () => {
+    const store = makeStore()
+    store.chatsById['chat-1'] = makeChat('chat-1', ['role-1'])
+    store.chatOrder = ['chat-1']
+    store.rolesById['role-1'] = makeRole('chat-1', 'role-1', '工程师')
+    const harness = await setupBackground(store)
+    const { createBackup } = await import('../group/backup')
+    const backupStore = makeStore()
+    backupStore.chatsById['chat-1'] = { ...makeChat('chat-1', ['role-1']), name: '备份里的旧名字' }
+    backupStore.chatsById['chat-2'] = makeChat('chat-2', ['role-2'])
+    backupStore.chatOrder = ['chat-1', 'chat-2']
+    backupStore.rolesById['role-1'] = makeRole('chat-1', 'role-1', '工程师')
+    backupStore.rolesById['role-2'] = makeRole('chat-2', 'role-2', '设计师')
+    const backup = JSON.parse(JSON.stringify(createBackup(backupStore, { exportedAt: new Date('2026-11-05T08:00:00Z') })))
+    const aiFrame = { tab: { id: 900, url: 'chrome-extension://test/team.html' } as chrome.tabs.Tab, frameId: 7, url: 'https://chatgpt.com/', origin: 'https://chatgpt.com' }
+
+    const fromFrame = await harness.invokeRaw({ type: 'GROUP_BACKUP_RESTORE', backup, mode: 'replace' }, aiFrame) as { ok: boolean }
+    expect(fromFrame.ok).toBe(false)
+    expect((await harness.getStore()).chatOrder).toEqual(['chat-1'])
+
+    const invalid = await harness.invoke({ type: 'GROUP_BACKUP_RESTORE', backup: { format: 'something-else' }, mode: 'merge' }) as { ok: boolean; error?: string }
+    expect(invalid).toEqual({ ok: false, error: '这不是 OpenTeam 备份文件' })
+
+    const merged = await harness.invoke({ type: 'GROUP_BACKUP_RESTORE', backup, mode: 'merge' }) as { ok: boolean; restored: { addedChatIds: string[]; skippedChatIds: string[] } }
+    expect(merged.ok).toBe(true)
+    expect(merged.restored).toEqual({ addedChatIds: ['chat-2'], skippedChatIds: ['chat-1'] })
+    const afterMerge = await harness.getStore()
+    expect(afterMerge.chatOrder).toEqual(['chat-1', 'chat-2'])
+    expect(afterMerge.chatsById['chat-1'].name).toBe(store.chatsById['chat-1'].name)
+    expect(afterMerge.rolesById['role-2'].name).toBe('设计师')
+
+    const replaced = await harness.invoke({ type: 'GROUP_BACKUP_RESTORE', backup, mode: 'replace' }) as { ok: boolean }
+    expect(replaced.ok).toBe(true)
+    expect((await harness.getStore()).chatsById['chat-1'].name).toBe('备份里的旧名字')
+  })
+
   it('validates GROUP_ROLES_CREATE_BATCH as a whole batch and keeps temporary people out of the library', async () => {
     const store = makeStore()
     store.chatsById['chat-1'] = makeChat('chat-1')

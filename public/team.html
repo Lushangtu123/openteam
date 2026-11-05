@@ -56,6 +56,14 @@
             </div>
             <button id="agent-control-toggle" class="btn settings-toggle" type="button" aria-pressed="false">本机智能体控制：关闭</button>
             <p id="agent-control-status" class="tiny settings-hint" data-control-state="disabled">端口 19305，仅允许本机连接。</p>
+            <div class="settings-section settings-backup">
+              <div class="settings-label">数据备份</div>
+              <button id="backup-export" class="btn settings-toggle" type="button">导出全部数据</button>
+              <button id="backup-restore" class="btn settings-toggle" type="button">从备份恢复…</button>
+              <label class="settings-checkbox"><input id="backup-include-keys" type="checkbox"> 同时导出 API Key</label>
+              <p class="tiny settings-hint">备份包含群聊、人员、笔记和图片。导出 API Key 后，请妥善保管备份文件。</p>
+              <input id="backup-file" type="file" accept=".json,application/json" hidden>
+            </div>
           </div>
         </div>
       </nav>

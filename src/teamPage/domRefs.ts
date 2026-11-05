@@ -37,6 +37,10 @@ export interface TeamPageDomRefs {
   languageZhEl: HTMLButtonElement
   agentControlToggleEl: HTMLButtonElement
   agentControlStatusEl: HTMLElement
+  backupExportEl: HTMLButtonElement
+  backupRestoreEl: HTMLButtonElement
+  backupFileEl: HTMLInputElement
+  backupIncludeKeysEl: HTMLInputElement
   themeLightEl: HTMLButtonElement
   themeDarkEl: HTMLButtonElement
   openAllNotesEl: HTMLButtonElement
@@ -201,6 +205,10 @@ export function createTeamPageDomRefs(): TeamPageDomRefs {
     languageZhEl: requireElement<HTMLButtonElement>('#language-zh'),
     agentControlToggleEl: requireElement<HTMLButtonElement>('#agent-control-toggle'),
     agentControlStatusEl: requireElement<HTMLElement>('#agent-control-status'),
+    backupExportEl: requireElement<HTMLButtonElement>('#backup-export'),
+    backupRestoreEl: requireElement<HTMLButtonElement>('#backup-restore'),
+    backupFileEl: requireElement<HTMLInputElement>('#backup-file'),
+    backupIncludeKeysEl: requireElement<HTMLInputElement>('#backup-include-keys'),
     themeLightEl: requireElement<HTMLButtonElement>('#theme-light'),
     themeDarkEl: requireElement<HTMLButtonElement>('#theme-dark'),
     openAllNotesEl: requireElement<HTMLButtonElement>('#open-all-notes'),

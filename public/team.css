@@ -770,6 +770,36 @@ h3 {
   line-height: 1.45;
 }
 
+.settings-backup {
+  margin: 12px 0 0;
+  border-top: 1px solid rgba(var(--neutral-rgb), 0.14);
+  padding-top: 10px;
+}
+
+.settings-backup .settings-hint {
+  margin-top: 0;
+}
+
+.settings-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.settings-checkbox input[type="checkbox"] {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  accent-color: rgb(var(--accent-rgb));
+}
+
 .settings-hint[data-control-state] {
   position: relative;
   padding-left: 13px;
@@ -6011,4 +6041,57 @@ select:focus {
   .role-health-loading::before {
     animation: none;
   }
+}
+
+/* Restore from backup dialog */
+.backup-restore-dialog.modal {
+  display: grid;
+  gap: 14px;
+  width: min(460px, 100%);
+}
+
+.backup-restore-dialog .modal-header {
+  margin-bottom: 0;
+  padding-right: 0;
+}
+
+.backup-restore-counts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.backup-restore-counts dt {
+  grid-row: 2;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.backup-restore-counts dd {
+  grid-row: 1;
+  margin: 0;
+  color: var(--text);
+  font-size: 20px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.backup-restore-notes {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.backup-restore-notes p {
+  margin: 0;
+}
+
+.backup-restore-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
 }

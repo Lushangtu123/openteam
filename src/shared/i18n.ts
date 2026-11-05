@@ -178,6 +178,27 @@ const UI_TRANSLATIONS: Record<string, string> = {
   '尚未读取消息': 'No messages read yet',
   '等待连接': 'Waiting to connect',
   '网页已连接': 'Web connected',
+  '数据备份': 'Data backup',
+  '导出全部数据': 'Export all data',
+  '从备份恢复…': 'Restore from backup…',
+  '同时导出 API Key': 'Also export API keys',
+  '备份包含群聊、人员、笔记和图片。导出 API Key 后，请妥善保管备份文件。': 'Backups include chats, people, notes and images. If you export API keys, keep the backup file safe.',
+  '从备份恢复': 'Restore from backup',
+  '备份时间': 'Backed up',
+  '消息': 'Messages',
+  '图片': 'Images',
+  '合并：保留当前数据，只加入当前没有的群聊和人员，设置保持不变。': 'Merge keeps your current data and only adds chats and people you do not have yet. Settings stay as they are.',
+  '替换：用备份覆盖当前全部数据，替换前会先下载一份当前数据的备份。已配置的 API 模型会保留。': 'Replace swaps all current data for the backup. A backup of the current data is downloaded first. API models configured here are kept.',
+  '这些 API 模型在备份里没有 API Key，需要在「添加大模型」里重新添加：': 'These API models were saved without their API key and need to be added again under Add model: ',
+  '合并到当前数据': 'Merge into current data',
+  '替换全部数据': 'Replace all data',
+  '导出备份失败': 'Could not export the backup',
+  '恢复备份失败': 'Could not restore the backup',
+  '读取群聊数据失败': 'Could not read chat data',
+  '这不是 OpenTeam 备份文件': 'This is not an OpenTeam backup file',
+  '这个备份来自更新版本的 OpenTeam，请先升级扩展': 'This backup comes from a newer OpenTeam. Update the extension first.',
+  '备份文件里没有可用的群聊数据': 'The backup file has no usable chat data',
+  '无法读取这个文件，请确认它是 OpenTeam 备份': 'Could not read this file. Make sure it is an OpenTeam backup.',
   '网页未打开': 'Page not open',
   '正在打开网页': 'Opening page',
   '网页没有响应': 'Page not responding',
@@ -868,6 +889,16 @@ function translateUiPattern(source: string): string | undefined {
   if (source.includes(' · ')) return source.split(' · ').map(part => translateUi(part, 'en')).join(' · ')
   const sendWithConnecting = source.match(/^将发送给：(.+)；正在连接：(.+)$/)
   if (sendWithConnecting) return `Will send to: ${sendWithConnecting[1]}; connecting: ${sendWithConnecting[2]}`
+  const backupExported = source.match(/^已导出备份：(\d+) 个群聊、(\d+) 条消息$/)
+  if (backupExported) return `Backup exported: ${backupExported[1]} chats, ${backupExported[2]} messages`
+  const backupReplaced = source.match(/^已用备份替换全部数据：(\d+) 个群聊$/)
+  if (backupReplaced) return `All data replaced from the backup: ${backupReplaced[1]} chats`
+  const backupMerged = source.match(/^已恢复：新增 (\d+) 个群聊(?:，跳过 (\d+) 个已存在的群聊)?$/)
+  if (backupMerged) return `Restored: ${backupMerged[1]} chats added${backupMerged[2] ? `, ${backupMerged[2]} existing chats skipped` : ''}`
+  const backupReplaceConfirm = source.match(/^替换会删除当前的 (\d+) 个群聊和它们的消息，换成备份里的数据。替换前会先下载一份当前数据的备份。继续吗？$/)
+  if (backupReplaceConfirm) return `Replacing deletes your current ${backupReplaceConfirm[1]} chats and their messages and puts the backup's data in their place. A backup of the current data is downloaded first. Continue?`
+  const backupExisting = source.match(/^备份里有 (\d+) 个群聊当前已经存在，合并时会保留当前的版本。$/)
+  if (backupExisting) return `${backupExisting[1]} chats in the backup already exist here; merging keeps the current version.`
   const unreachable = source.match(/^网页暂时无法接收：(.+)$/)
   if (unreachable) {
     // Each entry is "<person> <status>"; status labels contain no spaces.
