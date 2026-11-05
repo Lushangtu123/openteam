@@ -2,6 +2,8 @@
 
 **🌐 Language:** English | [简体中文](README.zh-CN.md)
 
+> **About this fork.** OpenTeam was created by **[afumu](https://github.com/afumu)** — the original project lives at **[afumu/openteam](https://github.com/afumu/openteam)**. All original code, design and documentation belong to afumu and the OpenTeam contributors and remain under the [PolyForm Noncommercial License 1.0.0](LICENSE) (`Required Notice: Copyright (c) 2026 OpenTeam contributors.`). This fork adds a refreshed team page UI and security hardening for the local control daemon, iframe header rules and background message handling. For the official version, releases and community, please use the original repository.
+
 > A local-first AI team workspace that turns your existing ChatGPT, Claude, Gemini, DeepSeek, and Grok web sessions into a multi-agent discussion room.
 
 OpenTeam is a Manifest V3 Chrome extension. It does not require model API keys and does not spend extra OpenAI, Claude, Gemini, DeepSeek, or Grok API tokens. Instead, it reuses the AI accounts you already have open in your browser, sends tasks to those web sessions, and gathers replies from different people and models into one shared team chat.
