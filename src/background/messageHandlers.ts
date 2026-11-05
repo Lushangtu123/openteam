@@ -480,8 +480,10 @@ export function createMessageHandlers(deps: MessageHandlersDependencies): Backgr
     const { store, result } = await mutateStore(store => {
       const chat = requireChat(store, chatId)
       const role = requireRole(store, chat.id, roleId)
-      role.status = 'ready'
-      role.updatedAt = timestamp
+      if (role.status !== 'thinking') {
+        role.status = 'ready'
+        role.updatedAt = timestamp
+      }
       updateConversation(role, readOptionalString(message.conversationUrl), readOptionalString(message.conversationId))
       chat.status = deps.getChatStatusFromRoles(store, chat)
       chat.updatedAt = timestamp

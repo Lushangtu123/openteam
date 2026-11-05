@@ -4,6 +4,28 @@ import { describe, expect, it, vi } from 'vitest'
 import { createChatGptAdapter } from './chatgpt'
 
 describe('ChatGPT site adapter', () => {
+  it('reads the answer in the virtualized transcript and ignores other units', () => {
+    document.body.innerHTML = `
+      <div data-content-search-turn-key="fallback-turn-0">
+        <div data-content-search-unit-key="fallback-turn-0:0:user"><p>Question</p></div>
+        <div data-content-search-unit-key="fallback-turn-0:2:assistant">
+          <h4 data-conversation-role="assistant">ChatGPT said:</h4>
+          <div data-chatgpt-selection-message-id="reply-1">
+            <div data-markdown-text-style="assistant-message"><p>First part</p></div>
+            <div data-markdown-text-style="assistant-message"><p>Second part</p></div>
+          </div>
+        </div>
+        <div class="turn-action-controls"><button aria-label="Copy">Copy</button></div>
+      </div>
+    `
+
+    const adapter = createChatGptAdapter()
+    const [reply] = adapter.getResponseContainers()
+    expect(adapter.getAllAssistantReplies()).toEqual(['First part\n\nSecond part'])
+    expect(adapter.findResponseContainer(document.querySelector('[data-markdown-text-style] p'))).toBe(reply)
+    expect(adapter.findResponseContainer(document.querySelector('button'))).toBeNull()
+  })
+
   it('extracts ChatGPT conversation ids and normalized safe urls', () => {
     const adapter = createChatGptAdapter({ href: 'https://chatgpt.com/c/abc-123?model=gpt-5' })
 

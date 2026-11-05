@@ -42,7 +42,10 @@ export function createRoleSession(options: {
     getActiveReplyAttemptId: () => activeReplyAttemptId,
     getAssignedChatId,
     assignRole(role): void {
+      const sameRole = assignedRole?.roleId === role.roleId && getAssignedChatId() === getAssignedChatId(role)
       assignedRole = role
+      if (sameRole) return
+
       activeMessageId = undefined
       activeReplyAttemptId = undefined
       options.onAssigned?.(role)

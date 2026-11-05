@@ -4,6 +4,28 @@ import { describe, expect, it, vi } from 'vitest'
 import { createClaudeAdapter } from './claude'
 
 describe('Claude site adapter', () => {
+  it('reads assistant prose in the new transcript without the message heading or user prompt', () => {
+    document.body.innerHTML = `
+      <div data-testid="user-message"><div data-perf-reply-text>Question</div></div>
+      <div data-reply-scope>
+        <div data-testid="assistant-message" data-is-streaming="false">
+          <h3 data-find-omitted>Claude responded: First part</h3>
+          <div data-transcript-engine-root>
+            <div data-cds="Prose"><div data-perf-reply-text><p>First part</p></div></div>
+            <div data-cds="Prose"><div data-perf-reply-text><p>Second part</p></div></div>
+          </div>
+        </div>
+        <button aria-label="Copy">Copy</button>
+      </div>
+    `
+
+    const adapter = createClaudeAdapter()
+    const [reply] = adapter.getResponseContainers()
+    expect(adapter.getAllAssistantReplies()).toEqual(['First part\n\nSecond part'])
+    expect(adapter.findResponseContainer(document.querySelector('[data-testid="assistant-message"] p'))).toBe(reply)
+    expect(adapter.findResponseContainer(document.querySelector('[data-testid="user-message"] div'))).toBeNull()
+  })
+
   it('extracts Claude conversation ids and normalized safe urls', () => {
     const adapter = createClaudeAdapter({ href: 'https://claude.ai/chat/abc-123?model=sonnet' })
 

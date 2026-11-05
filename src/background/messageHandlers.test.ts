@@ -57,6 +57,38 @@ function addFlow(store: OpenTeamStore, flow: Partial<OrchestrationFlow> = {}): O
 }
 
 describe('background message handlers', () => {
+  it('keeps a member waiting for its reply when the frame reports ready again', async () => {
+    vi.resetModules()
+    const store = createStoreWithReadyRole()
+    const role = store.rolesById['role-1']
+    Object.assign(role, { status: 'thinking', lastPromptMessageId: 'msg-1', replyAttemptId: 'attempt-1' })
+    vi.doMock('./storeAccess', async importOriginal => {
+      const actual = await importOriginal<typeof import('./storeAccess')>()
+      return {
+        ...actual,
+        mutateStore: async (mutator: (store: OpenTeamStore) => unknown) => ({ store, result: await mutator(store) }),
+      }
+    })
+
+    const { createMessageHandlers } = await import('./messageHandlers')
+    const routes = createMessageHandlers({
+      broadcastStoreUpdated: vi.fn(),
+      getChatStatusFromRoles: () => 'running',
+      log: { debug: vi.fn(), info: vi.fn(), warn: vi.fn() },
+      newId: vi.fn(),
+      now: () => 100,
+      runtimeFrames: { bind: vi.fn(), getByAddress: vi.fn(), getByRole: vi.fn() },
+      sendRoleMessage: vi.fn(),
+      sendError: vi.fn(),
+      sendPrompt: vi.fn(),
+    })
+
+    const route = routes.find(route => route.type === 'TEAM_FRAME_ROLE_READY')!
+    await route.handler({ type: route.type, chatId: 'chat-1', roleId: 'role-1' }, { tab: { id: 101 } as chrome.tabs.Tab, frameId: 7 })
+
+    expect(role).toMatchObject({ status: 'thinking', lastPromptMessageId: 'msg-1', replyAttemptId: 'attempt-1' })
+  })
+
   it('exposes group message route and sends prompts through injected delivery', async () => {
     vi.resetModules()
     let draftStore: OpenTeamStore | undefined

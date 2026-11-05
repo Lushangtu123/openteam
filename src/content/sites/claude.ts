@@ -1,21 +1,29 @@
 import type { ChatSiteAdapter, ConversationSnapshot, SiteStatusInfo } from './types'
 import { keepDeepestResponseContainers } from '../responseContainers'
 import { findClickableCopyButton, readResponseTextFromCopyAction } from './clipboardCopy'
-import { readEditorText, setContentEditableText } from './contentEditable'
+import { readEditorText, setContentEditableText, tryKeyboardSubmit } from './contentEditable'
 import { extractMarkdownFromDom } from './domMarkdown'
 import { buttonLabelMatches, describeElement, extractCleanTextFromDom, findClosestMatchingAncestor } from './domText'
 import { isClickableButton, waitForClickableButton, waitForElement } from './waitForElement'
 
 const CLAUDE_HOSTS = new Set(['claude.ai'])
-const DEFAULT_INPUT_TIMEOUT_MS = 9000
+const DEFAULT_INPUT_TIMEOUT_MS = 15000
 const DEFAULT_CLIPBOARD_TIMEOUT_MS = 900
 const DEFAULT_CLIPBOARD_POLL_MS = 40
 
 const CLAUDE_SELECTORS = {
-  editor: '[data-testid="chat-input"][contenteditable="true"], div[contenteditable="true"][aria-label*="Claude"]',
+  editor: [
+    '[data-testid="chat-input"][contenteditable="true"]',
+    'div[contenteditable="true"][aria-label*="Claude"]',
+    'div[contenteditable="true"][aria-label*="Write"]',
+    'div.ProseMirror[contenteditable="true"]',
+    'div[role="textbox"][contenteditable="true"]',
+    'fieldset [contenteditable="true"]',
+    'main div[contenteditable="true"]',
+  ].join(', '),
   sendButton:
-    'button[aria-label*="Send"], button[aria-label*="发送"], button[aria-label*="Submit"], button[aria-label*="发送消息"]',
-  response: '.font-claude-response',
+    'button[aria-label*="Send"], button[aria-label*="发送"], button[aria-label*="Submit"], button[aria-label*="发送消息"], button[data-testid="send-button"], button[type="submit"]',
+  response: '.font-claude-response, [data-testid="assistant-message"] [data-transcript-engine-root]:has([data-perf-reply-text])',
   copyButton:
     'button[data-testid="action-bar-copy"], [role="group"][aria-label="Message actions"] button[aria-label="Copy"], button[aria-label="Copy"], button[aria-label="复制"]',
   blocker: '[role="dialog"], .cookie-banner, [aria-label*="Cookie"], [aria-label*="Consent"]',
@@ -66,8 +74,12 @@ export function createClaudeAdapter(options: ClaudeAdapterOptions = {}): ChatSit
 
     if (!autoSend) return
 
-    const sendButton = await waitForClickableButton(CLAUDE_SELECTORS.sendButton, inputTimeoutMs, 'Claude 发送按钮暂不可用，请稍后重试')
-    sendButton.click()
+    try {
+      const sendButton = await waitForClickableButton(CLAUDE_SELECTORS.sendButton, inputTimeoutMs, 'Claude 发送按钮暂不可用，请稍后重试')
+      sendButton.click()
+    } catch (error) {
+      if (!tryKeyboardSubmit(editor)) throw error
+    }
   }
 
   return {

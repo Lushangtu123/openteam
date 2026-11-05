@@ -2,21 +2,34 @@ import type { ReplyImageSource } from '../../group/types'
 import type { ChatSiteAdapter, ConversationSnapshot, SiteStatusInfo } from './types'
 import { keepDeepestResponseContainers } from '../responseContainers'
 import { readResponseTextFromCopyAction } from './clipboardCopy'
-import { readEditorText, setContentEditableText } from './contentEditable'
+import { readEditorText, setContentEditableText, tryKeyboardSubmit } from './contentEditable'
 import { extractMarkdownFromDom } from './domMarkdown'
 import { buttonLabelMatches, describeElement, extractCleanTextFromDom, findClosestMatchingAncestor } from './domText'
 import { isClickableButton, waitForClickableButton, waitForElement } from './waitForElement'
 
 const CHATGPT_HOSTS = new Set(['chatgpt.com', 'chat.openai.com'])
-const DEFAULT_INPUT_TIMEOUT_MS = 9000
+const DEFAULT_INPUT_TIMEOUT_MS = 15000
 const DEFAULT_CLIPBOARD_TIMEOUT_MS = 900
 const DEFAULT_CLIPBOARD_POLL_MS = 40
 
 const CHATGPT_SELECTORS = {
-  editor: 'form[data-type="unified-composer"] #prompt-textarea[contenteditable="true"], #prompt-textarea.ProseMirror[contenteditable="true"]',
+  editor: [
+    'form[data-type="unified-composer"] #prompt-textarea[contenteditable="true"]',
+    '#prompt-textarea.ProseMirror[contenteditable="true"]',
+    '#prompt-textarea[contenteditable="true"]',
+    'div#prompt-textarea',
+    'textarea[name="prompt-textarea"]',
+    'textarea#mobile-composer-prompt',
+    'div.ProseMirror[contenteditable="true"]',
+    'form [contenteditable="true"].ProseMirror',
+    'div[role="textbox"][contenteditable="true"]',
+    '[data-testid="message-input"]',
+    'main div[contenteditable="true"]',
+  ].join(', '),
   sendButton:
-    'button[data-testid="send-button"], button[aria-label*="发送"], button[aria-label*="Send"], button[aria-label*="提交"], button[aria-label*="Submit"]',
+    'button[data-testid="send-button"], button#composer-submit-button, button[aria-label*="Send message"], button[aria-label*="Send prompt"], button[aria-label*="发送"], button[aria-label*="Send"], button[aria-label*="提交"], button[aria-label*="Submit"]',
   response: '[data-message-author-role="assistant"]',
+  transcriptResponse: '[data-content-search-unit-key$=":assistant"] [data-chatgpt-selection-message-id]:has([data-markdown-text-style="assistant-message"])',
   imageResponse: '[data-conversation-screenshot-content]',
   generatedImage:
     'img[src*="/backend-api/estuary/content"], [data-testid*="image"] img[src], [class*="imagegen-image"] img[src]',
@@ -69,6 +82,7 @@ export function createChatGptAdapter(options: ChatGptAdapterOptions = {}): ChatS
       )
     return uniqueElements([
       ...(turnResponses.length > 0 ? turnResponses : [...document.querySelectorAll(CHATGPT_SELECTORS.response)]),
+      ...document.querySelectorAll(CHATGPT_SELECTORS.transcriptResponse),
       ...standaloneImageResponses,
     ])
   }
@@ -87,8 +101,12 @@ export function createChatGptAdapter(options: ChatGptAdapterOptions = {}): ChatS
 
     if (!autoSend) return
 
-    const sendButton = await waitForClickableButton(CHATGPT_SELECTORS.sendButton, inputTimeoutMs, 'ChatGPT 发送按钮暂不可用，请稍后重试')
-    sendButton.click()
+    try {
+      const sendButton = await waitForClickableButton(CHATGPT_SELECTORS.sendButton, inputTimeoutMs, 'ChatGPT 发送按钮暂不可用，请稍后重试')
+      sendButton.click()
+    } catch (error) {
+      if (!tryKeyboardSubmit(editor)) throw error
+    }
   }
 
   return {
@@ -209,7 +227,7 @@ function findResponseContainer(element: Element | null): Element | null {
   const turnResponse = turn ? findPrimaryResponseInTurn(turn) : null
   if (turnResponse) return turnResponse
 
-  const textResponse = findClosestMatchingAncestor(element, CHATGPT_SELECTORS.response)
+  const textResponse = findClosestMatchingAncestor(element, `${CHATGPT_SELECTORS.response}, ${CHATGPT_SELECTORS.transcriptResponse}`)
   if (textResponse) return textResponse
 
   const imageResponse = findClosestMatchingAncestor(element, CHATGPT_SELECTORS.imageResponse)
