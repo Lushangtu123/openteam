@@ -6641,3 +6641,268 @@ select.reply-compare-select {
   font-weight: 800;
   vertical-align: 1px;
 }
+
+/* Team formation: the setup window and the role card. */
+.modal.team-setup-dialog {
+  width: min(620px, 100%);
+}
+
+.team-setup-form {
+  display: grid;
+  gap: 14px;
+}
+
+.team-setup-form textarea {
+  min-height: 92px;
+}
+
+.team-setup-members {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 8px;
+}
+
+.team-setup-member {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.team-setup-member-selected {
+  border-color: rgba(var(--accent-rgb), 0.55);
+  background: var(--accent-soft);
+}
+
+.team-setup-stepper {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.icon-btn.team-setup-step {
+  width: 26px;
+  height: 26px;
+  font-size: 15px;
+}
+
+.team-setup-count {
+  min-width: 16px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.team-setup-total {
+  margin: 6px 0 0;
+}
+
+.team-form-error {
+  min-height: 1em;
+  margin: 0;
+  color: var(--danger);
+  font-size: 13px;
+}
+
+.team-form-error:empty {
+  display: none;
+}
+
+.team-setup-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.modal.team-card-dialog {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 14px;
+  width: min(760px, 100%);
+  max-height: min(820px, calc(100vh - 48px));
+  overflow: hidden;
+}
+
+.team-card-task {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  white-space: pre-wrap;
+}
+
+.team-card-body {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  min-height: 0;
+  overflow: auto;
+}
+
+.team-card-row {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.team-card-row.team-card-conflict {
+  border-color: var(--warning);
+  background: var(--warning-soft);
+}
+
+.team-card-row-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.team-card-name {
+  font-weight: 600;
+}
+
+.team-card-state {
+  margin-left: auto;
+  color: var(--subtle);
+  font-size: 12px;
+}
+
+.team-card-state.team-card-problem {
+  color: var(--danger);
+}
+
+.team-health-ready .team-card-state {
+  color: var(--success);
+}
+
+.team-card-detail {
+  margin: 0;
+  color: var(--muted);
+  white-space: pre-wrap;
+}
+
+.team-card-row-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.team-card-position {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.team-card-position input {
+  flex: 1 1 200px;
+  height: 32px;
+}
+
+.team-card-tag {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--text);
+  font-size: 12px;
+}
+
+.team-card-tag.team-card-tag-conflict {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.team-card-details {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 3px 12px;
+  margin: 0;
+  font-size: 13px;
+}
+
+.team-card-details dt {
+  color: var(--subtle);
+}
+
+.team-card-details dd {
+  margin: 0;
+  color: var(--text);
+}
+
+.team-card-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--muted);
+  font-size: 13px;
+  white-space: pre-wrap;
+}
+
+.team-card-note.team-card-note-conflict {
+  border-color: var(--warning);
+  color: var(--warning);
+}
+
+.team-card-chip {
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  color: var(--text);
+  font-size: 12px;
+}
+
+.team-card-chip.team-card-chip-required {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.team-card-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.team-card-hint {
+  flex: 1 1 100%;
+  margin: 0;
+  color: var(--subtle);
+  font-size: 12px;
+}
+
+.team-formation-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 4px auto 12px;
+  padding: 10px 14px;
+  max-width: 720px;
+  border: 1px solid rgba(var(--accent-rgb), 0.45);
+  border-radius: 12px;
+  background: var(--accent-soft);
+  color: var(--text);
+  font-size: 13px;
+}
+
+.team-formation-banner-text {
+  flex: 1;
+}
+
+.team-claim-message {
+  display: grid;
+  gap: 6px;
+}
+
+.team-claim-title {
+  margin: 0;
+  font-weight: 600;
+}

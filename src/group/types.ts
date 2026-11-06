@@ -219,8 +219,29 @@ export interface GroupChat {
   nextMessageSeq: number
   status: ChatStatus
   requireManualMention?: boolean
+  // Set while the members of a group made with "按任务组队" pick their own positions.
+  teamFormation?: TeamFormation
   createdAt: number
   updatedAt: number
+}
+
+export type TeamFormationStatus = 'checking' | 'claiming' | 'confirmed'
+
+// A team built around a task, whose AI members choose their own positions. Members are asked in
+// rounds: one copy of every model in the first round, a second copy of a model in the next one, and
+// so on, so that copies of the same model see what the earlier copy took.
+export interface TeamFormation {
+  task: string
+  requiredPositions: string[]
+  status: TeamFormationStatus
+  // Role ids per round, in the order the rounds are sent.
+  rounds: string[][]
+  // Index into rounds of the next round to invite.
+  nextRound: number
+  // The user messages that asked members to claim a position, oldest first (rounds and re-picks).
+  invitationIds: string[]
+  createdAt: number
+  confirmedAt?: number
 }
 
 export interface RoleTemplate {
@@ -244,7 +265,7 @@ export interface RoleTemplate {
 export interface GroupRole {
   id: string
   chatId: string
-  createdBy?: 'orchestration-auto' | 'orchestration-template'
+  createdBy?: 'orchestration-auto' | 'orchestration-template' | 'team-formation'
   templateId?: string
   modelSource?: RoleModelSource
   chatSite?: ChatSite
@@ -294,6 +315,9 @@ export interface GroupMessage {
   orchestrationStageId?: string
   orchestrationStageIndex?: number
   orchestrationKind?: 'task' | 'role' | 'review' | 'status'
+  // Sends each target's persona with this message again, as on its first message. Set on the
+  // message that starts work after members picked their positions.
+  refreshPersona?: boolean
   createdAt: number
   status: DeliveryStatus
   deliveryStatus?: Record<string, DeliveryStatus>

@@ -42,7 +42,7 @@ export interface PrepareRolePromptDeliveryInput {
 
 export function prepareRolePromptDelivery(input: PrepareRolePromptDeliveryInput): PreparedRolePromptDelivery {
   const roleHistoryCount = countLocalRoleHistory(input.messages, input.role, input.userMessage.id)
-  const includesPersona = shouldIncludePersonaForPrompt(input.role, roleHistoryCount)
+  const includesPersona = shouldIncludePersonaForPrompt(input.role, roleHistoryCount, input.userMessage)
   const replyAttemptId = input.newId('attempt')
   const responseInstruction = responseInstructionForMessage(input.userMessage, input.store.settings.language)
   const maxContextChars = contextCharBudgetForRole(input.store, input.role)
@@ -143,8 +143,10 @@ function applyExternalMemoryPatch(store: OpenTeamStore, patch: ExternalMemoryPat
   }
 }
 
-function shouldIncludePersonaForPrompt(role: GroupRole, roleHistoryCount: number): boolean {
-  return !roleUsesChatGptGptsPersona(role) && roleHistoryCount === 0
+// The persona goes with a role's first message, and again with a message that asks for it (after
+// team members picked new positions).
+function shouldIncludePersonaForPrompt(role: GroupRole, roleHistoryCount: number, message: GroupMessage): boolean {
+  return !roleUsesChatGptGptsPersona(role) && (roleHistoryCount === 0 || message.refreshPersona === true)
 }
 
 function countLocalRoleHistory(messages: GroupMessage[], role: GroupRole, currentMessageId: string): number {

@@ -1,4 +1,6 @@
-import { createGroupRole } from '../group/roleTemplates'
+import { chatSiteLabel, isChatSite } from '../group/chatSites'
+import { createGroupRole, createGroupRolesBatch, type GroupRoleBatchInput } from '../group/roleTemplates'
+import { planTeamRounds, readTeamFormation, splitPositions, TEAM_MAX_COPIES_PER_MODEL, TEAM_MAX_MEMBERS, TEAM_MIN_MEMBERS, teamModelKey } from '../group/teamFormation'
 import type { GroupChat, GroupMessage, GroupRole, OpenTeamStore, OrchestrationFlow, OrchestrationStage, RoomMode } from '../group/types'
 import type { BackgroundMessageRoute } from './messageRouter'
 import { messageTabId, type RuntimeMessage } from './runtimeClient'
@@ -7,6 +9,7 @@ import { mutateStore, requireChat } from './storeAccess'
 
 export const CHAT_ROUTE_TYPES = [
   'GROUP_CHAT_CREATE',
+  'GROUP_TEAM_CREATE',
   'GROUP_CHAT_DUPLICATE',
   'GROUP_CHAT_SWITCH',
   'GROUP_CHAT_UPDATE',
@@ -37,6 +40,14 @@ export function createChatHandlers(deps: ChatHandlersDependencies): BackgroundMe
     const { store, result } = await mutateStore(store => createChat(store, message, deps))
     await deps.broadcastStoreUpdated(store)
     return { ok: true, chat: result, store }
+  }
+
+  // A group built around a task: its members are AIs that will pick their own positions.
+  const handleTeamCreate = async (message: RuntimeMessage) => {
+    const { store, result } = await mutateStore(store => createTeam(store, message, deps))
+    deps.log.info('team-create:stored', { chatId: result.chat.id, roleIds: result.roles.map(role => role.id), rounds: result.chat.teamFormation?.rounds.length })
+    await deps.broadcastStoreUpdated(store)
+    return { ok: true, chat: result.chat, roles: result.roles, store }
   }
 
   const handleChatDuplicate = async (message: RuntimeMessage) => {
@@ -83,6 +94,16 @@ export function createChatHandlers(deps: ChatHandlersDependencies): BackgroundMe
       if (patch.requireManualMention !== undefined) {
         chat.requireManualMention = !!patch.requireManualMention
         patchKeys.push('requireManualMention')
+      }
+
+      if (patch.teamFormation === null) {
+        delete chat.teamFormation
+        patchKeys.push('teamFormation')
+      } else if (patch.teamFormation !== undefined) {
+        const formation = readTeamFormation({ ...chat.teamFormation, ...(isRecord(patch.teamFormation) ? patch.teamFormation : {}) }, timestamp)
+        if (!formation) throw new Error('组队信息无效')
+        chat.teamFormation = formation
+        patchKeys.push('teamFormation')
       }
 
       chat.updatedAt = timestamp
@@ -204,6 +225,7 @@ export function createChatHandlers(deps: ChatHandlersDependencies): BackgroundMe
 
   return [
     { type: 'GROUP_CHAT_CREATE', handler: handleChatCreate },
+    { type: 'GROUP_TEAM_CREATE', handler: handleTeamCreate },
     { type: 'GROUP_CHAT_DUPLICATE', handler: handleChatDuplicate },
     { type: 'GROUP_CHAT_SWITCH', handler: handleChatSwitch },
     { type: 'GROUP_CHAT_UPDATE', handler: handleChatUpdate },
@@ -253,6 +275,64 @@ function createChat(store: OpenTeamStore, message: RuntimeMessage, deps: ChatHan
   appendWelcomeMessage(store, chat, createdRoles[0], readOptionalString(message.welcomeMessage), deps, timestamp)
   chat.status = chat.roleIds.length > 0 ? 'initializing' : 'draft'
   return chat
+}
+
+function createTeam(store: OpenTeamStore, message: RuntimeMessage, deps: ChatHandlersDependencies): { chat: GroupChat; roles: GroupRole[] } {
+  const task = requireString(message.task, '请先写下要做的事')
+  const members = (Array.isArray(message.members) ? message.members : []).map(member => readTeamMember(store, member))
+  if (members.length < TEAM_MIN_MEMBERS || members.length > TEAM_MAX_MEMBERS) throw new Error(`请选择 ${TEAM_MIN_MEMBERS}–${TEAM_MAX_MEMBERS} 位队员`)
+  const copies = new Map<string, number>()
+  for (const member of members) {
+    const count = (copies.get(member.key) ?? 0) + 1
+    if (count > TEAM_MAX_COPIES_PER_MODEL) throw new Error(`同一个 AI 最多加 ${TEAM_MAX_COPIES_PER_MODEL} 位`)
+    copies.set(member.key, count)
+  }
+
+  const name = readOptionalString(message.name) ?? (task.length > 20 ? `${task.slice(0, 20)}…` : task)
+  const chat = createChat(store, { type: 'GROUP_CHAT_CREATE', name, mode: 'collaborative' }, deps)
+  // Named after their model until they pick a position: "Claude", "Claude2" (names cannot hold spaces).
+  const seen = new Map<string, number>()
+  const items: GroupRoleBatchInput[] = members.map(member => {
+    const label = member.label.replace(/[\s@]+/g, '') || 'AI'
+    const index = (seen.get(label) ?? 0) + 1
+    seen.set(label, index)
+    return {
+      source: 'temporary',
+      createdBy: 'team-formation',
+      name: index > 1 ? `${label}${index}` : label,
+      systemPrompt: '',
+      modelSource: member.modelSource,
+      ...(member.chatSite ? { chatSite: member.chatSite } : {}),
+      ...(member.externalModelId ? { externalModelId: member.externalModelId } : {}),
+    }
+  })
+  const roles = createGroupRolesBatch(store, chat.id, items, () => deps.newId('role'), deps.now())
+  const requiredPositions = Array.isArray(message.requiredPositions)
+    ? message.requiredPositions.filter((item): item is string => typeof item === 'string')
+    : splitPositions(readOptionalString(message.requiredPositions) ?? '')
+  chat.teamFormation = readTeamFormation({
+    task,
+    requiredPositions,
+    status: 'checking',
+    rounds: planTeamRounds(roles.map(role => ({ roleId: role.id, modelKey: teamModelKey(role) }))),
+    nextRound: 0,
+    invitationIds: [],
+    createdAt: deps.now(),
+  }, deps.now())
+  chat.status = 'initializing'
+  return { chat, roles }
+}
+
+function readTeamMember(store: OpenTeamStore, value: unknown): { key: string; label: string; modelSource: 'site' | 'external'; chatSite?: GroupRole['chatSite']; externalModelId?: string } {
+  if (!isRecord(value)) throw new Error('队员无效')
+  if (value.modelSource === 'external') {
+    const externalModelId = requireString(value.externalModelId, '缺少外部模型')
+    const model = store.settings.externalModelsById[externalModelId]
+    if (!model) throw new Error('找不到这个外部模型')
+    return { key: `external:${externalModelId}`, label: model.name, modelSource: 'external', externalModelId }
+  }
+  if (!isChatSite(value.chatSite)) throw new Error('队员的站点无效')
+  return { key: `site:${value.chatSite}`, label: chatSiteLabel(value.chatSite), modelSource: 'site', chatSite: value.chatSite }
 }
 
 function appendWelcomeMessage(

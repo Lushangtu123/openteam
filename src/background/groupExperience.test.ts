@@ -1520,6 +1520,73 @@ describe('background group chat experience handlers', () => {
   })
 })
 
+
+describe('team formation in the background', () => {
+  it('creates a collaborative group of AIs named after their model, asking copies of a model in later rounds', async () => {
+    const harness = await setupBackground(makeStore())
+
+    const response = await harness.invoke({
+      type: 'GROUP_TEAM_CREATE',
+      task: '做一个面向大学生的记账小程序',
+      requiredPositions: '测试、运维',
+      members: [{ modelSource: 'site', chatSite: 'claude' }, { modelSource: 'site', chatSite: 'chatgpt' }, { modelSource: 'site', chatSite: 'claude' }],
+    }) as { ok: boolean; chat: GroupChat; error?: string }
+
+    expect(response.error).toBeUndefined()
+    expect(response.ok).toBe(true)
+    const store = await harness.getStore()
+    const chat = store.chatsById[response.chat.id]
+    const roles = chat.roleIds.map(id => store.rolesById[id])
+    expect(chat.mode).toBe('collaborative')
+    expect(chat.name).toBe('做一个面向大学生的记账小程序')
+    expect(roles.map(role => [role.name, role.chatSite, role.createdBy])).toEqual([['Claude', 'claude', 'team-formation'], ['ChatGPT', 'chatgpt', 'team-formation'], ['Claude2', 'claude', 'team-formation']])
+    expect(chat.teamFormation).toMatchObject({ task: '做一个面向大学生的记账小程序', requiredPositions: ['测试', '运维'], status: 'checking', rounds: [[roles[0].id, roles[1].id], [roles[2].id]], nextRound: 0, invitationIds: [] })
+
+    expect(await harness.invoke({ type: 'GROUP_TEAM_CREATE', task: '做事', members: [{ modelSource: 'site', chatSite: 'claude' }] })).toMatchObject({ ok: false, error: '请选择 2–6 位队员' })
+    expect(await harness.invoke({ type: 'GROUP_TEAM_CREATE', task: '做事', members: Array.from({ length: 4 }, () => ({ modelSource: 'site', chatSite: 'kimi' })) })).toMatchObject({ ok: false, error: '同一个 AI 最多加 3 位' })
+    expect(await harness.invoke({ type: 'GROUP_TEAM_CREATE', task: ' ', members: [] })).toMatchObject({ ok: false, error: '请先写下要做的事' })
+  })
+
+  it('records each round of invitations once, and resends personas when asked', async () => {
+    const store = makeStore()
+    store.currentChatId = 'chat-1'
+    store.chatsById['chat-1'] = { ...makeChat('chat-1', ['role-1', 'role-2']), mode: 'collaborative', teamFormation: { task: '记账', requiredPositions: [], status: 'checking', rounds: [['role-1'], ['role-2']], nextRound: 0, invitationIds: [], createdAt: 1 } }
+    store.chatOrder = ['chat-1']
+    store.rolesById['role-1'] = makeRole('chat-1', 'role-1', 'Claude', { systemPrompt: undefined, createdBy: 'team-formation' })
+    store.rolesById['role-2'] = makeRole('chat-1', 'role-2', 'Claude2', { systemPrompt: undefined, createdBy: 'team-formation' })
+    const harness = await setupBackground(store)
+    for (const [roleId, frameId] of [['role-1', 7], ['role-2', 8]] as const) {
+      await harness.invoke(
+        { type: 'TEAM_FRAME_ROLE_READY', chatId: 'chat-1', roleId, hostTabId: 900, conversationId: '__default__', conversationUrl: 'https://gemini.google.com/' },
+        { tab: { id: 101 } as chrome.tabs.Tab, frameId, url: 'https://gemini.google.com/' },
+      )
+    }
+
+    const invitation = await harness.invoke({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@Claude 请选择职位', teamInvitation: true, teamRound: 0 }) as { ok: boolean; message: GroupMessage }
+    expect(invitation.ok).toBe(true)
+    await harness.invoke({ type: 'TEAM_ROLE_REPLY', chatId: 'chat-1', roleId: 'role-1', messageId: invitation.message.id, content: '```json\n{"first_choice":"产品负责人"}\n```' })
+    expect(await harness.invoke({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@Claude 请选择职位', teamInvitation: true, teamRound: 0 })).toMatchObject({ ok: false, error: '这一轮已经邀请过了' })
+    let formation = (await harness.getStore()).chatsById['chat-1'].teamFormation!
+    expect(formation).toMatchObject({ status: 'claiming', nextRound: 1 })
+    expect(formation.invitationIds).toHaveLength(1)
+
+    // The confirmed position becomes the persona; the kickoff message carries it to a role that
+    // already has history.
+    expect(await harness.invoke({ type: 'GROUP_ROLE_UPDATE', roleId: 'role-1', patch: { name: '产品负责人', description: '需求和验收', systemPrompt: '你在这个项目中担任「产品负责人」' } })).toMatchObject({ ok: true })
+    expect(await harness.invoke({ type: 'GROUP_CHAT_UPDATE', chatId: 'chat-1', patch: { teamFormation: { status: 'confirmed', confirmedAt: 9 } } })).toMatchObject({ ok: true })
+    formation = (await harness.getStore()).chatsById['chat-1'].teamFormation!
+    expect(formation).toMatchObject({ status: 'confirmed', confirmedAt: 9, rounds: [['role-1'], ['role-2']] })
+
+    harness.tabsSendMessage.mockClear()
+    const kickoff = await harness.invoke({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@产品负责人 开始吧', refreshPersona: true }) as { message: GroupMessage }
+    await harness.invoke({ type: 'TEAM_ROLE_REPLY', chatId: 'chat-1', roleId: 'role-1', messageId: kickoff.message.id, content: '好的' })
+    await harness.invoke({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@产品负责人 继续' })
+    const prompts = harness.tabsSendMessage.mock.calls.filter(call => call[1]?.type === 'TEAM_SEND_PROMPT').map(call => call[1])
+    expect(prompts.map(prompt => prompt.includesPersona)).toEqual([true, false])
+    expect(prompts[0].content).toContain('你在这个项目中担任「产品负责人」')
+  })
+})
+
 function makeStore(): OpenTeamStore {
   return {
     version: 1,

@@ -188,6 +188,8 @@ const UI_TRANSLATIONS: Record<string, string> = {
   '关闭': 'Close',
   '正在回复…': 'Replying…',
   '回复失败': 'Reply failed',
+  '按任务组队': 'Team up for a task',
+  '⚑ 查看分工': '⚑ View positions',
   '还没有回复': 'No reply yet',
   '这位人员没有给出回复。': 'This person did not reply.',
   '回复到了会显示在这里。': 'The reply will show up here.',

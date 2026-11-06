@@ -32,6 +32,7 @@ describe('background chat handlers', () => {
 
     expect(CHAT_ROUTE_TYPES).toEqual([
       'GROUP_CHAT_CREATE',
+      'GROUP_TEAM_CREATE',
       'GROUP_CHAT_DUPLICATE',
       'GROUP_CHAT_SWITCH',
       'GROUP_CHAT_UPDATE',

@@ -327,7 +327,7 @@ function readGroupRoleBatchItem(value: unknown): Parameters<typeof createGroupRo
 }
 
 function readRoleCreatedBy(value: unknown): Parameters<typeof createGroupRole>[1]['createdBy'] {
-  return value === 'orchestration-auto' || value === 'orchestration-template' ? value : undefined
+  return value === 'orchestration-auto' || value === 'orchestration-template' || value === 'team-formation' ? value : undefined
 }
 
 function getBatchSource(items: Parameters<typeof createGroupRolesBatch>[2]): 'library' | 'temporary' | 'mixed' {

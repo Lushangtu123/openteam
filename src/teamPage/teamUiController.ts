@@ -42,6 +42,8 @@ export interface TeamUiControllerDependencies {
   registerExternalModelsEvents(): void
   runCommand(type: string, payload?: Record<string, unknown>): Promise<void>
   showError(message: string): void
+  // Opens the window that forms a team around a task.
+  openTeamFormation?(): void
   log: {
     debug(event: string, details?: Record<string, unknown>): void
     info(event: string, details?: Record<string, unknown>): void
@@ -133,6 +135,11 @@ export function createTeamUiController(deps: TeamUiControllerDependencies): Team
 
     requireElement<HTMLButtonElement>('#cancel-create-chat').addEventListener('click', () => {
       setChatCreatePopoverVisible(false)
+    })
+
+    document.querySelector<HTMLButtonElement>('#open-team-formation')?.addEventListener('click', () => {
+      setChatCreatePopoverVisible(false)
+      deps.openTeamFormation?.()
     })
 
     openGroupTemplateCreateEl.addEventListener('click', () => {

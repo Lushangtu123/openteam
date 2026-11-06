@@ -16,6 +16,7 @@ import { createIframeHost } from './iframeHost'
 import { applyTeamLanguage, createLanguageSettingsController } from './languageController'
 import { createMessageSearchView } from './messageSearchView'
 import { createReplyComparisonView } from './replyComparisonView'
+import { createTeamFormationView } from './teamFormationView'
 import { createMessagesView } from './messagesView'
 import { createNotesView } from './notesView'
 import { createPeopleLibraryView } from './peopleLibraryView'
@@ -77,6 +78,7 @@ const roleHealth = createRoleHealthTracker({
       renderRolePanel()
       renderComposerState()
       languageSettingsController.render()
+      teamFormationView.refresh()
     }, 0)
   },
 })
@@ -463,6 +465,10 @@ const messagesView = createMessagesView({
   showSuccess,
   renderOrchestrationStatus: orchestrationStatusView.renderOrchestrationStatus,
   openReplyComparison: questionId => replyComparisonView.open(questionId),
+  renderTeamFormationStatus: chat => teamFormationView.statusBanner(chat),
+  isTeamInvitation: (chat, messageId) => teamFormationView.isInvitation(chat, messageId),
+  openTeamCard: chatId => teamFormationView.openCard(chatId),
+  renderTeamClaim: message => teamFormationView.renderClaim(message),
   log,
 })
 const renderMessages = messagesView.renderMessages
@@ -491,6 +497,7 @@ const teamUiController = createTeamUiController({
   registerExternalModelsEvents,
   runCommand,
   showError,
+  openTeamFormation: () => teamFormationView.openSetup(),
   log,
 })
 const registerUi = teamUiController.registerUi
@@ -583,6 +590,7 @@ function handlePrimaryModeChange(isPrimary: boolean): void {
 function render(): void {
   renderSelectedChat()
   replyComparisonView.refresh()
+  teamFormationView.refresh()
   renderTemplates()
   renderAgentControlSettings()
   if (!externalModelsModalEl.hidden) renderExternalModels()
@@ -725,6 +733,16 @@ const replyComparisonView = createReplyComparisonView({
   getStore: () => store,
   runCommand,
   copyText: text => navigator.clipboard.writeText(text),
+  showError,
+  showSuccess,
+})
+
+const teamFormationView = createTeamFormationView({
+  getStore: () => store,
+  getCurrentChatId: () => appState.selectedChatId,
+  runCommand,
+  getRoleHealth: role => roleHealth.get(role.chatId, role.id),
+  focusRoleFrame: (chatId, roleId) => focusRoleFrame(chatId, roleId),
   showError,
   showSuccess,
 })

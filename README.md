@@ -30,6 +30,7 @@ Join the OpenTeam WeChat community by scanning the QR code below. If the QR code
 
 - 🚫 **0 API token workflow**: reuse AI website sessions instead of calling model APIs directly.
 - 🧩 **Multi-model discussion**: coordinate Gemini, ChatGPT, Claude, DeepSeek, Grok, Qwen, Kimi, and other supported web sessions in one chat.
+- 🙋 **Team up for a task**: describe the task, pick the AIs, and let each choose its own position on the project; you confirm the roles before work starts.
 - 🧑‍🏫 **Built-in advisor library**: start with 38 expert and thinking-style advisor templates, or create your own people.
 - 📣 **Mention-based routing**: use `@person` to ask one member, or `@everyone` to dispatch the same task to the whole team.
 - 🔄 **Independent and collaborative modes**: compare isolated perspectives first, then let members reference, challenge, and build on each other.

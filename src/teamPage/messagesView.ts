@@ -41,6 +41,12 @@ export interface MessagesViewDependencies {
   render(): void
   // Opens the side-by-side view of the replies to a question.
   openReplyComparison?(questionId: string): void
+  // The notice at the top of a group whose members are choosing positions, and the card that shows them.
+  renderTeamFormationStatus?(chat: GroupChat): HTMLElement | undefined
+  isTeamInvitation?(chat: GroupChat, messageId: string): boolean
+  openTeamCard?(chatId: string): void
+  // A reply to a team invitation shown as the position it claims, instead of its raw JSON.
+  renderTeamClaim?(message: GroupMessage): HTMLElement | undefined
   showError(message: string): void
   showSuccess(message: string): void
   renderOrchestrationStatus?(): HTMLElement | undefined
@@ -97,6 +103,8 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     const nodes: Node[] = []
     const orchestrationStatus = deps.renderOrchestrationStatus?.()
     if (orchestrationStatus) nodes.push(orchestrationStatus)
+    const teamStatus = deps.renderTeamFormationStatus?.(chat)
+    if (teamStatus) nodes.push(teamStatus)
 
     if (messages.length === 0) {
       const roles = deps.getCurrentRoles()
@@ -219,6 +227,8 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
       body.textContent = '正在回复中 '
     } else if (message.type === 'assistant' && message.status === 'error' && isStructuredFailureReason(message.content)) {
       renderPlainMessageBody(body, getDiagnosticText(message.content))
+    } else if (message.type === 'assistant' && message.status !== 'pending' && renderTeamClaimInto(body, message)) {
+      // Shown as the claimed position.
     } else if (shouldRenderMarkdownMessage(message)) {
       renderMarkdownMessageBody(body, message.content)
     } else {
@@ -315,6 +325,13 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     return true
   }
 
+  function renderTeamClaimInto(body: HTMLElement, message: GroupMessage): boolean {
+    const claim = deps.renderTeamClaim?.(message)
+    if (!claim) return false
+    body.append(claim)
+    return true
+  }
+
   function renderMarkdownMessageBody(body: HTMLElement, content: string): void {
     renderMarkdownInto(body, content)
   }
@@ -338,6 +355,18 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
   }
 
   function compareButton(message: GroupMessage): HTMLButtonElement | undefined {
+    const chat = deps.getCurrentChat()
+    if (message.type === 'user' && chat && deps.isTeamInvitation?.(chat, message.id)) {
+      const button = document.createElement('button')
+      button.type = 'button'
+      button.className = 'message-compare-btn message-team-btn'
+      button.textContent = '⚑ 查看分工'
+      button.addEventListener('click', event => {
+        event.stopPropagation()
+        deps.openTeamCard?.(chat.id)
+      })
+      return button
+    }
     const count = message.type === 'user' ? replyCounts.get(message.id) ?? 0 : 0
     if (count < 2 || !deps.openReplyComparison) return undefined
     const button = document.createElement('button')

@@ -1,0 +1,191 @@
+import { describe, expect, it } from 'vitest'
+import { createDefaultStore } from './store'
+import {
+  buildTeamInvitation,
+  buildTeamKickoff,
+  buildTeamBrief,
+  collectTeamMembers,
+  parseTeamClaim,
+  planTeamRounds,
+  readTeamFormation,
+  resolveTeamPositions,
+  splitPositions,
+  teamLabels,
+  teamMemberNames,
+  type TeamClaim,
+} from './teamFormation'
+import type { GroupMessage } from './types'
+
+const claim = (firstChoice: string, secondChoice?: string, neededPositions: string[] = []): TeamClaim => ({ firstChoice, ...(secondChoice ? { secondChoice } : {}), neededPositions })
+
+describe('team formation', () => {
+  it('asks copies of the same model in later rounds', () => {
+    const rounds = planTeamRounds([
+      { roleId: 'c1', modelKey: 'site:claude' },
+      { roleId: 'g1', modelKey: 'site:chatgpt' },
+      { roleId: 'c2', modelKey: 'site:claude' },
+      { roleId: 'c3', modelKey: 'site:claude' },
+      { roleId: 'k1', modelKey: 'site:kimi' },
+    ])
+
+    expect(rounds).toEqual([['c1', 'g1', 'k1'], ['c2'], ['c3']])
+  })
+
+  it('reads a claim from a ```json block, with Chinese keys or trailing commas', () => {
+    const reply = '好的，这是我的选择：\n```json\n{\n  "first_choice": "后端工程师",\n  "second_choice": "测试工程师",\n  "why": "擅长数据建模",\n  "responsibility": "接口和数据库",\n  "not_responsible": "界面设计",\n  "first_deliverable": "数据模型草案",\n  "needed_positions": ["产品经理", "前端", "后端", "测试"],\n}\n```'
+
+    expect(parseTeamClaim(reply)).toEqual({
+      firstChoice: '后端工程师',
+      secondChoice: '测试工程师',
+      why: '擅长数据建模',
+      responsibility: '接口和数据库',
+      notResponsible: '界面设计',
+      firstDeliverable: '数据模型草案',
+      neededPositions: ['产品经理', '前端', '后端', '测试'],
+    })
+    expect(parseTeamClaim('{"职位": "设计师", "第二选择": "设计师", "需要的职位": "设计、开发"}')).toEqual({ firstChoice: '设计师', neededPositions: ['设计', '开发'] })
+    expect(parseTeamClaim('我想当产品经理。')).toBeUndefined()
+    expect(parseTeamClaim('```json\n{"why": "没有职位"}\n```')).toBeUndefined()
+  })
+
+  it('gives everyone their first choice when nobody overlaps', () => {
+    const resolution = resolveTeamPositions([
+      { roleId: 'a', claim: claim('产品负责人') },
+      { roleId: 'b', claim: claim('后端工程师') },
+    ])
+
+    expect(resolution.assignments).toEqual({ a: { position: '产品负责人', from: 'first' }, b: { position: '后端工程师', from: 'first' } })
+    expect(resolution.conflicts).toEqual([])
+  })
+
+  it('moves one of two clashing members to a free second choice', () => {
+    const resolution = resolveTeamPositions([
+      { roleId: 'a', claim: claim('前端工程师', '测试工程师') },
+      { roleId: 'b', claim: claim('前端 工程师', '设计师') },
+      { roleId: 'c', claim: claim('设计师') },
+    ])
+
+    // b's second choice is c's first choice, so b has nowhere to go and keeps the position.
+    expect(resolution.assignments).toEqual({
+      a: { position: '测试工程师', from: 'second' },
+      b: { position: '前端工程师', from: 'first' },
+      c: { position: '设计师', from: 'first' },
+    })
+    expect(resolution.conflicts).toEqual([])
+  })
+
+  it('reports a clash that second choices cannot settle', () => {
+    const resolution = resolveTeamPositions([
+      { roleId: 'a', claim: claim('架构师') },
+      { roleId: 'b', claim: claim('架构师') },
+      { roleId: 'c', claim: claim('架构师', '运维') },
+    ])
+
+    expect(resolution.conflicts).toEqual([{ position: '架构师', roleIds: ['a', 'b'] }])
+    expect(resolution.assignments).toEqual({ c: { position: '运维', from: 'second' } })
+  })
+
+  it('keeps a position the user typed and moves claimants away from it', () => {
+    const resolution = resolveTeamPositions([
+      { roleId: 'a', position: '产品经理' },
+      { roleId: 'b', claim: claim('产品经理', '数据分析师') },
+      { roleId: 'c', claim: claim('产品经理') },
+    ])
+
+    expect(resolution.assignments).toEqual({ a: { position: '产品经理', from: 'first' }, b: { position: '数据分析师', from: 'second' } })
+    expect(resolution.conflicts).toEqual([{ position: '产品经理', roleIds: ['c'], holderRoleId: 'a' }])
+  })
+
+  it('lets an earlier claim keep the position, and asks only the latecomer to change', () => {
+    const resolution = resolveTeamPositions([
+      { roleId: 'a', claim: claim('产品负责人', '测试工程师'), claimOrder: 0 },
+      { roleId: 'b', claim: claim('产品负责人'), claimOrder: 1 },
+      { roleId: 'c', claim: claim('产品负责人', '设计师'), claimOrder: 1 },
+    ])
+
+    expect(resolution.assignments).toEqual({ a: { position: '产品负责人', from: 'first' }, c: { position: '设计师', from: 'second' } })
+    expect(resolution.conflicts).toEqual([{ position: '产品负责人', roleIds: ['b'], holderRoleId: 'a' }])
+  })
+
+  it('lists positions the task needs that nobody holds, required ones first', () => {
+    const resolution = resolveTeamPositions([
+      { roleId: 'a', claim: claim('前端开发', undefined, ['前端', '后端', '测试']) },
+      { roleId: 'b', claim: claim('后端工程师', undefined, ['后端', '测试', '运维']) },
+    ], ['安全审计'])
+
+    expect(resolution.uncovered).toEqual([
+      { position: '安全审计', mentions: 0, required: true },
+      { position: '测试', mentions: 2, required: false },
+      { position: '运维', mentions: 1, required: false },
+    ])
+  })
+
+  it('writes the invitation with the team, required and taken positions, and the reply format', () => {
+    const invitation = buildTeamInvitation({
+      task: '做一个记账小程序',
+      teamLabels: ['Claude ×2', 'Kimi'],
+      requiredPositions: ['测试'],
+      taken: [{ position: '产品负责人', holder: 'Claude' }],
+      language: 'zh-CN',
+    })
+
+    expect(invitation).toContain('做一个记账小程序')
+    expect(invitation).toContain('团队成员：Claude ×2、Kimi')
+    expect(invitation).toContain('团队必须有的职位：测试。')
+    expect(invitation).toContain('- 产品负责人（Claude）')
+    expect(invitation).toContain('"second_choice"')
+    expect(invitation).toContain('"needed_positions"')
+    expect(buildTeamInvitation({ task: 'Ship it', teamLabels: ['Claude'], requiredPositions: [], repick: true, language: 'en' })).toMatch(/^Some of you picked the same position/)
+  })
+
+  it('turns a claim into a persona, member names and the kickoff message', () => {
+    const own = { ...claim('后端工程师', '运维'), responsibility: '接口', notResponsible: '界面', firstDeliverable: '数据模型' }
+    expect(buildTeamBrief('后端 工程师', own, 'zh-CN')).toEqual({
+      description: '接口',
+      persona: '你在这个项目中担任「后端 工程师」，这是你自己在组队时选的职位。\n你负责：接口\n你不负责：界面\n你会先交付：数据模型',
+      responsibility: '接口',
+    })
+    // What it wrote is about the backend, so a member moved to its fallback gets the position alone.
+    expect(buildTeamBrief('运维', own, 'zh-CN')).toEqual({ description: '运维', persona: '你在这个项目中担任「运维」，这是你的第二选择：「后端工程师」已经有人了。请按这个职位安排你的工作。' })
+    expect(buildTeamBrief('安全', own, 'zh-CN').persona).toBe('你在这个项目中担任「安全」，这是组队时用户给你定的职位。请按这个职位安排你的工作。')
+    expect(teamMemberNames([{ roleId: 'a', position: '前端' }, { roleId: 'b', position: '前端 ' }, { roleId: 'c', position: '' }, { roleId: 'd', position: 'QA @ lead' }])).toEqual({ a: '前端', b: '前端2', c: 'member', d: 'QAlead' })
+    expect(buildTeamKickoff({ task: '做记账', members: [{ name: '前端', modelLabel: 'Kimi', responsibility: '页面' }], language: 'zh-CN' }))
+      .toBe('@所有人 分工已经确定，开始工作吧。\n\n任务：\n做记账\n\n分工：\n- 前端（Kimi）：页面\n\n请先完成你说的第一份交付。需要别人配合时，直接点名对方。')
+    expect(splitPositions('测试，运维、 测试; 安全')).toEqual(['测试', '运维', '安全'])
+  })
+
+  it('collects each member\'s latest answer and where it stands', () => {
+    const store = createDefaultStore()
+    store.settings.language = 'zh-CN'
+    for (const [id, site] of [['r1', 'claude'], ['r2', 'chatgpt'], ['r3', 'claude'], ['r4', 'kimi']] as const) {
+      store.rolesById[id] = { id, chatId: 'c1', name: site, status: 'ready', contextCursor: 0, chatSite: site, createdAt: 1, updatedAt: 1 }
+    }
+    const messages: GroupMessage[] = [
+      { id: 'inv1', chatId: 'c1', seq: 1, type: 'user', content: '邀请', targetRoleIds: ['r1', 'r2', 'r4'], createdAt: 1, status: 'pending', deliveryStatus: { r1: 'received', r2: 'received', r4: 'error' } },
+      { id: 'a1', chatId: 'c1', seq: 2, type: 'assistant', roleId: 'r1', sourceMessageId: 'inv1', content: '```json\n{"first_choice":"产品负责人"}\n```', createdAt: 2, status: 'received' },
+      { id: 'a2', chatId: 'c1', seq: 3, type: 'assistant', roleId: 'r2', sourceMessageId: 'inv1', content: '我想做前端', createdAt: 3, status: 'received' },
+    ]
+    store.chatsById.c1 = {
+      id: 'c1', name: '记账', mode: 'collaborative', roleIds: ['r1', 'r2', 'r3', 'r4'], messageIds: messages.map(message => message.id), nextMessageSeq: 4, status: 'ready', createdAt: 1, updatedAt: 1,
+      teamFormation: { task: '记账', requiredPositions: [], status: 'claiming', rounds: [['r1', 'r2', 'r4'], ['r3']], nextRound: 1, invitationIds: ['inv1'], createdAt: 1 },
+    }
+    for (const message of messages) store.messagesById[message.id] = message
+
+    const members = collectTeamMembers(store, store.chatsById.c1)
+
+    expect(members.map(member => [member.roleId, member.modelLabel, member.status, member.claim?.firstChoice ?? member.replyText ?? null])).toEqual([
+      ['r1', 'Claude', 'claimed', '产品负责人'],
+      ['r2', 'ChatGPT', 'unreadable', '我想做前端'],
+      ['r3', 'Claude', 'not-invited', null],
+      ['r4', 'Kimi', 'failed', null],
+    ])
+    expect(teamLabels(store, Object.values(store.rolesById))).toEqual(['Claude ×2', 'ChatGPT', 'Kimi'])
+  })
+
+  it('accepts only a well-formed formation', () => {
+    expect(readTeamFormation({ task: '  ' }, 5)).toBeUndefined()
+    expect(readTeamFormation({ task: '记账', rounds: [['r1', 3], []], nextRound: 9, requiredPositions: ['测试', '测试 '], status: 'weird' }, 5)).toEqual({
+      task: '记账', requiredPositions: ['测试'], status: 'checking', rounds: [['r1']], nextRound: 1, invitationIds: [], createdAt: 5,
+    })
+  })
+})

@@ -95,6 +95,11 @@ export function createMessageHandlers(deps: MessageHandlersDependencies): Backgr
       const parsed = parseGroupMentions(raw, roles, { ...roleMentionLabelOptionsFromSettings(store.settings), defaultTarget: defaultMentionTargetForMessage(raw, chat) })
       if (!parsed.ok) throw new Error(parsed.error)
       if (parsed.orchestrationTarget && uploads.length > 0) throw new Error('编排任务暂不支持附件，请去掉附件后再发送')
+      const teamInvitation = message.teamInvitation === true
+      const teamRound = typeof message.teamRound === 'number' ? message.teamRound : undefined
+      if (teamInvitation && !chat.teamFormation) throw new Error('这个群聊不在组队中')
+      // A round is invited once, even when two team pages try at the same time.
+      if (teamRound !== undefined && chat.teamFormation?.nextRound !== teamRound) throw new Error('这一轮已经邀请过了')
 
       if (parsed.orchestrationTarget) {
         const flow = resolveOrchestrationMentionFlow(store, chat, parsed.orchestrationTarget)
@@ -166,12 +171,18 @@ export function createMessageHandlers(deps: MessageHandlersDependencies): Backgr
         mentionsAll: parsed.mentionsAll,
         references: reference ? [reference] : undefined,
         ...(uploads.length > 0 ? { attachments: uploads.map(({ id, upload }) => uploadAttachment(id, upload)) } : {}),
+        ...(message.refreshPersona === true ? { refreshPersona: true } : {}),
         createdAt: timestamp,
         status: finalTargetRoleIds.length > 0 ? 'pending' : 'received',
         deliveryStatus: Object.fromEntries(finalTargetRoleIds.map(roleId => [roleId, unavailable.some(role => role.id === roleId) ? 'error' : 'pending'])),
       }
       updateUserMessageDeliveryStatus(userMessage)
 
+      if (teamInvitation && chat.teamFormation) {
+        chat.teamFormation.invitationIds.push(userMessage.id)
+        chat.teamFormation.status = 'claiming'
+        if (teamRound !== undefined) chat.teamFormation.nextRound = teamRound + 1
+      }
       store.messagesById[userMessage.id] = userMessage
       chat.messageIds.push(userMessage.id)
       chat.nextMessageSeq += 1

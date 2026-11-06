@@ -288,7 +288,8 @@ export function updateGroupRole(
     }
   }
   if (patch.systemPrompt !== undefined) {
-    if (role.createdBy !== 'orchestration-auto' && role.createdBy !== 'orchestration-template') throw new Error('群聊内人员人设不可编辑')
+    // Generated members may be rewritten: by orchestration, and by a team whose members pick positions.
+    if (role.createdBy !== 'orchestration-auto' && role.createdBy !== 'orchestration-template' && role.createdBy !== 'team-formation') throw new Error('群聊内人员人设不可编辑')
     const systemPrompt = assertValidSystemPrompt(patch.systemPrompt)
     if (systemPrompt) {
       role.systemPrompt = systemPrompt
