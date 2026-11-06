@@ -1008,6 +1008,8 @@ describe('team page messages view boundary', () => {
   })
 
   it('keeps the streaming stop button stable while assistant content updates', () => {
+    // Shown at once: these check what is shown, not how it flows in (see streamingReveal.test.ts).
+    vi.stubGlobal('matchMedia', () => ({ matches: true }))
     const now = Date.now()
     const chat: GroupChat = {
       id: 'chat-1',
@@ -1185,6 +1187,8 @@ describe('team page messages view boundary', () => {
   })
 
   it("shows a web member's reply as it is written in its replying row", () => {
+    // Shown at once: these check what is shown, not how it flows in (see streamingReveal.test.ts).
+    vi.stubGlobal('matchMedia', () => ({ matches: true }))
     const now = Date.now()
     const chat: GroupChat = {
       id: 'chat-1',

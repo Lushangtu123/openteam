@@ -17,8 +17,9 @@ const REPLY_POLL_INTERVAL_MS = 2000
 const REPLY_TIMEOUT_MS = 120000
 const SHORT_REPLY_MAX_CHARS = 50
 const SHORT_REPLY_STABLE_SETTLE_MS = 5000
-// How often the reply written so far is sent to the chat while the site is still writing.
-export const REPLY_PROGRESS_INTERVAL_MS = 1000
+// How often the reply written so far is sent to the chat while the site is still writing. The
+// team page smooths the text between updates.
+export const REPLY_PROGRESS_INTERVAL_MS = 500
 
 export interface ReplyObserverController {
   capturePromptReplyBaseline(messageId: string | undefined): void

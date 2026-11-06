@@ -1,3 +1,4 @@
+import { createStreamingReveal } from './streamingReveal'
 import { extractReplyChoices, type ReplyChoice } from '../group/replyChoices'
 import { normalizeLanguage } from '../shared/i18n'
 import { DEFAULT_MESSAGE_HIGHLIGHT_COLOR, MESSAGE_HIGHLIGHT_COLORS, messageHighlightColorRgb, type MessageHighlightColor } from '../group/highlightColors'
@@ -93,6 +94,16 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
   let replyCounts = new Map<string, number>()
   // Choices are offered only on replies newer than the user's latest message.
   let latestUserSeq = 0
+  // Replies still being written flow in smoothly instead of jumping in bursts. While the user is
+  // at the bottom of the chat, it stays there as the text grows.
+  const reveal = createStreamingReveal({
+    render: (body, text) => {
+      const follow = isScrolledNearBottom(deps.messagesEl)
+      body.replaceChildren()
+      if (text) renderMarkdownMessageBody(body, text)
+      if (follow) deps.messagesEl.scrollTop = deps.messagesEl.scrollHeight
+    },
+  })
 
   function renderMessages(): void {
     const chat = deps.getCurrentChat()
@@ -153,6 +164,10 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
       nodes.push(replyControlBubble(role))
     }
     reconcileChildren(deps.messagesEl, nodes)
+    reveal.retain(new Set([
+      ...messages.filter(message => message.type === 'assistant' && message.status === 'pending').map(message => streamingRevealKey(message)),
+      ...getVisibleThinkingRoles(deps.getCurrentRoles()).map(role => liveRevealKey(role)),
+    ]))
     pruneMessageNodeCache(messages)
     scheduleThinkingTimeouts()
     if (preserveScroll || !shouldFollowNewReplies) {
@@ -240,6 +255,8 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
       renderPlainMessageBody(body, getDiagnosticText(message.content))
     } else if (message.type === 'assistant' && message.status !== 'pending' && renderTeamClaimInto(body, message)) {
       // Shown as the claimed position.
+    } else if (message.type === 'assistant' && message.status === 'pending') {
+      reveal.show(streamingRevealKey(message), body, message.content)
     } else if (shouldRenderMarkdownMessage(message)) {
       renderMarkdownMessageBody(body, message.content)
     } else {
@@ -380,15 +397,12 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     const body = node.querySelector<HTMLElement>('.message-body')
     if (!body) return false
     body.className = 'message-body thinking-dots'
-    body.replaceChildren()
     if (!message.content.trim()) {
+      body.replaceChildren()
       body.textContent = '正在回复中 '
-    } else if (shouldRenderMarkdownMessage(message)) {
-      renderMarkdownMessageBody(body, message.content)
     } else {
-      renderPlainMessageBody(body, message.content)
+      reveal.show(streamingRevealKey(message), body, message.content)
     }
-    renderSavedHighlights(body, message)
     return true
   }
 
@@ -897,7 +911,7 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     bubble.className = 'message-bubble'
     const body = document.createElement('div')
     body.className = `message-body${stopped ? '' : ' thinking-dots'}`
-    if (liveText) renderMarkdownMessageBody(body, liveText)
+    if (liveText) reveal.show(liveRevealKey(role), body, liveText)
     else body.textContent = stopped ? '已停止回复' : '正在回复中 '
     bubble.append(body)
     const tools = document.createElement('div')
@@ -912,6 +926,14 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     inner.append(avatar, stack)
     article.append(inner)
     return article
+  }
+
+  function streamingRevealKey(message: GroupMessage): string {
+    return `message:${message.id}`
+  }
+
+  function liveRevealKey(role: GroupRole): string {
+    return `live:${role.id}:${role.lastPromptMessageId ?? ''}`
   }
 
   // The reply a web member has written so far, when it belongs to the question it is answering now.
