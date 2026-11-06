@@ -230,6 +230,44 @@ describe('team page messages view boundary', () => {
     expect(button?.disabled).toBe(true)
   })
 
+  it('announces discussion turns and shows the discussion bar with its controls', () => {
+    const { messagesEl, messages, view, deps } = createLongChatView(0)
+    const runCommand = vi.fn(async () => undefined)
+    deps.runCommand = runCommand
+    const chat = deps.getCurrentChat()!
+    const topic = { ...makeLongChatMessage(0, '要不要重写？'), id: 'topic', type: 'user' as const, roleId: undefined, roleName: undefined, targetRoleIds: ['role-1', 'role-2'], discussionTopic: true }
+    messages.push(
+      topic,
+      { ...makeLongChatMessage(1, '第 1/4 轮 · 请「工程师」发言'), id: 't1', type: 'user', roleId: undefined, roleName: undefined, targetRoleIds: ['role-1'], discussionTurnOf: 'topic', discussionTurn: 1 },
+      { ...makeLongChatMessage(3, '应该重写'), id: 'r1', sourceMessageId: 't1' },
+    )
+    chat.discussion = { id: 'd1', topicMessageId: 'topic', roleIds: ['role-1', 'role-2'], maxTurns: 4, turn: 2, status: 'running', currentRoleId: 'role-1', currentMessageId: 't2', failedTurns: 0, startedAt: 0, updatedAt: 0 }
+
+    view.renderMessages()
+    expect(messagesEl.querySelector('[data-message-id="topic"] .discussion-message-label')?.textContent).toBe('轮流讨论')
+    expect(messagesEl.querySelector('[data-message-id="t1"]')?.textContent).toBe('第 1/4 轮 · 请「工程师」发言')
+    const bar = messagesEl.querySelector('.discussion-bar.running')
+    expect(bar?.textContent).toContain('轮流讨论中 · 第 2/4 轮')
+    expect(bar?.textContent).toContain('「工程师」正在发言')
+    ;[...bar!.querySelectorAll('button')].find(button => button.textContent === '停止讨论')?.click()
+    expect(runCommand).toHaveBeenCalledWith('GROUP_DISCUSSION_STOP', { chatId: 'chat-1' })
+
+    chat.discussion = { ...chat.discussion, status: 'done', currentMessageId: undefined }
+    view.renderMessages()
+    const finished = messagesEl.querySelector('.discussion-bar:not(.running)')
+    expect(finished?.textContent).toContain('讨论结束 · 共 2 轮')
+    const buttons = [...finished!.querySelectorAll('button')]
+    buttons.find(button => button.textContent === '再讨论一轮')?.click()
+    buttons.find(button => button.textContent === '汇总讨论')?.click()
+    expect(runCommand).toHaveBeenCalledWith('GROUP_DISCUSSION_CONTINUE', { chatId: 'chat-1' })
+    expect(runCommand).toHaveBeenCalledWith('GROUP_ROUND_SUMMARY_REQUEST', { chatId: 'chat-1', messageId: 'topic' })
+
+    // Once the user moves on, the finished discussion's bar goes away.
+    messages.push({ ...makeLongChatMessage(4, '下一个话题'), id: 'next', type: 'user', roleId: undefined, roleName: undefined })
+    view.renderMessages()
+    expect(messagesEl.querySelector('.discussion-bar')).toBeNull()
+  })
+
   it('keeps every message node of a long chat cached between renders', () => {
     const { messagesEl, view } = createLongChatView(450)
     view.renderMessages()

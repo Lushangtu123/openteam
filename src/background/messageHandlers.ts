@@ -2,12 +2,13 @@ import { isChatSite } from '../group/chatSites'
 import { extractSupportedConversationId, normalizeSupportedChatConversationUrl } from '../group/conversationUrl'
 import { readMessageUploads, type MessageUpload } from '../group/messageUploads'
 import { hasRoundSummary, pickSummarizer, readSummarizableRound, roundSummaryRequestText } from '../group/roundSummary'
+import { chooseNextSpeaker, discussionMaxTurns, discussionTranscript, discussionTurnRequestText, DISCUSSION_MAX_FAILED_TURNS, isDiscussionRunning, startsDiscussion, turnCountsOf } from '../group/discussion'
 import type { LoadedUpload, UploadedImage } from './imageAttachments'
 import { normalizeMessageHighlightColor } from '../group/highlightColors'
 import { defaultMentionTargetForMessage, parseGroupMentions, roleMentionLabelOptionsFromSettings } from '../group/mentionParser'
 import { mapRuntimeRoleStatus } from '../group/runtimeProtocol'
 import type { BackgroundToRoleMessage } from '../group/runtimeProtocol'
-import type { ChatSite, GroupChat, GroupMessage, GroupRole, MessageAttachment, MessageImageAttachment, MessageReference, OpenTeamStore, OrchestrationFlow, ReplyImageSource, RoleSiteHealthReason, RoleSiteHealthStatus, RuntimeFrameBinding, MessageTokenUsage } from '../group/types'
+import type { ChatSite, DiscussionRun, GroupChat, GroupMessage, GroupRole, MessageAttachment, MessageImageAttachment, MessageReference, OpenTeamStore, OrchestrationFlow, ReplyImageSource, RoleSiteHealthReason, RoleSiteHealthStatus, RuntimeFrameBinding, MessageTokenUsage } from '../group/types'
 import { createExternalModelClient, type ExternalModelClient, type ExternalModelCompletionInput } from './externalModelClient'
 import type { BackgroundMessageRoute } from './messageRouter'
 import type { PromptDelivery, PromptSender } from './promptDelivery'
@@ -42,6 +43,8 @@ export const MESSAGE_ROUTE_TYPES = [
   'GROUP_MESSAGE_RESYNC_REPLY',
   'GROUP_MESSAGE_SEND',
   'GROUP_ROUND_SUMMARY_REQUEST',
+  'GROUP_DISCUSSION_STOP',
+  'GROUP_DISCUSSION_CONTINUE',
   'TEAM_FRAME_ROLE_READY',
   'TEAM_ROLE_CONVERSATION_UPDATED',
   'TEAM_SEND_ACK',
@@ -91,7 +94,8 @@ export function createMessageHandlers(baseDeps: MessageHandlersDependencies): Ba
   const deps: MessageHandlersDependencies = {
     ...baseDeps,
     onPromptSettled: (store, chatId, promptMessageId) => {
-      scheduleRoundSummary(store, chatId, promptMessageId)
+      if (store.messagesById[promptMessageId]?.discussionTurnOf) scheduleDiscussionAdvance(chatId, promptMessageId)
+      else scheduleRoundSummary(store, chatId, promptMessageId)
       return baseDeps.onPromptSettled?.(store, chatId, promptMessageId)
     },
   }
@@ -140,6 +144,20 @@ export function createMessageHandlers(baseDeps: MessageHandlersDependencies): Ba
         finalTargetRoleIds = []
       }
       deps.log.debug('message-send:parsed-targets', { chatId: chat.id, targetRoleIds: finalTargetRoleIds })
+
+      // While members take turns, what the user sends goes to the next speakers as a note.
+      if (isDiscussionRunning(chat) && chat.discussion) {
+        if (uploads.length > 0) throw new Error('讨论进行中，补充的消息暂不支持附件')
+        const note: GroupMessage = { id: deps.newId('msg'), chatId: chat.id, seq: chat.nextMessageSeq, type: 'user', content: raw, discussionNoteOf: chat.discussion.topicMessageId, targetRoleIds: [], createdAt: timestamp, status: 'received' }
+        store.messagesById[note.id] = note
+        chat.messageIds.push(note.id)
+        chat.nextMessageSeq += 1
+        chat.updatedAt = timestamp
+        return { message: note, deliveries: [], externalDeliveries: [] }
+      }
+      if (!teamInvitation && startsDiscussion(chat, finalTargetRoleIds)) {
+        return startDiscussion(store, chat, parsed, finalTargetRoleIds, uploads, message.refreshPersona === true, timestamp)
+      }
 
       const targetRoles = finalTargetRoleIds.map(roleId => store.rolesById[roleId]).filter((role): role is GroupRole => Boolean(role))
       const unavailable = targetRoles.filter(role => {
@@ -254,7 +272,7 @@ export function createMessageHandlers(baseDeps: MessageHandlersDependencies): Ba
       deps.log.info('message-send:orchestration-start', { chatId, flowId: orchestration.flowId, taskLength: orchestration.task.length })
       return { ok: true, ...(await startOrchestrationRun(deps, orchestration)) }
     }
-    const messageResult = result as { message: GroupMessage; deliveries: PromptDelivery[]; externalDeliveries: ExternalPromptDelivery[] }
+    const messageResult = result as { message: GroupMessage; deliveries: PromptDelivery[]; externalDeliveries: ExternalPromptDelivery[]; deliveryMessageId?: string }
     // The images must be stored before any delivery reads them.
     const images = uploads.flatMap(({ id, upload }) => upload.kind === 'image' ? [{ id, fileName: upload.fileName, mimeType: upload.mimeType, data: upload.data }] : [])
     if (images.length > 0) {
@@ -272,7 +290,7 @@ export function createMessageHandlers(baseDeps: MessageHandlersDependencies): Ba
     })
     await deps.broadcastStoreUpdated(store)
 
-    await sendPromptDeliveries(deps, chatId, messageResult.message.id, messageResult.deliveries)
+    await sendPromptDeliveries(deps, chatId, messageResult.deliveryMessageId ?? messageResult.message.id, messageResult.deliveries)
     let responseStore = store
     for (const delivery of messageResult.externalDeliveries) {
       responseStore = await sendExternalModelDelivery(deps, externalModelClient, externalModelRuns, delivery) ?? responseStore
@@ -360,6 +378,206 @@ export function createMessageHandlers(baseDeps: MessageHandlersDependencies): Ba
       await waitForRetryDelay(deps, ROUND_SUMMARY_DELAY_MS)
       await requestRoundSummary(chatId, questionId, { auto: true })
     })().catch(error => deps.log.warn('round-summary:failed', { chatId, questionId, error: error instanceof Error ? error.message : String(error) }))
+  }
+
+  // Starts a discussion inside the send mutation: the user's message is the topic, and the first
+  // member who can speak gets the first turn.
+  function startDiscussion(
+    store: OpenTeamStore,
+    chat: GroupChat,
+    parsed: { content: string; mentionedRoleIds: string[]; mentionsAll?: boolean },
+    participantIds: string[],
+    uploads: Array<{ id: string; upload: MessageUpload }>,
+    refreshPersona: boolean,
+    timestamp: number,
+  ) {
+    const roles = getChatRoles(store, chat)
+    const topic: GroupMessage = {
+      id: deps.newId('msg'),
+      chatId: chat.id,
+      seq: chat.nextMessageSeq,
+      type: 'user',
+      content: parsed.content,
+      targetRoleIds: participantIds,
+      mentionedRoleIds: parsed.mentionedRoleIds,
+      mentionsAll: parsed.mentionsAll,
+      discussionTopic: true,
+      ...(uploads.length > 0 ? { attachments: uploads.map(({ id, upload }) => uploadAttachment(id, upload)) } : {}),
+      ...(refreshPersona ? { refreshPersona: true } : {}),
+      createdAt: timestamp,
+      status: 'received',
+    }
+    store.messagesById[topic.id] = topic
+    chat.messageIds.push(topic.id)
+    chat.nextMessageSeq += 1
+    chat.updatedAt = timestamp
+    const run: DiscussionRun = {
+      id: deps.newId('discussion'),
+      topicMessageId: topic.id,
+      roleIds: participantIds,
+      maxTurns: discussionMaxTurns(participantIds.length),
+      turn: 0,
+      status: 'running',
+      failedTurns: 0,
+      startedAt: timestamp,
+      updatedAt: timestamp,
+    }
+    chat.discussion = run
+    const first = participantIds.map(id => roles.find(role => role.id === id)).find((role): role is GroupRole => Boolean(role && canTakeTurn(store, chat, role, timestamp)))
+    if (!first) {
+      run.status = 'stopped'
+      run.stopReason = 'unavailable'
+      throw new Error('参加讨论的成员都不可用，请等待或恢复后再试')
+    }
+    const turn = startDiscussionTurn(store, chat, run, first, undefined, timestamp)
+    deps.log.info('discussion:started', { chatId: chat.id, topicId: topic.id, participants: participantIds.length, maxTurns: run.maxTurns })
+    return {
+      message: topic,
+      deliveryMessageId: turn.request.id,
+      deliveries: turn.prepared.delivery ? [turn.prepared.delivery] : [],
+      externalDeliveries: turn.prepared.externalDelivery ? [turn.prepared.externalDelivery] : [],
+    }
+  }
+
+  function canTakeTurn(store: OpenTeamStore, chat: GroupChat, role: GroupRole, timestamp: number): boolean {
+    if (role.status === 'thinking' && !isStaleThinkingRole(role, timestamp)) return false
+    return isExternalModelRole(role)
+      ? Boolean(getExternalModelForRole(store, role))
+      : isRoleDeliverable(role, deps.runtimeFrames.getByRole(chat.id, role.id), timestamp)
+  }
+
+  // Asks one member for the next turn (inside a store mutation).
+  function startDiscussionTurn(store: OpenTeamStore, chat: GroupChat, run: DiscussionRun, role: GroupRole, handoffFrom: string | undefined, timestamp: number) {
+    run.turn += 1
+    const handoffName = handoffFrom ? store.rolesById[handoffFrom]?.name : undefined
+    const request: GroupMessage = {
+      id: deps.newId('msg'),
+      chatId: chat.id,
+      seq: chat.nextMessageSeq,
+      type: 'user',
+      content: discussionTurnRequestText(run.turn, run.maxTurns, role.name, handoffName, store.settings.language),
+      targetRoleIds: [role.id],
+      mentionedRoleIds: [role.id],
+      discussionTurnOf: run.topicMessageId,
+      discussionTurn: run.turn,
+      ...(handoffFrom ? { discussionHandoffFrom: handoffFrom } : {}),
+      createdAt: timestamp,
+      status: 'pending',
+      deliveryStatus: { [role.id]: 'pending' },
+    }
+    store.messagesById[request.id] = request
+    chat.messageIds.push(request.id)
+    chat.nextMessageSeq += 1
+    chat.updatedAt = timestamp
+    chat.status = 'running'
+    run.currentRoleId = role.id
+    run.currentMessageId = request.id
+    run.updatedAt = timestamp
+
+    const prepared = prepareRolePromptDelivery({ store, chat, role, userMessage: request, roles: getChatRoles(store, chat), messages: getChatMessages(store, chat), timestamp, newId: deps.newId, runtimeFrames: deps.runtimeFrames })
+    recoverDeliverableRoleStatus(role, timestamp, deps.log)
+    role.status = 'thinking'
+    role.lastPromptMessageId = request.id
+    role.replyAttemptId = prepared.replyAttemptId
+    delete role.liveReply
+    role.updatedAt = timestamp
+    return { request, prepared }
+  }
+
+  async function deliverDiscussionTurn(chatId: string, turn: ReturnType<typeof startDiscussionTurn>): Promise<OpenTeamStore | undefined> {
+    if (turn.prepared.delivery) await sendPromptDeliveries(deps, chatId, turn.request.id, [turn.prepared.delivery])
+    if (turn.prepared.externalDelivery) return sendExternalModelDelivery(deps, externalModelClient, externalModelRuns, turn.prepared.externalDelivery)
+    return undefined
+  }
+
+  // After a turn: the next member speaks (the one @-mentioned, or whoever spoke least), until the
+  // turns run out, the user stops it, or turns keep failing. A finished discussion is summarized.
+  const advanceDiscussion = async (chatId: string, requestId: string) => {
+    const timestamp = deps.now()
+    const { store, result } = await mutateStore(store => {
+      const chat = store.chatsById[chatId]
+      const run = chat?.discussion
+      if (!chat || !run || run.status !== 'running' || run.currentMessageId !== requestId) return undefined
+      const transcript = discussionTranscript(store, chat, run.topicMessageId)
+      const reply = [...transcript].reverse().find(entry => entry.kind === 'turn' && entry.message.sourceMessageId === requestId)
+      run.failedTurns = reply ? 0 : run.failedTurns + 1
+      const finish = (status: DiscussionRun['status'], stopReason?: DiscussionRun['stopReason']) => {
+        run.status = status
+        if (stopReason) run.stopReason = stopReason
+        delete run.currentMessageId
+        run.updatedAt = timestamp
+        chat.updatedAt = timestamp
+        return { finished: status, topicId: run.topicMessageId }
+      }
+      if (run.failedTurns >= DISCUSSION_MAX_FAILED_TURNS) return finish('stopped', 'failed')
+      if (run.turn >= run.maxTurns) return finish('done')
+      const next = chooseNextSpeaker({ run, roles: getChatRoles(store, chat), turnCounts: turnCountsOf(transcript), lastReply: reply?.message.content, isAvailable: role => canTakeTurn(store, chat, role, timestamp) })
+      if (!next) return finish('stopped', 'unavailable')
+      return { turn: startDiscussionTurn(store, chat, run, next.role, next.handoffFrom, timestamp) }
+    })
+    if (!result) return
+    await deps.broadcastStoreUpdated(store)
+    if ('turn' in result) {
+      deps.log.info('discussion:turn', { chatId, turn: result.turn.request.discussionTurn, roleId: result.turn.request.targetRoleIds?.[0], handoff: Boolean(result.turn.request.discussionHandoffFrom) })
+      await deliverDiscussionTurn(chatId, result.turn)
+      return
+    }
+    deps.log.info('discussion:finished', { chatId, status: result.finished })
+    // A discussion that ran its course is settled like a round: summarized, and notified.
+    if (result.finished === 'done') reportPromptSettled(deps, store, chatId, result.topicId)
+  }
+
+  function scheduleDiscussionAdvance(chatId: string, requestId: string): void {
+    void (async () => {
+      await waitForRetryDelay(deps, ROUND_SUMMARY_DELAY_MS)
+      await advanceDiscussion(chatId, requestId)
+    })().catch(error => deps.log.warn('discussion:advance-failed', { chatId, requestId, error: error instanceof Error ? error.message : String(error) }))
+  }
+
+  // Stops a discussion: the member speaking finishes, and nobody speaks after.
+  const handleDiscussionStop = async (message: RuntimeMessage) => {
+    const chatId = requireString(message.chatId, '缺少群聊 ID')
+    const timestamp = deps.now()
+    const { store } = await mutateStore(store => {
+      const chat = requireChat(store, chatId)
+      const run = chat.discussion
+      if (!run || run.status !== 'running') return
+      run.status = 'stopped'
+      run.stopReason = 'user'
+      delete run.currentMessageId
+      run.updatedAt = timestamp
+      chat.updatedAt = timestamp
+    })
+    await deps.broadcastStoreUpdated(store)
+    return { ok: true, store }
+  }
+
+  // One more turn for each member of a finished discussion.
+  const handleDiscussionContinue = async (message: RuntimeMessage) => {
+    const chatId = requireString(message.chatId, '缺少群聊 ID')
+    const timestamp = deps.now()
+    const { store, result } = await mutateStore(store => {
+      const chat = requireChat(store, chatId)
+      const run = chat.discussion
+      if (!run || run.status === 'running') throw new Error('没有可以继续的讨论')
+      if (!store.messagesById[run.topicMessageId]) throw new Error('找不到讨论的话题，可能已被删除')
+      const transcript = discussionTranscript(store, chat, run.topicMessageId)
+      run.status = 'running'
+      delete run.stopReason
+      run.failedTurns = 0
+      run.maxTurns = run.turn + run.roleIds.length
+      const lastTurn = [...transcript].reverse().find(entry => entry.kind === 'turn')
+      const next = chooseNextSpeaker({ run, roles: getChatRoles(store, chat), turnCounts: turnCountsOf(transcript), lastReply: lastTurn?.message.content, isAvailable: role => canTakeTurn(store, chat, role, timestamp) })
+      if (!next) {
+        run.status = 'stopped'
+        run.stopReason = 'unavailable'
+        throw new Error('参加讨论的成员都不可用，请等待或恢复后再试')
+      }
+      return startDiscussionTurn(store, chat, run, next.role, next.handoffFrom, timestamp)
+    })
+    await deps.broadcastStoreUpdated(store)
+    const responseStore = await deliverDiscussionTurn(chatId, result) ?? store
+    return { ok: true, message: result.request, store: responseStore }
   }
 
   const handleRoundSummaryRequest = async (message: RuntimeMessage) => {
@@ -981,6 +1199,8 @@ export function createMessageHandlers(baseDeps: MessageHandlersDependencies): Ba
     { type: 'GROUP_MESSAGE_RESYNC_REPLY', handler: handleMessageResyncReply },
     { type: 'GROUP_MESSAGE_SEND', handler: handleMessageSend },
     { type: 'GROUP_ROUND_SUMMARY_REQUEST', handler: handleRoundSummaryRequest },
+    { type: 'GROUP_DISCUSSION_STOP', handler: handleDiscussionStop },
+    { type: 'GROUP_DISCUSSION_CONTINUE', handler: handleDiscussionContinue },
     {
       type: 'TEAM_FRAME_ROLE_READY',
       handler: (message, sender) => readOptionalString(message.chatId) ? handleFrameRoleReady(message, sender) : { ok: false, error: 'TEAM_FRAME_ROLE_READY 缺少 chatId' },
@@ -1080,6 +1300,8 @@ async function markDeliveryError(deps: MessageHandlersDependencies, chatId: stri
   })
   await deps.broadcastStoreUpdated(store)
   await deps.sendError(reason)
+  // The member is done with this message (it never got it), like a member that failed to reply.
+  reportPromptSettled(deps, store, chatId, messageId)
 }
 
 function updateUserMessageDeliveryStatus(message: GroupMessage): void {

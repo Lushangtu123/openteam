@@ -41,12 +41,32 @@ describe('chat header view', () => {
     expect(harness.chatTitleAvatarEl.className).toMatch(/^chat-avatar chat-title-avatar role-tone-\d$/)
   })
 
+  it('switches turn-by-turn discussions on and off for collaborative chats', async () => {
+    const harness = createHarness('collaborative')
+    harness.view.renderChatHeader()
+
+    const toggle = harness.headerActionsEl.querySelector<HTMLButtonElement>('.discussion-toggle')
+    expect(toggle?.hidden).toBe(false)
+    expect(toggle?.textContent).toBe('轮流讨论')
+    expect(toggle?.getAttribute('aria-pressed')).toBe('false')
+    toggle?.click()
+    await Promise.resolve()
+    expect(harness.runCommand).toHaveBeenCalledWith('GROUP_CHAT_UPDATE', { chatId: 'chat-1', discussionMode: true })
+
+    harness.chat.discussionMode = true
+    harness.view.renderChatHeader()
+    expect(toggle?.getAttribute('aria-pressed')).toBe('true')
+    harness.chat.mode = 'independent'
+    harness.view.renderChatHeader()
+    expect(toggle?.hidden).toBe(true)
+  })
+
   it('toggles manual mention routing for collaborative chats', async () => {
     const harness = createHarness('collaborative')
 
     harness.view.renderChatHeader()
 
-    const toggle = harness.headerActionsEl.querySelector<HTMLButtonElement>('.manual-mention-toggle')
+    const toggle = harness.headerActionsEl.querySelector<HTMLButtonElement>('.manual-mention-toggle:not(.discussion-toggle)')
     expect(toggle).not.toBeNull()
     expect(toggle?.hidden).toBe(false)
     expect(toggle?.textContent).toBe('免@')

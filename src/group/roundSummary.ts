@@ -2,6 +2,7 @@
 // once everyone in a round has answered, one member writes a short summary of the round.
 import { PROMPT_I18N, normalizeLanguage } from '../shared/i18n'
 import { describeAttachments } from './messageUploads'
+import { discussionTranscript } from './discussion'
 import type { GroupChat, GroupMessage, GroupRole, OpenTeamLanguage, OpenTeamSettings, OpenTeamStore } from './types'
 
 // Key points
@@ -35,12 +36,15 @@ export function wantsKeyPoints(settings: Pick<OpenTeamSettings, 'replyKeyPoints'
 export interface RoundReply {
   role: GroupRole
   message: GroupMessage
+  // In a discussion, the turn this reply was.
+  turn?: number
 }
 
 export interface SummarizableRound {
   question: GroupMessage
-  // The latest good reply of each member, in the order they arrived.
+  // The latest good reply of each member, in the order they arrived; in a discussion, every turn.
   replies: RoundReply[]
+  discussion?: boolean
 }
 
 export const ROUND_SUMMARY_MIN_REPLIES = 2
@@ -49,6 +53,12 @@ export const ROUND_SUMMARY_MAX_REPLY_CHARS = 60_000
 
 export function isRoundSummaryRequest(message: GroupMessage | undefined): boolean {
   return message?.type === 'user' && Boolean(message.roundSummaryOf)
+}
+
+// What OpenTeam itself asks one member (a summary, or a discussion turn); members do not get these
+// as context, and the user did not write them.
+export function isOpenTeamRequest(message: GroupMessage | undefined): boolean {
+  return message?.type === 'user' && Boolean(message.roundSummaryOf || message.discussionTurnOf)
 }
 
 // A summary request, or the summary written in answer to one.
@@ -60,6 +70,7 @@ export function isRoundSummaryMessage(message: GroupMessage, messageById: (id: s
 // The round a message started, once every member it went to is done and at least two answered.
 export function readSummarizableRound(store: OpenTeamStore, chat: GroupChat, question: GroupMessage | undefined): SummarizableRound | undefined {
   if (!question || question.chatId !== chat.id || question.type !== 'user') return undefined
+  if (question.discussionTopic) return readSummarizableDiscussion(store, chat, question)
   if (question.roundSummaryOf || question.orchestrationKind || chat.teamFormation?.invitationIds.includes(question.id)) return undefined
   const statuses = Object.values(question.deliveryStatus ?? {})
   if (statuses.some(status => status !== 'received' && status !== 'error')) return undefined
@@ -81,8 +92,30 @@ export function readSummarizableRound(store: OpenTeamStore, chat: GroupChat, que
   return replies.length >= ROUND_SUMMARY_MIN_REPLIES ? { question, replies } : undefined
 }
 
+// A discussion is summarized once it has stopped, with every turn in order.
+function readSummarizableDiscussion(store: OpenTeamStore, chat: GroupChat, topic: GroupMessage): SummarizableRound | undefined {
+  if (chat.discussion?.topicMessageId === topic.id && chat.discussion.status === 'running') return undefined
+  const replies = discussionTranscript(store, chat, topic.id).flatMap(entry => {
+    const role = entry.kind === 'turn' && entry.message.roleId ? store.rolesById[entry.message.roleId] : undefined
+    return role ? [{ role, message: entry.message, turn: entry.turn }] : []
+  })
+  return replies.length >= ROUND_SUMMARY_MIN_REPLIES ? { question: topic, replies, discussion: true } : undefined
+}
+
+// True when the round has a summary asked for after its latest reply (a reply retried, or a
+// discussion continued, makes the old summary out of date).
 export function hasRoundSummary(store: OpenTeamStore, chat: GroupChat, questionId: string): boolean {
-  return chat.messageIds.some(id => store.messagesById[id]?.roundSummaryOf === questionId)
+  let latestRequestSeq = -1
+  let latestReplySeq = -1
+  for (const id of chat.messageIds) {
+    const message = store.messagesById[id]
+    if (!message) continue
+    if (message.roundSummaryOf === questionId) latestRequestSeq = Math.max(latestRequestSeq, message.seq)
+    else if (message.type === 'assistant' && message.sourceMessageId && (message.sourceMessageId === questionId || store.messagesById[message.sourceMessageId]?.discussionTurnOf === questionId)) {
+      latestReplySeq = Math.max(latestReplySeq, message.seq)
+    }
+  }
+  return latestRequestSeq >= 0 && latestRequestSeq > latestReplySeq
 }
 
 // Who writes the summary: an API member if there is one (quick, and its page holds no
@@ -113,13 +146,18 @@ export function buildRoundSummaryPrompt(input: {
   const { question, replies } = input.round
   const budget = Math.min(input.maxReplyChars ?? ROUND_SUMMARY_MAX_REPLY_CHARS, ROUND_SUMMARY_MAX_REPLY_CHARS)
   const share = Math.max(600, Math.floor(budget / Math.max(1, replies.length)))
-  const quoted = replies.map(({ role, message }) => `${en ? `[${role.name}]` : `【${role.name}】`}\n${trimReply(message.content, share, en)}`)
+  const label = (name: string, turn: number | undefined) => en
+    ? `[${name}${turn ? `, turn ${turn}` : ''}]`
+    : `【${name}${turn ? ` · 第 ${turn} 轮` : ''}】`
+  const quoted = replies.map(({ role, message, turn }) => `${label(role.name, turn)}\n${trimReply(message.content, share, en)}`)
   const questionText = `${question.content}${describeAttachments(question.attachments, language)}`.trim()
 
   return [
     en ? `You are "${input.summarizer.name}". This time, act as the summarizer of this round of the group discussion.` : `你是「${input.summarizer.name}」，这次请你担任本轮讨论的汇总人。`,
     `${en ? "The user's question:" : '用户的问题：'}\n${questionText}`,
-    `${en ? "The members' replies:" : '各成员的回复：'}\n\n${quoted.join('\n\n')}`,
+    input.round.discussion
+      ? `${en ? 'The discussion, turn by turn:' : '讨论中的发言（按顺序）：'}\n\n${quoted.join('\n\n')}`
+      : `${en ? "The members' replies:" : '各成员的回复：'}\n\n${quoted.join('\n\n')}`,
     en
       ? [
           'Summarize these replies so the user can see at a glance where things stand (under 200 words), in this format:',

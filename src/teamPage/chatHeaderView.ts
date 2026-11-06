@@ -25,6 +25,7 @@ export interface ChatHeaderView {
 
 export function createChatHeaderView(deps: ChatHeaderViewDependencies): ChatHeaderView {
   let manualMentionToggle: HTMLButtonElement | undefined
+  let discussionToggle: HTMLButtonElement | undefined
 
   function renderTitleAvatar(chat: GroupChat | undefined): void {
     const avatar = deps.chatTitleAvatarEl
@@ -51,6 +52,10 @@ export function createChatHeaderView(deps: ChatHeaderViewDependencies): ChatHead
       if (manualMentionToggle) {
         manualMentionToggle.hidden = true
         manualMentionToggle.disabled = true
+      }
+      if (discussionToggle) {
+        discussionToggle.hidden = true
+        discussionToggle.disabled = true
       }
       return
     }
@@ -87,6 +92,32 @@ export function createChatHeaderView(deps: ChatHeaderViewDependencies): ChatHead
     manualMentionToggle.setAttribute('aria-label', ui(ruleHint))
     manualMentionToggle.setAttribute('aria-pressed', String(plainMessagesReplyAll))
     manualMentionToggle.setAttribute('aria-checked', String(plainMessagesReplyAll))
+    renderDiscussionToggle(chat, manualMentionToggle)
+  }
+
+  // 轮流讨论: messages to several members start a turn-by-turn discussion (协作 groups only).
+  function renderDiscussionToggle(chat: GroupChat, before: HTMLElement): void {
+    if (!discussionToggle) {
+      discussionToggle = document.createElement('button')
+      discussionToggle.type = 'button'
+      discussionToggle.className = 'btn drawer-summary manual-mention-toggle discussion-toggle'
+      discussionToggle.setAttribute('role', 'switch')
+      discussionToggle.addEventListener('click', async () => {
+        const current = deps.getCurrentChat()
+        if (!current) return
+        await deps.runCommand('GROUP_CHAT_UPDATE', { chatId: current.id, discussionMode: current.discussionMode !== true })
+      })
+      before.parentElement?.insertBefore(discussionToggle, before)
+    }
+    const on = chat.discussionMode === true
+    const hint = '开启后，@ 两位以上成员时，他们会一个接一个发言，每人都能看到前面说了什么，也可以 @ 别人接着说'
+    discussionToggle.hidden = chat.mode !== 'collaborative'
+    discussionToggle.disabled = false
+    discussionToggle.textContent = ui('轮流讨论')
+    discussionToggle.title = ui(hint)
+    discussionToggle.setAttribute('aria-label', ui(hint))
+    discussionToggle.setAttribute('aria-pressed', String(on))
+    discussionToggle.setAttribute('aria-checked', String(on))
   }
 
   function ui(source: string): string {

@@ -7,7 +7,7 @@ import type { GroupChat, GroupMessage, GroupRole, MessageFileAttachment, Message
 import { formatBytes } from './composerAttachments'
 import { renderMarkdownInto } from './markdownRender'
 import { countRepliesByQuestion } from '../group/replyComparison'
-import { isKeyPointsHeading } from '../group/roundSummary'
+import { hasRoundSummary, isKeyPointsHeading, isOpenTeamRequest } from '../group/roundSummary'
 import type { ImageAttachmentBlobRecord } from '../shared/imageAttachmentRepository'
 import type { TeamPageState } from './appState'
 import { buildChatRenderItems, getChatStartupNotice, getStoppedReplyRoles, getVisibleThinkingRoles, THINKING_TIMEOUT_MS } from './chatExperience'
@@ -102,6 +102,8 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
   let summaryRequestsById = new Map<string, GroupMessage>()
   // Folded replies the user opened, until the page is reloaded.
   const expandedReplyIds = new Set<string>()
+  // The discussion bar, kept while its state is the same so a click is not lost to a re-render.
+  let discussionBarCache: { key: string; node: HTMLElement } | undefined
   // Replies still being written flow in smoothly instead of jumping in bursts. While the user is
   // at the bottom of the chat, it stays there as the text grows.
   const reveal = createStreamingReveal({
@@ -119,8 +121,9 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     replyCounts = countRepliesByQuestion(messages)
     summaryRequestsById = new Map(messages.filter(message => message.type === 'user' && message.roundSummaryOf).map(message => [message.id, message]))
     summarizedQuestionIds = new Set([...summaryRequestsById.values()].map(message => message.roundSummaryOf!))
-    // A summary request is not the user speaking, so it leaves the round's choices open.
-    latestUserSeq = messages.reduce((latest, message) => message.type === 'user' && !message.roundSummaryOf ? Math.max(latest, message.seq) : latest, 0)
+    // OpenTeam's own requests (summaries, discussion turns) are not the user speaking, so they leave
+    // the round's choices open.
+    latestUserSeq = messages.reduce((latest, message) => message.type === 'user' && !isOpenTeamRequest(message) ? Math.max(latest, message.seq) : latest, 0)
     releaseUnusedImageUrls(messages)
     const preserveScroll = deps.state.preserveNextMessageScroll
     const previousScrollTop = deps.messagesEl.scrollTop
@@ -174,6 +177,8 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     for (const role of getStoppedReplyRoles(deps.getCurrentRoles())) {
       nodes.push(replyControlBubble(role))
     }
+    const discussion = discussionBar(chat, messages)
+    if (discussion) nodes.push(discussion)
     reconcileChildren(deps.messagesEl, nodes)
     reveal.retain(new Set([
       ...messages.filter(message => message.type === 'assistant' && message.status === 'pending').map(message => streamingRevealKey(message)),
@@ -206,6 +211,16 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     const article = document.createElement('article')
     article.className = `message-row message ${message.type}${showName ? '' : ' compact'}${showAvatar ? '' : ' no-avatar'}`
     article.dataset.messageId = message.id
+
+    if (message.type === 'user' && message.discussionTurnOf) {
+      article.className = 'message-row message system discussion-turn-request'
+      const pill = document.createElement('div')
+      pill.className = 'message-system-pill'
+      pill.textContent = message.content
+      article.append(pill)
+      cacheMessageNode(message.id, signature, article, streamingSignature)
+      return article
+    }
 
     if (message.type === 'user' && message.roundSummaryOf) {
       article.className = 'message-row message system round-summary-request'
@@ -272,6 +287,12 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     bubble.className = 'message-bubble'
     const orchestrationLabel = renderOrchestrationMessageLabel(message)
     if (orchestrationLabel) bubble.append(orchestrationLabel)
+    if (message.discussionTopic || message.discussionNoteOf) {
+      const label = document.createElement('div')
+      label.className = 'discussion-message-label'
+      label.textContent = message.discussionTopic ? '轮流讨论' : '补充给下一位发言的成员'
+      bubble.append(label)
+    }
     const body = document.createElement('div')
     body.className = 'message-body'
     if (message.type === 'assistant' && message.status === 'pending') body.classList.add('thinking-dots')
@@ -408,6 +429,67 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
       text += node.textContent ?? ''
     }
     return text
+  }
+
+  // The group's discussion while it runs (turn, speaker, stop), and once it ends (one more round,
+  // summarize), until the user starts something else.
+  function discussionBar(chat: GroupChat, messages: GroupMessage[]): HTMLElement | undefined {
+    const run = chat.discussion
+    if (!run) return undefined
+    const running = run.status === 'running'
+    if (!running) {
+      const latestOwn = [...messages].reverse().find(message => message.type === 'user' && !isOpenTeamRequest(message))
+      if (!latestOwn || (latestOwn.id !== run.topicMessageId && latestOwn.discussionNoteOf !== run.topicMessageId)) return undefined
+    }
+    const store = deps.getStore()
+    const summarized = !running && hasRoundSummary(store, chat, run.topicMessageId)
+    const key = JSON.stringify([chat.id, run.id, run.status, run.turn, run.maxTurns, run.currentRoleId, run.stopReason, summarized, run.currentRoleId ? store.rolesById[run.currentRoleId]?.name : undefined])
+    if (discussionBarCache?.key === key) return discussionBarCache.node
+    const bar = document.createElement('div')
+    bar.className = `discussion-bar${running ? ' running' : ''}`
+    bar.setAttribute('role', 'status')
+    const text = document.createElement('div')
+    text.className = 'discussion-bar-text'
+    const title = document.createElement('strong')
+    const detail = document.createElement('span')
+    if (running) {
+      const speaker = run.currentRoleId ? store.rolesById[run.currentRoleId]?.name : undefined
+      title.textContent = `轮流讨论中 · 第 ${run.turn}/${run.maxTurns} 轮`
+      detail.textContent = speaker ? `「${speaker}」正在发言。你现在发的消息会作为补充，给下一位发言的成员看。` : '你现在发的消息会作为补充，给下一位发言的成员看。'
+    } else {
+      title.textContent = run.status === 'done' ? `讨论结束 · 共 ${run.turn} 轮` : `讨论已停止 · 共 ${run.turn} 轮`
+      detail.textContent = run.stopReason === 'failed'
+        ? '连续两位成员没有回复，讨论停了下来。'
+        : run.stopReason === 'unavailable' ? '没有可以发言的成员了。' : ''
+    }
+    text.append(title)
+    if (detail.textContent) text.append(detail)
+    bar.append(text)
+
+    const actions = document.createElement('div')
+    actions.className = 'discussion-bar-actions'
+    const command = (label: string, type: string, primary = false) => {
+      const button = document.createElement('button')
+      button.type = 'button'
+      button.className = `btn btn-small${primary ? ' btn-primary' : ''}`
+      button.textContent = label
+      button.addEventListener('click', () => {
+        button.disabled = true
+        deps.runCommand(type, { chatId: chat.id, ...(type === 'GROUP_ROUND_SUMMARY_REQUEST' ? { messageId: run.topicMessageId } : {}) })
+          .catch(error => deps.showError(error instanceof Error ? error.message : String(error)))
+          .finally(() => { button.disabled = false })
+      })
+      actions.append(button)
+    }
+    if (running) {
+      command('停止讨论', 'GROUP_DISCUSSION_STOP')
+    } else {
+      command('再讨论一轮', 'GROUP_DISCUSSION_CONTINUE', true)
+      if (!summarized) command('汇总讨论', 'GROUP_ROUND_SUMMARY_REQUEST')
+    }
+    bar.append(actions)
+    discussionBarCache = { key, node: bar }
+    return bar
   }
 
   // Asks a member to summarize a round that has no summary yet.

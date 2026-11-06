@@ -1,3 +1,4 @@
+import { isOpenTeamRequest } from '../group/roundSummary'
 import type { GroupChat, GroupMessage, GroupRole } from '../group/types'
 
 export const THINKING_TIMEOUT_MS = 120_000
@@ -123,13 +124,13 @@ export function buildChatRenderItems(messages: GroupMessage[], roles: GroupRole[
       })
     }
 
-    // A summary request is a notice, not the user speaking.
+    // OpenTeam's own requests (summaries, discussion turns) are notices, not the user speaking.
     const sameSpeaker =
       previousMessage?.type === message.type &&
       previousMessage?.roleId === message.roleId &&
       message.type !== 'system' &&
-      !message.roundSummaryOf &&
-      !previousMessage?.roundSummaryOf &&
+      !isOpenTeamRequest(message) &&
+      !isOpenTeamRequest(previousMessage) &&
       message.createdAt - previousTimestamp < MESSAGE_TIME_GAP_MS
     items.push({
       type: 'message',

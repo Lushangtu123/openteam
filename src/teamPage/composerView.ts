@@ -255,7 +255,8 @@ export function createComposerView(deps: ComposerViewDependencies): ComposerView
 
     const waitingRoles = targetResult.roles.filter(role => role.status === 'thinking' && !shouldAutoReconnectRole(role))
     const readyRoles = targetResult.roles.filter(role => role.status === 'ready')
-    if (waitingRoles.length > 0 && readyRoles.length === 0) {
+    // During a discussion the message is a note for the next speakers, so busy members do not matter.
+    if (waitingRoles.length > 0 && readyRoles.length === 0 && chat.discussion?.status !== 'running') {
       deps.showError(`请等待人员回复完成：${waitingRoles.map(roleDisplayName).join('、')}`)
       return
     }

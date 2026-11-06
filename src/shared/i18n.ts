@@ -196,6 +196,20 @@ const UI_TRANSLATIONS: Record<string, string> = {
   '本轮汇总': 'Round summary',
   '汇总本轮': 'Summarize round',
   '汇总本轮回复': 'Summarize this round',
+  '正在汇总本轮回复': 'Summarizing this round',
+  '轮流讨论': 'Take turns',
+  '开启后，@ 两位以上成员时，他们会一个接一个发言，每人都能看到前面说了什么，也可以 @ 别人接着说': 'When on, messages to two or more members start a discussion: they speak one at a time, each seeing what was said, and can @ someone to answer next',
+  '补充给下一位发言的成员': 'Note for the next speaker',
+  '你现在发的消息会作为补充，给下一位发言的成员看。': 'What you send now is added as a note for the next speaker.',
+  '连续两位成员没有回复，讨论停了下来。': 'Two turns in a row got no reply, so the discussion stopped.',
+  '没有可以发言的成员了。': 'No member is free to speak.',
+  '停止讨论': 'Stop discussion',
+  '再讨论一轮': 'One more round',
+  '汇总讨论': 'Summarize discussion',
+  '讨论进行中，补充的消息暂不支持附件': 'A discussion is running; notes cannot have attachments',
+  '参加讨论的成员都不可用，请等待或恢复后再试': 'None of the discussion members is available; wait or recover them and try again',
+  '没有可以继续的讨论': 'There is no discussion to continue',
+  '找不到讨论的话题，可能已被删除': 'The discussion topic was not found; it may have been deleted',
   'OpenTeam 不在前台时，成员都回复完会弹出桌面通知。': 'When OpenTeam is not in front, a desktop notification tells you every member has replied.',
   '查看成员的 AI 网页': "View the members' AI pages",
   '成员的网页在 OpenTeam 后面运行。需要登录、验证或关掉弹窗时打开它们，再点「返回 OpenTeam」回来。': "The members' pages run behind OpenTeam. Open them to sign in, pass a check or close a pop-up, then click Back to OpenTeam.",
@@ -980,6 +994,18 @@ function translateUiPattern(source: string): string | undefined {
   if (passwordFile) return `Cannot open a password-protected file: ${passwordFile[1]}`
   const unreadableFile = source.match(/^无法读取文件：(.+)（文件已损坏或格式不对）$/)
   if (unreadableFile) return `Cannot read ${unreadableFile[1]} (the file is damaged or not in the expected format)`
+  const summaryAsked = source.match(/^已请「(.+)」汇总本轮回复$/)
+  if (summaryAsked) return `Asked ${summaryAsked[1]} to summarize this round`
+  const discussionRunning = source.match(/^轮流讨论中 · 第 (\d+)\/(\d+) 轮$/)
+  if (discussionRunning) return `Discussion running · turn ${discussionRunning[1]}/${discussionRunning[2]}`
+  const discussionSpeaker = source.match(/^「(.+)」正在发言。你现在发的消息会作为补充，给下一位发言的成员看。$/)
+  if (discussionSpeaker) return `${discussionSpeaker[1]} is speaking. What you send now is added as a note for the next speaker.`
+  const discussionDone = source.match(/^讨论(结束|已停止) · 共 (\d+) 轮$/)
+  if (discussionDone) return `Discussion ${discussionDone[1] === '结束' ? 'finished' : 'stopped'} · ${discussionDone[2]} turns`
+  const discussionHandoff = source.match(/^第 (\d+)\/(\d+) 轮 · 「(.+)」请「(.+)」接着说$/)
+  if (discussionHandoff) return `Turn ${discussionHandoff[1]}/${discussionHandoff[2]}: ${discussionHandoff[3]} asked ${discussionHandoff[4]} to speak`
+  const discussionTurn = source.match(/^第 (\d+)\/(\d+) 轮 · 请「(.+)」发言$/)
+  if (discussionTurn) return `Turn ${discussionTurn[1]}/${discussionTurn[2]}: ${discussionTurn[3]} speaks`
   const documentPage = source.match(/^—— 第 (\d+) 页 ——$/)
   if (documentPage) return `—— Page ${documentPage[1]} ——`
   const documentSheet = source.match(/^—— 工作表：(.+) ——$/)

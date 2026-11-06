@@ -1,3 +1,4 @@
+import { discussionTranscript } from '../group/discussion'
 import type { OpenTeamStore } from '../group/types'
 import { normalizeLanguage } from '../shared/i18n'
 
@@ -17,8 +18,15 @@ export function findAnsweredPrompt(store: OpenTeamStore, chatId: string, message
   const chat = store.chatsById[chatId]
   const message = store.messagesById[messageId]
   if (!chat || !message || message.type !== 'user' || message.chatId !== chatId) return undefined
-  // A round's summary is not a question the user asked.
-  if (message.roundSummaryOf) return undefined
+  // A round's summary and a discussion turn are not questions the user asked.
+  if (message.roundSummaryOf || message.discussionTurnOf) return undefined
+  // A discussion is answered once it has finished.
+  if (message.discussionTopic) {
+    if (chat.discussion?.topicMessageId === messageId && chat.discussion.status === 'running') return undefined
+    const speakers = new Set(discussionTranscript(store, chat, messageId).flatMap(entry => entry.kind === 'turn' && entry.message.roleId ? [entry.message.roleId] : []))
+    if (speakers.size === 0) return undefined
+    return { chatId, chatName: chat.name, messageId, repliedNames: [...speakers].map(roleId => store.rolesById[roleId]?.name ?? roleId), failedNames: [] }
+  }
   const statuses = Object.entries(message.deliveryStatus ?? {})
   if (statuses.length === 0 || statuses.some(([, status]) => status !== 'received' && status !== 'error')) return undefined
   const nameOf = (roleId: string) => store.rolesById[roleId]?.name ?? roleId

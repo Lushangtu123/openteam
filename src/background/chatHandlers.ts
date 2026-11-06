@@ -130,6 +130,12 @@ export function createChatHandlers(deps: ChatHandlersDependencies): BackgroundMe
         patchKeys.push('pinned')
       }
 
+      if (patch.discussionMode !== undefined) {
+        if (patch.discussionMode) chat.discussionMode = true
+        else delete chat.discussionMode
+        patchKeys.push('discussionMode')
+      }
+
       if (patch.teamFormation === null) {
         delete chat.teamFormation
         patchKeys.push('teamFormation')

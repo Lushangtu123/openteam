@@ -150,6 +150,8 @@ describe('background message handlers', () => {
       'GROUP_MESSAGE_RESYNC_REPLY',
       'GROUP_MESSAGE_SEND',
       'GROUP_ROUND_SUMMARY_REQUEST',
+      'GROUP_DISCUSSION_STOP',
+      'GROUP_DISCUSSION_CONTINUE',
       'TEAM_FRAME_ROLE_READY',
       'TEAM_ROLE_CONVERSATION_UPDATED',
       'TEAM_SEND_ACK',
@@ -1225,6 +1227,140 @@ describe('background message handlers', () => {
     const response = await summarize?.handler({ type: 'GROUP_ROUND_SUMMARY_REQUEST', chatId: 'chat-1', messageId: 'msg-1' }, {})
     expect(response).toMatchObject({ ok: true, message: { roundSummaryOf: 'msg-1', targetRoleIds: ['role-1'] } })
     expect(complete).toHaveBeenCalledTimes(4)
+  })
+
+  it('runs a discussion turn by turn, hands the turn over on @, passes the user’s notes on, and summarizes it', async () => {
+    vi.resetModules()
+    const startingStore = createStoreWithTwoApiRoles()
+    startingStore.chatsById['chat-1'].mode = 'collaborative'
+    startingStore.chatsById['chat-1'].discussionMode = true
+    let currentStore = structuredClone(startingStore)
+    vi.doMock('./storeAccess', async importOriginal => {
+      const actual = await importOriginal<typeof import('./storeAccess')>()
+      return {
+        ...actual,
+        mutateStore: vi.fn(async (mutator: (store: OpenTeamStore) => unknown) => {
+          const result = await mutator(currentStore)
+          currentStore = structuredClone(currentStore)
+          return { store: currentStore, result }
+        }),
+      }
+    })
+
+    const { createMessageHandlers } = await import('./messageHandlers')
+    let releaseTurn2: () => void = () => {}
+    const turn2 = new Promise<void>(resolve => { releaseTurn2 = resolve })
+    let turns = 0
+    const complete = vi.fn(async (input: { prompt: string }): Promise<{ content: string }> => {
+      if (input.prompt.includes('汇总人')) return { content: '**共识**\n- 先修再说' }
+      turns += 1
+      if (turns === 1) return { content: '应该重写。@设计师 你怎么看？' }
+      if (turns === 2) {
+        await turn2
+        return { content: '先别重写，先修。' }
+      }
+      return { content: `第 ${turns} 次发言` }
+    })
+    let messageIdSeq = 0
+    const routes = createMessageHandlers({
+      broadcastStoreUpdated: vi.fn(),
+      externalModelClient: { complete },
+      getChatStatusFromRoles: () => 'ready',
+      log: { debug: vi.fn(), info: vi.fn(), warn: vi.fn() },
+      newId: vi.fn((prefix: string) => prefix === 'msg' ? `${prefix}-${++messageIdSeq}` : `${prefix}-${messageIdSeq}`),
+      now: vi.fn(() => 100),
+      runtimeFrames: { bind: vi.fn(), getByAddress: vi.fn(), getByRole: vi.fn(() => undefined) },
+      sendRoleMessage: vi.fn(),
+      sendError: vi.fn(),
+      sendPrompt: vi.fn(),
+      waitForRetry: vi.fn(async () => {}),
+    })
+    const send = routes.find(route => route.type === 'GROUP_MESSAGE_SEND')!
+
+    const response = await send.handler({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@all 要不要重写登录模块？' }, {})
+    expect(response).toMatchObject({ ok: true, message: { discussionTopic: true, content: '要不要重写登录模块？', targetRoleIds: ['role-1', 'role-2'] }, deliveries: [{ roleId: 'role-1' }] })
+
+    // Turn 2 goes to the member turn 1 @-mentioned; the user adds a note while it is written.
+    await vi.waitFor(() => expect(complete).toHaveBeenCalledTimes(2))
+    await send.handler({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@all 预算只有两周' }, {})
+    releaseTurn2()
+    await vi.waitFor(() => expect(complete).toHaveBeenCalledTimes(5))
+    await vi.waitFor(() => expect(Object.values(currentStore.messagesById).some(message => message.content === '**共识**\n- 先修再说')).toBe(true))
+
+    const prompts = complete.mock.calls.map(([input]) => input.prompt)
+    expect(prompts[0]).toContain('还没有人发言，由你开场。')
+    expect(prompts[1]).toContain('你的身份是「设计师」。')
+    expect(prompts[1]).toContain('【工程师】\n应该重写。@设计师 你怎么看？')
+    expect(prompts[2]).toContain('你的身份是「工程师」。')
+    expect(prompts[2]).toContain('【用户补充】\n@all 预算只有两周')
+    expect(prompts[3]).toContain('你的身份是「设计师」。')
+    expect(prompts[4]).toContain('讨论中的发言（按顺序）：')
+    expect(prompts[4]).toContain('【设计师 · 第 2 轮】\n先别重写，先修。')
+
+    const requests = Object.values(currentStore.messagesById).filter(message => message.discussionTurnOf).sort((a, b) => a.seq - b.seq)
+    expect(requests.map(request => [request.discussionTurn, request.targetRoleIds?.[0], request.discussionHandoffFrom])).toEqual([
+      [1, 'role-1', undefined], [2, 'role-2', 'role-1'], [3, 'role-1', undefined], [4, 'role-2', undefined],
+    ])
+    expect(requests[1].content).toBe('第 2/4 轮 · 「工程师」请「设计师」接着说')
+    expect(Object.values(currentStore.messagesById).find(message => message.discussionNoteOf)).toMatchObject({ content: '@all 预算只有两周', targetRoleIds: [] })
+    expect(currentStore.chatsById['chat-1'].discussion).toMatchObject({ status: 'done', turn: 4, maxTurns: 4 })
+  })
+
+  it('stops a discussion after the current turn and continues it for one more round', async () => {
+    vi.resetModules()
+    const startingStore = createStoreWithTwoApiRoles()
+    startingStore.chatsById['chat-1'].mode = 'collaborative'
+    startingStore.chatsById['chat-1'].discussionMode = true
+    let currentStore = structuredClone(startingStore)
+    vi.doMock('./storeAccess', async importOriginal => {
+      const actual = await importOriginal<typeof import('./storeAccess')>()
+      return {
+        ...actual,
+        mutateStore: vi.fn(async (mutator: (store: OpenTeamStore) => unknown) => {
+          const result = await mutator(currentStore)
+          currentStore = structuredClone(currentStore)
+          return { store: currentStore, result }
+        }),
+      }
+    })
+
+    const { createMessageHandlers } = await import('./messageHandlers')
+    let releaseTurn2: () => void = () => {}
+    const turn2 = new Promise<void>(resolve => { releaseTurn2 = resolve })
+    let turns = 0
+    const complete = vi.fn(async (_input: { prompt: string }): Promise<{ content: string }> => {
+      turns += 1
+      if (turns === 2) await turn2
+      return { content: `发言 ${turns}` }
+    })
+    let messageIdSeq = 0
+    const routes = createMessageHandlers({
+      broadcastStoreUpdated: vi.fn(),
+      externalModelClient: { complete },
+      getChatStatusFromRoles: () => 'ready',
+      log: { debug: vi.fn(), info: vi.fn(), warn: vi.fn() },
+      newId: vi.fn((prefix: string) => prefix === 'msg' ? `${prefix}-${++messageIdSeq}` : `${prefix}-${messageIdSeq}`),
+      now: vi.fn(() => 100),
+      runtimeFrames: { bind: vi.fn(), getByAddress: vi.fn(), getByRole: vi.fn(() => undefined) },
+      sendRoleMessage: vi.fn(),
+      sendError: vi.fn(),
+      sendPrompt: vi.fn(),
+      waitForRetry: vi.fn(async () => {}),
+    })
+    const route = (type: string) => routes.find(candidate => candidate.type === type)!
+
+    await route('GROUP_MESSAGE_SEND').handler({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@all 讨论一下' }, {})
+    await vi.waitFor(() => expect(complete).toHaveBeenCalledTimes(2))
+    await route('GROUP_DISCUSSION_STOP').handler({ type: 'GROUP_DISCUSSION_STOP', chatId: 'chat-1' }, {})
+    releaseTurn2()
+    await new Promise(resolve => setTimeout(resolve, 20))
+    expect(complete).toHaveBeenCalledTimes(2)
+    expect(currentStore.chatsById['chat-1'].discussion).toMatchObject({ status: 'stopped', stopReason: 'user', turn: 2 })
+
+    const continued = await route('GROUP_DISCUSSION_CONTINUE').handler({ type: 'GROUP_DISCUSSION_CONTINUE', chatId: 'chat-1' }, {})
+    expect(continued).toMatchObject({ ok: true, message: { discussionTurn: 3, targetRoleIds: ['role-1'] } })
+    await vi.waitFor(() => expect(currentStore.chatsById['chat-1'].discussion).toMatchObject({ status: 'done', turn: 4, maxTurns: 4 }))
+    await expect(route('GROUP_DISCUSSION_CONTINUE').handler({ type: 'GROUP_DISCUSSION_CONTINUE', chatId: 'chat-2' }, {})).rejects.toThrow()
   })
 
   it('delivers external model roles through the API runtime without requiring an iframe', async () => {

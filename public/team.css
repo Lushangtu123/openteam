@@ -7452,7 +7452,7 @@ select.reply-compare-select {
 }
 
 /* In narrow windows the group title needs the room; the choice is also in the settings menu. */
-@media (max-width: 1180px) {
+@media (max-width: 1360px) {
   :root[data-theme] .ui-style-switch {
     display: none;
   }
@@ -7750,6 +7750,81 @@ select.reply-compare-select {
 
 :root[data-theme] .round-summary-request .message-system-pill {
   font-size: 12px;
+}
+
+/* Turn-by-turn discussions: the topic and notes say what they are, each turn is announced, and a bar
+   at the end of the chat shows the turn and who speaks, with stop / one more round / summarize. */
+:root[data-theme] .discussion-turn-request .message-system-pill {
+  font-size: 12px;
+}
+
+:root[data-theme] .discussion-message-label {
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+/* In the user's bubble the label sits inside its padding, above the text. */
+:root[data-theme] .message-row.user .discussion-message-label {
+  margin-bottom: -6px;
+  padding: 9px 18px 0;
+}
+
+:root[data-theme] .discussion-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 6px max(24px, calc((100% - 768px) / 2)) 4px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 10px 12px 10px 16px;
+  background: var(--chip-bg);
+}
+
+:root[data-theme] .discussion-bar-text {
+  display: grid;
+  flex: 1;
+  gap: 2px;
+  min-width: 0;
+  font-size: 13px;
+}
+
+:root[data-theme] .discussion-bar-text strong {
+  color: var(--text);
+  font-weight: 650;
+}
+
+:root[data-theme] .discussion-bar-text span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+:root[data-theme] .discussion-bar.running .discussion-bar-text strong::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin: 0 7px 1px 0;
+  border-radius: 50%;
+  background: var(--success, #10a37f);
+  animation: discussion-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes discussion-pulse {
+  50% { opacity: 0.35; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-theme] .discussion-bar.running .discussion-bar-text strong::before {
+    animation: none;
+  }
+}
+
+:root[data-theme] .discussion-bar-actions {
+  display: flex;
+  flex: none;
+  gap: 6px;
 }
 
 /* Group list search (shown for long lists) and the pin mark on pinned groups. The sidebar gets a
@@ -8075,8 +8150,13 @@ select.reply-compare-select {
   display: none;
 }
 
+/* Room on the right for the reply's tools, which sit beside the bubble (four buttons). */
 :root[data-ui-style="grok"] .message-row.assistant .message-stack {
-  max-width: calc(100% - 112px);
+  max-width: calc(100% - 156px);
+}
+
+:root[data-ui-style="grok"] .messages {
+  overflow-x: hidden;
 }
 
 :root[data-ui-style="grok"] .message-row.assistant .message-bubble,
@@ -8224,4 +8304,11 @@ select.reply-compare-select {
 :root[data-ui-style="grok"] .round-summary-label {
   background: var(--gb-accent);
   color: #ffffff;
+}
+
+:root[data-ui-style="grok"] .discussion-bar {
+  margin-inline: max(24px, calc((100% - 860px) / 2));
+  border-color: transparent;
+  border-radius: 20px;
+  background: var(--gb-accent-soft);
 }

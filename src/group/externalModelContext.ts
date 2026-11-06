@@ -1,7 +1,7 @@
 import { formatContextMessage } from './contextSync'
 import { buildPrompt } from './promptBuilder'
 import { describeAttachments } from './messageUploads'
-import { isRoundSummaryMessage } from './roundSummary'
+import { isOpenTeamRequest, isRoundSummaryMessage } from './roundSummary'
 import { normalizeLanguage } from '../shared/i18n'
 import type { GroupChat, GroupMessage, GroupRole, OpenTeamLanguage, OpenTeamStore } from './types'
 
@@ -100,7 +100,7 @@ function externalContextMessages(store: OpenTeamStore, chat: GroupChat, role: Gr
     .filter((message): message is GroupMessage => Boolean(message))
     .filter(message => message.seq <= userMessage.seq)
     // Round summaries are for the user; members do not get them (or their requests) as context.
-    .filter(message => message.id === userMessage.id || !isRoundSummaryMessage(message, id => store.messagesById[id]))
+    .filter(message => message.id === userMessage.id || (!isRoundSummaryMessage(message, id => store.messagesById[id]) && !isOpenTeamRequest(message)))
     .sort((left, right) => left.seq - right.seq || left.createdAt - right.createdAt)
 
   if (chat.mode === 'collaborative') return messages

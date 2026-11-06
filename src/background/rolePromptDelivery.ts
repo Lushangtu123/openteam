@@ -5,6 +5,7 @@ import { buildOrchestrationReviewResponseInstruction } from '../group/orchestrat
 import { uploadedImageIds } from '../group/messageUploads'
 import { buildPrompt, roleUsesChatGptGptsPersona } from '../group/promptBuilder'
 import { buildRoundSummaryPrompt, keyPointsInstruction, readSummarizableRound, wantsKeyPoints } from '../group/roundSummary'
+import { buildDiscussionTurnPrompt, discussionTranscript } from '../group/discussion'
 import type { ExternalModelConfig, GroupChat, GroupMessage, GroupRole, MessageReference, OpenTeamStore } from '../group/types'
 import type { PromptDelivery } from './promptDelivery'
 import type { RuntimeFrameRegistry } from './runtimeFrames'
@@ -43,13 +44,17 @@ export interface PrepareRolePromptDeliveryInput {
 
 export function prepareRolePromptDelivery(input: PrepareRolePromptDeliveryInput): PreparedRolePromptDelivery {
   const roleHistoryCount = countLocalRoleHistory(input.messages, input.role, input.userMessage.id)
-  const summary = roundSummaryPromptFor(input)
-  const includesPersona = !summary && shouldIncludePersonaForPrompt(input.role, roleHistoryCount, input.userMessage)
+  const summaryPrompt = roundSummaryPromptFor(input)
+  const includesPersona = !summaryPrompt && shouldIncludePersonaForPrompt(input.role, roleHistoryCount, input.userMessage)
+  // OpenTeam's own requests (a summary, a discussion turn) carry their whole prompt.
+  const summary = summaryPrompt ?? (input.userMessage.discussionTurnOf
+    ? buildDiscussionTurnPrompt({ store: input.store, chat: input.chat, request: input.userMessage, role: input.role, roles: input.roles, includePersona: includesPersona, language: input.store.settings.language })
+    : undefined)
   const replyAttemptId = input.newId('attempt')
   const responseInstruction = responseInstructionForMessage(input.userMessage, input.store.settings.language)
   const extraInstruction = wantsKeyPoints(input.store.settings, input.chat, input.userMessage) ? keyPointsInstruction(input.store.settings.language) : undefined
   const maxContextChars = contextCharBudgetForRole(input.store, input.role)
-  const imageAttachmentIds = uploadedImageIds(input.userMessage)
+  const imageAttachmentIds = uploadedImageIds(discussionImagesSource(input) ?? input.userMessage)
   const images = imageAttachmentIds.length > 0 ? { imageAttachmentIds } : {}
 
   if (isExternalModelRole(input.role)) {
@@ -153,6 +158,14 @@ function applyExternalMemoryPatch(store: OpenTeamStore, patch: ExternalMemoryPat
 // team members picked new positions).
 function shouldIncludePersonaForPrompt(role: GroupRole, roleHistoryCount: number, message: GroupMessage): boolean {
   return !roleUsesChatGptGptsPersona(role) && (roleHistoryCount === 0 || message.refreshPersona === true)
+}
+
+// A member's first turn in a discussion carries the images the user attached to the topic.
+function discussionImagesSource(input: PrepareRolePromptDeliveryInput): GroupMessage | undefined {
+  const topicId = input.userMessage.discussionTurnOf
+  if (!topicId) return undefined
+  const spokeBefore = discussionTranscript(input.store, input.chat, topicId).some(entry => entry.kind === 'turn' && entry.message.roleId === input.role.id)
+  return spokeBefore ? { ...input.userMessage, attachments: [] } : input.store.messagesById[topicId]
 }
 
 // A request to summarize a round carries the round's replies itself, instead of the usual prompt.

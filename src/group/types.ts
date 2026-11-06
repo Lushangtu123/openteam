@@ -251,7 +251,36 @@ export interface GroupChat {
   pinned?: boolean
   // Set while the members of a group made with "按任务组队" pick their own positions.
   teamFormation?: TeamFormation
+  // 轮流讨论: in a 协作 group, a message to two or more members starts a turn-by-turn discussion
+  // instead of everyone answering at once.
+  discussionMode?: boolean
+  // The group's latest discussion.
+  discussion?: DiscussionRun
   createdAt: number
+  updatedAt: number
+}
+
+export type DiscussionStatus = 'running' | 'done' | 'stopped'
+
+// A turn-by-turn discussion: members speak one at a time about the topic message.
+export interface DiscussionRun {
+  id: string
+  topicMessageId: string
+  // The members taking part, in speaking order.
+  roleIds: string[]
+  maxTurns: number
+  // Turns started so far.
+  turn: number
+  status: DiscussionStatus
+  // Set when the user stops it: the member speaking finishes, and nobody speaks after.
+  stopRequested?: boolean
+  stopReason?: 'user' | 'failed' | 'unavailable'
+  currentRoleId?: string
+  // The request for the current turn.
+  currentMessageId?: string
+  // Turns in a row that got no reply.
+  failedTurns: number
+  startedAt: number
   updatedAt: number
 }
 
@@ -372,6 +401,15 @@ export interface GroupMessage {
   // On a request OpenTeam sends to one member to summarize a round: the message that started the
   // round. That member's answer is the round's summary.
   roundSummaryOf?: string
+  // On the user's message that started a turn-by-turn discussion.
+  discussionTopic?: boolean
+  // On a request OpenTeam sends to the member whose turn it is: the topic message, the turn number,
+  // and the member who handed the turn over by @-mentioning them, if any.
+  discussionTurnOf?: string
+  discussionTurn?: number
+  discussionHandoffFrom?: string
+  // On a message the user sent while a discussion ran: the topic. It is shown to the next speakers.
+  discussionNoteOf?: string
   createdAt: number
   status: DeliveryStatus
   deliveryStatus?: Record<string, DeliveryStatus>
