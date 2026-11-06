@@ -7365,6 +7365,11 @@ select.reply-compare-select {
   color: var(--muted);
 }
 
+/* A web member's reply as it is being written reads like any reply. */
+:root[data-theme] .message-row.thinking.live .message-body {
+  color: var(--text);
+}
+
 :root[data-theme] .message-time-divider {
   border: 0;
   background: transparent;
@@ -7396,6 +7401,14 @@ select.reply-compare-select {
   border: 0;
   background: transparent;
   box-shadow: none;
+  transform: none;
+}
+
+/* A reply still coming always shows its stop button; a stopped one its retry button. */
+:root[data-theme] .message-row.thinking .message-tools,
+:root[data-theme] .message-row.stopped .message-tools {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 :root[data-theme] .message-row:not(.thinking):not(.stopped) .message-tools {

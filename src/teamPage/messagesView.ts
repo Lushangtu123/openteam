@@ -799,8 +799,9 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
 
   function replyControlBubble(role: GroupRole, showName = true, showAvatar = true): HTMLElement {
     const stopped = role.status === 'stopped'
+    const liveText = stopped ? undefined : liveReplyText(role)
     const article = document.createElement('article')
-    article.className = `message-row message assistant ${stopped ? 'stopped' : 'thinking'}${showName ? '' : ' compact'}${showAvatar ? '' : ' no-avatar'}`
+    article.className = `message-row message assistant ${stopped ? 'stopped' : 'thinking'}${liveText ? ' live' : ''}${showName ? '' : ' compact'}${showAvatar ? '' : ' no-avatar'}`
     const inner = document.createElement('div')
     inner.className = 'message-inner'
     const avatar = document.createElement('div')
@@ -826,7 +827,8 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     bubble.className = 'message-bubble'
     const body = document.createElement('div')
     body.className = `message-body${stopped ? '' : ' thinking-dots'}`
-    body.textContent = stopped ? '已停止回复' : '正在回复中 '
+    if (liveText) renderMarkdownMessageBody(body, liveText)
+    else body.textContent = stopped ? '已停止回复' : '正在回复中 '
     bubble.append(body)
     const tools = document.createElement('div')
     tools.className = 'message-tools'
@@ -840,6 +842,14 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     inner.append(avatar, stack)
     article.append(inner)
     return article
+  }
+
+  // The reply a web member has written so far, when it belongs to the question it is answering now.
+  function liveReplyText(role: GroupRole): string | undefined {
+    const live = role.liveReply
+    if (!live || role.status !== 'thinking' || live.promptMessageId !== role.lastPromptMessageId) return undefined
+    if (live.replyAttemptId && role.replyAttemptId && live.replyAttemptId !== role.replyAttemptId) return undefined
+    return live.content.trim() || undefined
   }
 
   function referenceBox(reference: MessageReference): HTMLElement {

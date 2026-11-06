@@ -307,7 +307,20 @@ export interface GroupRole {
   replyAttemptId?: string
   lastReplyAt?: number
   siteHealth?: RoleSiteHealth
+  // What a web member has written so far, while it is still replying.
+  liveReply?: RoleLiveReply
   createdAt: number
+  updatedAt: number
+}
+
+// A web member's reply as it is being written. The chat shows it in the member's "replying" row
+// until the finished reply arrives as a message. It is not a message, so it never becomes context
+// for other members and never changes the order of the chat.
+export interface RoleLiveReply {
+  promptMessageId: string
+  replyAttemptId?: string
+  content: string
+  contentFormat?: 'markdown'
   updatedAt: number
 }
 

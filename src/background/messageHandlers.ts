@@ -28,6 +28,9 @@ interface ExternalModelRunRegistry {
   unregister(chatId: string, roleId: string, replyAttemptId: string): void
 }
 
+// A live reply longer than this is cut; the finished reply always arrives in full.
+const LIVE_REPLY_MAX_CHARS = 60_000
+
 export const MESSAGE_ROUTE_TYPES = [
   'GROUP_ROLE_RETRY_REPLY',
   'GROUP_ROLE_STOP_REPLY',
@@ -41,6 +44,7 @@ export const MESSAGE_ROUTE_TYPES = [
   'TEAM_ROLE_STATUS',
   'TEAM_SITE_STATUS_UPDATE',
   'TEAM_ROLE_REPLY',
+  'TEAM_ROLE_REPLY_PROGRESS',
   'TEAM_ROLE_REPLY_RESYNC',
   'TEAM_ROLE_ERROR',
 ] as const
@@ -298,6 +302,7 @@ export function createMessageHandlers(deps: MessageHandlersDependencies): Backgr
       role.status = 'thinking'
       role.lastPromptMessageId = userMessage.id
       role.replyAttemptId = prepared.replyAttemptId
+      delete role.liveReply
       role.updatedAt = timestamp
       chat.status = 'running'
       chat.updatedAt = timestamp
@@ -378,7 +383,9 @@ export function createMessageHandlers(deps: MessageHandlersDependencies): Backgr
       const chat = requireChat(store, chatId)
       const role = requireRole(store, chat.id, roleId)
       if (role.lastPromptMessageId !== active.messageId) return
-      const finalizedVisibleReply = active.isExternal ? finalizeActiveExternalAssistantReply(store, chat, role, active.messageId) : false
+      const finalizedVisibleReply = active.isExternal
+        ? finalizeActiveExternalAssistantReply(store, chat, role, active.messageId)
+        : keepLiveReplyAsMessage(store, chat, role, active.messageId, timestamp, deps.newId)
       if (!finalizedVisibleReply) {
         role.status = 'stopped'
         role.replyAttemptId = deps.newId('stopped')
@@ -590,6 +597,7 @@ export function createMessageHandlers(deps: MessageHandlersDependencies): Backgr
       const role = requireRole(store, chat.id, identity.roleId)
       const keepActivePromptError = mappedStatus === 'error' && Boolean(role.lastPromptMessageId)
       role.status = keepActivePromptError ? 'thinking' : mappedStatus
+      if (role.status !== 'thinking') delete role.liveReply
       role.updatedAt = timestamp
       if (mappedStatus === 'ready' || (mappedStatus === 'error' && !keepActivePromptError)) delete role.lastPromptMessageId
       if (mappedStatus === 'ready' || (mappedStatus === 'error' && !keepActivePromptError)) delete role.replyAttemptId
@@ -702,6 +710,7 @@ export function createMessageHandlers(deps: MessageHandlersDependencies): Backgr
         role.status = 'ready'
         role.lastReplyAt = timestamp
         role.updatedAt = timestamp
+        delete role.liveReply
         if (!promptMessageId || role.lastPromptMessageId === promptMessageId) delete role.lastPromptMessageId
         if (!replyAttemptId || role.replyAttemptId === replyAttemptId) delete role.replyAttemptId
         chat.status = deps.getChatStatusFromRoles(store, chat)
@@ -726,6 +735,41 @@ export function createMessageHandlers(deps: MessageHandlersDependencies): Backgr
     if (promptMessageId) await deps.promptDeliveryLimiter?.complete(identity.chatId, promptMessageId, identity.roleId)
     if (promptMessageId) await maybeAdvanceOrchestrationRun(deps, { chatId: identity.chatId, roleId: identity.roleId, promptMessageId, replyMessage: result.reply })
     return { ok: true, message: result.reply, store }
+  }
+
+  // What a web member has written so far. It lives on the role until the finished reply arrives,
+  // so the chat can show it without adding a message.
+  const handleRoleReplyProgress = async (message: RuntimeMessage, sender: chrome.runtime.MessageSender) => {
+    const identity = readIdentity(deps, message, sender)
+    const content = readReplyContent(message.content).slice(0, LIVE_REPLY_MAX_CHARS)
+    const promptMessageId = readOptionalString(message.messageId)
+    const replyAttemptId = readOptionalString(message.replyAttemptId)
+    if (!content || !promptMessageId) return { ok: true, ignored: true, reason: 'empty-progress' }
+    const contentFormat = message.contentFormat === 'markdown' ? 'markdown' : undefined
+    const timestamp = deps.now()
+
+    const { store, result } = await mutateStore(store => {
+      const chat = requireChat(store, identity.chatId)
+      const role = requireRole(store, chat.id, identity.roleId)
+      if (role.status !== 'thinking') return { ignored: true as const, reason: 'role-not-replying' }
+      const staleReason = staleReplyReason(store, chat, role, promptMessageId, replyAttemptId)
+      if (staleReason) return { ignored: true as const, reason: staleReason }
+      if (role.liveReply?.promptMessageId === promptMessageId && role.liveReply.content === content) return { ignored: true as const, reason: 'unchanged' }
+      role.liveReply = {
+        promptMessageId,
+        ...(replyAttemptId ? { replyAttemptId } : {}),
+        content,
+        ...(contentFormat ? { contentFormat } : {}),
+        updatedAt: timestamp,
+      }
+      // Text still arriving shows the member is alive, like a status heartbeat.
+      role.updatedAt = timestamp
+      return { ignored: false as const }
+    })
+
+    if (result.ignored) return { ok: true, ignored: true, reason: result.reason }
+    await deps.broadcastStoreUpdated(store)
+    return { ok: true }
   }
 
   const handleRoleReplyResync = async (message: RuntimeMessage, sender: chrome.runtime.MessageSender) => {
@@ -806,6 +850,7 @@ export function createMessageHandlers(deps: MessageHandlersDependencies): Backgr
       const role = requireRole(store, chat.id, identity.roleId)
       role.status = 'error'
       role.updatedAt = timestamp
+      delete role.liveReply
       if (!promptMessageId || role.lastPromptMessageId === promptMessageId) delete role.lastPromptMessageId
       if (!replyAttemptId || role.replyAttemptId === replyAttemptId) delete role.replyAttemptId
 
@@ -847,6 +892,7 @@ export function createMessageHandlers(deps: MessageHandlersDependencies): Backgr
     { type: 'TEAM_ROLE_STATUS', handler: handleRoleStatus },
     { type: 'TEAM_SITE_STATUS_UPDATE', handler: handleSiteStatusUpdate },
     { type: 'TEAM_ROLE_REPLY', handler: handleRoleReply },
+    { type: 'TEAM_ROLE_REPLY_PROGRESS', handler: handleRoleReplyProgress },
     { type: 'TEAM_ROLE_REPLY_RESYNC', handler: handleRoleReplyResync },
     { type: 'TEAM_ROLE_ERROR', handler: handleRoleError },
   ]
@@ -1007,6 +1053,7 @@ async function prepareRoleErrorRetry(
     role.status = 'thinking'
     role.lastPromptMessageId = userMessage.id
     role.replyAttemptId = prepared.replyAttemptId
+    delete role.liveReply
     role.updatedAt = timestamp
     chat.status = 'running'
     chat.updatedAt = timestamp
@@ -1380,6 +1427,49 @@ function finalizeActiveExternalAssistantReply(store: OpenTeamStore, chat: GroupC
   }
 
   role.status = 'stopped'
+  delete role.lastPromptMessageId
+  delete role.replyAttemptId
+  return true
+}
+
+// Stopping a web member keeps what it had written as its reply, like an API member's.
+function keepLiveReplyAsMessage(
+  store: OpenTeamStore,
+  chat: GroupChat,
+  role: GroupRole,
+  promptMessageId: string,
+  timestamp: number,
+  newId: MessageHandlersDependencies['newId'],
+): boolean {
+  const live = role.liveReply
+  delete role.liveReply
+  if (!live || live.promptMessageId !== promptMessageId || !live.content.trim()) return false
+
+  const reply: AssistantGroupMessage = {
+    id: newId('msg'),
+    chatId: chat.id,
+    seq: chat.nextMessageSeq,
+    type: 'assistant',
+    content: live.content,
+    ...(live.contentFormat ? { contentFormat: live.contentFormat } : {}),
+    roleId: role.id,
+    roleName: role.name,
+    sourceMessageId: promptMessageId,
+    createdAt: timestamp,
+    status: 'received',
+  }
+  store.messagesById[reply.id] = reply
+  chat.messageIds.push(reply.id)
+  chat.nextMessageSeq += 1
+
+  const userMessage = store.messagesById[promptMessageId]
+  if (userMessage?.deliveryStatus?.[role.id]) {
+    userMessage.deliveryStatus[role.id] = 'received'
+    updateUserMessageDeliveryStatus(userMessage)
+  }
+
+  role.status = 'stopped'
+  role.lastReplyAt = timestamp
   delete role.lastPromptMessageId
   delete role.replyAttemptId
   return true

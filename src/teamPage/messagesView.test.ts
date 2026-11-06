@@ -1087,6 +1087,91 @@ describe('team page messages view boundary', () => {
     expect(messagesEl.querySelector('.message-body')?.textContent).toContain('第一段第二段')
   })
 
+  it("shows a web member's reply as it is written in its replying row", () => {
+    const now = Date.now()
+    const chat: GroupChat = {
+      id: 'chat-1',
+      name: '群聊',
+      mode: 'independent',
+      roleIds: ['role-1'],
+      messageIds: ['msg-user'],
+      nextMessageSeq: 2,
+      status: 'running',
+      createdAt: now,
+      updatedAt: now,
+    }
+    const role: GroupRole = {
+      id: 'role-1',
+      chatId: chat.id,
+      name: '工程师',
+      chatSite: 'gemini',
+      status: 'thinking',
+      contextCursor: 0,
+      lastPromptMessageId: 'msg-user',
+      replyAttemptId: 'attempt-1',
+      liveReply: { promptMessageId: 'msg-user', replyAttemptId: 'attempt-1', content: '**结论**：可以上线', contentFormat: 'markdown', updatedAt: now },
+      createdAt: now,
+      updatedAt: now,
+    }
+    const userMessage: GroupMessage = {
+      id: 'msg-user',
+      chatId: chat.id,
+      seq: 1,
+      type: 'user',
+      content: '能上线吗？',
+      targetRoleIds: [role.id],
+      createdAt: now,
+      status: 'sent',
+    }
+    const store: OpenTeamStore = {
+      ...createDefaultStore(),
+      currentChatId: chat.id,
+      chatOrder: [chat.id],
+      chatsById: { [chat.id]: chat },
+      rolesById: { [role.id]: role },
+      messagesById: { [userMessage.id]: userMessage },
+    }
+    const messagesEl = document.createElement('section')
+    const view = createMessagesView({
+      state: createTeamPageState(),
+      getStore: () => store,
+      messagesEl,
+      getCurrentChat: () => chat,
+      getCurrentRoles: () => [role],
+      getCurrentMessages: () => [userMessage],
+      emptyCard: () => document.createElement('div'),
+      openAddPersonDialog: vi.fn(),
+      roleToneClass: () => 'role-tone-1',
+      roleAvatarLabel: () => '工',
+      messageTitle: message => message.roleName ?? 'AI 人员',
+      focusRoleFrame: vi.fn(),
+      insertMention: vi.fn(),
+      setReference: vi.fn(),
+      resyncMessageReply: vi.fn(async () => undefined),
+      retryRoleReply: vi.fn(async () => undefined),
+      stopRoleReply: vi.fn(async () => undefined),
+      runCommand: vi.fn(async () => undefined),
+      render: vi.fn(),
+      showError: vi.fn(),
+      showSuccess: vi.fn(),
+      log: { warn: vi.fn() },
+    })
+
+    view.renderMessages()
+    const row = messagesEl.querySelector('.message-row.thinking')
+    expect(row?.classList.contains('live')).toBe(true)
+    expect(row?.querySelector('.message-body strong')?.textContent).toBe('结论')
+    expect(row?.querySelector('.message-body')?.textContent).toContain('可以上线')
+    expect(row?.querySelector('[aria-label="停止回复"]')).not.toBeNull()
+
+    // Live text left over from another question is not shown.
+    role.liveReply = { ...role.liveReply!, promptMessageId: 'msg-earlier' }
+    view.renderMessages()
+    const waiting = messagesEl.querySelector('.message-row.thinking')
+    expect(waiting?.classList.contains('live')).toBe(false)
+    expect(waiting?.querySelector('.message-body')?.textContent).toContain('正在回复中')
+  })
+
   it('requests a full reply resync for the current assistant message without retrying the prompt', async () => {
     const now = Date.now()
     const chat: GroupChat = {

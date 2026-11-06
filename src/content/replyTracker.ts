@@ -23,6 +23,14 @@ export function createReplyTracker() {
       }
     },
 
+    // Whether this text is a reply already seen on the page or stored from before, without
+    // consuming anything.
+    isKnown(conversationId: string, reply: string): boolean {
+      const trimmed = reply.trim()
+      if (!trimmed) return false
+      return globallySeenReplyHashes.has(String(hashStr(trimmed))) || seenReplyHashes.has(replyKey(conversationId, trimmed))
+    },
+
     seedGlobal(replies: string[]): void {
       for (const reply of replies) {
         const trimmed = reply.trim()

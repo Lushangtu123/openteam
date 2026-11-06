@@ -138,6 +138,7 @@ describe('background message handlers', () => {
       'TEAM_ROLE_STATUS',
       'TEAM_SITE_STATUS_UPDATE',
       'TEAM_ROLE_REPLY',
+      'TEAM_ROLE_REPLY_PROGRESS',
       'TEAM_ROLE_REPLY_RESYNC',
       'TEAM_ROLE_ERROR',
     ])

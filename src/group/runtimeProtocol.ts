@@ -70,6 +70,15 @@ export type RoleToBackgroundMessage =
       conversationUrl?: string
     }
   | {
+      type: 'TEAM_ROLE_REPLY_PROGRESS'
+      chatId?: string
+      roleId?: string
+      messageId: string
+      replyAttemptId?: string
+      content: string
+      contentFormat?: 'markdown'
+    }
+  | {
       type: 'TEAM_ROLE_REPLY'
       chatId?: string
       roleId?: string

@@ -186,6 +186,121 @@ describe('createReplyObserver', () => {
     vi.useRealTimers()
   })
 
+  it('sends the reply written so far while the page is still generating', async () => {
+    vi.useFakeTimers()
+    document.body.innerHTML = '<message-content id="old">旧回复</message-content>'
+
+    const sentMessages: RoleToBackgroundMessage[] = []
+    let generating = true
+    const roleSession = createFakeRoleSession()
+    const observer = createReplyObserver({
+      siteAdapter: createFakeAdapter({ isGenerating: () => generating }),
+      roleSession,
+      log: createFakeLog(),
+      sendRuntimeMessage: async message => {
+        sentMessages.push(message)
+        return { ok: true } as never
+      },
+      reportRoleError: vi.fn(),
+    })
+
+    observer.capturePromptReplyBaseline('msg-1')
+    roleSession.startPrompt('msg-1', 'attempt-1')
+    observer.startReplyPolling('msg-1', 'attempt-1')
+    const progress = () => sentMessages.filter(message => message.type === 'TEAM_ROLE_REPLY_PROGRESS')
+
+    // Only the old reply is on the page: nothing to show yet.
+    await vi.advanceTimersByTimeAsync(2_000)
+    expect(progress()).toEqual([])
+
+    const reply = createMessageContent('new', '第一段')
+    document.body.append(reply)
+    await vi.advanceTimersByTimeAsync(1_000)
+    expect(progress()).toEqual([{
+      type: 'TEAM_ROLE_REPLY_PROGRESS',
+      chatId: 'chat-1',
+      roleId: 'role-1',
+      messageId: 'msg-1',
+      replyAttemptId: 'attempt-1',
+      content: '第一段',
+    }])
+
+    // The same text is not sent twice; new text is.
+    await vi.advanceTimersByTimeAsync(2_000)
+    expect(progress()).toHaveLength(1)
+    reply.textContent = '第一段，第二段'
+    await vi.advanceTimersByTimeAsync(1_000)
+    expect(progress().map(message => 'content' in message ? message.content : '')).toEqual(['第一段', '第一段，第二段'])
+    expect(sentMessages).not.toContainEqual(expect.objectContaining({ type: 'TEAM_ROLE_REPLY' }))
+
+    // Once the finished reply is reported, no more progress is sent.
+    generating = false
+    await vi.advanceTimersByTimeAsync(12_000)
+    expect(sentMessages).toContainEqual(expect.objectContaining({ type: 'TEAM_ROLE_REPLY', content: '第一段，第二段' }))
+    const progressCount = progress().length
+    reply.textContent = '第一段，第二段，之后的改动'
+    await vi.advanceTimersByTimeAsync(5_000)
+    expect(progress()).toHaveLength(progressCount)
+
+    vi.useRealTimers()
+  })
+
+  it('sends the live reply as Markdown when the site can read it that way', async () => {
+    vi.useFakeTimers()
+    document.body.innerHTML = ''
+
+    const sentMessages: RoleToBackgroundMessage[] = []
+    const roleSession = createFakeRoleSession()
+    const observer = createReplyObserver({
+      siteAdapter: createFakeAdapter({ readResponseMarkdown: node => `**${node.textContent ?? ''}**` }),
+      roleSession,
+      log: createFakeLog(),
+      sendRuntimeMessage: async message => {
+        sentMessages.push(message)
+        return { ok: true } as never
+      },
+      reportRoleError: vi.fn(),
+    })
+
+    observer.capturePromptReplyBaseline('msg-1')
+    roleSession.startPrompt('msg-1', 'attempt-1')
+    observer.startReplyPolling('msg-1', 'attempt-1')
+    document.body.append(createMessageContent('new', '结论'))
+    await vi.advanceTimersByTimeAsync(1_000)
+
+    expect(sentMessages).toContainEqual(expect.objectContaining({ type: 'TEAM_ROLE_REPLY_PROGRESS', content: '**结论**', contentFormat: 'markdown' }))
+    observer.clearReplyPolling()
+    vi.useRealTimers()
+  })
+
+  it('stops sending progress when another prompt takes over the page', async () => {
+    vi.useFakeTimers()
+    document.body.innerHTML = ''
+
+    const sentMessages: RoleToBackgroundMessage[] = []
+    const roleSession = createFakeRoleSession()
+    const observer = createReplyObserver({
+      siteAdapter: createFakeAdapter(),
+      roleSession,
+      log: createFakeLog(),
+      sendRuntimeMessage: async message => {
+        sentMessages.push(message)
+        return { ok: true } as never
+      },
+      reportRoleError: vi.fn(),
+    })
+
+    observer.capturePromptReplyBaseline('msg-1')
+    roleSession.startPrompt('msg-1', 'attempt-1')
+    observer.startReplyPolling('msg-1', 'attempt-1')
+    roleSession.startPrompt('msg-2', 'attempt-2')
+    document.body.append(createMessageContent('new', '给第二个问题的回复'))
+    await vi.advanceTimersByTimeAsync(3_000)
+
+    expect(sentMessages).not.toContainEqual(expect.objectContaining({ type: 'TEAM_ROLE_REPLY_PROGRESS', messageId: 'msg-1' }))
+    vi.useRealTimers()
+  })
+
   it('waits for the final ChatGPT two-stage answer instead of reporting the thinking stage', async () => {
     vi.useFakeTimers()
     document.body.innerHTML = `

@@ -1521,6 +1521,85 @@ describe('background group chat experience handlers', () => {
 })
 
 
+describe('live replies from web members', () => {
+  async function startReply() {
+    const store = makeStore()
+    store.currentChatId = 'chat-1'
+    store.chatsById['chat-1'] = makeChat('chat-1', ['role-1'])
+    store.chatOrder = ['chat-1']
+    store.rolesById['role-1'] = makeRole('chat-1', 'role-1', '工程师')
+    const harness = await setupBackground(store)
+    await harness.invoke({ type: 'TEAM_FRAME_ROLE_READY', chatId: 'chat-1', roleId: 'role-1', hostTabId: 900 }, { tab: { id: 101 } as chrome.tabs.Tab, frameId: 7, url: 'https://gemini.google.com/' })
+    const sent = await harness.invoke({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@all 写一份方案' }) as { ok: boolean; message: { id: string } }
+    await harness.invoke({ type: 'TEAM_SEND_ACK', chatId: 'chat-1', roleId: 'role-1', messageId: sent.message.id })
+    const replyAttemptId = (await harness.getStore()).rolesById['role-1'].replyAttemptId
+    return { harness, promptId: sent.message.id, replyAttemptId }
+  }
+
+  it('keeps the text written so far on the role, then the finished reply replaces it', async () => {
+    const { harness, promptId, replyAttemptId } = await startReply()
+
+    await harness.invoke({ type: 'TEAM_ROLE_REPLY_PROGRESS', chatId: 'chat-1', roleId: 'role-1', messageId: promptId, replyAttemptId, content: '第一段', contentFormat: 'markdown' })
+    let store = await harness.getStore()
+    expect(store.rolesById['role-1']).toMatchObject({ status: 'thinking', liveReply: { promptMessageId: promptId, content: '第一段', contentFormat: 'markdown' } })
+    // The live text is not a message: nothing is added to the chat yet.
+    expect(store.chatsById['chat-1'].messageIds).toEqual([promptId])
+
+    await harness.invoke({ type: 'TEAM_ROLE_REPLY_PROGRESS', chatId: 'chat-1', roleId: 'role-1', messageId: promptId, replyAttemptId, content: '第一段\n\n第二段', contentFormat: 'markdown' })
+    expect((await harness.getStore()).rolesById['role-1'].liveReply?.content).toBe('第一段\n\n第二段')
+
+    await harness.invoke({ type: 'TEAM_ROLE_REPLY', chatId: 'chat-1', roleId: 'role-1', messageId: promptId, replyAttemptId, content: '完整的方案', contentFormat: 'markdown' })
+    store = await harness.getStore()
+    expect(store.rolesById['role-1'].liveReply).toBeUndefined()
+    const replies = store.chatsById['chat-1'].messageIds.map(id => store.messagesById[id]).filter(message => message.type === 'assistant')
+    expect(replies.map(message => [message.content, message.status])).toEqual([['完整的方案', 'received']])
+
+    // Progress that arrives after the finished reply is ignored.
+    const late = await harness.invoke({ type: 'TEAM_ROLE_REPLY_PROGRESS', chatId: 'chat-1', roleId: 'role-1', messageId: promptId, replyAttemptId, content: '第一段' }) as { ignored?: boolean }
+    expect(late.ignored).toBe(true)
+    expect((await harness.getStore()).rolesById['role-1'].liveReply).toBeUndefined()
+  })
+
+  it('ignores progress for another question or an earlier attempt', async () => {
+    const { harness, promptId } = await startReply()
+
+    const otherPrompt = await harness.invoke({ type: 'TEAM_ROLE_REPLY_PROGRESS', chatId: 'chat-1', roleId: 'role-1', messageId: 'msg-other', content: '别的问题' }) as { ignored?: boolean; reason?: string }
+    const oldAttempt = await harness.invoke({ type: 'TEAM_ROLE_REPLY_PROGRESS', chatId: 'chat-1', roleId: 'role-1', messageId: promptId, replyAttemptId: 'attempt-old', content: '旧的尝试' }) as { ignored?: boolean; reason?: string }
+
+    expect(otherPrompt).toMatchObject({ ignored: true, reason: 'prompt-message-mismatch' })
+    expect(oldAttempt).toMatchObject({ ignored: true, reason: 'reply-attempt-mismatch' })
+    expect((await harness.getStore()).rolesById['role-1'].liveReply).toBeUndefined()
+  })
+
+  it('keeps what was written as the reply when the user stops it', async () => {
+    const { harness, promptId, replyAttemptId } = await startReply()
+    await harness.invoke({ type: 'TEAM_ROLE_REPLY_PROGRESS', chatId: 'chat-1', roleId: 'role-1', messageId: promptId, replyAttemptId, content: '写到一半的方案' })
+
+    const stopped = await harness.invoke({ type: 'GROUP_ROLE_STOP_REPLY', chatId: 'chat-1', roleId: 'role-1' }) as { ok: boolean }
+    expect(stopped.ok).toBe(true)
+    const store = await harness.getStore()
+    const role = store.rolesById['role-1']
+    expect(role.status).toBe('stopped')
+    expect(role.liveReply).toBeUndefined()
+    expect(role.lastPromptMessageId).toBeUndefined()
+    const reply = store.chatsById['chat-1'].messageIds.map(id => store.messagesById[id]).find(message => message.type === 'assistant')
+    expect(reply).toMatchObject({ content: '写到一半的方案', status: 'received', roleId: 'role-1', sourceMessageId: promptId })
+    expect(store.messagesById[promptId].deliveryStatus?.['role-1']).toBe('received')
+
+    // The page's own final report for the stopped reply no longer counts.
+    const late = await harness.invoke({ type: 'TEAM_ROLE_REPLY', chatId: 'chat-1', roleId: 'role-1', messageId: promptId, replyAttemptId, content: '写到一半的方案，又多了几个字' }) as { ignored?: boolean }
+    expect(late.ignored).toBe(true)
+  })
+
+  it('drops the live text once the member is no longer replying', async () => {
+    const { harness, promptId, replyAttemptId } = await startReply()
+    await harness.invoke({ type: 'TEAM_ROLE_REPLY_PROGRESS', chatId: 'chat-1', roleId: 'role-1', messageId: promptId, replyAttemptId, content: '写到一半' })
+    await harness.invoke({ type: 'TEAM_ROLE_STATUS', chatId: 'chat-1', roleId: 'role-1', status: 'idle' })
+
+    expect((await harness.getStore()).rolesById['role-1'].liveReply).toBeUndefined()
+  })
+})
+
 describe('team formation in the background', () => {
   it('creates a collaborative group of AIs named after their model, asking copies of a model in later rounds', async () => {
     const harness = await setupBackground(makeStore())

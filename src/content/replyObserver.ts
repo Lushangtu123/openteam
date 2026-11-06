@@ -16,6 +16,8 @@ const REPLY_POLL_INTERVAL_MS = 2000
 const REPLY_TIMEOUT_MS = 120000
 const SHORT_REPLY_MAX_CHARS = 50
 const SHORT_REPLY_STABLE_SETTLE_MS = 5000
+// How often the reply written so far is sent to the chat while the site is still writing.
+export const REPLY_PROGRESS_INTERVAL_MS = 1000
 
 export interface ReplyObserverController {
   capturePromptReplyBaseline(messageId: string | undefined): void
@@ -42,6 +44,9 @@ export function createReplyObserver(options: {
   let promptBaselinePromptId = ''
   let replyPollingTimer: number | null = null
   let replyPollingInFlight = false
+  let replyProgressTimer: number | null = null
+  let replyProgressInFlight = false
+  let lastProgressText = ''
   const replyTracker = createReplyTracker()
   const replyTimeout = createReplyTimeout(REPLY_TIMEOUT_MS, (messageId, failureReason) => {
     const assignedRole = roleSession.getAssignedRole()
@@ -166,6 +171,67 @@ export function createReplyObserver(options: {
       replyPollingTimer = null
     }
     replyPollingInFlight = false
+    clearReplyProgress()
+  }
+
+  function clearReplyProgress(): void {
+    if (replyProgressTimer) {
+      window.clearInterval(replyProgressTimer)
+      replyProgressTimer = null
+    }
+    lastProgressText = ''
+  }
+
+  // While the site writes its reply, send what it has written so far so the chat can show it.
+  // Only text read from the page is sent (never by pressing the site's copy button), and the
+  // finished reply still arrives the usual way and replaces it.
+  function startReplyProgress(messageId: string, replyAttemptId: string | undefined): void {
+    clearReplyProgress()
+    replyProgressTimer = window.setInterval(() => sendReplyProgress(messageId, replyAttemptId), REPLY_PROGRESS_INTERVAL_MS)
+  }
+
+  function sendReplyProgress(messageId: string, replyAttemptId: string | undefined): void {
+    const activePrompt = roleSession.getActivePrompt()
+    if (activePrompt?.messageId !== messageId || activePrompt.replyAttemptId !== replyAttemptId) {
+      clearReplyProgress()
+      return
+    }
+    const assignedRole = roleSession.getAssignedRole()
+    if (!assignedRole || replyProgressInFlight) return
+
+    const candidate = findCompensationCandidate()
+    if (!candidate) return
+    const conversationId = getConversationId()
+    if (replyTracker.isKnown(conversationId, candidate.text)) return
+    const partial = readPartialReply(candidate.element, candidate.text)
+    if (!partial.text || partial.text === lastProgressText || replyTracker.isKnown(conversationId, partial.text)) return
+
+    lastProgressText = partial.text
+    replyProgressInFlight = true
+    options
+      .sendRuntimeMessage({
+        type: 'TEAM_ROLE_REPLY_PROGRESS',
+        chatId: roleSession.getAssignedChatId(assignedRole),
+        roleId: assignedRole.roleId,
+        messageId,
+        replyAttemptId,
+        content: partial.text,
+        ...(partial.contentFormat ? { contentFormat: partial.contentFormat } : {}),
+      })
+      .catch(error => log.debug('reply-progress:send-failed', { messageId, error: error instanceof Error ? error.message : String(error) }))
+      .finally(() => {
+        replyProgressInFlight = false
+      })
+  }
+
+  function readPartialReply(element: Element, domText: string): { text: string; contentFormat?: 'markdown' } {
+    try {
+      const markdown = siteAdapter.readResponseMarkdown?.(element).trim()
+      if (markdown) return { text: markdown, contentFormat: 'markdown' }
+    } catch (error) {
+      log.debug('reply-progress:markdown-failed', { error: error instanceof Error ? error.message : String(error) })
+    }
+    return { text: domText.trim() }
   }
 
   function normalizedReplyLength(text: string): number {
@@ -180,6 +246,7 @@ export function createReplyObserver(options: {
   function startReplyPolling(messageId: string, replyAttemptId: string | undefined): void {
     clearReplyPolling()
     replyTimeout.arm(messageId)
+    startReplyProgress(messageId, replyAttemptId)
 
     let stableKey = ''
     let stableSince = 0
