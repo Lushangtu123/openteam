@@ -124,6 +124,12 @@ export function createChatHandlers(deps: ChatHandlersDependencies): BackgroundMe
         patchKeys.push('requireManualMention')
       }
 
+      if (patch.pinned !== undefined) {
+        if (patch.pinned) chat.pinned = true
+        else delete chat.pinned
+        patchKeys.push('pinned')
+      }
+
       if (patch.teamFormation === null) {
         delete chat.teamFormation
         patchKeys.push('teamFormation')
@@ -134,7 +140,8 @@ export function createChatHandlers(deps: ChatHandlersDependencies): BackgroundMe
         patchKeys.push('teamFormation')
       }
 
-      chat.updatedAt = timestamp
+      // Pinning moves a group in the list without being news in it.
+      if (patchKeys.some(key => key !== 'pinned')) chat.updatedAt = timestamp
       return { chat, patchKeys }
     })
     deps.log.info('chat-update:stored', { chatId: result.chat.id, patchKeys: result.patchKeys })

@@ -238,6 +238,8 @@ export interface GroupChat {
   nextMessageSeq: number
   status: ChatStatus
   requireManualMention?: boolean
+  // Kept at the top of the group list.
+  pinned?: boolean
   // Set while the members of a group made with "按任务组队" pick their own positions.
   teamFormation?: TeamFormation
   createdAt: number

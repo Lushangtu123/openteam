@@ -4,6 +4,7 @@ import { normalizeLanguage, translateUi } from '../shared/i18n'
 import type { TeamPageState } from './appState'
 import { formatChatExportMarkdown, safeChatExportFilename } from './chatExport'
 import { formatChatListTime } from './chatExperience'
+import { orderChatsForList, shouldShowChatSearch } from './chatListOrder'
 import type { RuntimeResponse } from './runtimeClient'
 
 interface ChatListIframeHost {
@@ -17,6 +18,8 @@ export interface ChatListViewDependencies {
   applyStore(store: OpenTeamStore): void
   storeSummaryEl: HTMLElement
   chatListEl: HTMLElement
+  chatListSearchBoxEl?: HTMLElement
+  chatListSearchEl?: HTMLInputElement
   iframeHost: ChatListIframeHost
   getTemplates(): RoleTemplate[]
   getChatRecentSummary(chat: GroupChat): string
@@ -39,14 +42,35 @@ export interface ChatListView {
 }
 
 export function createChatListView(deps: ChatListViewDependencies): ChatListView {
+  deps.chatListSearchEl?.addEventListener('input', () => {
+    deps.state.chatListQuery = deps.chatListSearchEl?.value ?? ''
+    renderChatList()
+  })
+  deps.chatListSearchEl?.addEventListener('keydown', event => {
+    if (event.key !== 'Escape' || !deps.chatListSearchEl?.value) return
+    event.preventDefault()
+    deps.chatListSearchEl.value = ''
+    deps.state.chatListQuery = ''
+    renderChatList()
+  })
+
   function renderChatList() {
     const store = deps.getStore()
-    const chats = store.chatOrder.map(chatId => store.chatsById[chatId]).filter((chat): chat is GroupChat => Boolean(chat))
-    deps.storeSummaryEl.textContent = ui(`${chats.length} 个群聊 · ${deps.getTemplates().length} 个人员库人员`)
+    const allChats = store.chatOrder.map(chatId => store.chatsById[chatId]).filter((chat): chat is GroupChat => Boolean(chat))
+    deps.storeSummaryEl.textContent = ui(`${allChats.length} 个群聊 · ${deps.getTemplates().length} 个人员库人员`)
     deps.chatListEl.replaceChildren()
+    const query = deps.state.chatListQuery
+    if (deps.chatListSearchBoxEl) deps.chatListSearchBoxEl.hidden = !shouldShowChatSearch(allChats.length, query)
+    if (deps.chatListSearchEl) deps.chatListSearchEl.placeholder = ui('搜索群聊')
 
-    if (chats.length === 0) {
+    if (allChats.length === 0) {
       deps.chatListEl.append(deps.emptyCard(ui('还没有群聊'), ui('在上方创建一个群聊，然后从人员库添加人员。')))
+      return
+    }
+
+    const chats = orderChatsForList(allChats, query, deps.getChatRecentSummary)
+    if (chats.length === 0) {
+      deps.chatListEl.append(deps.emptyCard(ui('没有找到群聊'), language() === 'en' ? `No group's name or last message contains "${query.trim()}".` : `没有名称或最近消息包含「${query.trim()}」的群聊。`))
       return
     }
 
@@ -88,6 +112,7 @@ export function createChatListView(deps: ChatListViewDependencies): ChatListView
         renderChatList()
       })
       row.append(name)
+      if (chat.pinned) row.append(pinMark())
 
       const summary = document.createElement('div')
       summary.className = 'summary-line'
@@ -132,10 +157,29 @@ export function createChatListView(deps: ChatListViewDependencies): ChatListView
     })
   }
 
+  function pinMark(): HTMLElement {
+    const mark = document.createElement('span')
+    mark.className = 'chat-pin-mark'
+    mark.setAttribute('role', 'img')
+    mark.setAttribute('aria-label', ui('已置顶'))
+    mark.title = ui('已置顶')
+    mark.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none"><path d="M9 4h6l-1 5 3 3H7l3-3-1-5Z" /><path d="M12 12v8" /></svg>'
+    return mark
+  }
+
   function chatActionMenu(chat: GroupChat): HTMLElement {
     const menu = document.createElement('div')
     menu.className = 'chat-action-menu'
     menu.addEventListener('click', event => event.stopPropagation())
+    const pin = document.createElement('button')
+    pin.type = 'button'
+    pin.className = 'btn btn-ghost'
+    pin.textContent = ui(chat.pinned ? '取消置顶' : '置顶群聊')
+    pin.addEventListener('click', () => {
+      deps.state.chatMenuChatId = undefined
+      renderChatList()
+      deps.runCommand('GROUP_CHAT_UPDATE', { chatId: chat.id, patch: { pinned: !chat.pinned } }).catch(error => deps.showError(error.message))
+    })
     const rename = document.createElement('button')
     rename.type = 'button'
     rename.className = 'btn btn-ghost'
@@ -196,7 +240,7 @@ export function createChatListView(deps: ChatListViewDependencies): ChatListView
       if (!window.confirm(`确定删除「${chat.name}」吗？删除后这个群聊的消息和角色都会移除。`)) return
       deleteChat(chat.id).catch(error => deps.showError(error.message))
     })
-    menu.append(rename, duplicate, exportRecord, clearMessages, closeFrames, remove)
+    menu.append(pin, rename, duplicate, exportRecord, clearMessages, closeFrames, remove)
     return menu
   }
 

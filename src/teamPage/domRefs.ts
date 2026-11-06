@@ -7,6 +7,8 @@ export interface TeamPageDomRefs {
   toggleFullscreenEl: HTMLButtonElement
   storeSummaryEl: HTMLElement
   chatListEl: HTMLElement
+  chatListSearchBoxEl: HTMLElement
+  chatListSearchEl: HTMLInputElement
   chatTitleEl: HTMLElement
   chatTitleAvatarEl: HTMLElement
   chatSubtitleEl: HTMLElement
@@ -181,6 +183,8 @@ export function createTeamPageDomRefs(): TeamPageDomRefs {
     toggleFullscreenEl: requireElement<HTMLButtonElement>('#toggle-fullscreen'),
     storeSummaryEl: requireElement<HTMLElement>('#store-summary'),
     chatListEl: requireElement<HTMLElement>('#chat-list'),
+    chatListSearchBoxEl: requireElement<HTMLElement>('#chat-list-search-box'),
+    chatListSearchEl: requireElement<HTMLInputElement>('#chat-list-search'),
     chatTitleEl: requireElement<HTMLElement>('#chat-title'),
     chatTitleAvatarEl: requireElement<HTMLElement>('#chat-title-avatar'),
     chatSubtitleEl: requireElement<HTMLElement>('#chat-subtitle'),

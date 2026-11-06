@@ -25,6 +25,8 @@ export interface TeamPageState {
   mentionIndex: number
   peopleDrawerOpen: boolean
   chatMenuChatId?: string
+  // What the search box above the group list holds.
+  chatListQuery: string
   roleSiteMenuRoleId?: string
   roleActionMenuRoleId?: string
   addPersonSiteMenuId?: string
@@ -68,6 +70,7 @@ export function createTeamPageState(): TeamPageState {
     peopleLibraryPage: 0,
     peopleLibraryTemplateType: 'custom',
     peopleLibrarySearchQuery: '',
+    chatListQuery: '',
     peopleLibraryCategory: '全部',
     addPersonTemplateType: 'custom',
     addPersonSearchQuery: '',

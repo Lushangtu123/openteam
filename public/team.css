@@ -7628,6 +7628,57 @@ select.reply-compare-select {
   letter-spacing: 0.01em;
 }
 
+/* Group list search (shown for long lists) and the pin mark on pinned groups. The sidebar gets a
+   row for the search box only while it shows. */
+:root[data-theme] .sidebar:has(.chat-list-search:not([hidden])) {
+  grid-template-rows: 66px auto minmax(0, 1fr);
+}
+
+:root[data-theme] .chat-list-search {
+  padding: 0 12px 8px;
+}
+
+:root[data-theme] .chat-list-search[hidden] {
+  display: none;
+}
+
+:root[data-theme] .chat-list-search input {
+  width: 100%;
+  height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0 12px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13.5px;
+}
+
+:root[data-theme] .chat-pin-mark {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  margin-left: 6px;
+  color: var(--subtle);
+}
+
+:root[data-theme] .chat-pin-mark svg {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+:root[data-ui-style="grok"] .chat-list-search input {
+  height: 38px;
+  border-radius: 999px;
+  padding: 0 16px;
+  background: var(--gb-pill);
+}
+
 /* ==========================================================================
    Grok style (html[data-ui-style="grok"]): a soft, friendly chat-app feel on
    top of the ChatGPT-like layer, in OpenTeam's own design. Soft gray panels,

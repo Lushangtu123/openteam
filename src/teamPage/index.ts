@@ -215,6 +215,8 @@ const chatListView = createChatListView({
   applyStore,
   storeSummaryEl,
   chatListEl,
+  chatListSearchBoxEl: teamDomRefs.chatListSearchBoxEl,
+  chatListSearchEl: teamDomRefs.chatListSearchEl,
   iframeHost,
   getTemplates,
   getChatRecentSummary: chat => getStoreChatRecentSummary(chat, store),

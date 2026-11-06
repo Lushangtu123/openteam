@@ -1521,6 +1521,24 @@ describe('background group chat experience handlers', () => {
 })
 
 
+describe('pinning groups', () => {
+  it('pins and unpins a group without making it look updated', async () => {
+    const store = makeStore()
+    store.chatsById['chat-1'] = { ...makeChat('chat-1'), updatedAt: 5 }
+    store.chatOrder = ['chat-1']
+    const harness = await setupBackground(store)
+
+    await harness.invoke({ type: 'GROUP_CHAT_UPDATE', chatId: 'chat-1', patch: { pinned: true } })
+    let chat = (await harness.getStore()).chatsById['chat-1']
+    expect(chat.pinned).toBe(true)
+    expect(chat.updatedAt).toBe(5)
+
+    await harness.invoke({ type: 'GROUP_CHAT_UPDATE', chatId: 'chat-1', patch: { pinned: false } })
+    chat = (await harness.getStore()).chatsById['chat-1']
+    expect('pinned' in chat).toBe(false)
+  })
+})
+
 describe('live replies from web members', () => {
   async function startReply() {
     const store = makeStore()
