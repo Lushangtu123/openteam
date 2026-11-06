@@ -7660,6 +7660,98 @@ select.reply-compare-select {
   transition: transform 0.18s ease, visibility 0s linear 0.18s;
 }
 
+/* Group rounds. A round's buttons sit side by side under the question; replies open with their key
+   points in a tinted box and long ones fold to them; the round's summary is a card. */
+:root[data-theme] .message-round-actions {
+  display: flex;
+  align-self: flex-end;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+:root[data-theme] .message-round-actions .message-compare-btn {
+  margin-top: 0;
+}
+
+:root[data-theme] .message-body.has-key-points > .key-points-heading {
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+}
+
+:root[data-theme] .message-body.has-key-points > .key-points-list {
+  margin: 0 0 14px;
+  border-radius: 12px;
+  padding: 10px 14px 10px 32px;
+  background: var(--chip-bg);
+}
+
+/* Key points written as lines (no list): the box without a bullet indent, its heading line muted. */
+:root[data-theme] .message-body.has-key-points > p.key-points-list {
+  padding: 10px 14px;
+}
+
+:root[data-theme] .key-points-block > strong:first-child {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+:root[data-theme] .message-body.folded > :not(.key-points-heading):not(.key-points-list) {
+  display: none;
+}
+
+:root[data-theme] .message-body.folded > .key-points-list {
+  margin-bottom: 0;
+}
+
+:root[data-theme] .key-points-toggle {
+  align-self: flex-start;
+  margin-top: 6px;
+  border: 0;
+  padding: 2px 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+:root[data-theme] .key-points-toggle::after {
+  content: " ↓";
+}
+
+:root[data-theme] .key-points-toggle[aria-expanded="true"]::after {
+  content: " ↑";
+}
+
+:root[data-theme] .key-points-toggle:hover {
+  color: var(--text);
+}
+
+:root[data-theme] .message-row.round-summary .message-bubble {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 12px 16px;
+}
+
+:root[data-theme] .round-summary-label {
+  flex: none;
+  border-radius: 999px;
+  padding: 1px 8px;
+  background: var(--chip-bg);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+}
+
+:root[data-theme] .round-summary-request .message-system-pill {
+  font-size: 12px;
+}
+
 /* Group list search (shown for long lists) and the pin mark on pinned groups. The sidebar gets a
    row for the search box only while it shows. */
 :root[data-theme] .sidebar:has(.chat-list-search:not([hidden])) {
@@ -8110,4 +8202,26 @@ select.reply-compare-select {
 :root[data-ui-style="grok"] .chat-action-menu {
   border: 1px solid var(--line);
   border-radius: 20px;
+}
+
+/* Group rounds in the Grok style: key points and summaries in the accent tint, and the fold
+   button inside the bubble's padding. */
+:root[data-ui-style="grok"] .message-body.has-key-points > .key-points-list {
+  background: var(--gb-accent-soft);
+}
+
+:root[data-ui-style="grok"] .key-points-toggle {
+  margin: -8px 22px 12px;
+}
+
+:root[data-ui-style="grok"] .message-row.round-summary .message-bubble {
+  border-color: transparent;
+  border-radius: 26px;
+  padding: 0;
+  background: var(--gb-accent-soft);
+}
+
+:root[data-ui-style="grok"] .round-summary-label {
+  background: var(--gb-accent);
+  color: #ffffff;
 }

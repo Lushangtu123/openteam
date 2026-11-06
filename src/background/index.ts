@@ -116,6 +116,14 @@ async function handleSettingsUpdate(message: RuntimeMessage) {
       if (message.replyNotifications) delete store.settings.replyNotifications
       else store.settings.replyNotifications = false
     }
+    if (typeof message.replyKeyPoints === 'boolean') {
+      if (message.replyKeyPoints) delete store.settings.replyKeyPoints
+      else store.settings.replyKeyPoints = false
+    }
+    if (typeof message.roundSummary === 'boolean') {
+      if (message.roundSummary) delete store.settings.roundSummary
+      else store.settings.roundSummary = false
+    }
   })
   await broadcastStoreUpdated(store)
   syncControlClient().catch(error => log.warn('control-client:settings-sync-failed', { error: errorReason(error) }))

@@ -14,6 +14,8 @@ export interface BuildPromptInput {
   reference?: MessageReference
   includePersona?: boolean
   responseInstruction?: string
+  // Added after the response instruction (the key-points request).
+  extraInstruction?: string
   language?: OpenTeamLanguage
 }
 
@@ -33,6 +35,7 @@ export function buildIndependentPrompt(input: BuildPromptInput): string {
     language === 'en' ? `User message:\n${input.userMessage.content}` : `用户消息：\n${input.userMessage.content}`,
     formatAttachedFilesForPrompt(input.userMessage, language),
     input.responseInstruction ?? independentResponseInstruction(input.role.name, Boolean(reference), language),
+    input.extraInstruction,
   ])
 }
 
@@ -50,6 +53,7 @@ export function buildCollaborativePrompt(input: BuildPromptInput): string {
     language === 'en' ? `User latest message:\n${input.userMessage.content}` : `用户最新消息：\n${input.userMessage.content}`,
     formatAttachedFilesForPrompt(input.userMessage, language),
     input.responseInstruction ?? collaborativeResponseInstruction(input.role.name, Boolean(reference), language),
+    input.extraInstruction,
   ])
 }
 

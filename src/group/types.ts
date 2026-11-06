@@ -64,6 +64,12 @@ export interface OpenTeamSettings {
   // A desktop notification when every member has answered while OpenTeam is not in front. On
   // unless set to false.
   replyNotifications?: boolean
+  // When a message goes to two or more members, they start with a few key points and long replies
+  // fold to them. On unless set to false.
+  replyKeyPoints?: boolean
+  // Once every member of such a round has answered, one member writes a short summary. On unless
+  // set to false.
+  roundSummary?: boolean
 }
 
 export interface TeamTemplateMember {
@@ -363,6 +369,9 @@ export interface GroupMessage {
   refreshPersona?: boolean
   // Tokens an API member's reply used, as its model reported them.
   usage?: MessageTokenUsage
+  // On a request OpenTeam sends to one member to summarize a round: the message that started the
+  // round. That member's answer is the round's summary.
+  roundSummaryOf?: string
   createdAt: number
   status: DeliveryStatus
   deliveryStatus?: Record<string, DeliveryStatus>

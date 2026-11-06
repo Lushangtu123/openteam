@@ -166,6 +166,70 @@ describe('team page messages view boundary', () => {
     expect(openReplyComparison).toHaveBeenCalledWith(question.id)
   })
 
+  it('folds a long reply to its key points and opens it on click', () => {
+    const { messagesEl, messages, view } = createLongChatView(0)
+    const long = '详细说明。'.repeat(80)
+    messages.push(
+      { ...makeLongChatMessage(1, `**要点**\n- 选方案 A\n- 成本更低\n\n${long}`), id: 'long' },
+      { ...makeLongChatMessage(3, '**要点**\n- 很短\n\n就这样。'), id: 'short' },
+      { ...makeLongChatMessage(5, long), id: 'plain' },
+      { ...makeLongChatMessage(7, `**要点**\nGo 编译为单文件。\nPython 开发更快。\n\n${long}`), id: 'lines' },
+      { ...makeLongChatMessage(9, `**要点**\n\nGo 编译为单文件。\nPython 开发更快。\n\n${long}`), id: 'heading-and-lines' },
+    )
+
+    view.renderMessages()
+    const body = messagesEl.querySelector<HTMLElement>('[data-message-id="long"] .message-body')
+    const toggle = messagesEl.querySelector<HTMLButtonElement>('[data-message-id="long"] .key-points-toggle')
+    expect(body?.classList.contains('folded')).toBe(true)
+    expect(body?.querySelector('.key-points-list')?.textContent).toContain('选方案 A')
+    expect(toggle?.textContent).toBe('展开全文')
+    // The whole reply is still there, so copying and highlights see all of it.
+    expect(body?.textContent).toContain('详细说明。')
+
+    toggle?.click()
+    expect(body?.classList.contains('folded')).toBe(false)
+    expect(toggle?.textContent).toBe('收起')
+    expect(toggle?.getAttribute('aria-expanded')).toBe('true')
+
+    // Short replies keep their key points box without folding; replies without key points are as before.
+    expect(messagesEl.querySelector('[data-message-id="short"] .message-body.has-key-points')).not.toBeNull()
+    expect(messagesEl.querySelector('[data-message-id="short"] .key-points-toggle')).toBeNull()
+    expect(messagesEl.querySelector('[data-message-id="plain"] .message-body.has-key-points')).toBeNull()
+    // Key points written as lines, with or without a blank line after the heading, fold the same way.
+    expect(messagesEl.querySelector('[data-message-id="lines"] .key-points-block')?.textContent).toContain('Python 开发更快。')
+    expect(messagesEl.querySelector('[data-message-id="lines"] .message-body.folded')).not.toBeNull()
+    expect(messagesEl.querySelector('[data-message-id="heading-and-lines"] .key-points-list')?.textContent).toContain('Go 编译为单文件。')
+    expect(messagesEl.querySelector('[data-message-id="heading-and-lines"] .message-body.folded')).not.toBeNull()
+  })
+
+  it('shows a round summary as a card, its request as a notice, and offers to summarize other rounds', () => {
+    const { messagesEl, messages, view, deps } = createLongChatView(0)
+    const runCommand = vi.fn(async () => undefined)
+    deps.runCommand = runCommand
+    const question = (id: string, seq: number) => ({ ...makeLongChatMessage(seq, '@all 选哪个'), id, type: 'user' as const, roleId: undefined, roleName: undefined, targetRoleIds: ['role-1', 'role-2'] })
+    const answer = (questionId: string, seq: number, roleId: string) => ({ ...makeLongChatMessage(seq, `回答 ${seq}`), id: `a-${seq}`, roleId, sourceMessageId: questionId })
+    messages.push(
+      question('q1', 0), answer('q1', 1, 'role-1'), answer('q1', 3, 'role-2'),
+      { ...question('s1', 4), content: '汇总本轮回复', targetRoleIds: ['role-1'], roundSummaryOf: 'q1' },
+      { ...answer('s1', 5, 'role-1'), content: '**共识**\n- 选 A' },
+      question('q2', 6), answer('q2', 7, 'role-1'), answer('q2', 9, 'role-2'),
+    )
+
+    view.renderMessages()
+    expect(messagesEl.querySelector('[data-message-id="s1"]')?.textContent).toBe('已请「工程师」汇总本轮回复')
+    const summary = messagesEl.querySelector('[data-message-id="a-5"]')
+    expect(summary?.classList.contains('round-summary')).toBe(true)
+    expect(summary?.querySelector('.round-summary-label')?.textContent).toBe('本轮汇总')
+
+    // The summarized round has no button; the other one does.
+    expect(messagesEl.querySelector('[data-message-id="q1"] .message-summary-btn')).toBeNull()
+    const button = messagesEl.querySelector<HTMLButtonElement>('[data-message-id="q2"] .message-summary-btn')
+    expect(button?.textContent).toBe('✦ 汇总本轮')
+    button?.click()
+    expect(runCommand).toHaveBeenCalledWith('GROUP_ROUND_SUMMARY_REQUEST', { chatId: 'chat-1', messageId: 'q2' })
+    expect(button?.disabled).toBe(true)
+  })
+
   it('keeps every message node of a long chat cached between renders', () => {
     const { messagesEl, view } = createLongChatView(450)
     view.renderMessages()

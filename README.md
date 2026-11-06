@@ -34,6 +34,7 @@ Join the OpenTeam WeChat community by scanning the QR code below. If the QR code
 - 🧑‍🏫 **Built-in advisor library**: start with 38 expert and thinking-style advisor templates, or create your own people.
 - 📣 **Mention-based routing**: use `@person` to ask one member, or `@everyone` to dispatch the same task to the whole team.
 - 🔄 **Independent and collaborative modes**: compare isolated perspectives first, then let members reference, challenge, and build on each other.
+- 📋 **Key points and round summaries**: when a message goes to several members, each reply starts with its key points and long replies fold to them; once everyone has answered, one member (an API member when there is one) writes a short summary of agreements, disagreements, open questions and next steps.
 - ⚡ **Live replies**: a web member's reply appears in the chat while the site is still writing it; stopping keeps what was written.
 - 🖼️ **Images and files**: attach images, PDF, Word, PowerPoint, Excel and text files to a message (documents are sent as the text read from them); images that ChatGPT, Gemini, Grok or Qwen draw are copied into the chat.
 - 🔘 **Clickable choices**: when a reply ends with options (A / B / C), answer it with one click.

@@ -7,6 +7,7 @@ import type { GroupChat, GroupMessage, GroupRole, MessageFileAttachment, Message
 import { formatBytes } from './composerAttachments'
 import { renderMarkdownInto } from './markdownRender'
 import { countRepliesByQuestion } from '../group/replyComparison'
+import { isKeyPointsHeading } from '../group/roundSummary'
 import type { ImageAttachmentBlobRecord } from '../shared/imageAttachmentRepository'
 import type { TeamPageState } from './appState'
 import { buildChatRenderItems, getChatStartupNotice, getStoppedReplyRoles, getVisibleThinkingRoles, THINKING_TIMEOUT_MS } from './chatExperience'
@@ -19,6 +20,8 @@ const AUTO_SCROLL_BOTTOM_THRESHOLD_PX = 48
 const MARK_MENU_SELECTION_GAP_PX = 12
 const MARK_MENU_FALLBACK_HEIGHT_PX = 148
 const MARK_MENU_SELECTION_SETTLE_DELAY_MS = 80
+// A reply with key points folds to them when the rest is longer than this.
+const KEY_POINTS_FOLD_MIN_CHARS = 280
 
 export interface MessagesViewDependencies {
   state: TeamPageState
@@ -94,6 +97,11 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
   let replyCounts = new Map<string, number>()
   // Choices are offered only on replies newer than the user's latest message.
   let latestUserSeq = 0
+  // Questions whose round has a summary (or one on the way), and the summary requests by id.
+  let summarizedQuestionIds = new Set<string>()
+  let summaryRequestsById = new Map<string, GroupMessage>()
+  // Folded replies the user opened, until the page is reloaded.
+  const expandedReplyIds = new Set<string>()
   // Replies still being written flow in smoothly instead of jumping in bursts. While the user is
   // at the bottom of the chat, it stays there as the text grows.
   const reveal = createStreamingReveal({
@@ -109,7 +117,10 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     const chat = deps.getCurrentChat()
     const messages = deps.getCurrentMessages()
     replyCounts = countRepliesByQuestion(messages)
-    latestUserSeq = messages.reduce((latest, message) => message.type === 'user' ? Math.max(latest, message.seq) : latest, 0)
+    summaryRequestsById = new Map(messages.filter(message => message.type === 'user' && message.roundSummaryOf).map(message => [message.id, message]))
+    summarizedQuestionIds = new Set([...summaryRequestsById.values()].map(message => message.roundSummaryOf!))
+    // A summary request is not the user speaking, so it leaves the round's choices open.
+    latestUserSeq = messages.reduce((latest, message) => message.type === 'user' && !message.roundSummaryOf ? Math.max(latest, message.seq) : latest, 0)
     releaseUnusedImageUrls(messages)
     const preserveScroll = deps.state.preserveNextMessageScroll
     const previousScrollTop = deps.messagesEl.scrollTop
@@ -196,6 +207,17 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     article.className = `message-row message ${message.type}${showName ? '' : ' compact'}${showAvatar ? '' : ' no-avatar'}`
     article.dataset.messageId = message.id
 
+    if (message.type === 'user' && message.roundSummaryOf) {
+      article.className = 'message-row message system round-summary-request'
+      const pill = document.createElement('div')
+      pill.className = 'message-system-pill'
+      const summarizer = message.targetRoleIds?.[0] ? deps.getStore().rolesById[message.targetRoleIds[0]] : undefined
+      pill.textContent = summarizer ? `已请「${summarizer.name}」汇总本轮回复` : '正在汇总本轮回复'
+      article.append(pill)
+      cacheMessageNode(message.id, signature, article, streamingSignature)
+      return article
+    }
+
     if (message.type === 'system') {
       const pill = document.createElement('div')
       pill.className = 'message-system-pill'
@@ -219,9 +241,17 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     const stack = document.createElement('div')
     stack.className = 'message-stack'
 
-    if (message.type === 'assistant' && showName) {
+    const isSummary = isRoundSummaryReply(message)
+    if (isSummary) article.classList.add('round-summary')
+    if (message.type === 'assistant' && (showName || isSummary)) {
       const name = document.createElement('div')
       name.className = 'message-name'
+      if (isSummary) {
+        const label = document.createElement('span')
+        label.className = 'round-summary-label'
+        label.textContent = '本轮汇总'
+        name.append(label)
+      }
       const title = document.createElement('span')
       title.className = 'message-name-text'
       title.textContent = deps.messageTitle(message)
@@ -265,6 +295,8 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     renderSavedHighlights(body, message)
     const hasVisibleTextBody = message.status === 'pending' || Boolean(message.content.trim())
     if (hasVisibleTextBody) bubble.append(body)
+    const foldToggle = message.type === 'assistant' && message.status === 'received' ? foldToKeyPoints(body, message.id) : undefined
+    if (foldToggle) bubble.append(foldToggle)
     const imageGrid = renderMessageImageGrid(message)
     if (imageGrid) bubble.append(imageGrid)
     const fileList = renderMessageFileList(message)
@@ -303,13 +335,101 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
 
     stack.append(bubble)
     const compare = compareButton(message)
-    if (compare) stack.append(compare)
+    const summarize = summarizeButton(message)
+    if (compare || summarize) {
+      const actions = document.createElement('div')
+      actions.className = 'message-round-actions'
+      if (compare) actions.append(compare)
+      if (summarize) actions.append(summarize)
+      stack.append(actions)
+    }
     const choices = replyChoicesBlock(message)
     if (choices) stack.append(choices)
     inner.append(avatar, stack)
     article.append(inner)
     cacheMessageNode(message.id, signature, article, streamingSignature)
     return article
+  }
+
+  function isRoundSummaryReply(message: GroupMessage): boolean {
+    return message.type === 'assistant' && Boolean(message.sourceMessageId && summaryRequestsById.has(message.sourceMessageId))
+  }
+
+  // A reply that starts with key points shows only them until opened, when the rest is long. The
+  // reply is rendered whole and the rest hidden, so highlights and copying keep working.
+  function foldToKeyPoints(body: HTMLElement, messageId: string): HTMLButtonElement | undefined {
+    const parts = keyPointsParts([...body.children])
+    if (!parts) return undefined
+    body.classList.add('has-key-points')
+    const restLength = [...body.children].slice(parts).reduce((total, element) => total + (element.textContent?.trim().length ?? 0), 0)
+    if (restLength < KEY_POINTS_FOLD_MIN_CHARS) return undefined
+
+    const toggle = document.createElement('button')
+    toggle.type = 'button'
+    toggle.className = 'key-points-toggle'
+    const update = () => {
+      const expanded = expandedReplyIds.has(messageId)
+      body.classList.toggle('folded', !expanded)
+      toggle.setAttribute('aria-expanded', String(expanded))
+      toggle.textContent = expanded ? '收起' : '展开全文'
+    }
+    toggle.addEventListener('click', () => {
+      if (expandedReplyIds.has(messageId)) expandedReplyIds.delete(messageId)
+      else expandedReplyIds.add(messageId)
+      update()
+    })
+    update()
+    return toggle
+  }
+
+  // Marks a reply's key points and says how many leading elements they take. Members write them as
+  // a heading and a list, a heading and lines, or the heading and lines in one paragraph.
+  function keyPointsParts(children: Element[]): number | undefined {
+    const [first, second] = children
+    if (!first) return undefined
+    const isLines = (element: Element | undefined) => element?.tagName === 'P' && Boolean(element.querySelector('br'))
+    if (isKeyPointsHeading(first.textContent ?? '')) {
+      if (!second || !(second.tagName === 'UL' || second.tagName === 'OL' || isLines(second))) return undefined
+      first.classList.add('key-points-heading')
+      second.classList.add('key-points-list')
+      return 2
+    }
+    if (isLines(first) && isKeyPointsHeading(firstLineText(first))) {
+      first.classList.add('key-points-list', 'key-points-block')
+      return 1
+    }
+    return undefined
+  }
+
+  function firstLineText(element: Element): string {
+    let text = ''
+    for (const node of element.childNodes) {
+      if (node.nodeName === 'BR') break
+      text += node.textContent ?? ''
+    }
+    return text
+  }
+
+  // Asks a member to summarize a round that has no summary yet.
+  function summarizeButton(message: GroupMessage): HTMLButtonElement | undefined {
+    if (message.type !== 'user' || message.roundSummaryOf || message.orchestrationKind || message.status === 'pending') return undefined
+    if ((replyCounts.get(message.id) ?? 0) < 2 || summarizedQuestionIds.has(message.id)) return undefined
+    const chat = deps.getCurrentChat()
+    if (chat && deps.isTeamInvitation?.(chat, message.id)) return undefined
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.className = 'message-compare-btn message-summary-btn'
+    button.textContent = '✦ 汇总本轮'
+    button.addEventListener('click', event => {
+      event.stopPropagation()
+      button.disabled = true
+      deps.runCommand('GROUP_ROUND_SUMMARY_REQUEST', { chatId: message.chatId, messageId: message.id })
+        .catch(error => {
+          button.disabled = false
+          deps.showError(error instanceof Error ? error.message : String(error))
+        })
+    })
+    return button
   }
 
   function choicesOpen(message: GroupMessage): boolean {
@@ -805,6 +925,9 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
       orchestrationReviewResult: findReviewResultForMessage(message),
       highlights: deps.getStore().messageHighlightsById?.[message.id],
       compareCount: message.type === 'user' ? replyCounts.get(message.id) ?? 0 : undefined,
+      summarized: message.type === 'user' ? summarizedQuestionIds.has(message.id) : undefined,
+      roundSummary: isRoundSummaryReply(message),
+      summaryTarget: message.roundSummaryOf ? deps.getStore().rolesById[message.targetRoleIds?.[0] ?? '']?.name : undefined,
       targetRoleIds: message.targetRoleIds,
       mentionedRoleIds: message.mentionedRoleIds,
       mentionsAll: message.mentionsAll,

@@ -53,6 +53,8 @@ describe('team page dom refs', () => {
       <button id="theme-dark"></button>
       <span id="chat-title-avatar"></span>
       <button id="reply-notifications-toggle"></button>
+      <button id="reply-key-points-toggle"></button>
+      <button id="round-summary-toggle"></button>
       <div id="chat-list-search-box"><input id="chat-list-search" /></div>
       <button id="ui-style-chatgpt"></button>
       <button id="ui-style-grok"></button>

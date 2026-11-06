@@ -39,6 +39,8 @@ export interface TeamPageDomRefs {
   languageZhEl: HTMLButtonElement
   agentControlToggleEl: HTMLButtonElement
   replyNotificationsToggleEl: HTMLButtonElement
+  replyKeyPointsToggleEl: HTMLButtonElement
+  roundSummaryToggleEl: HTMLButtonElement
   agentControlStatusEl: HTMLElement
   backupExportEl: HTMLButtonElement
   backupRestoreEl: HTMLButtonElement
@@ -214,6 +216,8 @@ export function createTeamPageDomRefs(): TeamPageDomRefs {
     languageZhEl: requireElement<HTMLButtonElement>('#language-zh'),
     agentControlToggleEl: requireElement<HTMLButtonElement>('#agent-control-toggle'),
     replyNotificationsToggleEl: requireElement<HTMLButtonElement>('#reply-notifications-toggle'),
+    replyKeyPointsToggleEl: requireElement<HTMLButtonElement>('#reply-key-points-toggle'),
+    roundSummaryToggleEl: requireElement<HTMLButtonElement>('#round-summary-toggle'),
     agentControlStatusEl: requireElement<HTMLElement>('#agent-control-status'),
     backupExportEl: requireElement<HTMLButtonElement>('#backup-export'),
     backupRestoreEl: requireElement<HTMLButtonElement>('#backup-restore'),

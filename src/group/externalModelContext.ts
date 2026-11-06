@@ -1,6 +1,7 @@
 import { formatContextMessage } from './contextSync'
 import { buildPrompt } from './promptBuilder'
 import { describeAttachments } from './messageUploads'
+import { isRoundSummaryMessage } from './roundSummary'
 import { normalizeLanguage } from '../shared/i18n'
 import type { GroupChat, GroupMessage, GroupRole, OpenTeamLanguage, OpenTeamStore } from './types'
 
@@ -11,6 +12,7 @@ export interface ExternalModelPromptResult {
 
 export interface BuildExternalModelPromptOptions {
   responseInstruction?: string
+  extraInstruction?: string
   maxContextChars?: number
 }
 
@@ -80,6 +82,7 @@ function buildPromptWithExternalContext(
     reference: userMessage.references?.[0],
     includePersona: true,
     responseInstruction: options.responseInstruction,
+    extraInstruction: options.extraInstruction,
     language,
   })
   if (chat.mode === 'collaborative' || contextMessages.length === 0) return basePrompt
@@ -96,6 +99,8 @@ function externalContextMessages(store: OpenTeamStore, chat: GroupChat, role: Gr
     .map(messageId => store.messagesById[messageId])
     .filter((message): message is GroupMessage => Boolean(message))
     .filter(message => message.seq <= userMessage.seq)
+    // Round summaries are for the user; members do not get them (or their requests) as context.
+    .filter(message => message.id === userMessage.id || !isRoundSummaryMessage(message, id => store.messagesById[id]))
     .sort((left, right) => left.seq - right.seq || left.createdAt - right.createdAt)
 
   if (chat.mode === 'collaborative') return messages

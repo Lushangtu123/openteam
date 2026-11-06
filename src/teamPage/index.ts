@@ -617,18 +617,29 @@ function render(): void {
   languageSettingsController.render()
 }
 
+// On/off settings that are on unless set to false, each with its switch in the settings menu.
+const REPLY_SETTING_TOGGLES = [
+  { key: 'replyNotifications', label: '回复完成时通知', element: () => teamDomRefs.replyNotificationsToggleEl },
+  { key: 'replyKeyPoints', label: '多人回复先列要点', element: () => teamDomRefs.replyKeyPointsToggleEl },
+  { key: 'roundSummary', label: '每轮自动汇总', element: () => teamDomRefs.roundSummaryToggleEl },
+] as const
+
 function renderReplyNotificationSettings(): void {
-  const enabled = store.settings.replyNotifications !== false
-  teamDomRefs.replyNotificationsToggleEl.setAttribute('aria-pressed', String(enabled))
-  teamDomRefs.replyNotificationsToggleEl.textContent = `回复完成时通知：${enabled ? '开启' : '关闭'}`
+  for (const toggle of REPLY_SETTING_TOGGLES) {
+    const enabled = store.settings[toggle.key] !== false
+    toggle.element().setAttribute('aria-pressed', String(enabled))
+    toggle.element().textContent = `${toggle.label}：${enabled ? '开启' : '关闭'}`
+  }
 }
 
 function registerReplyNotificationSettings(): void {
-  teamDomRefs.replyNotificationsToggleEl.addEventListener('click', () => {
-    runCommand('GROUP_SETTINGS_UPDATE', {
-      replyNotifications: store.settings.replyNotifications === false,
-    }).catch(error => showError(error instanceof Error ? error.message : String(error)))
-  })
+  for (const toggle of REPLY_SETTING_TOGGLES) {
+    toggle.element().addEventListener('click', () => {
+      runCommand('GROUP_SETTINGS_UPDATE', {
+        [toggle.key]: store.settings[toggle.key] === false,
+      }).catch(error => showError(error instanceof Error ? error.message : String(error)))
+    })
+  }
 }
 
 function renderAgentControlSettings(): void {

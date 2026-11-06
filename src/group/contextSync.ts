@@ -1,5 +1,6 @@
 import { normalizeLanguage } from '../shared/i18n'
 import { describeAttachments } from './messageUploads'
+import { isRoundSummaryMessage } from './roundSummary'
 import type { GroupChat, GroupMessage, GroupRole, OpenTeamLanguage } from './types'
 
 export interface UnsyncedContextResult {
@@ -22,6 +23,8 @@ export function getUnsyncedMessagesForRole(
     .filter((message): message is GroupMessage => Boolean(message))
     .filter(message => message.seq > role.contextCursor && message.id !== userMessage.id && message.roleId !== role.id)
     .filter(message => isMessageVisibleToRole(message, role.id))
+    // Round summaries are for the user; they repeat what members already said.
+    .filter(message => !isRoundSummaryMessage(message, id => messageById.get(id)))
     .filter(message => Boolean(message.content.trim()))
 }
 

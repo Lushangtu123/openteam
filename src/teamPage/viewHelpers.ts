@@ -31,7 +31,16 @@ export function getChatRecentSummary(chat: GroupChat, store: OpenTeamStore): str
   const lastMessageId = chat.messageIds[chat.messageIds.length - 1]
   const message = lastMessageId ? store.messagesById[lastMessageId] : undefined
   if (!message) return '暂无消息。可恢复聊天、添加人员或发送第一条任务。'
-  return `${messageTitle(message)}：${truncate(message.content, 72)}`
+  return `${messageTitle(message)}：${truncate(plainPreview(message.content), 72)}`
+}
+
+// A reply's text without Markdown marks (bold, headings, list bullets), on one line.
+export function plainPreview(content: string): string {
+  return content
+    .replace(/(\*\*|__)(.+?)\1/g, '$2')
+    .replace(/^\s{0,3}(?:#{1,6}\s+|[-*+]\s+|>\s?)/gm, '')
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
 export function messageTitle(message: GroupMessage): string {

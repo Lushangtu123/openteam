@@ -17,6 +17,8 @@ export function findAnsweredPrompt(store: OpenTeamStore, chatId: string, message
   const chat = store.chatsById[chatId]
   const message = store.messagesById[messageId]
   if (!chat || !message || message.type !== 'user' || message.chatId !== chatId) return undefined
+  // A round's summary is not a question the user asked.
+  if (message.roundSummaryOf) return undefined
   const statuses = Object.entries(message.deliveryStatus ?? {})
   if (statuses.length === 0 || statuses.some(([, status]) => status !== 'received' && status !== 'error')) return undefined
   const nameOf = (roleId: string) => store.rolesById[roleId]?.name ?? roleId

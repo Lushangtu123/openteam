@@ -785,6 +785,8 @@ function normalizeSettings(raw: unknown, storedVersion = CURRENT_STORE_VERSION):
     language: readSettingsLanguage(raw.language),
     ...teamTemplatesSetting(raw.teamTemplates),
     ...(raw.replyNotifications === false ? { replyNotifications: false } : {}),
+    ...(raw.replyKeyPoints === false ? { replyKeyPoints: false } : {}),
+    ...(raw.roundSummary === false ? { roundSummary: false } : {}),
   }
 }
 

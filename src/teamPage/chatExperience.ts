@@ -123,10 +123,13 @@ export function buildChatRenderItems(messages: GroupMessage[], roles: GroupRole[
       })
     }
 
+    // A summary request is a notice, not the user speaking.
     const sameSpeaker =
       previousMessage?.type === message.type &&
       previousMessage?.roleId === message.roleId &&
       message.type !== 'system' &&
+      !message.roundSummaryOf &&
+      !previousMessage?.roundSummaryOf &&
       message.createdAt - previousTimestamp < MESSAGE_TIME_GAP_MS
     items.push({
       type: 'message',

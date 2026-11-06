@@ -1,6 +1,7 @@
 import { isChatSite } from '../group/chatSites'
 import { extractSupportedConversationId, normalizeSupportedChatConversationUrl } from '../group/conversationUrl'
 import { readMessageUploads, type MessageUpload } from '../group/messageUploads'
+import { hasRoundSummary, pickSummarizer, readSummarizableRound, roundSummaryRequestText } from '../group/roundSummary'
 import type { LoadedUpload, UploadedImage } from './imageAttachments'
 import { normalizeMessageHighlightColor } from '../group/highlightColors'
 import { defaultMentionTargetForMessage, parseGroupMentions, roleMentionLabelOptionsFromSettings } from '../group/mentionParser'
@@ -30,6 +31,8 @@ interface ExternalModelRunRegistry {
 
 // A live reply longer than this is cut; the finished reply always arrives in full.
 const LIVE_REPLY_MAX_CHARS = 60_000
+// A round's summary is asked for a moment after its last reply, once that member's page is idle.
+const ROUND_SUMMARY_DELAY_MS = 1500
 
 export const MESSAGE_ROUTE_TYPES = [
   'GROUP_ROLE_RETRY_REPLY',
@@ -38,6 +41,7 @@ export const MESSAGE_ROUTE_TYPES = [
   'GROUP_MESSAGE_HIGHLIGHT_CREATE',
   'GROUP_MESSAGE_RESYNC_REPLY',
   'GROUP_MESSAGE_SEND',
+  'GROUP_ROUND_SUMMARY_REQUEST',
   'TEAM_FRAME_ROLE_READY',
   'TEAM_ROLE_CONVERSATION_UPDATED',
   'TEAM_SEND_ACK',
@@ -82,7 +86,15 @@ export interface MessageHandlersDependencies {
   waitForRetry?(ms: number): Promise<void>
 }
 
-export function createMessageHandlers(deps: MessageHandlersDependencies): BackgroundMessageRoute[] {
+export function createMessageHandlers(baseDeps: MessageHandlersDependencies): BackgroundMessageRoute[] {
+  // A finished round is also when its summary is asked for.
+  const deps: MessageHandlersDependencies = {
+    ...baseDeps,
+    onPromptSettled: (store, chatId, promptMessageId) => {
+      scheduleRoundSummary(store, chatId, promptMessageId)
+      return baseDeps.onPromptSettled?.(store, chatId, promptMessageId)
+    },
+  }
   const externalModelClient = deps.externalModelClient ?? createExternalModelClient()
   const externalModelRuns = deps.externalModelRuns ?? createExternalModelRunRegistry()
   const roleErrorRetryCounts = new Map<string, number>()
@@ -275,6 +287,85 @@ export function createMessageHandlers(deps: MessageHandlersDependencies): Backgr
       ],
       store: responseStore,
     }
+  }
+
+  // Asks one member to summarize a round: an API member if there is one, else whoever answered
+  // first. `auto` requests (when a round finishes) give up quietly when there is nothing to do.
+  const requestRoundSummary = async (chatId: string, questionId: string, options: { roleId?: string; auto?: boolean } = {}) => {
+    const timestamp = deps.now()
+    const { store, result } = await mutateStore(store => {
+      const chat = requireChat(store, chatId)
+      const question = store.messagesById[questionId]
+      if (options.auto && (store.settings.roundSummary === false || (question?.targetRoleIds?.length ?? 0) < 2)) return undefined
+      const round = readSummarizableRound(store, chat, question)
+      if (!round) {
+        if (options.auto) return undefined
+        throw new Error('这一轮还不能汇总：需要至少两位成员回复完成')
+      }
+      if (options.auto && hasRoundSummary(store, chat, round.question.id)) return undefined
+
+      const roles = getChatRoles(store, chat)
+      const isAvailable = (role: GroupRole) => role.status !== 'thinking' && (isExternalModelRole(role)
+        ? Boolean(getExternalModelForRole(store, role))
+        : isRoleDeliverable(role, deps.runtimeFrames.getByRole(chat.id, role.id), timestamp))
+      const summarizer = options.roleId ? roles.find(role => role.id === options.roleId) : pickSummarizer(roles, round, isAvailable)
+      if (!summarizer || !isAvailable(summarizer)) {
+        if (options.auto) return undefined
+        throw new Error('现在没有空闲的成员可以汇总，请稍后再试')
+      }
+
+      const request: GroupMessage = {
+        id: deps.newId('msg'),
+        chatId: chat.id,
+        seq: chat.nextMessageSeq,
+        type: 'user',
+        content: roundSummaryRequestText(store.settings.language),
+        targetRoleIds: [summarizer.id],
+        mentionedRoleIds: [summarizer.id],
+        roundSummaryOf: round.question.id,
+        createdAt: timestamp,
+        status: 'pending',
+        deliveryStatus: { [summarizer.id]: 'pending' },
+      }
+      store.messagesById[request.id] = request
+      chat.messageIds.push(request.id)
+      chat.nextMessageSeq += 1
+      chat.updatedAt = timestamp
+      chat.status = 'running'
+
+      const prepared = prepareRolePromptDelivery({ store, chat, role: summarizer, userMessage: request, roles, messages: getChatMessages(store, chat), timestamp, newId: deps.newId, runtimeFrames: deps.runtimeFrames })
+      recoverDeliverableRoleStatus(summarizer, timestamp, deps.log)
+      summarizer.status = 'thinking'
+      summarizer.lastPromptMessageId = request.id
+      summarizer.replyAttemptId = prepared.replyAttemptId
+      summarizer.updatedAt = timestamp
+      return { request, prepared }
+    })
+    if (!result) return { ok: true, skipped: true }
+
+    deps.log.info('round-summary:requested', { chatId, questionId, messageId: result.request.id, roleId: result.request.targetRoleIds?.[0], auto: Boolean(options.auto) })
+    await deps.broadcastStoreUpdated(store)
+    if (result.prepared.delivery) await sendPromptDeliveries(deps, chatId, result.request.id, [result.prepared.delivery])
+    let responseStore = store
+    if (result.prepared.externalDelivery) responseStore = await sendExternalModelDelivery(deps, externalModelClient, externalModelRuns, result.prepared.externalDelivery) ?? responseStore
+    return { ok: true, message: result.request, store: responseStore }
+  }
+
+  function scheduleRoundSummary(store: OpenTeamStore, chatId: string, questionId: string): void {
+    const chat = store.chatsById[chatId]
+    const question = store.messagesById[questionId]
+    if (!chat || store.settings.roundSummary === false || (question?.targetRoleIds?.length ?? 0) < 2) return
+    if (!readSummarizableRound(store, chat, question) || hasRoundSummary(store, chat, questionId)) return
+    void (async () => {
+      await waitForRetryDelay(deps, ROUND_SUMMARY_DELAY_MS)
+      await requestRoundSummary(chatId, questionId, { auto: true })
+    })().catch(error => deps.log.warn('round-summary:failed', { chatId, questionId, error: error instanceof Error ? error.message : String(error) }))
+  }
+
+  const handleRoundSummaryRequest = async (message: RuntimeMessage) => {
+    const chatId = requireString(message.chatId, '缺少群聊 ID')
+    const questionId = requireString(message.messageId, '缺少消息 ID')
+    return requestRoundSummary(chatId, questionId, { roleId: readOptionalString(message.roleId) })
   }
 
   const handleRoleRetryReply = async (message: RuntimeMessage) => {
@@ -889,6 +980,7 @@ export function createMessageHandlers(deps: MessageHandlersDependencies): Backgr
     { type: 'GROUP_MESSAGE_HIGHLIGHT_CREATE', handler: handleMessageHighlightCreate },
     { type: 'GROUP_MESSAGE_RESYNC_REPLY', handler: handleMessageResyncReply },
     { type: 'GROUP_MESSAGE_SEND', handler: handleMessageSend },
+    { type: 'GROUP_ROUND_SUMMARY_REQUEST', handler: handleRoundSummaryRequest },
     {
       type: 'TEAM_FRAME_ROLE_READY',
       handler: (message, sender) => readOptionalString(message.chatId) ? handleFrameRoleReady(message, sender) : { ok: false, error: 'TEAM_FRAME_ROLE_READY 缺少 chatId' },

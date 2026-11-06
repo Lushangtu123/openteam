@@ -32,6 +32,23 @@ function createStoreWithReadyRole(): OpenTeamStore {
   return store
 }
 
+// A chat with two API members, 工程师 and 设计师, on the same model.
+function createStoreWithTwoApiRoles(): OpenTeamStore {
+  const store = createStoreWithReadyRole()
+  store.settings.language = 'zh-CN'
+  store.settings.externalModelOrder = ['model-1']
+  store.settings.externalModelsById = {
+    'model-1': { id: 'model-1', name: '本地模型', format: 'openai', baseUrl: 'https://api.example.test/v1', apiKey: 'sk-test', modelName: 'local-chat-model', createdAt: 1, updatedAt: 1 },
+  }
+  const engineer = store.rolesById['role-1']
+  engineer.modelSource = 'external'
+  engineer.externalModelId = 'model-1'
+  delete engineer.chatSite
+  store.rolesById['role-2'] = { ...structuredClone(engineer), id: 'role-2', name: '设计师', systemPrompt: '从设计角度分析问题' }
+  store.chatsById['chat-1'].roleIds = ['role-1', 'role-2']
+  return store
+}
+
 function addFlow(store: OpenTeamStore, flow: Partial<OrchestrationFlow> = {}): OrchestrationFlow {
   const resolved: OrchestrationFlow = {
     id: flow.id ?? 'flow-1',
@@ -132,6 +149,7 @@ describe('background message handlers', () => {
       'GROUP_MESSAGE_HIGHLIGHT_CREATE',
       'GROUP_MESSAGE_RESYNC_REPLY',
       'GROUP_MESSAGE_SEND',
+      'GROUP_ROUND_SUMMARY_REQUEST',
       'TEAM_FRAME_ROLE_READY',
       'TEAM_ROLE_CONVERSATION_UPDATED',
       'TEAM_SEND_ACK',
@@ -1100,6 +1118,113 @@ describe('background message handlers', () => {
       status: 'pending',
       deliveryStatus: { 'role-1': 'pending' },
     })
+  })
+
+  it('asks for key points in a round and has an API member summarize it once everyone has answered', async () => {
+    vi.resetModules()
+    const startingStore = createStoreWithTwoApiRoles()
+    let currentStore = structuredClone(startingStore)
+    vi.doMock('./storeAccess', async importOriginal => {
+      const actual = await importOriginal<typeof import('./storeAccess')>()
+      return {
+        ...actual,
+        mutateStore: vi.fn(async (mutator: (store: OpenTeamStore) => unknown) => {
+          const result = await mutator(currentStore)
+          currentStore = structuredClone(currentStore)
+          return { store: currentStore, result }
+        }),
+      }
+    })
+
+    const { createMessageHandlers } = await import('./messageHandlers')
+    let answered = 0
+    const complete = vi.fn(async (input: { prompt: string }): Promise<{ content: string }> => ({
+      content: input.prompt.includes('汇总人') ? '**共识**\n- 都支持方案 A' : `**要点**\n- 回复 ${++answered}`,
+    }))
+    const onPromptSettled = vi.fn()
+    let messageIdSeq = 0
+    const routes = createMessageHandlers({
+      broadcastStoreUpdated: vi.fn(),
+      externalModelClient: { complete },
+      getChatStatusFromRoles: () => 'ready',
+      log: { debug: vi.fn(), info: vi.fn(), warn: vi.fn() },
+      newId: vi.fn((prefix: string) => prefix === 'msg' ? `${prefix}-${++messageIdSeq}` : `${prefix}-${messageIdSeq}`),
+      now: vi.fn(() => 100),
+      onPromptSettled,
+      runtimeFrames: { bind: vi.fn(), getByAddress: vi.fn(), getByRole: vi.fn(() => undefined) },
+      sendRoleMessage: vi.fn(),
+      sendError: vi.fn(),
+      sendPrompt: vi.fn(),
+      waitForRetry: vi.fn(async () => {}),
+    })
+
+    await routes.find(route => route.type === 'GROUP_MESSAGE_SEND')?.handler({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@all 选哪个方案？' }, {})
+    await vi.waitFor(() => expect(complete).toHaveBeenCalledTimes(3))
+
+    const prompts = complete.mock.calls.map(([input]: [{ prompt: string }]) => input.prompt)
+    expect(prompts[0]).toContain('**要点**')
+    expect(prompts[1]).toContain('**要点**')
+    expect(prompts[2]).toContain('你是「工程师」，这次请你担任本轮讨论的汇总人。')
+    expect(prompts[2]).toContain('【工程师】\n**要点**\n- 回复 1')
+    expect(prompts[2]).toContain('【设计师】\n**要点**\n- 回复 2')
+    expect(prompts[2]).not.toContain('**要点**」')
+    await vi.waitFor(() => expect(Object.values(currentStore.messagesById).some(message => message.content === '**共识**\n- 都支持方案 A')).toBe(true))
+    const request = Object.values(currentStore.messagesById).find(message => message.roundSummaryOf)
+    expect(request).toMatchObject({ type: 'user', roundSummaryOf: 'msg-1', targetRoleIds: ['role-1'], content: '汇总本轮回复' })
+    expect(onPromptSettled).toHaveBeenCalledWith(expect.anything(), 'chat-1', 'msg-1')
+    // The summary is not summarized again, and a single member's reply is never summarized.
+    expect(complete).toHaveBeenCalledTimes(3)
+  })
+
+  it('leaves rounds alone when summaries are turned off, and explains a round that cannot be summarized yet', async () => {
+    vi.resetModules()
+    const startingStore = createStoreWithTwoApiRoles()
+    startingStore.settings.roundSummary = false
+    startingStore.settings.replyKeyPoints = false
+    let currentStore = structuredClone(startingStore)
+    vi.doMock('./storeAccess', async importOriginal => {
+      const actual = await importOriginal<typeof import('./storeAccess')>()
+      return {
+        ...actual,
+        mutateStore: vi.fn(async (mutator: (store: OpenTeamStore) => unknown) => {
+          const result = await mutator(currentStore)
+          currentStore = structuredClone(currentStore)
+          return { store: currentStore, result }
+        }),
+      }
+    })
+
+    const { createMessageHandlers } = await import('./messageHandlers')
+    const complete = vi.fn(async (_input: { prompt: string }) => ({ content: '回复' }))
+    let messageIdSeq = 0
+    const routes = createMessageHandlers({
+      broadcastStoreUpdated: vi.fn(),
+      externalModelClient: { complete },
+      getChatStatusFromRoles: () => 'ready',
+      log: { debug: vi.fn(), info: vi.fn(), warn: vi.fn() },
+      newId: vi.fn((prefix: string) => prefix === 'msg' ? `${prefix}-${++messageIdSeq}` : `${prefix}-${messageIdSeq}`),
+      now: vi.fn(() => 100),
+      runtimeFrames: { bind: vi.fn(), getByAddress: vi.fn(), getByRole: vi.fn(() => undefined) },
+      sendRoleMessage: vi.fn(),
+      sendError: vi.fn(),
+      sendPrompt: vi.fn(),
+      waitForRetry: vi.fn(async () => {}),
+    })
+
+    await routes.find(route => route.type === 'GROUP_MESSAGE_SEND')?.handler({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@all 选哪个方案？' }, {})
+    await new Promise(resolve => setTimeout(resolve, 20))
+    expect(complete).toHaveBeenCalledTimes(2)
+    expect(complete.mock.calls.map(([input]) => input.prompt).join('\n')).not.toContain('**要点**')
+
+    await routes.find(route => route.type === 'GROUP_MESSAGE_SEND')?.handler({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@工程师 你呢？' }, {})
+    const single = Object.values(currentStore.messagesById).find(message => message.type === 'user' && message.content === '你呢？')
+    const summarize = routes.find(route => route.type === 'GROUP_ROUND_SUMMARY_REQUEST')
+    await expect(summarize?.handler({ type: 'GROUP_ROUND_SUMMARY_REQUEST', chatId: 'chat-1', messageId: single?.id }, {})).rejects.toThrow('这一轮还不能汇总：需要至少两位成员回复完成')
+
+    // Asked by hand, the first round is summarized even with automatic summaries off.
+    const response = await summarize?.handler({ type: 'GROUP_ROUND_SUMMARY_REQUEST', chatId: 'chat-1', messageId: 'msg-1' }, {})
+    expect(response).toMatchObject({ ok: true, message: { roundSummaryOf: 'msg-1', targetRoleIds: ['role-1'] } })
+    expect(complete).toHaveBeenCalledTimes(4)
   })
 
   it('delivers external model roles through the API runtime without requiring an iframe', async () => {
