@@ -15,7 +15,8 @@
     "alarms",
     "declarativeNetRequest",
     "clipboardRead",
-    "clipboardWrite"
+    "clipboardWrite",
+    "cookies"
   ],
   "host_permissions": [
     "https://gemini.google.com/*",
@@ -27,6 +28,7 @@
     "https://chat.deepseek.com/*",
     "https://grok.com/*",
     "https://*.grok.com/*",
+    "wss://grok.com/*",
     "https://chat.qwen.ai/*",
     "https://www.kimi.com/*",
     "https://*/*",

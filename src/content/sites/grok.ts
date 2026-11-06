@@ -89,12 +89,35 @@ export function createGrokAdapter(options: GrokAdapterOptions = {}): ChatSiteAda
     checkStatus: context => checkSiteHealth({
       findEditor: findGrokEditor,
       isGenerating: isGrokGenerating,
-      isLoginPage: () => /^\/(sign-in|sign-up|login)\b/.test(location.pathname),
+      isLoginPage: () => /^\/(sign-in|sign-up|login)\b/.test(location.pathname) || findGrokNotice()?.kind === 'login',
+      findSiteError: () => {
+        const notice = findGrokNotice()
+        return notice?.kind === 'error' ? notice.text : undefined
+      },
     }, context),
     stopGenerating: stopGrokGenerating,
     fillAndSend,
     collectPromptDiagnostics,
   }
+}
+
+// Grok's own messages that mean a reply will not come: its connection banner and "Network error
+// occurred" toast (from grok.com's error-toast and gateway-connection-banner strings), and the wall a
+// signed-out guest gets after sending ("Continue your conversation / Sign up to continue").
+// "Testing your connection…" is left out: it is a check in progress.
+const GROK_ERROR_TEXT = /^(Your network or security software is blocking Grok|Grok is having trouble with its real-time connection|Grok can.t be reached right now|Network error occurred)/i
+const GROK_LOGIN_TEXT = /^(Your session has ended|Continue your conversation$|Sign up to continue)/i
+const GROK_NOTICE_CANDIDATES = '[role="alert"], [role="status"], [data-sonner-toast], h1, h2, h3, h4, p, span:not(:has(*)), div:not(:has(*))'
+
+export function findGrokNotice(root: ParentNode = document): { kind: 'error' | 'login'; text: string } | undefined {
+  for (const element of root.querySelectorAll<HTMLElement>(GROK_NOTICE_CANDIDATES)) {
+    if (element.closest('[hidden], [aria-hidden="true"]')) continue
+    const text = (element.textContent ?? '').replace(/\s+/g, ' ').trim()
+    if (!text || text.length > 300) continue
+    if (GROK_ERROR_TEXT.test(text)) return { kind: 'error', text }
+    if (GROK_LOGIN_TEXT.test(text)) return { kind: 'login', text }
+  }
+  return undefined
 }
 
 export function getGrokConversationLocation(href: string): ConversationSnapshot {

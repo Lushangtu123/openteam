@@ -11,6 +11,7 @@ import {
   hasTopLevelStaticImport,
 } from '../vite.config'
 import { CHAT_SITE_INFO, CHAT_SITES } from './group/chatSites'
+import { WEBSOCKET_COOKIE_SITES } from './background/websocketCookies'
 
 describe('extension security configuration', () => {
   it('pins the unpacked extension id with a stable manifest key', () => {
@@ -38,6 +39,7 @@ describe('extension security configuration', () => {
       'https://chat.deepseek.com/*',
       'https://grok.com/*',
       'https://*.grok.com/*',
+      'wss://grok.com/*',
       'https://chat.qwen.ai/*',
       'https://www.kimi.com/*',
       'https://*/*',
@@ -120,6 +122,15 @@ describe('extension security configuration', () => {
       }
     }
     expect(manifest.content_scripts[0].all_frames).toBe(true)
+  })
+
+  it('can rewrite the WebSocket handshake of every site whose frames need their cookies on it', () => {
+    const manifest = JSON.parse(readFileSync(resolve(process.cwd(), 'public/manifest.json'), 'utf8')) as { permissions: string[]; host_permissions: string[] }
+
+    // Network rules only change requests the extension has host access to, and http(s) patterns do
+    // not cover ws(s) URLs.
+    expect(manifest.permissions).toContain('cookies')
+    for (const site of WEBSOCKET_COOKIE_SITES) expect(manifest.host_permissions).toContain(`wss://${site.initiatorDomain}/*`)
   })
 
   it('only lets the OpenTeam extension origin connect to the local control daemon', () => {

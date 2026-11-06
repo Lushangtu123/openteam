@@ -34,14 +34,24 @@ export function messageTabId(message: RuntimeMessage, sender: chrome.runtime.Mes
   return senderTabId(sender) ?? explicitTabId(message.hostTabId)
 }
 
+const hostTabListeners = new Set<() => void>()
+
+// Called when a team page tab is first seen or goes away.
+export function onHostTabsChanged(listener: () => void): void {
+  hostTabListeners.add(listener)
+}
+
 export function rememberHost(sender: chrome.runtime.MessageSender, explicitTabIdValue?: unknown): void {
   const tabId = senderTabId(sender) ?? explicitTabId(explicitTabIdValue)
-  if (tabId !== undefined) hostTabIds.add(tabId)
+  if (tabId === undefined || hostTabIds.has(tabId)) return
+  hostTabIds.add(tabId)
+  for (const listener of hostTabListeners) listener()
 }
 
 export function forgetHostTab(tabId: number): void {
-  hostTabIds.delete(tabId)
+  const known = hostTabIds.delete(tabId)
   storeSync.forget(tabId)
+  if (known) for (const listener of hostTabListeners) listener()
 }
 
 export function listHostTabIds(): number[] {

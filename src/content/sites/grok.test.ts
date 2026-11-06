@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { describe, expect, it, vi } from 'vitest'
-import { createGrokAdapter } from './grok'
+import { createGrokAdapter, findGrokNotice } from './grok'
 
 describe('Grok site adapter', () => {
   it('extracts Grok conversation ids and normalized safe urls', () => {
@@ -228,5 +228,27 @@ describe('Grok site adapter', () => {
     const response = document.querySelector('[data-testid="assistant-message"]')!
 
     expect(createGrokAdapter().readResponseMarkdown?.(response)).toBe('## 方案\n\n**结论**：可以做\n\n- 接入 adapter\n- 验证登录态')
+  })
+
+  it('recognises Grok\'s connection banner, its network error toast and the sign-up wall', () => {
+    const composer = '<div class="query-bar"><div data-testid="chat-input"><div class="ProseMirror" contenteditable="true" role="textbox"></div></div></div>'
+    const adapter = createGrokAdapter()
+
+    document.body.innerHTML = composer + '<div class="banner"><svg></svg><div>Your network or security software is blocking Grok’s real-time connection. Try another network, or ask your IT team to allow WebSocket connections to grok.com.</div><button>Retry</button></div>'
+    expect(findGrokNotice()).toEqual({ kind: 'error', text: 'Your network or security software is blocking Grok’s real-time connection. Try another network, or ask your IT team to allow WebSocket connections to grok.com.' })
+    expect(adapter.checkStatus?.({ pageAgeMs: 60_000, now: 5 })).toMatchObject({ status: 'error', reason: 'site-error', detail: expect.stringContaining('blocking Grok’s real-time connection') })
+
+    document.body.innerHTML = composer + '<ol><li data-sonner-toast="" data-type="error"><div>Network error occurred</div></li></ol>'
+    expect(findGrokNotice()?.kind).toBe('error')
+
+    document.body.innerHTML = composer + '<div class="card"><h3>Continue your conversation</h3><p>Sign up to continue seamlessly with Grok’s full power</p></div><button>Sign up</button>'
+    expect(findGrokNotice()).toEqual({ kind: 'login', text: 'Continue your conversation' })
+    expect(adapter.checkStatus?.({ pageAgeMs: 60_000, now: 5 })).toEqual({ status: 'unauthorized', reason: 'login', timestamp: 5 })
+
+    // "Testing your connection…" is a check in progress; a reply that merely mentions an error is
+    // part of the conversation.
+    document.body.innerHTML = composer + '<div>Network issue detected. Testing your connection…</div><div data-testid="assistant-message"><p>If you see “Network error occurred”, retry.</p></div>'
+    expect(findGrokNotice()).toBeUndefined()
+    expect(adapter.checkStatus?.({ pageAgeMs: 60_000, now: 5 })).toEqual({ status: 'ready', timestamp: 5 })
   })
 })

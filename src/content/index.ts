@@ -11,6 +11,8 @@ import { contentLog as log, sendRuntimeMessage, type ContentRuntimeMessage } fro
 import { createRoleSession } from './roleSession'
 import { getActiveChatSiteAdapter } from './sites'
 import type { SiteStatusInfo } from './sites/types'
+import { createSiteProblemTracker } from './siteProblem'
+import { chatSiteForHostname, chatSiteLabel } from '../group/chatSites'
 
 const OPEN_TEAM_LOADED_KEY = '__OPENTEAM_LOADED__'
 
@@ -19,6 +21,7 @@ const siteAdapter = getActiveChatSiteAdapter()
 let replyObserver: ReplyObserverController | undefined
 let conversationMonitor: ConversationMonitor | undefined
 let lastReportedStatus: { key: string; status: SiteStatusInfo } | undefined
+const siteProblems = createSiteProblemTracker(chatSiteLabel(chatSiteForHostname(location.hostname)))
 const pageStartedAt = Date.now()
 
 const roleSession = createRoleSession({
@@ -73,6 +76,7 @@ function reportSiteStatus(force: boolean): void {
 
   try {
     const currentStatus = getCurrentSiteStatus()
+    failPendingReplyOnSiteProblem(currentStatus)
     const key = [chatId, assignedRole.roleId, currentStatus.status, currentStatus.reason, currentStatus.detail].join('|')
     if (!force && lastReportedStatus?.key === key) return
     lastReportedStatus = { key, status: currentStatus }
@@ -88,6 +92,19 @@ function reportSiteStatus(force: boolean): void {
   } catch (error) {
     log.warn('status-heartbeat:check-failed', { error: error instanceof Error ? error.message : String(error) })
   }
+}
+
+// See siteProblem.ts: a reply the page has shown it cannot give fails with the page's own message.
+function failPendingReplyOnSiteProblem(status: SiteStatusInfo): void {
+  const active = roleSession.getActivePrompt()
+  const reason = siteProblems.observe(active?.messageId, status)
+  if (!active || !reason) return
+  log.warn('site-problem:fail-reply', { messageId: active.messageId, status: status.status, reason: status.reason, detail: status.detail })
+  const replyAttemptId = active.replyAttemptId
+  roleSession.clearActivePrompt(active.messageId)
+  replyObserver?.clearPromptReplyBaseline()
+  replyObserver?.clearReplyPolling()
+  reportRoleError(active.messageId, reason, undefined, undefined, replyAttemptId)
 }
 
 function getCurrentSiteStatus(): SiteStatusInfo {

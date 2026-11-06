@@ -14,6 +14,8 @@ import {
   requestRoleRecovery,
   sendError,
   type RuntimeMessage,
+  onHostTabsChanged,
+  listHostTabIds,
 } from './runtimeClient'
 import { createMessageRouter } from './messageRouter'
 import { classifyRuntimeSender, isRuntimeMessageAllowed, responseForSender } from './senderPolicy'
@@ -30,6 +32,7 @@ import type { BackgroundToRoleMessage } from '../group/runtimeProtocol'
 import { createControlActionExecutor } from './controlHandlers'
 import { createControlClient } from './controlClient'
 import { createImageAttachmentService } from './imageAttachments'
+import { createWebSocketCookieSync } from './websocketCookies'
 import { createIndexedDbImageAttachmentRepository } from '../shared/imageAttachmentRepository'
 
 const runtimeFrames = createRuntimeFrameRegistry()
@@ -297,6 +300,31 @@ chrome.action.onClicked.addListener(() => {
     logBackgroundFailure('open-team-page:failed', error)
   }
 })
+
+// Grok's chat WebSocket from the team page's frames: see websocketCookies.ts. Skipped when the
+// cookies permission or session rules are not available.
+if (chrome.cookies?.onChanged && chrome.declarativeNetRequest?.updateSessionRules) {
+  const webSocketCookies = createWebSocketCookieSync({
+    getCookies: async url => {
+      // Partitioned cookies are kept per top-level site; the frames' top level is this extension.
+      const topLevelSite = chrome.runtime.getURL('').replace(/\/$/, '')
+      const [unpartitioned, partitioned] = await Promise.all([
+        chrome.cookies.getAll({ url }),
+        // partitionKey (Chrome 119+) is not in the installed chrome types yet.
+        chrome.cookies.getAll({ url, partitionKey: { topLevelSite } } as chrome.cookies.GetAllDetails).catch(() => []),
+      ])
+      return [...unpartitioned, ...partitioned]
+    },
+    updateSessionRules: update => chrome.declarativeNetRequest.updateSessionRules(update),
+    listTabIds: listHostTabIds,
+    log,
+  })
+  onHostTabsChanged(() => webSocketCookies.schedule())
+  chrome.cookies.onChanged.addListener(change => {
+    if (webSocketCookies.watchesDomain(change.cookie.domain)) webSocketCookies.schedule()
+  })
+  webSocketCookies.schedule()
+}
 
 chrome.tabs.onRemoved.addListener(tabId => {
   try {
