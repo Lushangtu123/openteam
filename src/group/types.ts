@@ -268,6 +268,8 @@ export interface TeamFormation {
   preset?: boolean
   // The positions before the members were asked to divide the work again.
   previousPositions?: Array<{ position: string; holder: string }>
+  // The message holding the files attached to the task; every invitation carries copies of them.
+  materialsMessageId?: string
   createdAt: number
   confirmedAt?: number
 }

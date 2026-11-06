@@ -55,6 +55,11 @@ function setup(store = makeStore(), health: Record<string, RolePageHealth> = {})
       const role = store.rolesById[String(payload?.roleId)]
       Object.assign(role, payload?.patch)
     }
+    // The task's files, posted in the group as a message of their own.
+    if (type === 'GROUP_MESSAGE_SEND' && Array.isArray(payload?.uploads)) {
+      const uploads = payload.uploads as Array<{ fileName: string; mimeType: string; size: number; text?: string }>
+      addMessage(store, { id: 'materials', type: 'user', content: String(payload.raw), status: 'received', attachments: uploads.map((upload, index) => ({ id: `att${index}`, type: 'file', status: 'ready', fileName: upload.fileName, mimeType: upload.mimeType, size: upload.size, text: upload.text ?? '' })) })
+    }
   })
   const openAutoPlan = vi.fn()
   const showSuccess = vi.fn()
@@ -115,6 +120,44 @@ describe('team formation view', () => {
     await vi.waitFor(() => expect(document.querySelector('.team-setup-dialog')).toBeNull())
     // The store's current chat has a formation, so its card opens.
     expect(document.querySelector('#team-card-title')?.textContent).toBe('检查队员')
+  })
+
+  it('attaches files to the task and sends them with every invitation', async () => {
+    const { store, view, runCommand } = setup()
+    view.openSetup()
+    document.querySelector<HTMLTextAreaElement>('#team-setup-task')!.value = '做一个记账小程序'
+    const plus = (key: string) => document.querySelector<HTMLButtonElement>(`.team-setup-member[data-key="${key}"] .team-setup-step:last-child`)!
+    plus('site:claude').click()
+    plus('site:chatgpt').click()
+    const input = document.querySelector<HTMLInputElement>('.team-setup-form input[type="file"]')!
+    Object.defineProperty(input, 'files', { configurable: true, value: [new File(['# 需求\n记账'], 'spec.md', { type: 'text/markdown' })] })
+    input.dispatchEvent(new Event('change'))
+    await vi.waitFor(() => expect(document.querySelector('.team-setup-tray')?.textContent).toContain('spec.md'))
+
+    document.querySelector<HTMLFormElement>('.team-setup-form')!.dispatchEvent(new Event('submit', { cancelable: true }))
+    await vi.waitFor(() => expect(store.chatsById.c1.teamFormation?.materialsMessageId).toBe('materials'))
+    const posted = runCommand.mock.calls.find(call => call[0] === 'GROUP_MESSAGE_SEND')![1]!
+    expect(posted.raw).toBe('项目资料（会随邀请一起发给每位队员）')
+    expect(posted.uploads).toEqual([expect.objectContaining({ kind: 'text', fileName: 'spec.md', text: '# 需求\n记账' })])
+
+    // The invitation carries copies of the files.
+    footerButton('邀请它们自荐').click()
+    await vi.waitFor(() => expect(store.chatsById.c1.teamFormation!.invitationIds).toEqual(['inv1']))
+    const invitation = runCommand.mock.calls.find(call => call[0] === 'GROUP_MESSAGE_SEND' && call[1]?.teamInvitation)![1]!
+    expect(invitation.attachmentsFrom).toBe('materials')
+  })
+
+  it('takes up to five of the same AI and twelve members in all', () => {
+    const { view } = setup()
+    view.openSetup()
+    const plus = (key: string) => document.querySelector<HTMLButtonElement>(`.team-setup-member[data-key="${key}"] .team-setup-step:last-child`)!
+    const count = (key: string) => document.querySelector(`.team-setup-member[data-key="${key}"] .team-setup-count`)!.textContent
+    for (let index = 0; index < 7; index += 1) plus('site:claude').click()
+    expect(count('site:claude')).toBe('5')
+    for (let index = 0; index < 5; index += 1) plus('site:gemini').click()
+    for (let index = 0; index < 5; index += 1) plus('site:kimi').click()
+    expect(count('site:kimi')).toBe('2')
+    expect(document.querySelector('.team-setup-total')?.textContent).toBe('已选 12 位，可选 2–12 位；同一个 AI 最多 5 位。')
   })
 
   it('invites only once every member\'s page can send', async () => {

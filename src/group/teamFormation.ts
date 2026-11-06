@@ -5,8 +5,9 @@ import { isChatSite } from './chatSites'
 import type { GroupChat, GroupMessage, GroupRole, OpenTeamLanguage, OpenTeamStore, TeamFormation, TeamTemplate, TeamTemplateMember } from './types'
 
 export const TEAM_MIN_MEMBERS = 2
-export const TEAM_MAX_MEMBERS = 6
-export const TEAM_MAX_COPIES_PER_MODEL = 3
+// Every member is a web page (or an API call) of its own, so a bigger team is heavier to run.
+export const TEAM_MAX_MEMBERS = 12
+export const TEAM_MAX_COPIES_PER_MODEL = 5
 export const TEAM_MAX_TEMPLATES = 20
 
 // What a member answered when asked which position it wants.
@@ -455,6 +456,7 @@ export function readTeamFormation(value: unknown, now: number): TeamFormation | 
     invitationIds,
     ...(record.preset === true ? { preset: true } : {}),
     ...(previousPositions.length > 0 ? { previousPositions } : {}),
+    ...(typeof record.materialsMessageId === 'string' && record.materialsMessageId ? { materialsMessageId: record.materialsMessageId } : {}),
     createdAt: typeof record.createdAt === 'number' ? record.createdAt : now,
     ...(typeof record.confirmedAt === 'number' ? { confirmedAt: record.confirmedAt } : {}),
   }

@@ -6679,8 +6679,29 @@ select.reply-compare-select {
 
 .team-setup-stepper {
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
   gap: 4px;
+}
+
+/* Long API model names shorten instead of pushing the stepper out of the row. */
+.team-setup-member > .role-site-badge {
+  display: block;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The task's files: the attach button as wide as its words. */
+.team-setup-attach {
+  justify-self: start;
+  width: auto;
+}
+
+.team-setup-tray:not([hidden]) {
+  margin: 2px 0 8px;
 }
 
 .icon-btn.team-setup-step {

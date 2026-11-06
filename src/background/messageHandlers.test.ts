@@ -1180,6 +1180,61 @@ describe('background message handlers', () => {
     }))
   })
 
+  it("copies an earlier message's files onto a new one, as each team invitation does", async () => {
+    vi.resetModules()
+    const startingStore = createStoreWithReadyRole()
+    startingStore.chatsById['chat-1'].requireManualMention = true
+    startingStore.messagesById['msg-files'] = {
+      id: 'msg-files', chatId: 'chat-1', seq: 1, type: 'user', content: '项目资料', createdAt: 1, status: 'received',
+      attachments: [
+        { id: 'img-1', type: 'image', status: 'ready', source: 'user-upload', mimeType: 'image/png', size: 3, fileName: 'chart.png' },
+        { id: 'file-1', type: 'file', status: 'ready', fileName: 'spec.md', mimeType: 'text/markdown', size: 6, text: '# spec' },
+      ],
+    }
+    startingStore.chatsById['chat-1'].messageIds = ['msg-files']
+    startingStore.chatsById['chat-1'].nextMessageSeq = 2
+    let currentStore = structuredClone(startingStore)
+    vi.doMock('./storeAccess', async importOriginal => {
+      const actual = await importOriginal<typeof import('./storeAccess')>()
+      return {
+        ...actual,
+        mutateStore: vi.fn(async (mutator: (store: OpenTeamStore) => unknown) => {
+          const result = await mutator(currentStore)
+          currentStore = structuredClone(currentStore)
+          return { store: currentStore, result }
+        }),
+      }
+    })
+    const { createMessageHandlers } = await import('./messageHandlers')
+    const saveUploads = vi.fn(async () => undefined)
+    const loadUploads = vi.fn(async (ids: string[]) => ids.map(() => ({ fileName: 'chart.png', mimeType: 'image/png', bytes: new Uint8Array([137, 80, 78]), data: btoa(String.fromCharCode(137, 80, 78)) })))
+    let messageIdSeq = 0
+    const routes = createMessageHandlers({
+      broadcastStoreUpdated: vi.fn(),
+      getChatStatusFromRoles: () => 'ready',
+      imageAttachments: { captureReplyImages: vi.fn(), deleteByIds: vi.fn(async () => undefined), saveUploads, loadUploads },
+      log: { debug: vi.fn(), info: vi.fn(), warn: vi.fn() },
+      newId: vi.fn((prefix: string) => `${prefix}-${++messageIdSeq}`),
+      now: vi.fn(() => 100),
+      runtimeFrames: { bind: vi.fn(), getByAddress: vi.fn(), getByRole: vi.fn(() => undefined) },
+      sendRoleMessage: vi.fn(),
+      sendError: vi.fn(),
+      sendPrompt: vi.fn(),
+    } as never)
+    const sendRoute = routes.find(route => route.type === 'GROUP_MESSAGE_SEND')!
+
+    const response = await sendRoute.handler({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '请看资料', attachmentsFrom: 'msg-files' }, {}) as { message: GroupMessage }
+
+    expect(loadUploads).toHaveBeenCalledWith(['img-1'])
+    expect(response.message.attachments).toEqual([
+      expect.objectContaining({ type: 'image', source: 'user-upload', fileName: 'chart.png', mimeType: 'image/png' }),
+      expect.objectContaining({ type: 'file', fileName: 'spec.md', text: '# spec' }),
+    ])
+    // Its own copy of the image, stored under the new message.
+    expect(saveUploads).toHaveBeenCalledWith(expect.objectContaining({ chatId: 'chat-1', messageId: response.message.id, images: [expect.objectContaining({ fileName: 'chart.png', mimeType: 'image/png' })] }))
+    await expect(sendRoute.handler({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '再看', attachmentsFrom: 'msg-gone' }, {})).rejects.toThrow('找不到要附带的资料')
+  })
+
   it('streams external model replies into a pending assistant message', async () => {
     vi.resetModules()
     const startingStore = createStoreWithReadyRole()

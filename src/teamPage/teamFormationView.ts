@@ -21,7 +21,9 @@ import {
   type TeamResolution,
 } from '../group/teamFormation'
 import type { GroupChat, GroupMessage, GroupRole, OpenTeamLanguage, OpenTeamStore } from '../group/types'
-import { normalizeLanguage } from '../shared/i18n'
+import { normalizeLanguage, translateUi } from '../shared/i18n'
+import type { MessageUpload } from '../group/messageUploads'
+import { createComposerAttachments } from './composerAttachments'
 import { PROBLEM_HEALTH_STATUSES, rolePageHealthLabel, type RolePageHealth } from './roleHealth'
 
 export interface TeamFormationViewDependencies {
@@ -112,6 +114,16 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
     task.placeholder = t('例如：做一个面向大学生的记账小程序，两周内出可用版本', 'For example: build a budgeting mini app for students, usable within two weeks')
     taskField.append(task)
 
+    // Files for the task: they go to every member with the invitation.
+    const filesField = field(t('项目资料（选填）', 'Project files (optional)'))
+    const tray = element('div', 'attachment-tray team-setup-tray')
+    tray.hidden = true
+    const attach = button(t('添加图片或文件', 'Add images or files'), 'btn btn-small team-setup-attach')
+    const fileInput = document.createElement('input')
+    fileInput.type = 'file'
+    fileInput.hidden = true
+    filesField.append(tray, attach, fileInput, element('p', 'tiny', t('图片和文本文件会随邀请发给每位队员；也可以粘贴或拖进来，最多 4 个。', 'Images and text files go to every member with the invitation; paste or drop them here too, up to 4.')))
+
     const membersField = field(t('选择队员', 'Team members'))
     const total = element('p', 'tiny team-setup-total')
     const list = element('div', 'team-setup-members')
@@ -119,6 +131,7 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
       const row = element('div', 'team-setup-member')
       row.dataset.key = choice.key
       const label = element('span', `role-site-badge ${choice.pillClass}`, choice.label)
+      label.title = choice.label
       const stepper = element('div', 'team-setup-stepper')
       const minus = stepButton('−', t(`少一个 ${choice.label}`, `One fewer ${choice.label}`))
       const value = element('span', 'team-setup-count', '0')
@@ -165,7 +178,28 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
     submit.type = 'submit'
     actions.append(cancel, submit)
     const savedField = savedTeamsField()
-    form.append(taskField, ...(savedField ? [savedField] : []), membersField, requiredField, nameField, error, actions)
+    form.append(taskField, filesField, ...(savedField ? [savedField] : []), membersField, requiredField, nameField, error, actions)
+    const taskFiles = createComposerAttachments({
+      trayEl: tray,
+      attachButtonEl: attach,
+      fileInputEl: fileInput,
+      pasteTargetEl: task,
+      dropTargetEl: form,
+      ui: source => translateUi(source, language()),
+      showError: text => { error.textContent = text },
+      onChange: () => clearError(),
+    })
+    taskFiles.register()
+
+    // Reads the attached files; shows why when one cannot be read.
+    async function readTaskFiles(): Promise<MessageUpload[] | undefined> {
+      try {
+        return await taskFiles.readUploads()
+      } catch (caught) {
+        error.textContent = message(caught)
+        return undefined
+      }
+    }
 
     function savedTeamsField(): HTMLElement | undefined {
       const templates = deps.getStore().settings.teamTemplates ?? []
@@ -178,15 +212,18 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
         const text = element('div', 'team-setup-saved-text')
         text.append(element('span', 'team-card-name', template.name), element('span', 'tiny', template.members.map(member => member.name).join(t('、', ', '))))
         const use = button(t('用这个团队', 'Use this team'), 'btn btn-small')
-        use.addEventListener('click', () => {
+        use.addEventListener('click', async () => {
+          const uploads = await readTaskFiles()
+          if (!uploads) return
           use.disabled = true
           deps.runCommand('GROUP_TEAM_CREATE', {
             templateId: template.id,
             ...(task.value.trim() ? { task: task.value.trim() } : {}),
             ...(name.value.trim() ? { name: name.value.trim() } : {}),
-          }).then(() => {
-            closeSetup()
+          }).then(async () => {
             const chatId = deps.getStore().currentChatId
+            if (chatId && uploads.length > 0) await postTaskFiles(chatId, uploads)
+            closeSetup()
             if (chatId && deps.getStore().chatsById[chatId]?.teamFormation) openCard(chatId)
           }).catch(caught => {
             error.textContent = message(caught)
@@ -219,7 +256,7 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
     task.addEventListener('input', clearError)
     renderTotal()
 
-    form.addEventListener('submit', event => {
+    form.addEventListener('submit', async event => {
       event.preventDefault()
       if (!task.value.trim()) {
         error.textContent = t('先写下要做的事。', 'Describe the task first.')
@@ -232,15 +269,18 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
         return
       }
       const members = choices.flatMap(choice => Array.from({ length: counts.get(choice.key) ?? 0 }, () => choice.member))
+      const uploads = await readTaskFiles()
+      if (!uploads) return
       submit.disabled = true
       deps.runCommand('GROUP_TEAM_CREATE', {
         task: task.value.trim(),
         members,
         requiredPositions: splitPositions(required.value),
         ...(name.value.trim() ? { name: name.value.trim() } : {}),
-      }).then(() => {
-        closeSetup()
+      }).then(async () => {
         const chatId = deps.getStore().currentChatId
+        if (chatId && uploads.length > 0) await postTaskFiles(chatId, uploads)
+        closeSetup()
         if (chatId && deps.getStore().chatsById[chatId]?.teamFormation) openCard(chatId)
       }).catch(caught => {
         error.textContent = caught instanceof Error ? caught.message : String(caught)
@@ -255,6 +295,22 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
     document.addEventListener('keydown', handleEscape)
     setup = { backdrop }
     task.focus()
+  }
+
+  // Posts the task's files in the new group (only recorded: a team group delivers nothing without an
+  // @), and remembers that message so every invitation carries copies of them.
+  async function postTaskFiles(chatId: string, uploads: MessageUpload[]): Promise<void> {
+    await deps.runCommand('GROUP_MESSAGE_SEND', { chatId, raw: t('项目资料（会随邀请一起发给每位队员）', 'Project files (sent to every member with the invitation)'), uploads })
+    const store = deps.getStore()
+    const chat = store.chatsById[chatId]
+    const materials = [...(chat?.messageIds ?? [])].reverse().map(id => store.messagesById[id]).find(item => item?.type === 'user' && Boolean(item.attachments?.length))
+    if (materials) await deps.runCommand('GROUP_CHAT_UPDATE', { chatId, patch: { teamFormation: { materialsMessageId: materials.id } } })
+  }
+
+  // The files every invitation carries, when the task has any.
+  function taskFilesPayload(chat: GroupChat): Record<string, string> {
+    const id = chat.teamFormation?.materialsMessageId
+    return id && deps.getStore().messagesById[id] ? { attachmentsFrom: id } : {}
   }
 
   function memberChoices(): MemberChoice[] {
@@ -619,7 +675,7 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
       const resolution = resolution_(chat, members)
       const taken = Object.entries(resolution.assignments).map(([roleId, assignment]) => ({ position: assignment.position, holder: store.rolesById[roleId]?.name ?? roleId }))
       const text = buildTeamInvitation({ task: formation.task, teamLabels: teamLabels(store, chatRoles(store, chat)), requiredPositions: formation.requiredPositions, taken, previous: formation.previousPositions, language: language() })
-      await deps.runCommand('GROUP_MESSAGE_SEND', { chatId, raw: invitationRaw(store, roles, text), teamInvitation: true, teamRound: round })
+      await deps.runCommand('GROUP_MESSAGE_SEND', { chatId, raw: invitationRaw(store, roles, text), teamInvitation: true, teamRound: round, ...taskFilesPayload(chat) })
     } catch (caught) {
       // Another team page sent this round already.
       if (!message(caught).includes('这一轮已经邀请过了')) deps.showError(message(caught))
@@ -642,7 +698,7 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
     const text = buildTeamInvitation({ task: formation.task, teamLabels: teamLabels(store, chatRoles(store, chat)), requiredPositions: formation.requiredPositions, taken, repick: true, language: language() })
     busy = true
     try {
-      await deps.runCommand('GROUP_MESSAGE_SEND', { chatId, raw: invitationRaw(store, roles, text), teamInvitation: true })
+      await deps.runCommand('GROUP_MESSAGE_SEND', { chatId, raw: invitationRaw(store, roles, text), teamInvitation: true, ...taskFilesPayload(chat) })
     } catch (caught) {
       deps.showError(message(caught))
     } finally {
@@ -709,7 +765,8 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
         language: language(),
       })
       await deps.runCommand('GROUP_CHAT_UPDATE', { chatId, patch: { teamFormation: { status: 'confirmed', confirmedAt: Date.now() } } })
-      await deps.runCommand('GROUP_MESSAGE_SEND', { chatId, raw: kickoff, refreshPersona: true })
+      // A saved team skips the invitations, so its kickoff carries the task's files.
+      await deps.runCommand('GROUP_MESSAGE_SEND', { chatId, raw: kickoff, refreshPersona: true, ...(formation.invitationIds.length === 0 ? taskFilesPayload(chat) : {}) })
       deps.showSuccess(t('已开工', 'Started'))
     } catch (caught) {
       deps.showError(message(caught))

@@ -91,7 +91,8 @@ export function createMessageHandlers(deps: MessageHandlersDependencies): Backgr
     const chatId = requireString(message.chatId, '缺少群聊 ID')
     const raw = requireString(message.raw, '消息内容不能为空')
     const timestamp = deps.now()
-    const uploadCheck = readMessageUploads(message.uploads)
+    const copied = await uploadsCopiedFrom(deps, chatId, message.attachmentsFrom)
+    const uploadCheck = readMessageUploads(copied.length > 0 ? [...(Array.isArray(message.uploads) ? message.uploads : []), ...copied] : message.uploads)
     if (!uploadCheck.ok) throw new Error(uploadCheck.error)
     const uploads = uploadCheck.uploads.map(upload => ({ id: deps.newId('attachment'), upload }))
     deps.log.info('message-send:start', { chatId, rawLength: raw.length, uploads: uploads.length })
@@ -1441,6 +1442,26 @@ function finalizeActiveExternalAssistantReply(store: OpenTeamStore, chat: GroupC
   delete role.lastPromptMessageId
   delete role.replyAttemptId
   return true
+}
+
+// Copies of the files attached to another of the user's messages in the chat, for a message that
+// should carry them too (each invitation of a team carries the task's files).
+async function uploadsCopiedFrom(deps: MessageHandlersDependencies, chatId: string, sourceId: unknown): Promise<unknown[]> {
+  const id = readOptionalString(sourceId)
+  if (!id) return []
+  const { result: attachments } = await mutateStore(store => {
+    const source = store.messagesById[id]
+    if (!source || source.chatId !== chatId || source.type !== 'user') throw new Error('找不到要附带的资料，可能已被删除')
+    return source.attachments ?? []
+  })
+  const imageIds = attachments.filter(attachment => attachment.type === 'image' && attachment.status === 'ready' && attachment.source === 'user-upload').map(attachment => attachment.id)
+  if (imageIds.length > 0 && !deps.imageAttachments?.loadUploads) throw new Error('当前环境不支持附带图片')
+  const images = new Map((imageIds.length > 0 ? await deps.imageAttachments!.loadUploads!(imageIds) : []).map((upload, index) => [imageIds[index], upload]))
+  return attachments.flatMap((attachment): unknown[] => {
+    if (attachment.type === 'file') return [{ kind: 'text', fileName: attachment.fileName, mimeType: attachment.mimeType, text: attachment.text }]
+    const image = images.get(attachment.id)
+    return image ? [{ kind: 'image', fileName: image.fileName, mimeType: image.mimeType, data: image.data }] : []
+  })
 }
 
 function reportPromptSettled(deps: MessageHandlersDependencies, store: OpenTeamStore, chatId: string, promptMessageId: string): void {
