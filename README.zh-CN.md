@@ -2,7 +2,7 @@
 
 **🌐 语言:** [English](README.md) | 简体中文
 
-> **关于此 Fork：** OpenTeam 的原作者是 **[afumu](https://github.com/afumu)**，原项目地址为 **[afumu/openteam](https://github.com/afumu/openteam)**。项目的原始代码、设计与文档均归 afumu 及 OpenTeam 贡献者所有，并继续遵循 [PolyForm Noncommercial License 1.0.0](LICENSE)（`Required Notice: Copyright (c) 2026 OpenTeam contributors.`）。本 Fork 在此基础上做了团队页界面改版，加固了本机控制守护进程、iframe 响应头规则和后台消息处理的安全性，提升了大量聊天记录下的存储与消息渲染速度，并新增了 AI 网页健康状态和全量数据备份与恢复。官方版本、发布与交流群请以原仓库为准。
+> **关于此 Fork：** OpenTeam 的原作者是 **[afumu](https://github.com/afumu)**，原项目地址为 **[afumu/openteam](https://github.com/afumu/openteam)**。项目的原始代码、设计与文档均归 afumu 及 OpenTeam 贡献者所有，并继续遵循 [PolyForm Noncommercial License 1.0.0](LICENSE)（`Required Notice: Copyright (c) 2026 OpenTeam contributors.`）。本 Fork 在此基础上新增了 Qwen 和 Kimi、按任务组队、网页成员回复实时显示、图片收发、回复选项一键作答和两种界面风格；加固了本机控制守护进程、iframe 响应头规则和后台消息处理的安全性，提升了大量聊天记录下的存储与消息渲染速度，并新增了 AI 网页健康状态、全量数据备份与恢复，以及「核心亮点」里列出的各项工作台工具。官方版本、发布与交流群请以原仓库为准。
 
 > 复用你已经登录的 AI 网页账号，把 ChatGPT、Claude、Gemini、DeepSeek、Grok、Qwen、Kimi 组织成一个本地优先的 AI 专家团。
 
@@ -34,6 +34,12 @@ OpenTeam 可以看作 [OpenLink](https://github.com/afumu/openlink) 的姊妹篇
 - 🧑‍🏫 **内置顾问库**：内置 38 个专家 / 思想风格顾问模板，也支持自定义人员。
 - 📣 **基于 @ 的消息路由**：用 `@人员` 定向提问，或用 `@所有人` 同时分发给整个团队。
 - 🔄 **独立与协作两种模式**：先收集彼此独立的视角，再让成员参考、补充或反驳其他观点。
+- ⚡ **回复实时显示**：网页成员还在写的时候，回复就会出现在群聊里；按停止会保留已经写出的内容。
+- 🖼️ **图片双向流转**：发消息时可以附上图片和文本文件；ChatGPT、Gemini、Grok、Qwen 生成的图片会自动收进群聊。
+- 🔘 **选项一键作答**：成员回复结尾给出选项（A / B / C）时，点一下就能回答。
+- 🔌 **可选的 API 成员**：在网页会话之外，还可以添加 OpenAI 或 Anthropic 兼容的模型；每条 API 回复会显示用了多少 token。
+- 🧰 **工作台工具**：对比同一个问题的各家回复、搜索消息、编辑后重新发送、语音输入、群聊置顶与搜索、笔记、所有成员回复完时的桌面通知、每个 AI 网页的健康状态，以及全量备份与恢复。
+- 🎨 **两种界面风格**：ChatGPT 风格和 Grok 风格，各有浅色与深色，可在顶栏或设置菜单里切换。
 - 💾 **本地优先存储**：群聊、人员、消息、笔记、高亮和设置都保存在浏览器本地存储中。
 - 🤖 **智能体控制 CLI**：可选的 `openteamcli` 可以让本机智能体创建群聊、添加角色、发布任务并等待回复。
 
@@ -56,7 +62,7 @@ team.html
 | --- | --- |
 | Gemini | 长上下文、研究、多模态材料 |
 | ChatGPT | 综合执行、工具化工作流、快速迭代 |
-| Claude | 长文档、审查、结构化写作、谨慎推理 |
+| Claude | 长文档、审查、结构化写作、谨慎推理。claude.ai 现在拒绝在其他页面里运行，请改为添加 Claude API 成员（Anthropic 格式） |
 | DeepSeek | 代码、推理、中文任务和成本敏感场景 |
 | Grok | 时事研究、替代表述、X/Grok 网页会员会话工作流 |
 | Qwen | 中文与多语言写作、代码、长文档（chat.qwen.ai） |
@@ -81,13 +87,13 @@ OpenTeam 会通过用户自己登录的浏览器网页会话和 DOM 自动化与
 大多数普通用户只需要安装浏览器扩展：
 
 ```bash
-git clone https://github.com/afumu/openteam.git
+git clone https://github.com/Lushangtu123/openteam.git
 cd openteam
 npm install
 npm run build
 ```
 
-构建完成后，打开 `chrome://extensions/`，开启开发者模式，点击 **加载已解压的扩展程序**，选择生成的 `dist/` 目录，然后点击 OpenTeam 扩展图标打开团队工作台。
+这里克隆的是本 Fork；原项目地址为 [afumu/openteam](https://github.com/afumu/openteam)。构建完成后，打开 `chrome://extensions/`，开启开发者模式，点击 **加载已解压的扩展程序**，选择生成的 `dist/` 目录，然后点击 OpenTeam 扩展图标打开团队工作台。请先在普通标签页里登录要用的 AI 网站。拉取更新后，重新运行 `npm run build`，再在 `chrome://extensions/` 里点 OpenTeam 的重新加载按钮。
 
 ### 方式二：安装 CLI + Agent Skill
 
@@ -132,12 +138,17 @@ npm run verify
 
 OpenTeam 是本地优先的扩展，但安装前仍然值得了解它需要的浏览器权限：
 
-- `storage`：保存群聊、人员、笔记、设置和本地状态。
+- `storage` / `unlimitedStorage`：保存群聊、人员、笔记、设置和本地状态，包括很长的群聊。
 - `tabs`：定位并和扩展页、AI 网站 tab / frame 通信。
 - `alarms`：调度运行时维护任务。
 - `declarativeNetRequest`：调整响应头，让支持的 AI 网站可以嵌入扩展的 iframe 工作区。
 - `clipboardRead` / `clipboardWrite`：支持复制和剪贴板相关交互。
-- Host permissions：允许 OpenTeam 访问支持的 AI 网站和嵌入式网页会话。
+- `cookies`：读取 Grok 的登录 cookie，让它的实时连接在团队页里也能工作（只作用于 OpenTeam 自己的标签页）。
+- `notifications`：OpenTeam 不在前台时，所有成员回复完会弹出桌面通知（可在设置里关闭）。
+- Host permissions：允许 OpenTeam 访问支持的 AI 网站和嵌入式网页会话，包括 Grok 的 WebSocket（`wss://grok.com`）。
+- 麦克风（不在 manifest 里）：语音输入使用 Chrome 自带的在线语音识别；第一次使用时 Chrome 会询问是否允许使用麦克风。
+
+你附加的图片保存在浏览器本地（IndexedDB），只有发送时才会上传到对应的 AI 网站或模型。API Key 保存在浏览器本地存储中，导出备份时默认不包含，除非你主动勾选。
 
 OpenTeam 不提供云端同步。你的 AI 对话仍然会由你使用的 AI 网站处理，并受对应网站的账号规则、额度限制、隐私政策和服务条款约束。
 
@@ -146,6 +157,9 @@ OpenTeam 不提供云端同步。你的 AI 对话仍然会由你使用的 AI 网
 - OpenTeam 当前优先支持 Chrome / Chromium 系浏览器。
 - AI 站点适配依赖网页 DOM，目标网站改版可能导致 prompt 发送或回复监听失效。
 - iframe 工作区依赖 `declarativeNetRequest` 调整响应头，因此权限面比普通 popup 扩展更重。
+- 有些网站会主动拒绝在其他页面里运行，目前 claude.ai 就是这样。OpenTeam 会在该成员的网页状态里说明原因，不会绕过这种限制；请改用该网站的 API。
+- 未登录的会话有限制：未登录的 Gemini 不会发送带图片的消息，未登录的 Grok 生成图片前会要求登录。
+- 语音输入需要联网，因为 Chrome 是在线识别语音的。
 - 内置名人风格顾问是基于公开思想整理的提示词模板，不是真人参与，也不应被表述为真人参与。
 - 医疗、法律、金融等高风险输出仍需要用户自行判断，并咨询合格专业人士。
 
@@ -180,6 +194,10 @@ npm run verify
 ## 📚 文档
 
 - [设计文档](docs/DESIGN.zh-CN.md)
+- [按任务组队](docs/TEAM_FORMATION.md)（英文）
+- [AI 网页健康状态](docs/AI_PAGE_HEALTH.md)（英文）
+- [图片与附件](docs/MULTIMODAL_ATTACHMENTS.md)（英文）
+- [ACP 支持](docs/ACP.md)（英文）
 - [OpenTeam CLI](packages/openteamcli/README.zh-CN.md)
 
 ## 📜 许可证

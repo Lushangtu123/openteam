@@ -2,7 +2,7 @@
 
 **🌐 Language:** English | [简体中文](README.zh-CN.md)
 
-> **About this fork.** OpenTeam was created by **[afumu](https://github.com/afumu)** — the original project lives at **[afumu/openteam](https://github.com/afumu/openteam)**. All original code, design and documentation belong to afumu and the OpenTeam contributors and remain under the [PolyForm Noncommercial License 1.0.0](LICENSE) (`Required Notice: Copyright (c) 2026 OpenTeam contributors.`). This fork adds a refreshed team page UI, security hardening for the local control daemon, iframe header rules and background message handling, faster storage and message rendering for large chats, a live health status for each AI page, and full backup and restore. For the official version, releases and community, please use the original repository.
+> **About this fork.** OpenTeam was created by **[afumu](https://github.com/afumu)** — the original project lives at **[afumu/openteam](https://github.com/afumu/openteam)**. All original code, design and documentation belong to afumu and the OpenTeam contributors and remain under the [PolyForm Noncommercial License 1.0.0](LICENSE) (`Required Notice: Copyright (c) 2026 OpenTeam contributors.`). This fork adds Qwen and Kimi, task-based team formation, live replies from web members, images in both directions, clickable reply choices, two interface styles, security hardening for the local control daemon, iframe header rules and background message handling, faster storage and message rendering for large chats, a live health status for each AI page, full backup and restore, and the workspace tools listed under Highlights. For the official version, releases and community, please use the original repository.
 
 > A local-first AI team workspace that turns your existing ChatGPT, Claude, Gemini, DeepSeek, Grok, Qwen, and Kimi web sessions into a multi-agent discussion room.
 
@@ -34,6 +34,12 @@ Join the OpenTeam WeChat community by scanning the QR code below. If the QR code
 - 🧑‍🏫 **Built-in advisor library**: start with 38 expert and thinking-style advisor templates, or create your own people.
 - 📣 **Mention-based routing**: use `@person` to ask one member, or `@everyone` to dispatch the same task to the whole team.
 - 🔄 **Independent and collaborative modes**: compare isolated perspectives first, then let members reference, challenge, and build on each other.
+- ⚡ **Live replies**: a web member's reply appears in the chat while the site is still writing it; stopping keeps what was written.
+- 🖼️ **Images both ways**: attach images and text files to a message; images that ChatGPT, Gemini, Grok or Qwen draw are copied into the chat.
+- 🔘 **Clickable choices**: when a reply ends with options (A / B / C), answer it with one click.
+- 🔌 **Optional API members**: add OpenAI- or Anthropic-compatible models next to web sessions; each API reply shows how many tokens it used.
+- 🧰 **Workspace tools**: compare the replies to one question, search messages, edit and resend a message, voice input, pin and search groups, notes, a desktop notification when every member has answered, a live health status for each AI page, and full backup and restore.
+- 🎨 **Two looks**: a ChatGPT-like and a Grok-like interface, each in light and dark, switched from the header or the settings menu.
 - 💾 **Local-first storage**: chats, people, messages, notes, highlights, and settings are stored in browser storage.
 - 🤖 **Agent control CLI**: optional `openteamcli` support lets local agents create chats, add roles, post tasks, and wait for replies.
 
@@ -56,7 +62,7 @@ Supported site types:
 | --- | --- |
 | Gemini | Long context, research, multimodal material |
 | ChatGPT | General execution, tool-shaped workflows, fast iteration |
-| Claude | Long documents, review, structured writing, careful reasoning |
+| Claude | Long documents, review, structured writing, careful reasoning. claude.ai now refuses to run inside other pages, so add Claude as an API member (Anthropic format) instead |
 | DeepSeek | Code, reasoning, Chinese-language work, cost-sensitive tasks |
 | Grok | Current-events research, alternative phrasing, X/Grok web-session workflows |
 | Qwen | Chinese and multilingual writing, code, long documents (chat.qwen.ai) |
@@ -81,13 +87,13 @@ Use it at your own risk. The maintainers are not responsible for account restric
 Most users only need the browser extension:
 
 ```bash
-git clone https://github.com/afumu/openteam.git
+git clone https://github.com/Lushangtu123/openteam.git
 cd openteam
 npm install
 npm run build
 ```
 
-After the build finishes, open `chrome://extensions/`, turn on Developer mode, click **Load unpacked**, select the generated `dist/` directory, and then click the OpenTeam extension icon to open the team workspace.
+This clones this fork; the original project is [afumu/openteam](https://github.com/afumu/openteam). After the build finishes, open `chrome://extensions/`, turn on Developer mode, click **Load unpacked**, select the generated `dist/` directory, and then click the OpenTeam extension icon to open the team workspace. Sign in to the AI websites you want to use in normal tabs first. After pulling changes, run `npm run build` again and click the reload button on OpenTeam in `chrome://extensions/`.
 
 ### Option 2: CLI + Agent Skill
 
@@ -132,12 +138,17 @@ npm run verify
 
 OpenTeam is local-first, but it needs browser-extension permissions that are worth reviewing before installation:
 
-- `storage`: save chats, people, notes, settings, and local state.
+- `storage` / `unlimitedStorage`: save chats, people, notes, settings, and local state, including large chats.
 - `tabs`: locate and communicate with extension and AI-site tabs/frames.
 - `alarms`: schedule runtime maintenance tasks.
 - `declarativeNetRequest`: adjust response headers so supported AI websites can be embedded in the extension iframe workspace.
 - `clipboardRead` / `clipboardWrite`: support copy and clipboard-based interactions.
-- Host permissions: allow OpenTeam to work with supported AI websites and embedded web sessions.
+- `cookies`: read Grok's session cookies so its real-time connection works inside the team page (applied only to OpenTeam's own tabs).
+- `notifications`: tell you when every member has answered while OpenTeam is not in front (can be turned off in settings).
+- Host permissions: allow OpenTeam to work with supported AI websites and embedded web sessions, including Grok's WebSocket (`wss://grok.com`).
+- Microphone (no manifest permission): voice input uses Chrome's built-in speech recognition, which works online; Chrome asks for microphone access the first time.
+
+Images that you attach are stored in the browser (IndexedDB) and uploaded to an AI site or model only when you send them. API keys stay in browser storage and are left out of backups unless you choose to include them.
 
 OpenTeam does not provide cloud sync. Your AI conversations are still processed by the AI websites you use, under their own account rules, usage limits, privacy policies, and terms of service.
 
@@ -146,6 +157,9 @@ OpenTeam does not provide cloud sync. Your AI conversations are still processed 
 - OpenTeam is Chrome / Chromium-first.
 - AI-site adapters depend on page DOM structure, so website redesigns can break prompt sending or reply capture.
 - The iframe workspace requires response-header changes through `declarativeNetRequest`, which makes the permission surface heavier than a normal popup extension.
+- Some sites refuse to run inside other pages on purpose; claude.ai does today. OpenTeam reports this on the member's page status and does not work around it; use the site's API instead.
+- Signed-out sessions have limits: signed-out Gemini does not send messages with images, and signed-out Grok asks you to log in before drawing.
+- Voice input needs a network connection, because Chrome recognizes speech online.
 - Built-in famous-person advisor templates are prompt templates inspired by public ideas. They are not real people and should not be presented as real participation.
 - Medical, legal, financial, and other high-stakes outputs still require human judgment and qualified professional advice.
 
@@ -180,6 +194,10 @@ npm run verify
 ## 📚 Documentation
 
 - [Design document](docs/DESIGN.md)
+- [Team formation](docs/TEAM_FORMATION.md)
+- [AI page health status](docs/AI_PAGE_HEALTH.md)
+- [Images and attachments](docs/MULTIMODAL_ATTACHMENTS.md)
+- [ACP support](docs/ACP.md)
 - [OpenTeam CLI](packages/openteamcli/README.md)
 
 ## 📜 License
