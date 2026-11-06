@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createExternalModelClient, ExternalModelError, normalizeBaseUrl } from './externalModelClient'
+import { createExternalModelClient, ExternalModelError, normalizeBaseUrl, normalizeUsage } from './externalModelClient'
 import type { ExternalModelConfig } from '../group/types'
 import { streamText } from 'ai'
 
@@ -58,6 +58,37 @@ describe('ExternalModelClient Stability Baseline', () => {
     const result = await client.complete({ model: mockConfig, prompt: 'Hi' })
 
     expect(result.content).toBe('Hello World')
+  })
+
+  it('reports the tokens a reply used once the stream ends, and lives without them', async () => {
+    vi.mocked(streamText).mockReturnValueOnce({ ...createMockStreamResult(['Hi']), usage: Promise.resolve({ inputTokens: 1200, outputTokens: 34, totalTokens: 1234 }) })
+    const client = createExternalModelClient(mockFetch)
+    const onUsage = vi.fn()
+
+    const chunks: string[] = []
+    for await (const chunk of client.stream!({ model: mockConfig, prompt: 'Hi', onUsage })) chunks.push(chunk)
+
+    expect(chunks).toEqual(['Hi'])
+    expect(onUsage).toHaveBeenCalledWith({ inputTokens: 1200, outputTokens: 34, totalTokens: 1234 })
+
+    vi.mocked(streamText).mockReturnValueOnce({ ...createMockStreamResult(['ok']), usage: Promise.reject(new Error('no usage')) })
+    const silent = vi.fn()
+    expect((await client.complete({ model: mockConfig, prompt: 'Hi', onUsage: silent })).content).toBe('ok')
+    expect(silent).not.toHaveBeenCalled()
+  })
+
+  it('counts usage only from real numbers, adding up a missing total', () => {
+    expect(normalizeUsage({ inputTokens: 10, outputTokens: 5 })).toEqual({ inputTokens: 10, outputTokens: 5, totalTokens: 15 })
+    expect(normalizeUsage({ totalTokens: 7.4 })).toEqual({ totalTokens: 7 })
+    expect(normalizeUsage({ inputTokens: Number.NaN })).toBeUndefined()
+    expect(normalizeUsage(undefined)).toBeUndefined()
+  })
+
+  it('asks OpenAI-compatible servers to include usage in the stream', async () => {
+    vi.mocked(streamText).mockReturnValue(createMockStreamResult(['ok']))
+    await createExternalModelClient(mockFetch).complete({ model: mockConfig, prompt: 'Hi' })
+    const model = (vi.mocked(streamText).mock.calls[0][0] as { model: { config?: { includeUsage?: boolean } } }).model
+    expect(model.config?.includeUsage).toBe(true)
   })
 
   it('sends attached images as image parts next to the prompt', async () => {

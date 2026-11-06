@@ -25,6 +25,14 @@ export interface ExternalModelCompletionInput {
   // Images the user attached, sent with the prompt as image parts (the model must accept images).
   images?: ExternalModelImage[]
   abortSignal?: AbortSignal
+  // Told how many tokens the reply used, once the model reports it at the end of the stream.
+  onUsage?(usage: ExternalModelUsage): void
+}
+
+export interface ExternalModelUsage {
+  inputTokens?: number
+  outputTokens?: number
+  totalTokens?: number
 }
 
 export interface ExternalModelImage {
@@ -184,6 +192,8 @@ async function* streamExternalModel(input: ExternalModelCompletionInput, fetchIm
           apiKey: input.model.apiKey,
           baseURL: normalizedUrl,
           fetch: fetchImpl,
+          // Asks for the token counts at the end of the stream (stream_options.include_usage).
+          includeUsage: true,
         })
 
       const result = streamText({
@@ -195,6 +205,7 @@ async function* streamExternalModel(input: ExternalModelCompletionInput, fetchIm
       for await (const textPart of result.textStream) {
         if (textPart) yield textPart
       }
+      await reportUsage(result.usage, input.onUsage)
       return
     } catch (error: any) {
       if (isAbortError(error)) throw error
@@ -213,6 +224,30 @@ async function* streamExternalModel(input: ExternalModelCompletionInput, fetchIm
       const delay = Math.pow(2, attempt) * 500
       await new Promise(resolve => setTimeout(resolve, delay))
     }
+  }
+}
+
+// Some servers send no usage; the reply is fine without it.
+async function reportUsage(usage: PromiseLike<{ inputTokens?: number; outputTokens?: number; totalTokens?: number }>, onUsage: ExternalModelCompletionInput['onUsage']): Promise<void> {
+  if (!onUsage) return
+  try {
+    const normalized = normalizeUsage(await usage)
+    if (normalized) onUsage(normalized)
+  } catch {
+    // No usage reported.
+  }
+}
+
+export function normalizeUsage(usage: { inputTokens?: number; outputTokens?: number; totalTokens?: number } | undefined): ExternalModelUsage | undefined {
+  const count = (value: number | undefined) => typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.round(value) : undefined
+  const inputTokens = count(usage?.inputTokens)
+  const outputTokens = count(usage?.outputTokens)
+  const totalTokens = count(usage?.totalTokens) ?? (inputTokens !== undefined || outputTokens !== undefined ? (inputTokens ?? 0) + (outputTokens ?? 0) : undefined)
+  if (inputTokens === undefined && outputTokens === undefined && totalTokens === undefined) return undefined
+  return {
+    ...(inputTokens !== undefined ? { inputTokens } : {}),
+    ...(outputTokens !== undefined ? { outputTokens } : {}),
+    ...(totalTokens !== undefined ? { totalTokens } : {}),
   }
 }
 

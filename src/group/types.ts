@@ -356,6 +356,8 @@ export interface GroupMessage {
   // Sends each target's persona with this message again, as on its first message. Set on the
   // message that starts work after members picked their positions.
   refreshPersona?: boolean
+  // Tokens an API member's reply used, as its model reported them.
+  usage?: MessageTokenUsage
   createdAt: number
   status: DeliveryStatus
   deliveryStatus?: Record<string, DeliveryStatus>
@@ -400,6 +402,12 @@ export interface MessageFileAttachment {
 }
 
 export type MessageAttachment = MessageImageAttachment | MessageFileAttachment
+
+export interface MessageTokenUsage {
+  inputTokens?: number
+  outputTokens?: number
+  totalTokens?: number
+}
 
 export interface MessageReference {
   messageId: string

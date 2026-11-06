@@ -1214,9 +1214,10 @@ describe('background message handlers', () => {
 
     const { createMessageHandlers } = await import('./messageHandlers')
     const externalModelClient = {
-      stream: vi.fn(async function* () {
+      stream: vi.fn(async function* (input: { onUsage?(usage: { inputTokens: number; outputTokens: number; totalTokens: number }): void }) {
         yield '第一段'
         yield '第二段'
+        input.onUsage?.({ inputTokens: 120, outputTokens: 30, totalTokens: 150 })
       }),
     }
     const broadcasts: OpenTeamStore[] = []
@@ -1255,6 +1256,7 @@ describe('background message handlers', () => {
       content: '第一段第二段',
       status: 'received',
       roleId: 'role-1',
+      usage: { inputTokens: 120, outputTokens: 30, totalTokens: 150 },
     })
     expect(finalStore?.messagesById['msg-1']).toMatchObject({
       status: 'received',

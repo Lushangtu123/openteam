@@ -6,7 +6,7 @@ import { normalizeMessageHighlightColor } from '../group/highlightColors'
 import { defaultMentionTargetForMessage, parseGroupMentions, roleMentionLabelOptionsFromSettings } from '../group/mentionParser'
 import { mapRuntimeRoleStatus } from '../group/runtimeProtocol'
 import type { BackgroundToRoleMessage } from '../group/runtimeProtocol'
-import type { ChatSite, GroupChat, GroupMessage, GroupRole, MessageAttachment, MessageImageAttachment, MessageReference, OpenTeamStore, OrchestrationFlow, ReplyImageSource, RoleSiteHealthReason, RoleSiteHealthStatus, RuntimeFrameBinding } from '../group/types'
+import type { ChatSite, GroupChat, GroupMessage, GroupRole, MessageAttachment, MessageImageAttachment, MessageReference, OpenTeamStore, OrchestrationFlow, ReplyImageSource, RoleSiteHealthReason, RoleSiteHealthStatus, RuntimeFrameBinding, MessageTokenUsage } from '../group/types'
 import { createExternalModelClient, type ExternalModelClient, type ExternalModelCompletionInput } from './externalModelClient'
 import type { BackgroundMessageRoute } from './messageRouter'
 import type { PromptDelivery, PromptSender } from './promptDelivery'
@@ -1172,6 +1172,8 @@ async function sendExternalModelDelivery(deps: MessageHandlersDependencies, clie
   runs.register(delivery.chatId, delivery.roleId, delivery.replyAttemptId, controller)
   let replyMessageId: string | undefined
   let content = ''
+  let usage: MessageTokenUsage | undefined
+  const onUsage = (value: MessageTokenUsage) => { usage = value }
   try {
     deps.log.info('external-model:send:start', {
       chatId: delivery.chatId,
@@ -1199,9 +1201,10 @@ async function sendExternalModelDelivery(deps: MessageHandlersDependencies, clie
     for (let attemptIndex = 0; attemptIndex <= retryDelays.length; attemptIndex += 1) {
       try {
         content = ''
+        usage = undefined
         const stream = typeof client.stream === 'function'
-          ? client.stream({ model: delivery.model, prompt: delivery.prompt, images, abortSignal: controller.signal })
-          : streamCompleteFallback(client, { model: delivery.model, prompt: delivery.prompt, images, abortSignal: controller.signal })
+          ? client.stream({ model: delivery.model, prompt: delivery.prompt, images, abortSignal: controller.signal, onUsage })
+          : streamCompleteFallback(client, { model: delivery.model, prompt: delivery.prompt, images, abortSignal: controller.signal, onUsage })
         for await (const chunk of abortableChunks(stream, controller.signal)) {
           throwIfAborted(controller.signal)
           if (!chunk) continue
@@ -1236,7 +1239,7 @@ async function sendExternalModelDelivery(deps: MessageHandlersDependencies, clie
       }
     }
 
-    const finalized = await finishExternalAssistantReply(deps, delivery, replyMessageId, content)
+    const finalized = await finishExternalAssistantReply(deps, delivery, replyMessageId, content, usage)
     if (finalized.ignored) {
       deps.log.warn('external-model:reply:ignored-stale', { chatId: delivery.chatId, roleId: delivery.roleId, messageId: delivery.messageId, reason: finalized.reason })
       return finalized.store
@@ -1331,6 +1334,7 @@ async function finishExternalAssistantReply(
   delivery: ExternalPromptDelivery,
   replyMessageId: string,
   content: string,
+  usage?: MessageTokenUsage,
 ): Promise<{ ignored: true; reason: string; store: OpenTeamStore } | { ignored: false; store: OpenTeamStore }> {
   const timestamp = deps.now()
   const { store, result } = await mutateStore(store => {
@@ -1342,6 +1346,7 @@ async function finishExternalAssistantReply(
       if (!isAssistantMessageForRole(reply, chat, role)) return { ignored: true as const, reason: 'reply-message-not-found' }
       reply.content = content
       reply.status = 'received'
+      if (usage) reply.usage = usage
       markChatHasNewMessage(store, chat)
 
       const userMessage = store.messagesById[delivery.messageId]

@@ -1,3 +1,4 @@
+import { normalizeLanguage } from '../shared/i18n'
 import { DEFAULT_MESSAGE_HIGHLIGHT_COLOR, MESSAGE_HIGHLIGHT_COLORS, messageHighlightColorRgb, type MessageHighlightColor } from '../group/highlightColors'
 import { roleMentionLabel, roleMentionLabelOptionsFromSettings, roleModelLabel } from '../group/mentionParser'
 import type { GroupChat, GroupMessage, GroupRole, MessageFileAttachment, MessageHighlight, MessageImageAttachment, MessageReference, OpenTeamStore, OrchestrationReviewResult } from '../group/types'
@@ -210,6 +211,8 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
         const jumpButton = siteJumpButton(message.chatId, role)
         if (jumpButton) name.append(jumpButton)
       }
+      const usage = usageLabel(message)
+      if (usage) name.append(usage)
       wireMentionShortcut(name, role)
       stack.append(name)
     }
@@ -282,6 +285,22 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     article.append(inner)
     cacheMessageNode(message.id, signature, article, streamingSignature)
     return article
+  }
+
+  // How many tokens an API reply used, with the input/output split on hover.
+  function usageLabel(message: GroupMessage): HTMLElement | undefined {
+    const total = message.usage?.totalTokens
+    if (total === undefined) return undefined
+    const label = document.createElement('span')
+    label.className = 'message-usage'
+    label.textContent = `${total.toLocaleString('en-US')} tokens`
+    const en = normalizeLanguage(deps.getStore().settings.language) === 'en'
+    const parts = [
+      message.usage?.inputTokens !== undefined ? `${en ? 'Input' : '输入'} ${message.usage.inputTokens.toLocaleString('en-US')}` : '',
+      message.usage?.outputTokens !== undefined ? `${en ? 'Output' : '输出'} ${message.usage.outputTokens.toLocaleString('en-US')}` : '',
+    ].filter(Boolean)
+    if (parts.length) label.title = `${parts.join(' · ')} tokens`
+    return label
   }
 
   function cacheMessageNode(messageId: string, signature: string, node: HTMLElement, streamingSignature?: string): void {
@@ -720,6 +739,7 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
       attachments: message.attachments?.map(attachment => attachment.type === 'file' ? { id: attachment.id, type: attachment.type, fileName: attachment.fileName, size: attachment.size } : attachment),
       createdAt: message.createdAt,
       status: message.status,
+      usage: message.usage,
       references: message.references,
       orchestrationRunId: message.orchestrationRunId,
       orchestrationRound: message.orchestrationRound,
