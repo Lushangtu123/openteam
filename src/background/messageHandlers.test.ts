@@ -256,8 +256,11 @@ describe('background message handlers', () => {
     })
     const sendRoute = routes.find(route => route.type === 'GROUP_MESSAGE_SEND')
 
+    await expect(sendRoute?.handler({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@all x', uploads: [{ kind: 'image', fileName: 'a.mp3', mimeType: 'audio/mpeg', data: 'AAAA' }] }, {}))
+      .rejects.toThrow('不支持这种文件：a.mp3')
+    // A PDF travels as its text, never as image data.
     await expect(sendRoute?.handler({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@all x', uploads: [{ kind: 'image', fileName: 'a.pdf', mimeType: 'application/pdf', data: 'AAAA' }] }, {}))
-      .rejects.toThrow('不支持这种文件：a.pdf')
+      .rejects.toThrow('附件格式不正确')
     expect(mutateStore).not.toHaveBeenCalled()
   })
 

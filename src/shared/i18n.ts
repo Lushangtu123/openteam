@@ -226,6 +226,8 @@ const UI_TRANSLATIONS: Record<string, string> = {
   '系统': 'System',
   '添加图片或文件': 'Add image or file',
   '附件只在发送时上传给对应的 AI 网站或模型。': 'Attachments are uploaded to the AI site or model only when you send them.',
+  '读取中…': 'Reading…',
+  '附件只在发送时上传给对应的 AI 网站或模型。PDF 和 Office 文件发送的是读出的文字。': 'Attachments are uploaded to the AI site or model only when you send them. PDF and Office files are sent as the text read from them.',
   '移除附件': 'Remove attachment',
   '数据备份': 'Data backup',
   '导出全部数据': 'Export all data',
@@ -953,8 +955,28 @@ function translateUiPattern(source: string): string | undefined {
   if (searchCount) return `${searchCount[1]} ${searchCount[1] === '1' ? 'message' : 'messages'} found`
   const uploadLimit = source.match(/^一条消息最多 (\d+) 个附件$/)
   if (uploadLimit) return `A message can have at most ${uploadLimit[1]} attachments`
-  const uploadUnsupported = source.match(/^不支持这种文件：(.+)。可以上传 PNG、JPEG、WebP、GIF 图片，或文本、Markdown、代码等文本文件。$/)
-  if (uploadUnsupported) return `Unsupported file: ${uploadUnsupported[1]}. You can attach PNG, JPEG, WebP or GIF images, or text files such as text, Markdown or code.`
+  const uploadUnsupported = source.match(/^不支持这种文件：(.+)。可以上传 PDF、Word、PowerPoint、Excel 文件，PNG、JPEG、WebP、GIF 图片，或文本、Markdown、代码等文本文件。$/)
+  if (uploadUnsupported) return `Unsupported file: ${uploadUnsupported[1]}. You can attach PDF, Word, PowerPoint or Excel files, PNG, JPEG, WebP or GIF images, or text files such as text, Markdown or code.`
+  const legacyOffice = source.match(/^暂不支持旧版 Office 文件：(.+)。请另存为 \.docx、\.pptx、\.xlsx 或 PDF 后再上传。$/)
+  if (legacyOffice) return `Older Office files are not supported yet: ${legacyOffice[1]}. Save it as .docx, .pptx, .xlsx or PDF and attach it again.`
+  const documentTooLarge = source.match(/^文件太大：(.+)（最大 30 MB）$/)
+  if (documentTooLarge) return `File too large: ${documentTooLarge[1]} (30 MB at most)`
+  const documentTooLong = source.match(/^文件里的文字太多：(.+)（最多 1 MB 文字）$/)
+  if (documentTooLong) return `Too much text in ${documentTooLong[1]} (1 MB of text at most)`
+  const scannedPdf = source.match(/^没有读到文字：(.+)（可能是扫描件或图片）。可以把页面截图后作为图片发送。$/)
+  if (scannedPdf) return `No text found in ${scannedPdf[1]} (it may be a scan or pictures). You can send screenshots of its pages as images.`
+  const noText = source.match(/^没有读到文字：(.+)$/)
+  if (noText) return `No text found in ${noText[1]}`
+  const passwordFile = source.match(/^无法打开有密码的文件：(.+)$/)
+  if (passwordFile) return `Cannot open a password-protected file: ${passwordFile[1]}`
+  const unreadableFile = source.match(/^无法读取文件：(.+)（文件已损坏或格式不对）$/)
+  if (unreadableFile) return `Cannot read ${unreadableFile[1]} (the file is damaged or not in the expected format)`
+  const documentPage = source.match(/^—— 第 (\d+) 页 ——$/)
+  if (documentPage) return `—— Page ${documentPage[1]} ——`
+  const documentSheet = source.match(/^—— 工作表：(.+) ——$/)
+  if (documentSheet) return `—— Sheet: ${documentSheet[1]} ——`
+  const charactersRead = source.match(/^(\d+) 字$/)
+  if (charactersRead) return `${charactersRead[1]} ${charactersRead[1] === '1' ? 'character' : 'characters'}`
   const imageTooLarge = source.match(/^图片太大：(.+)（最大 10 MB）$/)
   if (imageTooLarge) return `Image too large: ${imageTooLarge[1]} (10 MB at most)`
   const textTooLarge = source.match(/^文本文件太大：(.+)（最大 1 MB）$/)

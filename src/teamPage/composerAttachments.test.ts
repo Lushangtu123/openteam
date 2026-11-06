@@ -2,13 +2,14 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createComposerAttachments } from './composerAttachments'
+import type { DocumentTextLabels } from './documentText'
 
 afterEach(() => {
   document.body.replaceChildren()
   vi.unstubAllGlobals()
 })
 
-function setup() {
+function setup(readDocument?: (file: File, labels: DocumentTextLabels) => Promise<string>) {
   vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: vi.fn(() => 'blob:preview'), revokeObjectURL: vi.fn() }))
   const trayEl = document.createElement('div')
   const attachButtonEl = document.createElement('button')
@@ -20,7 +21,7 @@ function setup() {
   document.body.append(dropTargetEl)
   const showError = vi.fn()
   const onChange = vi.fn()
-  const attachments = createComposerAttachments({ trayEl, attachButtonEl, fileInputEl, pasteTargetEl, dropTargetEl, ui: source => source, showError, onChange })
+  const attachments = createComposerAttachments({ trayEl, attachButtonEl, fileInputEl, pasteTargetEl, dropTargetEl, ui: source => source, showError, onChange, readDocument })
   attachments.register()
   const choose = (files: File[]) => {
     Object.defineProperty(fileInputEl, 'files', { configurable: true, get: () => files })
@@ -53,14 +54,14 @@ describe('composer attachments', () => {
     const { attachments, choose, showError } = setup()
 
     choose([
-      new File(['x'], 'report.pdf', { type: 'application/pdf' }),
+      new File(['x'], 'song.mp3', { type: 'audio/mpeg' }),
       sized(new File(['x'], 'huge.png', { type: 'image/png' }), 11 * 1024 * 1024),
       ...Array.from({ length: 5 }, (_, index) => new File(['x'], `${index}.txt`, { type: 'text/plain' })),
     ])
 
     expect(attachments.list()).toHaveLength(4)
     const message = showError.mock.calls[0][0] as string
-    expect(message).toContain('不支持这种文件：report.pdf')
+    expect(message).toContain('不支持这种文件：song.mp3')
     expect(message).toContain('图片太大：huge.png（最大 10 MB）')
     expect(message).toContain('一条消息最多 4 个附件')
   })
@@ -106,5 +107,39 @@ describe('composer attachments', () => {
     attachments.take()
     choose([new File([new Uint8Array([0, 159, 146, 150, 0, 255])], 'data.txt', { type: 'text/plain' })])
     await expect(attachments.readUploads()).rejects.toThrow('无法读取文本文件：data.txt（不是 UTF-8 文本）')
+  })
+
+  it('reads a PDF or Office file as soon as it is added and sends its text', async () => {
+    let finish: (text: string) => void = () => {}
+    const readDocument = vi.fn((_file: File, labels: DocumentTextLabels) => new Promise<string>(resolve => {
+      finish = text => resolve(`${labels.pageLabel(1)}\n${text}`)
+    }))
+    const { attachments, trayEl, choose, fileInputEl } = setup(readDocument)
+
+    choose([new File(['%PDF'], 'report.pdf', { type: 'application/pdf' })])
+
+    expect(fileInputEl.accept).toContain('.pdf')
+    expect(fileInputEl.accept).toContain('.docx')
+    expect(readDocument).toHaveBeenCalledTimes(1)
+    expect(attachments.list().map(item => item.kind)).toEqual(['document'])
+    expect(trayEl.querySelector('.attachment-chip-document .attachment-chip-icon')?.textContent).toBe('PDF')
+    expect(trayEl.querySelector('.attachment-chip-size')?.textContent).toBe('读取中…')
+    expect(trayEl.querySelector('.attachment-tray-hint')?.textContent).toContain('PDF 和 Office 文件发送的是读出的文字。')
+
+    // Sending waits for the reading to finish.
+    const uploads = attachments.readUploads()
+    finish('季度目标')
+    expect(await uploads).toEqual([{ kind: 'text', fileName: 'report.pdf', mimeType: 'application/pdf', size: 4, text: '—— 第 1 页 ——\n季度目标' }])
+    expect(trayEl.querySelector('.attachment-chip-size')?.textContent).toBe('4 B · 16 字')
+  })
+
+  it('drops a file that cannot be read and says why', async () => {
+    const readDocument = vi.fn(async () => { throw new Error('无法打开有密码的文件：secret.docx') })
+    const { attachments, choose, showError } = setup(readDocument)
+
+    choose([new File(['x'], 'secret.docx', { type: '' })])
+    await vi.waitFor(() => expect(showError).toHaveBeenCalledWith('无法打开有密码的文件：secret.docx'))
+
+    expect(attachments.list()).toEqual([])
   })
 })

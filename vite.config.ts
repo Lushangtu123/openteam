@@ -2,7 +2,7 @@
 import { configDefaults, defineConfig } from 'vitest/config'
 import { build as buildWithEsbuild } from 'esbuild'
 import { join, resolve } from 'path'
-import { copyFileSync, mkdirSync, readFileSync, readdirSync } from 'fs'
+import { copyFileSync, cpSync, mkdirSync, readFileSync, readdirSync } from 'fs'
 
 export function hasTopLevelStaticImport(source: string): boolean {
   return /^\s*import(?:[\s{*"']|\w)/m.test(source)
@@ -70,6 +70,10 @@ export default defineConfig(({ mode }) => ({
       async closeBundle() {
         mkdirSync('dist', { recursive: true })
         copyFileSync('public/manifest.json', 'dist/manifest.json')
+        // pdf.js's character maps, for reading the text of PDFs in Chinese, Japanese or Korean
+        // (see src/teamPage/pdfText.ts).
+        cpSync('node_modules/pdfjs-dist/cmaps', 'dist/pdfjs/cmaps', { recursive: true })
+        copyFileSync('node_modules/pdfjs-dist/LICENSE', 'dist/pdfjs/LICENSE')
         const esbuildHardeningOptions = createEsbuildScriptHardeningOptions(mode)
 
         await buildWithEsbuild({

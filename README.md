@@ -35,7 +35,7 @@ Join the OpenTeam WeChat community by scanning the QR code below. If the QR code
 - 📣 **Mention-based routing**: use `@person` to ask one member, or `@everyone` to dispatch the same task to the whole team.
 - 🔄 **Independent and collaborative modes**: compare isolated perspectives first, then let members reference, challenge, and build on each other.
 - ⚡ **Live replies**: a web member's reply appears in the chat while the site is still writing it; stopping keeps what was written.
-- 🖼️ **Images both ways**: attach images and text files to a message; images that ChatGPT, Gemini, Grok or Qwen draw are copied into the chat.
+- 🖼️ **Images and files**: attach images, PDF, Word, PowerPoint, Excel and text files to a message (documents are sent as the text read from them); images that ChatGPT, Gemini, Grok or Qwen draw are copied into the chat.
 - 🔘 **Clickable choices**: when a reply ends with options (A / B / C), answer it with one click.
 - 🔌 **Optional API members**: add OpenAI- or Anthropic-compatible models next to web sessions; each API reply shows how many tokens it used.
 - 🧰 **Workspace tools**: compare the replies to one question, search messages, edit and resend a message, voice input, pin and search groups, notes, a desktop notification when every member has answered, a live health status for each AI page, and full backup and restore.
@@ -203,5 +203,7 @@ npm run verify
 ## 📜 License
 
 OpenTeam is released under the [PolyForm Noncommercial License 1.0.0](LICENSE), using the SPDX identifier `PolyForm-Noncommercial-1.0.0`.
+
+Reading PDFs uses Mozilla's [pdf.js](https://github.com/mozilla/pdf.js) (`pdfjs-dist`), under the Apache License 2.0; the build includes its license at `pdfjs/LICENSE`.
 
 You may use, study, modify, and redistribute the project for non-commercial purposes only. Commercial use, commercial redistribution, hosted commercial services, paid workflows, and productized commercial use are not permitted without separate written permission.

@@ -1,4 +1,5 @@
 import { checkUploadFile, MAX_UPLOADS_PER_MESSAGE, UPLOAD_ACCEPT, type MessageUpload, type UploadKind } from '../group/messageUploads'
+import { readDocumentText, type DocumentTextLabels } from './documentText'
 
 export interface ComposerAttachmentsDependencies {
   trayEl: HTMLElement
@@ -10,6 +11,8 @@ export interface ComposerAttachmentsDependencies {
   ui(source: string): string
   showError(message: string): void
   onChange(): void
+  // Reads a PDF or Office file's text; tests pass their own.
+  readDocument?(file: File, labels: DocumentTextLabels): Promise<string>
 }
 
 export interface PendingAttachment {
@@ -17,12 +20,16 @@ export interface PendingAttachment {
   file: File
   kind: UploadKind
   previewUrl?: string
+  // A PDF or Office file: its text, read as soon as the file is added.
+  text?: Promise<string>
+  textLength?: number
 }
 
 export interface ComposerAttachments {
   register(): void
   list(): PendingAttachment[]
-  // Reads the files for sending. Throws when a text file is not readable text.
+  // Reads the files for sending. Throws when a text file is not readable text, or a PDF or Office
+  // file could not be read.
   readUploads(): Promise<MessageUpload[]>
   take(): PendingAttachment[]
   restore(items: PendingAttachment[]): void
@@ -77,10 +84,29 @@ export function createComposerAttachments(deps: ComposerAttachmentsDependencies)
         continue
       }
       nextKey += 1
-      items.push({ key: `attachment-${nextKey}`, file, kind: check.kind, previewUrl: check.kind === 'image' ? URL.createObjectURL(file) : undefined })
+      const item: PendingAttachment = { key: `attachment-${nextKey}`, file, kind: check.kind, previewUrl: check.kind === 'image' ? URL.createObjectURL(file) : undefined }
+      items.push(item)
+      if (item.kind === 'document') startReading(item)
     }
     changed()
     if (errors.length > 0) deps.showError(errors.join('\n'))
+  }
+
+  // Reading starts right away, so a file that cannot be read is reported while it is added.
+  function startReading(item: PendingAttachment): void {
+    const labels: DocumentTextLabels = {
+      pageLabel: page => deps.ui(`—— 第 ${page} 页 ——`),
+      sheetLabel: name => deps.ui(`—— 工作表：${name} ——`),
+    }
+    item.text = (deps.readDocument ?? readDocumentText)(item.file, labels)
+    item.text.then(text => {
+      item.textLength = text.length
+      if (items.includes(item)) render()
+    }, (error: unknown) => {
+      if (!items.includes(item)) return
+      remove(item.key)
+      deps.showError(deps.ui(error instanceof Error ? error.message : String(error)))
+    })
   }
 
   function remove(key: string): void {
@@ -105,7 +131,9 @@ export function createComposerAttachments(deps: ComposerAttachmentsDependencies)
     for (const item of items) list.append(chip(item))
     const hint = document.createElement('p')
     hint.className = 'attachment-tray-hint'
-    hint.textContent = deps.ui('附件只在发送时上传给对应的 AI 网站或模型。')
+    hint.textContent = items.some(item => item.kind === 'document')
+      ? deps.ui('附件只在发送时上传给对应的 AI 网站或模型。PDF 和 Office 文件发送的是读出的文字。')
+      : deps.ui('附件只在发送时上传给对应的 AI 网站或模型。')
     deps.trayEl.append(list, hint)
   }
 
@@ -131,7 +159,11 @@ export function createComposerAttachments(deps: ComposerAttachmentsDependencies)
     name.textContent = item.file.name
     const size = document.createElement('span')
     size.className = 'attachment-chip-size'
-    size.textContent = formatBytes(item.file.size)
+    size.textContent = item.kind !== 'document'
+      ? formatBytes(item.file.size)
+      : item.textLength === undefined
+        ? deps.ui('读取中…')
+        : `${formatBytes(item.file.size)} · ${deps.ui(`${item.textLength} 字`)}`
     meta.append(name, size)
     const removeButton = document.createElement('button')
     removeButton.type = 'button'
@@ -148,6 +180,12 @@ export function createComposerAttachments(deps: ComposerAttachmentsDependencies)
     for (const item of items) {
       if (item.kind === 'image') {
         uploads.push({ kind: 'image', fileName: item.file.name, mimeType: item.file.type, size: item.file.size, data: await readBase64(item.file) })
+        continue
+      }
+      if (item.kind === 'document') {
+        // Sent as the text read from it; waits here if the file is still being read.
+        const text = await (item.text ?? Promise.reject(new Error('not read')))
+        uploads.push({ kind: 'text', fileName: item.file.name, mimeType: item.file.type || 'application/octet-stream', size: item.file.size, text })
         continue
       }
       const text = await readText(item.file)

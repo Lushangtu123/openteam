@@ -11,7 +11,11 @@ The composer has a paperclip button, and accepts pasted and dropped files. Rules
 - Up to 4 attachments per message.
 - PNG, JPEG, WebP and GIF images, up to 10 MB each.
 - Text files (text, Markdown, CSV, JSON, YAML, code, logs, …), up to 1 MB each, read as UTF-8.
-- Anything else (PDF, Office files, archives) is refused with a reason.
+- PDF, Word (.docx), PowerPoint (.pptx) and Excel (.xlsx) files, up to 30 MB each. Their text is read in the team page as soon as they are added (the chip shows 「读取中…」, then how many characters were found), and the message carries that text, at most 1 MB of it, like a text file:
+  - PDF: pdf.js (`src/teamPage/pdfText.ts`, loaded only when a PDF is added), in its own worker. The build copies pdf.js's character maps to `dist/pdfjs/cmaps/`, which PDFs in Chinese, Japanese or Korean often need. Each page's text comes under 「—— 第 N 页 ——」; pages with no text are left out.
+  - Word, PowerPoint, Excel: `src/teamPage/officeText.ts` reads the zip with the browser's `DecompressionStream` and the XML directly (no library). Word gives paragraphs and tables (cells separated by " | "); PowerPoint gives each slide's text in the presentation's order; Excel gives each sheet's rows, cells separated by tabs (dates show as Excel's serial numbers, formulas as their last value).
+  - A PDF with no text (a scan, pictures) is refused with a hint to send screenshots as images; password-protected and damaged files are refused with the reason. Older .doc/.ppt/.xls files are refused with a hint to save them as .docx/.pptx/.xlsx or PDF.
+- Anything else (archives, audio, video) is refused with a reason.
 
 The tray above the input box shows each pending file with a remove button and the note:
 
@@ -20,7 +24,7 @@ The tray above the input box shows each pending file with a remove button and th
 ## Storage
 
 - Images: `MessageImageAttachment` with `source: 'user-upload'` on the message; the bytes are stored in IndexedDB (`ImageAttachmentRepository`) by the background when the message is created, keyed by chat and message, so deleting messages or chats removes them, and backups include them.
-- Text files: `MessageFileAttachment` on the message, including the text, because the text goes into prompts.
+- Text files: `MessageFileAttachment` on the message, including the text, because the text goes into prompts. PDF and Office files are stored the same way, with their text (the file itself is not kept).
 - Captured ChatGPT/Gemini reply images keep working as before (no `source`).
 - Generated images are copied from ChatGPT, Gemini, Grok and Qwen replies:
   - Grok's are https images on `assets.grok.com/users/…/generated/…`, inside the reply, which the background downloads (inside the existing `*.grok.com` host permission).
@@ -29,7 +33,7 @@ The tray above the input box shows each pending file with a remove button and th
 
 ## Delivery
 
-- Text files are written into the prompt after the user's message (`formatAttachedFilesForPrompt`), in a code fence longer than any backtick run inside the file. Earlier messages in the context only name their attachments.
+- Text files are written into the prompt after the user's message (`formatAttachedFilesForPrompt`), in a code fence longer than any backtick run inside the file. A PDF or Office file's text is labeled as such (「附件 report.pdf（文件中的文字）」). Earlier messages in the context only name their attachments.
 - Images are loaded from IndexedDB when a prompt is delivered, so retries send them again:
   - API models receive them as image parts next to the prompt (AI SDK `messages`); the model has to accept images.
   - AI sites receive them through the content script (`src/content/fileUpload.ts`): it pastes the files into the site's input box, falls back to the site's file input, and only types and sends the prompt once the site visibly shows the attachment. If the site shows its own "upload failed" message, or does not react at all, the delivery fails with that reason instead of sending the prompt without its images.
@@ -41,6 +45,7 @@ The tray above the input box shows each pending file with a remove button and th
 ## Verified
 
 - Unit tests cover the rules, prompt text, background storage and delivery, the frame and API senders, the composer tray and the site uploader against fake composers.
+- In Chrome for Testing (logged-out profile, November 2026), PDF and Office files: a PDF printed by Chrome (embedded fonts), a PDF whose Chinese font uses a predefined CMap with no ToUnicode table (read correctly through the copied character maps, its empty page left out), a Word file, an Excel workbook and a PowerPoint deck were read and stored with the message; a PDF with only a picture was refused with the scan hint. A signed-out Gemini member, asked about the PDF, answered with the Chinese code word, the English code and the weekday from page 3.
 - In Chrome for Testing (logged-out profile): the tray, sending, an API role behind a mock OpenAI-compatible endpoint (image part identical to the file, file text in the prompt), and ChatGPT as a guest, which takes the pasted image and then refuses the upload; the role reports "Failed to upload".
 - In Chrome for Testing, logged out (November 2026):
   - Gemini: OpenTeam opens the "+" menu and the image reaches the input box (upload to `push.clients6.google.com` succeeds). Gemini then never sends a signed-out prompt that has an image, in a frame or in its own tab, so a reply cannot be checked without signing in. Image generation needs signing in ("您登录了吗？…无法为您创建任何图片").

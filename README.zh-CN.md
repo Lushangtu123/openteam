@@ -35,7 +35,7 @@ OpenTeam 可以看作 [OpenLink](https://github.com/afumu/openlink) 的姊妹篇
 - 📣 **基于 @ 的消息路由**：用 `@人员` 定向提问，或用 `@所有人` 同时分发给整个团队。
 - 🔄 **独立与协作两种模式**：先收集彼此独立的视角，再让成员参考、补充或反驳其他观点。
 - ⚡ **回复实时显示**：网页成员还在写的时候，回复就会出现在群聊里；按停止会保留已经写出的内容。
-- 🖼️ **图片双向流转**：发消息时可以附上图片和文本文件；ChatGPT、Gemini、Grok、Qwen 生成的图片会自动收进群聊。
+- 🖼️ **图片与文件**：发消息时可以附上图片、PDF、Word、PowerPoint、Excel 和文本文件（文档会读出其中的文字发给成员）；ChatGPT、Gemini、Grok、Qwen 生成的图片会自动收进群聊。
 - 🔘 **选项一键作答**：成员回复结尾给出选项（A / B / C）时，点一下就能回答。
 - 🔌 **可选的 API 成员**：在网页会话之外，还可以添加 OpenAI 或 Anthropic 兼容的模型；每条 API 回复会显示用了多少 token。
 - 🧰 **工作台工具**：对比同一个问题的各家回复、搜索消息、编辑后重新发送、语音输入、群聊置顶与搜索、笔记、所有成员回复完时的桌面通知、每个 AI 网页的健康状态，以及全量备份与恢复。
@@ -203,5 +203,7 @@ npm run verify
 ## 📜 许可证
 
 OpenTeam 使用 [PolyForm Noncommercial License 1.0.0](LICENSE) 发布，SPDX 标识符为 `PolyForm-Noncommercial-1.0.0`。
+
+读取 PDF 使用了 Mozilla 的 [pdf.js](https://github.com/mozilla/pdf.js)（`pdfjs-dist`），采用 Apache License 2.0；构建产物在 `pdfjs/LICENSE` 中附带其许可证。
 
 你可以在非商用目的下使用、学习、修改和再分发本项目。未经单独书面授权，禁止商用、商业再分发、托管商业服务、付费工作流或产品化商业使用。
