@@ -120,7 +120,7 @@ async function attachPromptFiles(files: PromptFile[] | undefined): Promise<void>
   if (!siteAdapter.findEditor) throw new Error(`${siteAdapter.id} 暂不支持上传图片`)
   const editor = await waitForEditor(siteAdapter.findEditor, 15_000)
   log.info('attach-files:start', { site: siteAdapter.id, files: files.map(file => ({ name: file.fileName, type: file.mimeType, size: file.data.length })) })
-  await attachFilesToComposer({ editor, files })
+  await attachFilesToComposer({ editor, files, revealFileInputs: siteAdapter.revealFileInputs })
   log.info('attach-files:done', { site: siteAdapter.id, count: files.length })
 }
 

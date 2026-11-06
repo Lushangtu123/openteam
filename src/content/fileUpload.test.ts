@@ -86,6 +86,78 @@ describe('attaching files to an AI site composer', () => {
     await expect(attachFilesToComposer({ editor, files: [PNG], ...FAST })).rejects.toThrow('图片没有上传成功：Failed to upload')
   })
 
+  it('picks the file input made for images over one for documents', async () => {
+    const { form, editor } = composer(`
+      <input id="docs" type="file" accept=".txt,.pdf,.docx" multiple hidden>
+      <input id="single" type="file" accept="image/*" hidden>
+      <input id="images" type="file" accept="image/*,video/*" multiple hidden>`)
+    const chosen = new Map<string, File[]>()
+    for (const input of form.querySelectorAll<HTMLInputElement>('input[type="file"]')) {
+      let files: FileList | undefined
+      Object.defineProperty(input, 'files', { get: () => files, set: value => { files = value; chosen.set(input.id, [...value]) } })
+      input.addEventListener('change', () => { for (const file of [...(files ?? [])]) showPreview(form, file) })
+    }
+
+    await attachFilesToComposer({ editor, files: [PNG, { ...PNG, fileName: 'second.png' }], ...FAST })
+
+    expect([...chosen.keys()]).toEqual(['images'])
+    expect(chosen.get('images')?.map(file => file.name)).toEqual(['chart.png', 'second.png'])
+  })
+
+  it("opens a site's upload menu to reach its file input, before trying a paste, and closes it again", async () => {
+    const { form, editor } = composer()
+    const pasted = vi.fn()
+    editor.addEventListener('paste', pasted)
+    let chosen: FileList | undefined
+    const close = vi.fn()
+    const revealFileInputs = vi.fn(async () => {
+      const input = document.createElement('input')
+      input.type = 'file'
+      input.accept = 'image/*,video/*'
+      Object.defineProperty(input, 'files', { get: () => chosen, set: value => { chosen = value } })
+      input.addEventListener('change', () => { for (const file of [...(chosen ?? [])]) showPreview(form, file) })
+      document.body.append(input)
+      return close
+    })
+
+    await attachFilesToComposer({ editor, files: [PNG], revealFileInputs, ...FAST })
+
+    expect(revealFileInputs).toHaveBeenCalledTimes(1)
+    expect([...(chosen ?? [])].map(file => file.name)).toEqual(['chart.png'])
+    expect(close).toHaveBeenCalledTimes(1)
+    expect(pasted).not.toHaveBeenCalled()
+  })
+
+  it('still pastes when the upload menu shows no file input', async () => {
+    const { form, editor } = composer()
+    editor.addEventListener('paste', event => {
+      event.preventDefault()
+      showPreview(form, new File(['x'], 'chart.png'))
+    })
+    const close = vi.fn()
+
+    await attachFilesToComposer({ editor, files: [PNG], revealFileInputs: async () => close, ...FAST })
+
+    expect(close).toHaveBeenCalledTimes(1)
+    expect(form.querySelectorAll('img')).toHaveLength(1)
+  })
+
+  it('sees a preview anywhere in the fieldset around the input box, as on Gemini', async () => {
+    document.body.innerHTML = `
+      <fieldset><div class="previews"></div>
+        <div><div><div><div><div><div id="editor" contenteditable="true"></div></div></div></div></div></div>
+      </fieldset>`
+    const editor = document.querySelector<HTMLElement>('#editor')!
+    editor.addEventListener('paste', event => {
+      event.preventDefault()
+      const image = document.createElement('img')
+      image.src = 'blob:https://gemini.google.com/preview'
+      document.querySelector('.previews')!.append(image)
+    })
+
+    await expect(attachFilesToComposer({ editor, files: [PNG], ...FAST })).resolves.toBeUndefined()
+  })
+
   it('refuses to go on when the site takes the files in no way', async () => {
     const { editor } = composer()
 

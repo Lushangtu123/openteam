@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { describe, expect, it, vi } from 'vitest'
-import { createGeminiAdapter } from './gemini'
+import { revealGeminiFileInputs, createGeminiAdapter } from './gemini'
 
 describe('Gemini site adapter', () => {
   it('extracts Gemini conversation ids and normalized safe urls', () => {
@@ -173,5 +173,39 @@ describe('Gemini site adapter', () => {
       width: 1024,
       height: 768,
     }])
+  })
+})
+
+describe('Gemini file uploads', () => {
+  it('opens the + menu so its file inputs exist, and closes it afterwards', async () => {
+    document.body.innerHTML = `
+      <rich-textarea><div class="ql-editor" contenteditable="true"></div></rich-textarea>
+      <button aria-haspopup="menu" aria-expanded="false" aria-label="Upload & tools"><mat-icon data-mat-icon-name="plus"></mat-icon></button>`
+    const button = document.querySelector('button')!
+    button.addEventListener('click', () => {
+      button.setAttribute('aria-expanded', 'true')
+      document.body.insertAdjacentHTML('beforeend', '<div class="cdk-overlay-backdrop"></div><uploader><input type="file" accept="image/*,video/*" multiple></uploader>')
+    })
+    const escapes = vi.fn()
+    document.addEventListener('keydown', event => { if (event.key === 'Escape') escapes() })
+    document.addEventListener('click', event => {
+      if ((event.target as Element).classList?.contains('cdk-overlay-backdrop')) {
+        button.setAttribute('aria-expanded', 'false')
+        document.querySelector('.cdk-overlay-backdrop')?.remove()
+      }
+    })
+
+    const close = await revealGeminiFileInputs()
+    expect(document.querySelector('input[type="file"]')).not.toBeNull()
+    expect(button.getAttribute('aria-expanded')).toBe('true')
+
+    close?.()
+    expect(button.getAttribute('aria-expanded')).toBe('false')
+    expect(escapes).toHaveBeenCalledTimes(1)
+  })
+
+  it('does nothing without the + menu', async () => {
+    document.body.innerHTML = '<rich-textarea><div class="ql-editor" contenteditable="true"></div></rich-textarea>'
+    expect(await revealGeminiFileInputs()).toBeUndefined()
   })
 })

@@ -29,10 +29,16 @@ The tray above the input box shows each pending file with a remove button and th
 - Images are loaded from IndexedDB when a prompt is delivered, so retries send them again:
   - API models receive them as image parts next to the prompt (AI SDK `messages`); the model has to accept images.
   - AI sites receive them through the content script (`src/content/fileUpload.ts`): it pastes the files into the site's input box, falls back to the site's file input, and only types and sends the prompt once the site visibly shows the attachment. If the site shows its own "upload failed" message, or does not react at all, the delivery fails with that reason instead of sending the prompt without its images.
+  - The file input chosen is the one that fits best: one made for images (`image/*`, `.png`, …) before one for any file, one that takes several files when there are several. An input only for documents is never used.
+  - Gemini ignores pasted files and adds its file inputs only while its "+" ("Upload & tools" / 「上传和工具」) menu is open. Its adapter (`revealFileInputs`) opens that menu, the files go into its image input, and the menu is closed again. Its "Upload files" item is not clicked, so no file chooser opens.
+  - Attachments are recognized anywhere in the composer's `form`, or the `fieldset` Gemini uses instead.
 - Orchestration tasks do not take attachments yet.
 
 ## Verified
 
 - Unit tests cover the rules, prompt text, background storage and delivery, the frame and API senders, the composer tray and the site uploader against fake composers.
 - In Chrome for Testing (logged-out profile): the tray, sending, an API role behind a mock OpenAI-compatible endpoint (image part identical to the file, file text in the prompt), and ChatGPT as a guest, which takes the pasted image and then refuses the upload; the role reports "Failed to upload".
-- Not verified: successful uploads on logged-in AI site accounts.
+- In Chrome for Testing, logged out (November 2026):
+  - Gemini: OpenTeam opens the "+" menu and the image reaches the input box (upload to `push.clients6.google.com` succeeds). Gemini then never sends a signed-out prompt that has an image, in a frame or in its own tab, so a reply cannot be checked without signing in. Image generation needs signing in ("您登录了吗？…无法为您创建任何图片").
+  - Kimi takes a pasted image. Grok and Qwen take the paste; Qwen asks to log in. ChatGPT shows a Cloudflare check to the headless browser.
+- Not verified: successful uploads and generated images on logged-in AI site accounts.

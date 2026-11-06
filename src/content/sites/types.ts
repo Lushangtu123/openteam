@@ -29,6 +29,10 @@ export interface ChatSiteAdapter {
   checkStatus?(context: SiteHealthContext): SiteStatusInfo
   // The site's prompt input box, where attached files are pasted.
   findEditor?(): HTMLElement | null
+  // For sites that add their file inputs only while their upload menu is open: opens it so the
+  // inputs are on the page, and returns how to close it again. Such sites get files through their
+  // file input first, and pasting only as a fallback.
+  revealFileInputs?(): Promise<(() => void) | undefined>
   stopGenerating(): Promise<boolean>
   fillAndSend(content: string, autoSend?: boolean): Promise<void>
   collectPromptDiagnostics(): Record<string, unknown>

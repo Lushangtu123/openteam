@@ -24,7 +24,14 @@ const GEMINI_SELECTORS = {
     'button[data-test-id="copy-button"], copy-button button, button[mattooltip="复制回答"], button[aria-label="复制"], button[aria-label*="Copy"], button[aria-label*="复制"]',
   turn: 'model-response',
   image: 'img[src]',
+  // The "+" left of the input box ("Upload & tools" / 「上传和工具」). Its menu holds the file
+  // inputs, which are not on the page while the menu is closed.
+  uploadMenuButton: 'button[aria-haspopup="menu"]:has(mat-icon[data-mat-icon-name="plus"]), button[aria-haspopup="menu"][aria-label*="Upload"], button[aria-haspopup="menu"][aria-label*="上传"], button[aria-haspopup="menu"][aria-label*="上傳"]',
+  menuBackdrop: '.cdk-overlay-backdrop',
 }
+
+const UPLOAD_MENU_WAIT_MS = 2000
+const UPLOAD_MENU_POLL_MS = 100
 
 const SKIP_TAGS = new Set([
   'MAT-ICON',
@@ -98,6 +105,7 @@ export function createGeminiAdapter(options: GeminiAdapterOptions = {}): ChatSit
     findResponseContainer,
     isGenerating: isGeminiGenerating,
     findEditor: () => document.querySelector<HTMLElement>(GEMINI_SELECTORS.editor),
+    revealFileInputs: revealGeminiFileInputs,
     // Signing in happens on accounts.google.com, where OpenTeam has no content script.
     checkStatus: context => checkSiteHealth({
       findEditor: () => document.querySelector(GEMINI_SELECTORS.editor),
@@ -245,4 +253,23 @@ function dispatchEnter(editor: HTMLElement, options: { metaKey?: boolean } = {})
   editor.dispatchEvent(new KeyboardEvent('keypress', eventOptions))
   editor.dispatchEvent(new KeyboardEvent('keyup', eventOptions))
   return true
+}
+
+// Gemini ignores files pasted into its input box (at least when signed out) and adds its file
+// inputs only while the "+" menu is open. Opening the menu is enough; its "Upload files" item is
+// not clicked, so no file chooser opens.
+export async function revealGeminiFileInputs(): Promise<(() => void) | undefined> {
+  const button = document.querySelector<HTMLElement>(GEMINI_SELECTORS.uploadMenuButton)
+  if (!button) return undefined
+  const wasOpen = button.getAttribute('aria-expanded') === 'true'
+  if (!wasOpen) button.click()
+  for (let waited = 0; waited < UPLOAD_MENU_WAIT_MS && !document.querySelector('input[type="file"]'); waited += UPLOAD_MENU_POLL_MS) {
+    await new Promise(resolve => window.setTimeout(resolve, UPLOAD_MENU_POLL_MS))
+  }
+  if (wasOpen) return undefined
+  return () => {
+    if (button.getAttribute('aria-expanded') !== 'true' && !document.querySelector(GEMINI_SELECTORS.menuBackdrop)) return
+    document.querySelector<HTMLElement>(GEMINI_SELECTORS.menuBackdrop)?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true }))
+  }
 }
