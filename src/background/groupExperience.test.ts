@@ -1639,8 +1639,9 @@ describe('team formation in the background', () => {
     expect(roles.map(role => [role.name, role.chatSite, role.createdBy])).toEqual([['Claude', 'claude', 'team-formation'], ['ChatGPT', 'chatgpt', 'team-formation'], ['Claude2', 'claude', 'team-formation']])
     expect(chat.teamFormation).toMatchObject({ task: '做一个面向大学生的记账小程序', requiredPositions: ['测试', '运维'], status: 'checking', rounds: [[roles[0].id, roles[1].id], [roles[2].id]], nextRound: 0, invitationIds: [] })
 
-    expect(await harness.invoke({ type: 'GROUP_TEAM_CREATE', task: '做事', members: [{ modelSource: 'site', chatSite: 'claude' }] })).toMatchObject({ ok: false, error: '请选择 2–6 位队员' })
-    expect(await harness.invoke({ type: 'GROUP_TEAM_CREATE', task: '做事', members: Array.from({ length: 4 }, () => ({ modelSource: 'site', chatSite: 'kimi' })) })).toMatchObject({ ok: false, error: '同一个 AI 最多加 3 位' })
+    expect(await harness.invoke({ type: 'GROUP_TEAM_CREATE', task: '做事', members: [{ modelSource: 'site', chatSite: 'claude' }] })).toMatchObject({ ok: false, error: '请选择 2–12 位队员' })
+    expect(await harness.invoke({ type: 'GROUP_TEAM_CREATE', task: '做事', members: Array.from({ length: 13 }, (_, index) => ({ modelSource: 'site', chatSite: ['kimi', 'qwen', 'grok'][index % 3] })) })).toMatchObject({ ok: false, error: '请选择 2–12 位队员' })
+    expect(await harness.invoke({ type: 'GROUP_TEAM_CREATE', task: '做事', members: Array.from({ length: 6 }, () => ({ modelSource: 'site', chatSite: 'kimi' })) })).toMatchObject({ ok: false, error: '同一个 AI 最多加 5 位' })
     expect(await harness.invoke({ type: 'GROUP_TEAM_CREATE', task: ' ', members: [] })).toMatchObject({ ok: false, error: '请先写下要做的事' })
   })
 
