@@ -332,7 +332,7 @@ describe('IframeHost', () => {
       Element.prototype.scrollIntoView = originalScrollIntoView
     }
 
-    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'start', behavior: 'smooth' })
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'start', behavior: 'instant' })
   })
 
   it('focuses a role frame and highlights its chat group', () => {

@@ -7823,6 +7823,24 @@ select.reply-compare-select {
   transform: none;
 }
 
+/* Switching groups keeps the header's buttons still. The row is pinned to the right, so the
+   buttons only some groups have (编排, 免@) go first, at its left end, where showing or hiding
+   them moves nothing else; labels whose text changes keep a steady width. */
+:root[data-theme] .chat-header #open-orchestration,
+:root[data-theme] .chat-header .manual-mention-toggle {
+  order: -1;
+}
+
+:root[data-theme] #chat-status {
+  min-width: 68px;
+  justify-content: center;
+}
+
+:root[data-theme] #toggle-people-drawer {
+  min-width: 64px;
+  justify-content: center;
+}
+
 /* Group list search (shown for long lists) and the pin mark on pinned groups. The sidebar gets a
    row for the search box only while it shows. */
 :root[data-theme] .sidebar:has(.chat-list-search:not([hidden])) {

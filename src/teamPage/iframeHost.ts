@@ -428,9 +428,11 @@ export class IframeHost {
     this.emit({ type: 'group-preserved', chatId })
   }
 
+  // Brings the group's AI pages forward behind the window (pages out of view are throttled by the
+  // browser). At once, not animated: switching groups should not show the background sliding.
   private scrollChatGroupIntoView(group: HTMLElement): void {
     if (typeof group.scrollIntoView !== 'function') return
-    group.scrollIntoView({ block: 'start', behavior: 'smooth' })
+    group.scrollIntoView({ block: 'start', behavior: 'instant' })
   }
 
   private mountRole(record: RoleFrameRecord, group: HTMLElement): void {
