@@ -1,10 +1,13 @@
 import type { GroupChat, GroupMessage, GroupRole, RoomMode } from '../group/types'
 import { normalizeLanguage, translateUi, type TeamLanguage } from '../shared/i18n'
 import type { TeamPageState } from './appState'
+import { roleAvatarLabel, roleToneClass } from './viewHelpers'
 
 export interface ChatHeaderViewDependencies {
   state: TeamPageState
   chatTitleEl: HTMLElement
+  // The group's avatar next to its title (shown by the Grok style).
+  chatTitleAvatarEl?: HTMLElement
   chatSubtitleEl: HTMLElement
   chatStatusEl: HTMLElement
   togglePeopleDrawerEl: HTMLButtonElement
@@ -23,10 +26,20 @@ export interface ChatHeaderView {
 export function createChatHeaderView(deps: ChatHeaderViewDependencies): ChatHeaderView {
   let manualMentionToggle: HTMLButtonElement | undefined
 
+  function renderTitleAvatar(chat: GroupChat | undefined): void {
+    const avatar = deps.chatTitleAvatarEl
+    if (!avatar) return
+    avatar.hidden = !chat
+    if (!chat) return
+    avatar.className = `chat-avatar chat-title-avatar ${roleToneClass(chat.name)}`
+    avatar.textContent = roleAvatarLabel(chat.name)
+  }
+
   function renderChatHeader(): void {
     const chat = deps.getCurrentChat()
     const roles = deps.getCurrentRoles()
     const messages = deps.getCurrentMessages()
+    renderTitleAvatar(chat)
     if (!chat) {
       deps.chatTitleEl.textContent = ui('未选择群聊')
       deps.chatSubtitleEl.textContent = ui('创建或选择一个群聊开始协作')

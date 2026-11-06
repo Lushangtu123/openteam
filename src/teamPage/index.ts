@@ -45,7 +45,7 @@ const imageAttachmentRepository = createIndexedDbImageAttachmentRepository()
 let store: OpenTeamStore = appState.store
 
 const teamDomRefs = createTeamPageDomRefs()
-const { appShellEl, closeWindowEl, toggleWindowSizeEl, toggleFullscreenEl, storeSummaryEl, chatListEl, chatTitleEl, chatSubtitleEl, chatStatusEl, messagesEl } = teamDomRefs
+const { appShellEl, closeWindowEl, toggleWindowSizeEl, toggleFullscreenEl, storeSummaryEl, chatListEl, chatTitleEl, chatTitleAvatarEl, chatSubtitleEl, chatStatusEl, messagesEl } = teamDomRefs
 const { roleSummaryEl, roleListEl, roleTemplateSelectEl, templateListEl, targetPreviewEl, busyPreviewEl, composerFormEl, sendButtonEl } = teamDomRefs
 const { messageInputEl, referenceDraftEl, mentionPanelEl, errorEl, newChatNameEl, createChatFormEl, quickCreateChatEl } = teamDomRefs
 const { templateNameEl, templateDescriptionEl, templatePromptEl, templateAiDescriptionEl, generateTemplatePersonaEl, templatePersonaGenerationStatusEl, templateFormTitleEl, settingsButtonEl, settingsMenuEl, languageEnEl, languageZhEl, agentControlToggleEl, agentControlStatusEl, themeLightEl, themeDarkEl, uiStyleChatGptEl, uiStyleGrokEl, settingsUiStyleChatGptEl, settingsUiStyleGrokEl } = teamDomRefs
@@ -197,6 +197,7 @@ const renderRolePanel = rolePanelView.renderRolePanel
 const chatHeaderView = createChatHeaderView({
   state: appState,
   chatTitleEl,
+  chatTitleAvatarEl,
   chatSubtitleEl,
   chatStatusEl,
   togglePeopleDrawerEl,

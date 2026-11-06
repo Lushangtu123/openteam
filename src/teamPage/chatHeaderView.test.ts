@@ -31,6 +31,16 @@ describe('chat header view', () => {
     expect(harness.togglePeopleDrawerEl.textContent).toBe('Members 1')
   })
 
+  it("shows the group's avatar next to its title", () => {
+    const harness = createHarness('independent')
+
+    harness.view.renderChatHeader()
+
+    expect(harness.chatTitleAvatarEl.hidden).toBe(false)
+    expect(harness.chatTitleAvatarEl.textContent).toBe('群')
+    expect(harness.chatTitleAvatarEl.className).toMatch(/^chat-avatar chat-title-avatar role-tone-\d$/)
+  })
+
   it('toggles manual mention routing for collaborative chats', async () => {
     const harness = createHarness('collaborative')
 
@@ -77,6 +87,7 @@ function createHarness(mode: RoomMode, language: 'zh-CN' | 'en' = 'zh-CN') {
     updatedAt: 1,
   }
   const chatTitleEl = document.createElement('h2')
+  const chatTitleAvatarEl = document.createElement('span')
   const chatSubtitleEl = document.createElement('p')
   const chatStatusEl = document.createElement('span')
   const togglePeopleDrawerEl = document.createElement('button')
@@ -89,6 +100,7 @@ function createHarness(mode: RoomMode, language: 'zh-CN' | 'en' = 'zh-CN') {
   const view = createChatHeaderView({
     state: createTeamPageState(),
     chatTitleEl,
+    chatTitleAvatarEl,
     chatSubtitleEl,
     chatStatusEl,
     togglePeopleDrawerEl,
@@ -99,5 +111,5 @@ function createHarness(mode: RoomMode, language: 'zh-CN' | 'en' = 'zh-CN') {
     getCurrentMessages: () => messages,
     runCommand,
   })
-  return { chat, roles, messages, chatStatusEl, chatSubtitleEl, togglePeopleDrawerEl, openOrchestrationEl, headerActionsEl, runCommand, view }
+  return { chat, roles, messages, chatTitleAvatarEl, chatStatusEl, chatSubtitleEl, togglePeopleDrawerEl, openOrchestrationEl, headerActionsEl, runCommand, view }
 }

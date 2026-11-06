@@ -8,6 +8,7 @@ export interface TeamPageDomRefs {
   storeSummaryEl: HTMLElement
   chatListEl: HTMLElement
   chatTitleEl: HTMLElement
+  chatTitleAvatarEl: HTMLElement
   chatSubtitleEl: HTMLElement
   chatStatusEl: HTMLElement
   messagesEl: HTMLElement
@@ -181,6 +182,7 @@ export function createTeamPageDomRefs(): TeamPageDomRefs {
     storeSummaryEl: requireElement<HTMLElement>('#store-summary'),
     chatListEl: requireElement<HTMLElement>('#chat-list'),
     chatTitleEl: requireElement<HTMLElement>('#chat-title'),
+    chatTitleAvatarEl: requireElement<HTMLElement>('#chat-title-avatar'),
     chatSubtitleEl: requireElement<HTMLElement>('#chat-subtitle'),
     chatStatusEl: requireElement<HTMLElement>('#chat-status'),
     messagesEl: requireElement<HTMLElement>('#messages'),
