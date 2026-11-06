@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { describe, expect, it, vi } from 'vitest'
-import { createGrokAdapter, findGrokNotice } from './grok'
+import { createGrokAdapter, findGrokNotice, readGrokImages } from './grok'
 
 describe('Grok site adapter', () => {
   it('extracts Grok conversation ids and normalized safe urls', () => {
@@ -250,5 +250,21 @@ describe('Grok site adapter', () => {
     document.body.innerHTML = composer + '<div>Network issue detected. Testing your connection…</div><div data-testid="assistant-message"><p>If you see “Network error occurred”, retry.</p></div>'
     expect(findGrokNotice()).toBeUndefined()
     expect(adapter.checkStatus?.({ pageAgeMs: 60_000, now: 5 })).toEqual({ status: 'ready', timestamp: 5 })
+  })
+})
+
+describe('Grok generated images', () => {
+  it('reads the images Grok draws in a reply, not the profile picture', () => {
+    document.body.innerHTML = `
+      <img alt="" src="https://assets.grok.com/users/u1/abc-profile-picture.webp" width="300" height="300">
+      <div class="message-bubble" role="article" data-testid="assistant-message">
+        <div class="response-content-markdown">
+          <div class="group/image"><div class="group/grok-image"><img alt="Generated image" width="784" height="1168" src="https://assets.grok.com/users/u1/generated/g1/image.jpg"></div></div>
+          <img alt="" src="https://evil.example/generated/x.jpg">
+        </div>
+      </div>`
+    const reply = document.querySelector('[data-testid="assistant-message"]')!
+    expect(readGrokImages(reply)).toEqual([{ sourceUrl: 'https://assets.grok.com/users/u1/generated/g1/image.jpg', alt: 'Generated image', width: 784, height: 1168 }])
+    expect(createGrokAdapter().readResponseImages?.(reply)).toHaveLength(1)
   })
 })

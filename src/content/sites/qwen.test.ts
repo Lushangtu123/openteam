@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createQwenAdapter } from './qwen'
+import { createQwenAdapter, readQwenImages } from './qwen'
 
 afterEach(() => {
   document.body.replaceChildren()
@@ -233,5 +233,18 @@ describe('Qwen site adapter', () => {
     document.body.innerHTML = '<button>Log in</button>'
     window.history.replaceState(null, '', '/auth?action=signin')
     expect(adapter.checkStatus?.({ pageAgeMs: 1000, now: 5 })).toEqual({ status: 'unauthorized', reason: 'login', timestamp: 5 })
+  })
+})
+
+describe('Qwen generated images', () => {
+  it("reads the images Qwen draws, to be read in the page since its CDN does not serve OpenTeam", () => {
+    document.body.innerHTML = `
+      <div class="qwen-chat-message-assistant">
+        <div class="chat-response-media-render"><div class="image-tool-container"><div class="qwen-image"><div class="qwen-markdown-image"><img class="ant-image-img qwen-image" width="450" height="603" src="https://cdn.qwenlm.ai/output/u1/image_gen/g1/1793987567.png"></div></div></div></div>
+        <div class="response-message-content phase-answer"><p>我已经为您生成了一张图片。</p></div>
+      </div>`
+    const reply = document.querySelector('.qwen-chat-message-assistant')!
+    expect(readQwenImages(reply)).toEqual([{ sourceUrl: 'https://cdn.qwenlm.ai/output/u1/image_gen/g1/1793987567.png', width: 450, height: 603, readInPage: true }])
+    expect(createQwenAdapter().readResponseText(reply)).toBe('我已经为您生成了一张图片。')
   })
 })

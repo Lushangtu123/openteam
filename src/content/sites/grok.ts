@@ -6,6 +6,7 @@ import { readEditorText, setContentEditableText } from './contentEditable'
 import { extractMarkdownFromDom } from './domMarkdown'
 import { buttonLabelMatches, describeElement, extractCleanTextFromDom, findClosestMatchingAncestor } from './domText'
 import { isClickableButton } from './waitForElement'
+import { readGeneratedImages } from './replyImageSources'
 
 const GROK_HOST = 'grok.com'
 const GROK_HOME_URL = `https://${GROK_HOST}/`
@@ -24,6 +25,8 @@ const GROK_SELECTORS = {
     '[data-testid="assistant-message"], [data-message-author-role="assistant"], [data-author="assistant"], [class*="assistant-message"], [class*="assistant"] [class*="message"], [class*="assistant"] [class*="message-bubble"]',
   copyButton: 'button[aria-label*="Copy"], button[data-testid*="copy"], button[title*="Copy"]',
   activityIndicator: '[aria-busy="true"], [data-testid*="thinking"], [data-testid*="generating"]',
+  // Images Grok draws, inside the reply: assets.grok.com/users/…/generated/…/image.jpg.
+  generatedImage: 'img[src*="/generated/"], [class*="grok-image"] img[src]',
 }
 
 const SKIP_TAGS = new Set(['SCRIPT', 'STYLE', 'BUTTON', 'TEXTAREA', 'SVG'])
@@ -81,6 +84,7 @@ export function createGrokAdapter(options: GrokAdapterOptions = {}): ChatSiteAda
     getResponseContainers,
     getAllAssistantReplies,
     readResponseText: extractCleanText,
+    readResponseImages: readGrokImages,
     readResponseTextFromCopy: node => readResponseTextFromCopy(node, clipboardTimeoutMs, clipboardPollMs),
     readResponseMarkdown: extractMarkdownFromDom,
     findResponseContainer,
@@ -338,4 +342,9 @@ function isVisibleInteractiveElement(element: Element): boolean {
 
 function waitForNextGrokPoll(): Promise<void> {
   return new Promise(resolve => window.setTimeout(resolve, 50))
+}
+
+export function readGrokImages(node: Node) {
+  return readGeneratedImages(node, GROK_SELECTORS.generatedImage, url =>
+    (url.hostname === 'grok.com' || url.hostname.endsWith('.grok.com')) && url.pathname.includes('/generated/'))
 }

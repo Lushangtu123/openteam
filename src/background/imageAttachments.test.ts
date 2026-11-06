@@ -181,6 +181,33 @@ describe('image attachment service', () => {
     expect(records).toHaveLength(0)
   })
 
+  it('downloads Grok images and stores Qwen images read in the page', async () => {
+    const records: ImageAttachmentBlobRecord[] = []
+    let next = 0
+    const fetchImage = vi.fn(async () => new Response(new Blob(['grok-jpeg'], { type: 'image/jpeg' }), { status: 200, headers: { 'content-type': 'image/jpeg' } }))
+    const service = createImageAttachmentService({ fetchImage, repository: createFakeRepository(records), newId: () => `attachment-${++next}`, now: () => 5 })
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 9])
+
+    const attachments = await service.captureReplyImages({
+      chatId: 'chat-1',
+      messageId: 'msg-1',
+      images: [
+        { sourceUrl: 'https://assets.grok.com/users/u1/generated/g1/image.jpg', alt: 'Generated image' },
+        { sourceUrl: 'https://cdn.qwenlm.ai/output/u1/image_gen/g1/1.png', data: btoa(String.fromCharCode(...png)) },
+        { sourceUrl: 'https://cdn.qwenlm.ai/output/u1/image_gen/g1/2.png' },
+      ],
+    })
+
+    expect(fetchImage).toHaveBeenCalledTimes(1)
+    expect(fetchImage).toHaveBeenCalledWith('https://assets.grok.com/users/u1/generated/g1/image.jpg', expect.objectContaining({ credentials: 'include' }))
+    expect(attachments.map(attachment => [attachment.status, attachment.fileName ?? attachment.error])).toEqual([
+      ['ready', 'grok-image-1.jpg'],
+      ['ready', 'qwen-image-2.png'],
+      // Not read in the page: OpenTeam does not download from Qwen's CDN itself.
+      ['error', '不支持的图片来源'],
+    ])
+  })
+
   it('rejects active image formats such as SVG', async () => {
     const records: ImageAttachmentBlobRecord[] = []
     const service = createImageAttachmentService({

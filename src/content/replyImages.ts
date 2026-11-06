@@ -13,13 +13,14 @@ export async function materializeReplyImages(images: ReplyImageSource[] | undefi
   if (!images?.length) return images
   const result: ReplyImageSource[] = []
   for (const image of images) {
-    if (image.data || !image.sourceUrl.startsWith('blob:')) {
+    if (image.data || !(image.sourceUrl.startsWith('blob:') || image.readInPage)) {
       result.push(image)
       continue
     }
     try {
       const blob = await readPageImage(image.sourceUrl, doc)
-      result.push({ ...image, data: bytesToBase64(new Uint8Array(await blob.arrayBuffer())), mimeType: blob.type })
+      const { readInPage: _readInPage, ...source } = image
+      result.push({ ...source, data: bytesToBase64(new Uint8Array(await blob.arrayBuffer())), mimeType: blob.type })
     } catch (error) {
       log.warn('reply-images:read-failed', { error: error instanceof Error ? error.message : String(error) })
       // Sent without its bytes, the image shows in the chat as one that could not be saved.
@@ -32,7 +33,9 @@ export async function materializeReplyImages(images: ReplyImageSource[] | undefi
 async function readPageImage(sourceUrl: string, doc: Document): Promise<Blob> {
   let blob: Blob | undefined
   try {
-    blob = await (await fetch(sourceUrl)).blob()
+    const response = await fetch(sourceUrl, { credentials: 'omit' })
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    blob = await response.blob()
   } catch {
     blob = await drawPageImage(sourceUrl, doc)
   }

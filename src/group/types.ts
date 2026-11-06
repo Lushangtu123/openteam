@@ -373,9 +373,11 @@ export interface ReplyImageSource {
   width?: number
   height?: number
   // The image itself (base64), read inside the page, when its source is a page blob: URL that
-  // only that page can open. ChatGPT shows its generated images this way.
+  // only that page can open (ChatGPT's generated images), or a site's image CDN that lets the site's
+  // page download but not OpenTeam (readInPage: Qwen's generated images).
   data?: string
   mimeType?: string
+  readInPage?: boolean
 }
 
 export interface MessageImageAttachment {

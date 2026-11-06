@@ -1,4 +1,5 @@
 import { CHAT_SITE_INFO, chatSiteConversationId, chatSiteForUrl } from '../../group/chatSites'
+import { readGeneratedImages } from './replyImageSources'
 import { findClickableCopyButton, readResponseTextFromCopyAction } from './clipboardCopy'
 import { extractMarkdownFromDom } from './domMarkdown'
 import { buttonLabelMatches, describeElement, extractCleanTextFromDom, findClosestMatchingAncestor } from './domText'
@@ -28,6 +29,8 @@ export const QWEN_SELECTORS = {
   modal: '.ant-modal-wrap .ant-modal[aria-modal="true"], .ant-modal-wrap [role="dialog"][aria-modal="true"]',
   codeBlock: 'pre.qwen-markdown-code',
   codeLine: '.view-lines .view-line',
+  // Images Qwen draws, in the reply's media area: cdn.qwenlm.ai/output/…/image_gen/….png.
+  generatedImage: '.qwen-image img, img.qwen-image',
 }
 
 const SKIP_TAGS = new Set(['SCRIPT', 'STYLE', 'BUTTON', 'TEXTAREA', 'SVG', 'svg'])
@@ -72,6 +75,7 @@ export function createQwenAdapter(options: QwenAdapterOptions = {}): ChatSiteAda
     getResponseContainers,
     getAllAssistantReplies: () => getResponseContainers().map(readQwenResponseText).filter(Boolean),
     readResponseText: readQwenResponseText,
+    readResponseImages: readQwenImages,
     readResponseMarkdown: readQwenResponseMarkdown,
     readResponseTextFromCopy: node => readResponseTextFromCopyAction({ node, timeoutMs: clipboardTimeoutMs, pollMs: clipboardPollMs, findCopyButton }),
     findResponseContainer: element => findClosestMatchingAncestor(element, QWEN_SELECTORS.assistantMessage),
@@ -228,4 +232,11 @@ function collectPromptDiagnostics(): Record<string, unknown> {
     sendButtonMatches: [...document.querySelectorAll(QWEN_SELECTORS.sendButton)].slice(0, 5).map(describeElement),
     stopButtonMatches: [...document.querySelectorAll(QWEN_SELECTORS.stopButton)].slice(0, 5).map(describeElement),
   }
+}
+
+// Qwen's image CDN lets the Qwen page download its images but not OpenTeam, so they are read in
+// the page before the reply is sent (readInPage).
+export function readQwenImages(node: Node) {
+  return readGeneratedImages(node, QWEN_SELECTORS.generatedImage, url => url.hostname === 'cdn.qwenlm.ai' || url.hostname.endsWith('.qwenlm.ai'))
+    .map(image => ({ ...image, readInPage: true }))
 }

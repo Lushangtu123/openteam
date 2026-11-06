@@ -660,7 +660,7 @@ export function createMessageHandlers(deps: MessageHandlersDependencies): Backgr
     const content = readReplyContent(message.content)
     const images = readReplyImageSources(message.images)
     if (!content && images.length === 0) throw new Error('回复内容不能为空')
-    if (images.length > 0 && !isBoundImageSender(deps, identity, message, sender)) throw new Error('图片回复只能来自已绑定的 ChatGPT 或 Gemini 页面')
+    if (images.length > 0 && !isBoundImageSender(deps, identity, message, sender)) throw new Error('图片回复只能来自已绑定的 ChatGPT、Gemini、Grok 或 Qwen 页面')
     const contentFormat = message.contentFormat === 'markdown' ? 'markdown' : undefined
     const promptMessageId = readOptionalString(message.messageId)
     const replyAttemptId = readOptionalString(message.replyAttemptId)
@@ -782,7 +782,7 @@ export function createMessageHandlers(deps: MessageHandlersDependencies): Backgr
     const content = readReplyContent(message.content)
     const images = readReplyImageSources(message.images)
     if (!content && images.length === 0) throw new Error('回复内容不能为空')
-    if (images.length > 0 && !isBoundImageSender(deps, identity, message, sender)) throw new Error('图片回复只能来自已绑定的 ChatGPT 或 Gemini 页面')
+    if (images.length > 0 && !isBoundImageSender(deps, identity, message, sender)) throw new Error('图片回复只能来自已绑定的 ChatGPT、Gemini、Grok 或 Qwen 页面')
     const contentFormat = message.contentFormat === 'markdown' ? 'markdown' : undefined
     const timestamp = deps.now()
     const attachments = images.length > 0
@@ -1857,7 +1857,9 @@ function isTrustedImageSenderUrl(value: string | undefined): boolean {
     return url.protocol === 'https:' && (
       url.hostname === 'chatgpt.com' ||
       url.hostname === 'chat.openai.com' ||
-      url.hostname === 'gemini.google.com'
+      url.hostname === 'gemini.google.com' ||
+      url.hostname === 'grok.com' ||
+      url.hostname === 'chat.qwen.ai'
     )
   } catch {
     return false

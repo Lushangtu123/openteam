@@ -201,17 +201,18 @@ function deduplicateImages(images: ReplyImageSource[]): ReplyImageSource[] {
   return [...byUrl.values()]
 }
 
-type ImageSourceProvider = 'chatgpt' | 'gemini'
+type ImageSourceProvider = 'chatgpt' | 'gemini' | 'grok' | 'qwen'
 
 function requireSafeImageSourceUrl(value: string): { href: string; provider: ImageSourceProvider } {
   const url = parseHttpsUrl(value)
   if (!url) throw new Error('不支持的图片来源')
   if (CHATGPT_IMAGE_SOURCE_HOSTS.has(url.hostname)) return { href: url.href, provider: 'chatgpt' }
   if (GEMINI_IMAGE_SOURCE_HOSTS.has(url.hostname) || isGoogleImageHost(url.hostname)) return { href: url.href, provider: 'gemini' }
+  if (isGrokImageHost(url.hostname)) return { href: url.href, provider: 'grok' }
   throw new Error('不支持的图片来源')
 }
 
-// A blob: URL made by the ChatGPT or Gemini page (blob:https://chatgpt.com/…).
+// A blob: URL made by the ChatGPT or Gemini page (blob:https://chatgpt.com/…), or Qwen's image CDN.
 function requirePageImageProvider(value: string): ImageSourceProvider {
   try {
     const url = new URL(value)
@@ -220,6 +221,8 @@ function requirePageImageProvider(value: string): ImageSourceProvider {
       if (origin === 'https://chatgpt.com' || origin === 'https://chat.openai.com') return 'chatgpt'
       if (origin === 'https://gemini.google.com') return 'gemini'
     }
+    // Qwen's image CDN, read by the Qwen page.
+    if (url.protocol === 'https:' && (url.hostname === 'cdn.qwenlm.ai' || url.hostname.endsWith('.qwenlm.ai'))) return 'qwen'
   } catch {
     // Falls through to the error below.
   }
@@ -243,6 +246,7 @@ function requireSafeImageRedirectUrl(value: string, provider: ImageSourceProvide
   if (!url) throw new Error('图片重定向到了不受信任的站点')
   if (provider === 'chatgpt' && !isOpenAiImageHost(url.hostname)) throw new Error('图片重定向到了不受信任的站点')
   if (provider === 'gemini' && !isGeminiImageHost(url.hostname)) throw new Error('图片重定向到了不受信任的站点')
+  if (provider === 'grok' && !isGrokImageHost(url.hostname)) throw new Error('图片重定向到了不受信任的站点')
   return url.href
 }
 
@@ -260,6 +264,11 @@ function isOpenAiImageHost(hostname: string): boolean {
     hostname === 'openai.com' ||
     hostname === 'oaiusercontent.com' ||
     OPENAI_IMAGE_HOST_SUFFIXES.some(suffix => hostname.endsWith(suffix))
+}
+
+// Grok's generated images: assets.grok.com/users/…/generated/…
+function isGrokImageHost(hostname: string): boolean {
+  return hostname === 'grok.com' || hostname.endsWith('.grok.com')
 }
 
 function isGeminiImageHost(hostname: string): boolean {
