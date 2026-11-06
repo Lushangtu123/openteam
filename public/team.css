@@ -7660,6 +7660,37 @@ select.reply-compare-select {
   white-space: nowrap;
 }
 
+/* The mic button sits next to the attach button; while listening it turns red and pulses. */
+:root[data-theme] .composer-mic {
+  margin-left: auto;
+}
+
+:root[data-theme] .composer-mic[hidden] {
+  display: none;
+}
+
+:root[data-ui-style="grok"] .composer:has(.composer-mic:not([hidden])) #message-input {
+  padding-right: 112px;
+}
+
+:root[data-theme] .composer-mic.listening {
+  border-color: transparent;
+  background: #ef4444;
+  color: #ffffff;
+  animation: composer-mic-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes composer-mic-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.45); }
+  50% { box-shadow: 0 0 0 7px rgba(239, 68, 68, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-theme] .composer-mic.listening {
+    animation: none;
+  }
+}
+
 /* Group list search (shown for long lists) and the pin mark on pinned groups. The sidebar gets a
    row for the search box only while it shows. */
 :root[data-theme] .sidebar:has(.chat-list-search:not([hidden])) {

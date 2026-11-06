@@ -50,6 +50,7 @@ describe('team page dom refs', () => {
       <div id="attachment-tray"></div>
       <button id="attach-file"></button>
       <input id="attach-file-input" type="file" />
+      <button id="voice-input"></button>
       <button id="open-message-search"></button>
       <button id="theme-light"></button>
       <button id="theme-dark"></button>

@@ -30,6 +30,7 @@ import { createTeamPagePrimaryCoordinator } from './teamPagePrimary'
 import { createErrorPresenter, createSuccessPresenter, teamPageLog } from './teamPageServices'
 import { createThemeController } from './themeController'
 import { createUiStyleController } from './uiStyleController'
+import { createVoiceInput, speechRecognitionFromWindow } from './voiceInput'
 import { createTeamUiController } from './teamUiController'
 import { emptyCard, getChatRecentSummary as getStoreChatRecentSummary, messageTitle, roleAvatarLabel, roleToneClass } from './viewHelpers'
 import { agentControlStatusState, agentControlStatusText } from './agentControlStatusView'
@@ -74,6 +75,13 @@ const uiStyleController = createUiStyleController({
   buttons: { chatgpt: [uiStyleChatGptEl, settingsUiStyleChatGptEl], grok: [uiStyleGrokEl, settingsUiStyleGrokEl] },
 })
 uiStyleController.initializeStyle()
+createVoiceInput({
+  button: teamDomRefs.voiceInputEl,
+  input: teamDomRefs.messageInputEl as HTMLTextAreaElement,
+  language: () => store.settings.language === 'en' ? 'en' : 'zh-CN',
+  showError: message => showError(message),
+  Recognition: speechRecognitionFromWindow(),
+})
 
 let roleHealthRenderPending = false
 const roleHealth = createRoleHealthTracker({
