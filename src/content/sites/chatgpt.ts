@@ -32,8 +32,12 @@ const CHATGPT_SELECTORS = {
   response: '[data-message-author-role="assistant"]',
   transcriptResponse: '[data-content-search-unit-key$=":assistant"] [data-chatgpt-selection-message-id]:has([data-markdown-text-style="assistant-message"])',
   imageResponse: '[data-conversation-screenshot-content]',
+  // Since November 2026 an image reply is a message block of its own, holding a gallery of
+  // blob: images and no text.
+  imageMessage: '[data-chatgpt-search-message-ids]:has([data-testid="generated-image-gallery"])',
+  transcriptUserUnit: '[data-content-search-unit-key$=":user"]',
   generatedImage:
-    'img[src*="/backend-api/estuary/content"], [data-testid*="image"] img[src], [class*="imagegen-image"] img[src]',
+    'img[src*="/backend-api/estuary/content"], [data-testid*="image"] img[src], [class*="imagegen-image"] img[src], [data-testid="generated-image-preview"] img[src]',
   responseActions: '[role="group"][aria-label="回复操作"], [role="group"][aria-label="Message actions"], [aria-label="回复操作"], [aria-label="Message actions"]',
   turnCopyButton: 'button[data-testid="copy-turn-action-button"], button[aria-label="复制回复"], button[aria-label="Copy response"]',
   copyButton:
@@ -46,6 +50,7 @@ const CHATGPT_SELECTORS = {
 }
 
 const SKIP_TAGS = new Set(['SCRIPT', 'STYLE', 'BUTTON', 'TEXTAREA', 'SVG'])
+const CHATGPT_ORIGINS = new Set(['https://chatgpt.com', 'https://chat.openai.com'])
 
 interface ChatGptAdapterOptions {
   href?: string
@@ -81,10 +86,13 @@ export function createChatGptAdapter(options: ChatGptAdapterOptions = {}): ChatS
         !response.closest(CHATGPT_SELECTORS.userTurn) &&
         isGeneratedImageResponse(response),
       )
+    const imageMessages = [...document.querySelectorAll(CHATGPT_SELECTORS.imageMessage)]
+      .filter(message => !message.closest(CHATGPT_SELECTORS.transcriptUserUnit) && isGeneratedImageResponse(message))
     return uniqueElements([
       ...(turnResponses.length > 0 ? turnResponses : [...document.querySelectorAll(CHATGPT_SELECTORS.response)]),
       ...document.querySelectorAll(CHATGPT_SELECTORS.transcriptResponse),
       ...standaloneImageResponses,
+      ...imageMessages,
     ])
   }
 
@@ -214,6 +222,9 @@ function findResponseContainer(element: Element | null): Element | null {
   const textResponse = findClosestMatchingAncestor(element, `${CHATGPT_SELECTORS.response}, ${CHATGPT_SELECTORS.transcriptResponse}`)
   if (textResponse) return textResponse
 
+  const imageMessage = findClosestMatchingAncestor(element, CHATGPT_SELECTORS.imageMessage)
+  if (imageMessage && !imageMessage.closest(CHATGPT_SELECTORS.transcriptUserUnit) && isGeneratedImageResponse(imageMessage)) return imageMessage
+
   const imageResponse = findClosestMatchingAncestor(element, CHATGPT_SELECTORS.imageResponse)
   return imageResponse &&
     !imageResponse.closest(CHATGPT_SELECTORS.userTurn) &&
@@ -296,10 +307,13 @@ function extractResponseImages(node: Node): ReplyImageSource[] {
   return [...bySourceUrl.values()]
 }
 
+// https images, and blob: images made by ChatGPT itself (read inside the page before sending).
 function normalizeGeneratedImageUrl(value: string): string | undefined {
   try {
     const url = new URL(value, location.href)
-    return url.protocol === 'https:' ? url.href : undefined
+    if (url.protocol === 'https:') return url.href
+    if (url.protocol === 'blob:' && CHATGPT_ORIGINS.has(url.origin)) return url.href
+    return undefined
   } catch {
     return undefined
   }

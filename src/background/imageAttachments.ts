@@ -99,6 +99,7 @@ export function createImageAttachmentService(deps: {
         }
 
         try {
+          if (image.data !== undefined) return await storePageImage(image, index, id, shared)
           const source = requireSafeImageSourceUrl(image.sourceUrl)
           const response = await deps.fetchImage(source.href, {
             method: 'GET',
@@ -145,11 +146,42 @@ export function createImageAttachmentService(deps: {
           }
         }
       }
+
+      // An image the content script read inside the page, because its source is a blob: URL the
+      // background cannot open. Only the bound ChatGPT/Gemini frame may send it (checked by the
+      // message handler); here the source must be that site's blob: URL and the bytes a real image.
+      async function storePageImage(
+        image: ReplyImageSource,
+        index: number,
+        id: string,
+        shared: Pick<MessageImageAttachment, 'id' | 'type'> & Partial<MessageImageAttachment>,
+      ): Promise<MessageImageAttachment> {
+        const provider = requirePageImageProvider(image.sourceUrl)
+        const bytes = base64ToBytes(image.data ?? '')
+        if (bytes.length === 0) throw new Error('图片内容为空')
+        if (bytes.length > maxImageBytes) throw new Error('图片超过 25 MB 上限')
+        const mimeType = sniffImageMimeType(bytes)
+        if (!mimeType) throw new Error('页面发来的内容不是图片')
+        const blob = new Blob([bytes], { type: mimeType })
+        const fileName = `${provider}-image-${index + 1}.${extensionForMimeType(mimeType)}`
+        await deps.repository.put({
+          id,
+          chatId: input.chatId,
+          messageId: input.messageId,
+          blob,
+          mimeType,
+          size: blob.size,
+          fileName,
+          createdAt: deps.now(),
+        })
+        return { ...shared, status: 'ready', mimeType, size: blob.size, fileName } as MessageImageAttachment
+      }
     },
     deleteByIds(ids): Promise<void> {
       return deps.repository.deleteByIds(ids)
     },
   }
+
 }
 
 function deduplicateImages(images: ReplyImageSource[]): ReplyImageSource[] {
@@ -163,6 +195,7 @@ function deduplicateImages(images: ReplyImageSource[]): ReplyImageSource[] {
       alt: current?.alt ?? image.alt,
       width: current?.width ?? image.width,
       height: current?.height ?? image.height,
+      ...(current?.data ?? image.data ? { data: current?.data ?? image.data, mimeType: current?.mimeType ?? image.mimeType } : {}),
     })
   }
   return [...byUrl.values()]
@@ -176,6 +209,33 @@ function requireSafeImageSourceUrl(value: string): { href: string; provider: Ima
   if (CHATGPT_IMAGE_SOURCE_HOSTS.has(url.hostname)) return { href: url.href, provider: 'chatgpt' }
   if (GEMINI_IMAGE_SOURCE_HOSTS.has(url.hostname) || isGoogleImageHost(url.hostname)) return { href: url.href, provider: 'gemini' }
   throw new Error('不支持的图片来源')
+}
+
+// A blob: URL made by the ChatGPT or Gemini page (blob:https://chatgpt.com/…).
+function requirePageImageProvider(value: string): ImageSourceProvider {
+  try {
+    const url = new URL(value)
+    if (url.protocol === 'blob:') {
+      const origin = new URL(url.pathname).origin
+      if (origin === 'https://chatgpt.com' || origin === 'https://chat.openai.com') return 'chatgpt'
+      if (origin === 'https://gemini.google.com') return 'gemini'
+    }
+  } catch {
+    // Falls through to the error below.
+  }
+  throw new Error('不支持的图片来源')
+}
+
+// The image type from the bytes themselves; never trusts a declared type.
+export function sniffImageMimeType(bytes: Uint8Array): string | undefined {
+  const starts = (...signature: number[]) => signature.every((byte, index) => bytes[index] === byte)
+  const ascii = (from: number, to: number) => String.fromCharCode(...bytes.slice(from, to))
+  if (starts(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a)) return 'image/png'
+  if (starts(0xff, 0xd8, 0xff)) return 'image/jpeg'
+  if (ascii(0, 6) === 'GIF87a' || ascii(0, 6) === 'GIF89a') return 'image/gif'
+  if (ascii(0, 4) === 'RIFF' && ascii(8, 12) === 'WEBP') return 'image/webp'
+  if (ascii(4, 8) === 'ftyp' && /^avi[fs]$/.test(ascii(8, 12))) return 'image/avif'
+  return undefined
 }
 
 function requireSafeImageRedirectUrl(value: string, provider: ImageSourceProvider): string {
@@ -246,7 +306,7 @@ function normalizeDimension(value: number | undefined): number | undefined {
 
 function safeCaptureError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error)
-  if (message === '不支持的图片来源' || message === '远端内容不是图片') return message
+  if (message === '不支持的图片来源' || message === '远端内容不是图片' || message === '页面发来的内容不是图片' || message === '图片内容为空') return message
   if (message.includes('25 MB')) return '图片超过 25 MB 上限'
   if (message.includes('HTTP')) return message
   if (message.includes('重定向')) return message

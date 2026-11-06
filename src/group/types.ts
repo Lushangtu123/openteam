@@ -365,6 +365,10 @@ export interface ReplyImageSource {
   alt?: string
   width?: number
   height?: number
+  // The image itself (base64), read inside the page, when its source is a page blob: URL that
+  // only that page can open. ChatGPT shows its generated images this way.
+  data?: string
+  mimeType?: string
 }
 
 export interface MessageImageAttachment {

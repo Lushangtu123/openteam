@@ -2,6 +2,7 @@ import type { BackgroundToRoleMessage, PromptFile, RoleToBackgroundMessage } fro
 import { createConversationMonitor, type ConversationMonitor } from './conversationMonitor'
 import { attachFilesToComposer } from './fileUpload'
 import { registerFrameRoleHandshake } from './frameHandshake'
+import { materializeReplyImages } from './replyImages'
 import { isDirectEmbeddedFrame, isEmbeddedFrame } from './frameEnvironment'
 import { waitBeforePromptInput, PROMPT_INPUT_DELAY_MS } from './promptDelay'
 import { promptStatusMessage } from './promptStatus'
@@ -202,17 +203,17 @@ function handleResyncReplyMessage(message: Extract<BackgroundToRoleMessage, { ty
         contentFormat: reply.contentFormat,
       })
       const snapshot = siteAdapter.getConversationSnapshot()
-      return sendBackgroundMessage({
+      return materializeReplyImages(reply.images, log).then(images => sendBackgroundMessage({
         type: 'TEAM_ROLE_REPLY_RESYNC',
         chatId: message.chatId,
         roleId: message.roleId,
         messageId: message.messageId,
         content: reply.text,
         contentFormat: reply.contentFormat,
-        images: reply.images,
+        images,
         conversationId: snapshot.conversationId,
         conversationUrl: snapshot.conversationUrl,
-      })
+      }))
     })
     .then(response => {
       const responseRecord = typeof response === 'object' && response !== null ? response as Record<string, unknown> : undefined

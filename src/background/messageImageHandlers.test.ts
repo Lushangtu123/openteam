@@ -102,6 +102,60 @@ describe('background image reply handling', () => {
     expect(response.store.messagesById['msg-user'].deliveryStatus?.['role-1']).toBe('received')
   })
 
+  it('passes image bytes read inside the ChatGPT page on to storage, and drops malformed ones', async () => {
+    vi.resetModules()
+    let currentStore = createImageReplyStore()
+    vi.doMock('./storeAccess', async importOriginal => {
+      const actual = await importOriginal<typeof import('./storeAccess')>()
+      return {
+        ...actual,
+        mutateStore: vi.fn(async (mutator: (store: OpenTeamStore) => unknown) => {
+          const result = await mutator(currentStore)
+          currentStore = structuredClone(currentStore)
+          return { store: currentStore, result }
+        }),
+      }
+    })
+    const captureReplyImages = vi.fn(async () => [])
+    const binding: RuntimeFrameBinding = { chatId: 'chat-1', roleId: 'role-1', tabId: 101, frameId: 7, ready: true, lastSeenAt: 1 }
+    const { createMessageHandlers } = await import('./messageHandlers')
+    const routes = createMessageHandlers({
+      broadcastStoreUpdated: vi.fn(),
+      getChatStatusFromRoles: () => 'ready',
+      imageAttachments: { captureReplyImages, deleteByIds: vi.fn(async () => undefined) },
+      log: { debug: vi.fn(), info: vi.fn(), warn: vi.fn() },
+      newId: vi.fn((prefix: string) => prefix === 'msg' ? 'msg-image' : `${prefix}-1`),
+      now: vi.fn(() => 100),
+      runtimeFrames: { bind: vi.fn(), getByAddress: vi.fn(() => binding), getByRole: vi.fn(() => binding) },
+      sendRoleMessage: vi.fn(),
+      sendError: vi.fn(),
+      sendPrompt: vi.fn(),
+    })
+
+    const replyRoute = routes.find(route => route.type === 'TEAM_ROLE_REPLY')
+    await replyRoute?.handler({
+      type: 'TEAM_ROLE_REPLY',
+      chatId: 'chat-1',
+      roleId: 'role-1',
+      messageId: 'msg-user',
+      replyAttemptId: 'attempt-1',
+      content: '',
+      images: [
+        { sourceUrl: 'blob:https://chatgpt.com/generated', alt: 'Generated image 1', data: 'iVBORw0KGgo=', mimeType: 'image/png' },
+        { sourceUrl: 'blob:https://chatgpt.com/broken', data: 'not base64!', mimeType: 'image/png' },
+      ],
+    }, { tab: { id: 101 } as chrome.tabs.Tab, frameId: 7, url: 'https://chatgpt.com/c/conversation' })
+
+    expect(captureReplyImages).toHaveBeenCalledWith({
+      chatId: 'chat-1',
+      messageId: 'msg-image',
+      images: [
+        { sourceUrl: 'blob:https://chatgpt.com/generated', alt: 'Generated image 1', data: 'iVBORw0KGgo=', mimeType: 'image/png' },
+        { sourceUrl: 'blob:https://chatgpt.com/broken' },
+      ],
+    })
+  })
+
   it('accepts image replies from a bound Gemini frame', async () => {
     vi.resetModules()
     let currentStore = createImageReplyStore('gemini')

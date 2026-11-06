@@ -1783,19 +1783,34 @@ function readReplyContent(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
 }
 
+// Image bytes read inside the page (for blob: sources), capped per image and per reply.
+const MAX_REPLY_IMAGE_DATA_CHARS = Math.ceil((25 * 1024 * 1024) / 3) * 4
+const MAX_REPLY_IMAGES_DATA_CHARS = 4 * MAX_REPLY_IMAGE_DATA_CHARS
+
 function readReplyImageSources(value: unknown): ReplyImageSource[] {
   if (!Array.isArray(value)) return []
+  let dataChars = 0
   return value.slice(0, 20).flatMap(item => {
     if (!isRecord(item) || typeof item.sourceUrl !== 'string' || !item.sourceUrl.trim()) return []
     const width = readOptionalImageDimension(item.width)
     const height = readOptionalImageDimension(item.height)
+    const data = readReplyImageData(item.data)
+    const withData = data !== undefined && dataChars + data.length <= MAX_REPLY_IMAGES_DATA_CHARS
+    if (withData) dataChars += data.length
     return [{
       sourceUrl: item.sourceUrl.trim(),
       ...(typeof item.alt === 'string' && item.alt.trim() ? { alt: item.alt.trim().slice(0, 500) } : {}),
       ...(width ? { width } : {}),
       ...(height ? { height } : {}),
+      ...(withData ? { data } : {}),
+      ...(withData && typeof item.mimeType === 'string' ? { mimeType: item.mimeType.slice(0, 40) } : {}),
     }]
   })
+}
+
+function readReplyImageData(value: unknown): string | undefined {
+  if (typeof value !== 'string' || !value || value.length > MAX_REPLY_IMAGE_DATA_CHARS) return undefined
+  return /^[A-Za-z0-9+/]+={0,2}$/.test(value) ? value : undefined
 }
 
 function readOptionalImageDimension(value: unknown): number | undefined {

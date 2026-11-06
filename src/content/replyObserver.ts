@@ -2,6 +2,7 @@ import type { RoleToBackgroundMessage } from '../group/runtimeProtocol'
 import type { ReplyImageSource } from '../group/types'
 import { createReplyTimeout } from './replyTimeout'
 import { createReplyTracker } from './replyTracker'
+import { materializeReplyImages } from './replyImages'
 import { resolveReportableReplyText, type ReportableReplyText } from './reportableReply'
 import { countResponseContainers, keepDeepestResponseContainers } from './responseContainers'
 import type { ContentLogger } from './runtimeClient'
@@ -352,19 +353,21 @@ export function createReplyObserver(options: {
     log.info('reply:accepted', { messageId, textLength: text.length, roleId: assignedRole.roleId, roleName: assignedRole.roleName, source })
 
     const snapshot = siteAdapter.getConversationSnapshot()
-    options
-      .sendRuntimeMessage({
+    const chatId = roleSession.getAssignedChatId(assignedRole)
+    // Images the page shows through blob: URLs are read here, before the reply leaves the page.
+    materializeReplyImages(reply.images, log)
+      .then(images => options.sendRuntimeMessage({
         type: 'TEAM_ROLE_REPLY',
-        chatId: roleSession.getAssignedChatId(assignedRole),
+        chatId,
         roleId: assignedRole.roleId,
         messageId,
         replyAttemptId,
         content: text,
         contentFormat: reply.contentFormat,
-        images: reply.images,
+        images,
         conversationId: snapshot.conversationId,
         conversationUrl: snapshot.conversationUrl,
-      })
+      }))
       .then(() => {
         const activePrompt = roleSession.getActivePrompt()
         if (activePrompt) {

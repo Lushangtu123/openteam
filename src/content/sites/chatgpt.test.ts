@@ -246,6 +246,49 @@ describe('ChatGPT site adapter', () => {
     ])
   })
 
+  it('reads the November 2026 image reply: a message block with a gallery of blob: images', () => {
+    document.body.innerHTML = `
+      <div data-content-search-turn-key="fallback-turn-1">
+        <div data-content-search-unit-key="fallback-turn-1:0:user">
+          <div data-chatgpt-selection-message-id="user-1">请生成一张图片：一只橘猫</div>
+          <div data-chatgpt-search-message-ids="user-1"><div data-testid="generated-image-gallery"><button data-testid="generated-image-preview"><img alt="Uploaded" src="blob:https://chatgpt.com/user-upload"></button></div></div>
+        </div>
+        <div class="group" data-talvt-turn-state="complete">
+          <div data-chatgpt-search-message-ids="assistant-1">
+            <div data-testid="generated-image-gallery">
+              <div class="group/generated-image-preview" data-web-image-tile="true">
+                <button type="button" data-testid="generated-image-preview" aria-label="Generated image 1">
+                  <img alt="Generated image 1" width="1254" height="1254" src="blob:https://chatgpt.com/e4aebf64-0fa1">
+                </button>
+              </div>
+            </div>
+            <button>Edit</button>
+          </div>
+        </div>
+      </div>
+    `
+
+    const adapter = createChatGptAdapter()
+    const message = document.querySelector('[data-chatgpt-search-message-ids="assistant-1"]')!
+    const responses = adapter.getResponseContainers()
+
+    expect(responses).toEqual([message])
+    expect(adapter.readResponseText(message)).toBe('')
+    expect(adapter.readResponseImages?.(message)).toEqual([{ sourceUrl: 'blob:https://chatgpt.com/e4aebf64-0fa1', alt: 'Generated image 1', width: 1254, height: 1254 }])
+    expect(adapter.findResponseContainer(message.querySelector('img'))).toBe(message)
+  })
+
+  it('ignores blob: images made by any other site', () => {
+    document.body.innerHTML = `
+      <div data-chatgpt-search-message-ids="assistant-1">
+        <div data-testid="generated-image-gallery"><button data-testid="generated-image-preview"><img alt="x" src="blob:https://evil.example/abc"></button></div>
+      </div>
+    `
+    const adapter = createChatGptAdapter()
+    expect(adapter.readResponseImages?.(document.querySelector('[data-chatgpt-search-message-ids]')!)).toEqual([])
+    expect(adapter.getResponseContainers()).toEqual([])
+  })
+
   it('keeps standalone image turns when older text turns are also present', () => {
     document.body.innerHTML = `
       <section data-turn="assistant" data-testid="conversation-turn-1">

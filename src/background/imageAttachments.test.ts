@@ -140,6 +140,47 @@ describe('image attachment service', () => {
     expect(attachments[2].error).toBe('远端内容不是图片')
   })
 
+  it('stores an image read inside the page without downloading it, by its real type', async () => {
+    const records: ImageAttachmentBlobRecord[] = []
+    const fetchImage = vi.fn()
+    const service = createImageAttachmentService({ fetchImage, repository: createFakeRepository(records), newId: () => 'attachment-1', now: () => 5 })
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3])
+
+    const attachments = await service.captureReplyImages({
+      chatId: 'chat-1',
+      messageId: 'msg-1',
+      images: [{ sourceUrl: 'blob:https://chatgpt.com/e4aebf64', alt: 'Generated image 1', data: btoa(String.fromCharCode(...png)), mimeType: 'image/jpeg' }],
+    })
+
+    expect(fetchImage).not.toHaveBeenCalled()
+    expect(attachments).toEqual([expect.objectContaining({ id: 'attachment-1', status: 'ready', mimeType: 'image/png', size: png.length, fileName: 'chatgpt-image-1.png', alt: 'Generated image 1' })])
+    expect(records).toHaveLength(1)
+    expect(new Uint8Array(await records[0].blob.arrayBuffer())).toEqual(png)
+  })
+
+  it('refuses page image bytes that are not an image, or from another site', async () => {
+    const records: ImageAttachmentBlobRecord[] = []
+    let next = 0
+    const service = createImageAttachmentService({ fetchImage: vi.fn(), repository: createFakeRepository(records), newId: () => `attachment-${++next}`, now: () => 5 })
+
+    const attachments = await service.captureReplyImages({
+      chatId: 'chat-1',
+      messageId: 'msg-1',
+      images: [
+        { sourceUrl: 'blob:https://chatgpt.com/svg', data: btoa('<svg onload="alert(1)"/>'), mimeType: 'image/png' },
+        { sourceUrl: 'blob:https://evil.example/png', data: btoa(String.fromCharCode(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a)) },
+        { sourceUrl: 'https://chatgpt.com/backend-api/estuary/content?id=file', data: btoa(String.fromCharCode(0xff, 0xd8, 0xff)) },
+      ],
+    })
+
+    expect(attachments.map(attachment => [attachment.status, attachment.error])).toEqual([
+      ['error', '页面发来的内容不是图片'],
+      ['error', '不支持的图片来源'],
+      ['error', '不支持的图片来源'],
+    ])
+    expect(records).toHaveLength(0)
+  })
+
   it('rejects active image formats such as SVG', async () => {
     const records: ImageAttachmentBlobRecord[] = []
     const service = createImageAttachmentService({
