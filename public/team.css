@@ -6684,11 +6684,13 @@ select.reply-compare-select {
   gap: 4px;
 }
 
-/* Long API model names shorten instead of pushing the stepper out of the row. */
+/* Long API model names shorten instead of pushing the stepper out of the row. A block (for the
+   ellipsis) keeps the label centred with a line as tall as the badge. */
 .team-setup-member > .role-site-badge {
   display: block;
   flex: 0 1 auto;
   min-width: 0;
+  line-height: 16px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -7771,6 +7773,54 @@ select.reply-compare-select {
 :root[data-ui-style="grok"] .reply-choice:hover .reply-choice-label {
   border-color: var(--gb-accent);
   color: var(--gb-accent);
+}
+
+/* Scrollbars here are styled, so they take room: a list or window that starts to scroll would
+   suddenly narrow and shift its content sideways. Their room is kept from the start. The chat
+   keeps it on both sides so its column stays centred. */
+:root[data-theme] .messages {
+  scrollbar-gutter: stable both-edges;
+}
+
+:root[data-theme] .modal,
+:root[data-theme] .role-scroll,
+:root[data-theme] .team-card-body,
+:root[data-theme] .reply-compare-body,
+:root[data-theme] .message-search-results,
+:root[data-theme] #people-library-list,
+:root[data-theme] #add-library-people-list,
+:root[data-theme] .all-notes-list,
+:root[data-theme] .notes-editor,
+:root[data-theme] .select-list,
+:root[data-theme] .group-template-list,
+:root[data-theme] .orchestration-people-list,
+:root[data-theme] .orchestration-settings,
+:root[data-theme] .orchestration-status-body,
+:root[data-theme] .orchestration-auto-messages,
+:root[data-theme] .orchestration-template-content {
+  scrollbar-gutter: stable;
+}
+
+/* Symbols drawn a little low in their font (×, ⚙, the launcher's ⌁) are lifted to the middle,
+   and the restore button's hidden label no longer pushes its ↺ to the left. */
+:root[data-theme] .modal-close,
+:root[data-theme] #close-notes-panel,
+:root[data-theme] #settings-button {
+  padding-bottom: 2px;
+}
+
+:root[data-theme] .launcher {
+  padding-bottom: 3px;
+}
+
+:root[data-theme] #restore-chat {
+  gap: 0;
+}
+
+/* Cards in the orchestration window no longer rise a pixel on hover. */
+:root[data-theme] .orchestration-template-card:hover:not(:disabled),
+:root[data-theme] .orchestration-template-card:focus-visible {
+  transform: none;
 }
 
 /* Group list search (shown for long lists) and the pin mark on pinned groups. The sidebar gets a

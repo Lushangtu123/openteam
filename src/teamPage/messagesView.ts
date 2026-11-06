@@ -649,6 +649,8 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
 
     const path = document.createElementNS('http://www.w3.org/2000/svg', 'path')
     path.setAttribute('d', messageActionIconPath(icon))
+    // The quote marks are drawn up and to the left of the middle of their box.
+    if (icon === 'quote') path.setAttribute('transform', 'translate(0.9 1.6)')
     svg.append(path)
     return svg
   }
