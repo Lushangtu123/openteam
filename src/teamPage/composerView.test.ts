@@ -7,7 +7,7 @@ import { createDefaultStore } from '../group/store'
 import type { GroupChat, GroupRole } from '../group/types'
 import { createTeamPageState } from './appState'
 import { applyTeamLanguage } from './languageController'
-import { createComposerView, type ComposerViewDependencies } from './composerView'
+import { createComposerView, editableMessageText, type ComposerViewDependencies } from './composerView'
 
 describe('team page composer view boundary', () => {
   it('keeps composer rendering, references, mentions, and send flow outside the entrypoint', () => {
@@ -50,6 +50,28 @@ describe('team page composer targeting', () => {
     deps.messageInputEl.value = '@所有人 请一起看'
     view.renderComposerState()
     expect(deps.targetPreviewEl.textContent).toBe('将发送给：工程师（DeepSeek）')
+  })
+
+  it('puts a sent message back in the input box with its mentions, to send again', () => {
+    const { view, deps } = createComposerHarness()
+    const message = { id: 'msg-1', chatId: 'chat-1', seq: 1, type: 'user', content: '再评审一次', targetRoleIds: ['role-1'], createdAt: 1, status: 'sent' } as const
+
+    view.editMessage(message)
+
+    expect(deps.messageInputEl.value).toBe('@工程师（DeepSeek） 再评审一次')
+    expect(deps.messageInputEl.selectionStart).toBe(deps.messageInputEl.value.length)
+    expect(deps.targetPreviewEl.textContent).toContain('工程师')
+  })
+
+  it('writes a sent message back as it was typed', () => {
+    const roles = [makeRole('chat-1', 'role-1', '工程师', 'ready'), makeRole('chat-1', 'role-2', '设计师', 'ready')]
+    const base = { id: 'msg', chatId: 'chat-1', seq: 1, type: 'user', createdAt: 1, status: 'sent' } as const
+    const label = (role: GroupRole) => role.name
+
+    expect(editableMessageText({ ...base, content: '大家看看', mentionsAll: true, targetRoleIds: ['role-1', 'role-2'] }, roles, label)).toBe('@所有人 大家看看')
+    expect(editableMessageText({ ...base, content: '你们俩看看', targetRoleIds: ['role-1', 'role-2'] }, roles, label)).toBe('@工程师 @设计师 你们俩看看')
+    // A member who has since left the group is dropped.
+    expect(editableMessageText({ ...base, content: '记一下', targetRoleIds: ['role-gone'] }, roles, label)).toBe('记一下')
   })
 
   it('confirms the default all-members mention with Enter from the keyboard', () => {

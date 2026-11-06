@@ -34,6 +34,8 @@ export interface ComposerView {
   registerComposerEvents(): void
   insertMention(role: GroupRole): void
   setReference(message: GroupMessage): void
+  // Puts a sent message back in the input box, with its @mentions, to be changed and sent again.
+  editMessage(message: GroupMessage): void
   submitComposerMessage(): Promise<void>
 }
 
@@ -292,6 +294,21 @@ export function createComposerView(deps: ComposerViewDependencies): ComposerView
     renderComposerState()
   }
 
+  function editMessage(message: GroupMessage): void {
+    deps.messageInputEl.value = editableMessageText(message, deps.getCurrentRoles(), role => roleMentionLabel(role, mentionLabelOptions()))
+    const reference = message.references?.[0]
+    const referenced = reference ? deps.getStore().messagesById[reference.messageId] : undefined
+    if (referenced) {
+      setReference(referenced)
+    } else {
+      deps.state.selectedReference = undefined
+    }
+    const end = deps.messageInputEl.value.length
+    deps.messageInputEl.setSelectionRange(end, end)
+    deps.messageInputEl.focus()
+    renderComposerState()
+  }
+
   function resolveMessageTargets(raw: string, roles: GroupRole[]): { ok: true; roles: GroupRole[] } | { ok: false; error: string } {
     const chat = deps.getCurrentChat()
     const parsed = parseGroupMentions(raw, roles, { ...mentionLabelOptions(), defaultTarget: chat ? defaultMentionTargetForMessage(raw, chat) : 'none' })
@@ -334,7 +351,20 @@ export function createComposerView(deps: ComposerViewDependencies): ComposerView
     renderComposerState()
   }
 
-  return { renderComposerState, registerComposerEvents, insertMention, setReference, submitComposerMessage }
+  return { renderComposerState, registerComposerEvents, insertMention, setReference, editMessage, submitComposerMessage }
+}
+
+// A sent message as it was typed: its @mentions (everyone, or each member it went to who is still in
+// the group), then its text. Attached files are not brought back.
+export function editableMessageText(message: GroupMessage, roles: GroupRole[], labelOf: (role: GroupRole) => string): string {
+  const labels = message.mentionsAll
+    ? ['所有人']
+    : (message.targetRoleIds ?? []).flatMap(id => {
+      const role = roles.find(candidate => candidate.id === id)
+      return role ? [labelOf(role)] : []
+    })
+  const mentions = labels.map(label => `@${label}`).join(' ')
+  return [mentions, message.content.trim()].filter(Boolean).join(' ')
 }
 
 function createMentionOptions(roles: GroupRole[]): MentionOption[] {

@@ -49,6 +49,7 @@ const UI_TRANSLATIONS: Record<string, string> = {
   '界面模式': 'Theme',
   '界面风格': 'Interface style',
   '搜索群聊': 'Search groups',
+  '编辑后重新发送': 'Edit and send again',
   '置顶群聊': 'Pin to top',
   '取消置顶': 'Unpin',
   '已置顶': 'Pinned',

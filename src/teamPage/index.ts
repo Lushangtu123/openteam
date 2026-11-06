@@ -464,6 +464,7 @@ const messagesView = createMessagesView({
   focusRoleFrame,
   insertMention,
   setReference,
+  editAndResend: message => composerView.editMessage(message),
   insertTextIntoActiveNote,
   resyncMessageReply,
   retryRoleReply,

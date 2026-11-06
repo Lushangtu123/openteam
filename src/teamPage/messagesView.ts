@@ -8,7 +8,7 @@ import type { ImageAttachmentBlobRecord } from '../shared/imageAttachmentReposit
 import type { TeamPageState } from './appState'
 import { buildChatRenderItems, getChatStartupNotice, getStoppedReplyRoles, getVisibleThinkingRoles, THINKING_TIMEOUT_MS } from './chatExperience'
 
-type MessageActionIcon = 'copy' | 'quote' | 'jump' | 'check' | 'stop' | 'retry' | 'download'
+type MessageActionIcon = 'copy' | 'quote' | 'jump' | 'check' | 'stop' | 'retry' | 'download' | 'edit'
 
 const MAX_CACHED_MESSAGE_NODES = 400
 const COPY_FEEDBACK_MS = 1200
@@ -32,6 +32,8 @@ export interface MessagesViewDependencies {
   focusRoleFrame(chatId: string, roleId: string | undefined): void
   insertMention(role: GroupRole): void
   setReference(message: GroupMessage): void
+  // Puts one of the user's messages back in the input box to be sent again.
+  editAndResend?(message: GroupMessage): void
   insertTextIntoActiveNote?(text: string): void
   resyncMessageReply(message: GroupMessage): Promise<void>
   retryRoleReply(role: GroupRole, messageId?: string): Promise<void>
@@ -263,6 +265,13 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
         tools.append(createMessageIconButton('引用回复', 'quote', () => deps.setReference(message)))
         tools.append(createMessageIconButton('复制回复', 'copy', button => handleCopyMessage(button, message)))
       }
+      bubble.append(tools)
+    }
+
+    if (message.type === 'user' && deps.editAndResend && !message.orchestrationKind && message.content.trim()) {
+      const tools = document.createElement('div')
+      tools.className = 'message-tools'
+      tools.append(createMessageIconButton('编辑后重新发送', 'edit', () => deps.editAndResend?.(message)))
       bubble.append(tools)
     }
 
@@ -578,6 +587,7 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     if (icon === 'check') return 'M9.2 16.4 4.8 12l1.4-1.4 3 3 8.6-8.6 1.4 1.4-10 10Z'
     if (icon === 'stop') return 'M7.5 6h9A1.5 1.5 0 0 1 18 7.5v9a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 6 16.5v-9A1.5 1.5 0 0 1 7.5 6Z'
     if (icon === 'retry') return 'M12 5a7 7 0 1 1-6.3 4H4a9 9 0 1 0 2.6-4.4L4 2v7h7L8.1 6.1A7 7 0 0 1 12 5Z'
+    if (icon === 'edit') return 'M15.3 4.9a2.2 2.2 0 0 1 3.1 0l.7.7a2.2 2.2 0 0 1 0 3.1L9.6 18.2 5 19l.8-4.6 9.5-9.5Zm-1.2 3.6-6.6 6.6-.4 1.9 1.9-.4 6.6-6.6-1.5-1.5Z'
     if (icon === 'download') return 'M11 4h2v8.2l2.6-2.6L17 11l-5 5-5-5 1.4-1.4 2.6 2.6V4Zm-5 13h12v2H6v-2Z'
     return 'M14 5h5v5h-1.6V7.7l-7.1 7.1-1.1-1.1 7.1-7.1H14V5ZM6.5 6h4v1.6h-4a.9.9 0 0 0-.9.9v9a.9.9 0 0 0 .9.9h9a.9.9 0 0 0 .9-.9v-4H18v4A2.5 2.5 0 0 1 15.5 20h-9A2.5 2.5 0 0 1 4 17.5v-9A2.5 2.5 0 0 1 6.5 6Z'
   }

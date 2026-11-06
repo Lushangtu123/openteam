@@ -1087,6 +1087,48 @@ describe('team page messages view boundary', () => {
     expect(messagesEl.querySelector('.message-body')?.textContent).toContain('第一段第二段')
   })
 
+  it("offers to edit and resend the user's own messages", () => {
+    const now = Date.now()
+    const chat: GroupChat = { id: 'chat-1', name: '群聊', mode: 'independent', roleIds: [], messageIds: ['msg-user', 'msg-task'], nextMessageSeq: 3, status: 'ready', createdAt: now, updatedAt: now }
+    const userMessage: GroupMessage = { id: 'msg-user', chatId: chat.id, seq: 1, type: 'user', content: '再看一遍', createdAt: now, status: 'sent' }
+    const flowTask: GroupMessage = { id: 'msg-task', chatId: chat.id, seq: 2, type: 'user', content: '编排任务', orchestrationKind: 'task', createdAt: now, status: 'sent' }
+    const store: OpenTeamStore = { ...createDefaultStore(), currentChatId: chat.id, chatOrder: [chat.id], chatsById: { [chat.id]: chat }, messagesById: { [userMessage.id]: userMessage, [flowTask.id]: flowTask } }
+    const editAndResend = vi.fn()
+    const messagesEl = document.createElement('section')
+    const view = createMessagesView({
+      state: createTeamPageState(),
+      getStore: () => store,
+      messagesEl,
+      getCurrentChat: () => chat,
+      getCurrentRoles: () => [],
+      getCurrentMessages: () => [userMessage, flowTask],
+      emptyCard: () => document.createElement('div'),
+      openAddPersonDialog: vi.fn(),
+      roleToneClass: () => 'role-tone-1',
+      roleAvatarLabel: () => '你',
+      messageTitle: message => message.roleName ?? '你',
+      focusRoleFrame: vi.fn(),
+      insertMention: vi.fn(),
+      setReference: vi.fn(),
+      editAndResend,
+      resyncMessageReply: vi.fn(async () => undefined),
+      retryRoleReply: vi.fn(async () => undefined),
+      stopRoleReply: vi.fn(async () => undefined),
+      runCommand: vi.fn(async () => undefined),
+      render: vi.fn(),
+      showError: vi.fn(),
+      showSuccess: vi.fn(),
+      log: { warn: vi.fn() },
+    })
+
+    view.renderMessages()
+    const buttons = [...messagesEl.querySelectorAll<HTMLButtonElement>('[aria-label="编辑后重新发送"]')]
+    // Only the user's own message, not an orchestration task.
+    expect(buttons).toHaveLength(1)
+    buttons[0].click()
+    expect(editAndResend).toHaveBeenCalledWith(userMessage)
+  })
+
   it("shows a web member's reply as it is written in its replying row", () => {
     const now = Date.now()
     const chat: GroupChat = {
