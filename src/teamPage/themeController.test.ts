@@ -15,6 +15,19 @@ describe('theme controller', () => {
     expect(harness.controller.getTheme()).toBe('light')
   })
 
+  it('starts light when nothing is saved, and keeps a saved dark theme', () => {
+    const fresh = createHarness(undefined)
+    fresh.controller.initializeTheme()
+    expect(fresh.root.dataset.theme).toBe('light')
+    expect(fresh.lightButton.getAttribute('aria-pressed')).toBe('true')
+    // Nothing is saved until the person picks a theme.
+    expect(fresh.storage.getItem(THEME_STORAGE_KEY)).toBeNull()
+
+    const saved = createHarness('dark')
+    saved.controller.initializeTheme()
+    expect(saved.root.dataset.theme).toBe('dark')
+  })
+
   it('switches theme from the buttons and saves the selection', () => {
     const harness = createHarness('dark')
     harness.controller.initializeTheme()
@@ -35,12 +48,12 @@ describe('theme controller', () => {
   })
 })
 
-function createHarness(savedTheme: TeamTheme) {
+function createHarness(savedTheme: TeamTheme | undefined) {
   const root = document.createElement('html')
   const lightButton = document.createElement('button')
   const darkButton = document.createElement('button')
   const storage = createStorage()
-  storage.setItem(THEME_STORAGE_KEY, savedTheme)
+  if (savedTheme) storage.setItem(THEME_STORAGE_KEY, savedTheme)
   const controller = createThemeController({
     root,
     lightButton,

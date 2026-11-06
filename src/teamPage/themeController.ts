@@ -18,7 +18,7 @@ export interface ThemeController {
 
 export function createThemeController(deps: ThemeControllerDependencies): ThemeController {
   const storage = deps.storage ?? safeLocalStorage()
-  let currentTheme: TeamTheme = normalizeTheme(deps.root.dataset.theme) ?? 'dark'
+  let currentTheme: TeamTheme = normalizeTheme(deps.root.dataset.theme) ?? 'light'
   let registered = false
 
   function setTheme(theme: TeamTheme): void {
@@ -26,7 +26,7 @@ export function createThemeController(deps: ThemeControllerDependencies): ThemeC
   }
 
   function initializeTheme(): void {
-    applyTheme(readStoredTheme(storage) ?? normalizeTheme(deps.root.dataset.theme) ?? 'dark', false)
+    applyTheme(readStoredTheme(storage) ?? normalizeTheme(deps.root.dataset.theme) ?? 'light', false)
   }
 
   function registerThemeEvents(): void {

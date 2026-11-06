@@ -6953,3 +6953,264 @@ select.reply-compare-select {
 .team-card-panel textarea.team-card-panel-input {
   flex: 1 1 100%;
 }
+
+/* ==========================================================================
+   Clean and bright: the final layer. Fewer borders, shadows, glows and
+   gradients; light is the default theme. Both themes share the structure,
+   and each sets its own colors in the tokens at the top of this block.
+   ========================================================================== */
+
+:root[data-theme="light"] {
+  --accent-rgb: 79, 70, 229;
+  --brand: #4f46e5;
+  --bg: #f6f7f9;
+  --page-bg: #f6f7f9;
+  --line: rgba(17, 24, 39, 0.08);
+  --line-hover: rgba(17, 24, 39, 0.14);
+  --text: #111827;
+  --muted: #4b5563;
+  --subtle: #9ca3af;
+  --rail-bg: #f7f8fa;
+  --sidebar-bg: #fbfbfc;
+  --workspace-bg: #ffffff;
+  --hover: rgba(17, 24, 39, 0.045);
+  --clean-assistant-bg: #f5f6f8;
+  --clean-user-bg: #eef0ff;
+  --clean-user-text: #1e1b4b;
+  --clean-selected-bg: #eef0ff;
+  --clean-selected-text: #3730a3;
+  --clean-pill-bg: #f3f4f6;
+  --clean-shell-shadow: 0 24px 64px -32px rgba(17, 24, 39, 0.22), 0 0 0 1px rgba(17, 24, 39, 0.06);
+}
+
+:root[data-theme="dark"] {
+  --clean-assistant-bg: #1a1b23;
+  --clean-user-bg: rgba(142, 130, 255, 0.18);
+  --clean-user-text: #ecebff;
+  --clean-selected-bg: rgba(142, 130, 255, 0.14);
+  --clean-selected-text: #d9d5ff;
+  --clean-pill-bg: rgba(255, 255, 255, 0.05);
+  --clean-shell-shadow: 0 24px 64px -28px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+/* The window and the AI pages behind it: no glowing outline. */
+:root[data-theme] .app-shell {
+  box-shadow: var(--clean-shell-shadow);
+  border-color: transparent;
+}
+
+:root[data-theme] #iframe-host .chat-frame-group,
+:root[data-theme] #iframe-host .chat-frame-group.active {
+  border-color: var(--line);
+  outline: none;
+  box-shadow: none;
+}
+
+/* Header: plain buttons, no pills. */
+:root[data-theme] .chat-header .btn,
+:root[data-theme] .chat-header .drawer-summary {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+:root[data-theme] .chat-header .btn:hover,
+:root[data-theme] .chat-header .drawer-summary:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+:root[data-theme] .chat-header .icon-btn {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+:root[data-theme] .chat-header .icon-btn:hover {
+  background: var(--hover);
+}
+
+:root[data-theme] .theme-switch {
+  border-color: transparent;
+  background: var(--clean-pill-bg);
+}
+
+:root[data-theme] .chat-header .status-pill {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+:root[data-theme] .status-pill::before {
+  box-shadow: none;
+}
+
+:root[data-theme] #chat-status {
+  border-color: transparent;
+  background: transparent;
+  padding: 0 6px;
+}
+
+/* Messages: replies as text on a faint surface, the user's own in a soft tint. */
+:root[data-theme] .message-row.assistant .message-bubble,
+:root[data-theme] .message-row.system .message-bubble {
+  border-color: transparent;
+  background: var(--clean-assistant-bg);
+  box-shadow: none;
+  border-radius: 4px 16px 16px 16px;
+}
+
+:root[data-theme] .message-row.user .message-bubble {
+  border-color: transparent;
+  background: var(--clean-user-bg);
+  color: var(--clean-user-text);
+  box-shadow: none;
+  border-radius: 16px 4px 16px 16px;
+}
+
+:root[data-theme] .message-row.user .message-bubble a,
+:root[data-theme] .message-row.user .message-bubble .mention-chip,
+:root[data-theme] .message-row.user .message-bubble .message-mention {
+  color: var(--brand);
+}
+
+/* A finished message's tools float at its top-right corner on hover or keyboard focus, taking no
+   room otherwise. Messages still replying, or stopped, keep their own tools (stop, retry). */
+:root[data-theme] .message-row:not(.thinking):not(.stopped) .message-bubble {
+  position: relative;
+}
+
+:root[data-theme] .message-row:not(.thinking):not(.stopped) .message-tools {
+  position: absolute;
+  /* In the name line above the message, clear of its text. */
+  top: -30px;
+  right: 6px;
+  z-index: 2;
+  margin: 0;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--workspace-bg);
+  box-shadow: 0 4px 12px -6px rgba(17, 24, 39, 0.2);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+
+:root[data-theme] .message-row:not(.thinking):not(.stopped):hover .message-tools,
+:root[data-theme] .message-row:not(.thinking):not(.stopped):focus-within .message-tools {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+@media (hover: none) {
+  :root[data-theme] .message-row:not(.thinking):not(.stopped) .message-tools {
+    position: static;
+    border: 0;
+    box-shadow: none;
+    background: transparent;
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+/* Avatars: one soft color each, no gradient, no shadow. */
+:root[data-theme] .message-avatar,
+:root[data-theme] .chat-avatar,
+:root[data-theme] .role-avatar,
+:root[data-theme] .mention-avatar,
+:root[data-theme] .orchestration-person-avatar {
+  box-shadow: none;
+  border: 0;
+  color: #ffffff;
+}
+
+:root[data-theme] .message-avatar.role-tone-0, :root[data-theme] .chat-avatar.role-tone-0, :root[data-theme] .role-avatar.role-tone-0, :root[data-theme] .mention-avatar.role-tone-0, :root[data-theme] .orchestration-person-avatar.role-tone-0 { background: #34b27b; }
+:root[data-theme] .message-avatar.role-tone-1, :root[data-theme] .chat-avatar.role-tone-1, :root[data-theme] .role-avatar.role-tone-1, :root[data-theme] .mention-avatar.role-tone-1, :root[data-theme] .orchestration-person-avatar.role-tone-1 { background: #4f8df7; }
+:root[data-theme] .message-avatar.role-tone-2, :root[data-theme] .chat-avatar.role-tone-2, :root[data-theme] .role-avatar.role-tone-2, :root[data-theme] .mention-avatar.role-tone-2, :root[data-theme] .orchestration-person-avatar.role-tone-2 { background: #ef9d2e; }
+:root[data-theme] .message-avatar.role-tone-3, :root[data-theme] .chat-avatar.role-tone-3, :root[data-theme] .role-avatar.role-tone-3, :root[data-theme] .mention-avatar.role-tone-3, :root[data-theme] .orchestration-person-avatar.role-tone-3 { background: #8b6be8; }
+:root[data-theme] .message-avatar.role-tone-4, :root[data-theme] .chat-avatar.role-tone-4, :root[data-theme] .role-avatar.role-tone-4, :root[data-theme] .mention-avatar.role-tone-4, :root[data-theme] .orchestration-person-avatar.role-tone-4 { background: #e56b8c; }
+:root[data-theme] .message-avatar.role-tone-5, :root[data-theme] .chat-avatar.role-tone-5, :root[data-theme] .role-avatar.role-tone-5, :root[data-theme] .mention-avatar.role-tone-5, :root[data-theme] .orchestration-person-avatar.role-tone-5 { background: #2fa5a3; }
+
+/* Group list: a quiet selected state. */
+:root[data-theme] .chat-item {
+  border-color: transparent;
+  box-shadow: none;
+}
+
+:root[data-theme] .chat-item.active {
+  border-color: transparent;
+  background: var(--clean-selected-bg);
+  box-shadow: none;
+}
+
+:root[data-theme] .chat-item.active::before {
+  display: none;
+}
+
+:root[data-theme] .chat-item.active .chat-name,
+:root[data-theme] .chat-item.active .chat-title {
+  color: var(--clean-selected-text);
+}
+
+/* Composer: one light border, less height. */
+:root[data-theme] .composer {
+  border-color: var(--line);
+  box-shadow: 0 1px 2px rgba(17, 24, 39, 0.04);
+  border-radius: 16px;
+}
+
+:root[data-theme] .composer:focus-within {
+  border-color: rgba(var(--accent-rgb), 0.45);
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.1);
+}
+
+:root[data-theme] #message-input {
+  min-height: 64px;
+}
+
+/* Member drawer: flat cards. */
+:root[data-theme] .role-card {
+  box-shadow: none;
+  border-color: var(--line);
+}
+
+:root[data-theme] .role-card.selected,
+:root[data-theme] .role-card.active {
+  border-color: rgba(var(--accent-rgb), 0.35);
+  background: var(--clean-selected-bg);
+  box-shadow: none;
+}
+
+/* Primary buttons: solid, no glow. */
+:root[data-theme] .btn-primary {
+  background: var(--brand);
+  box-shadow: none;
+}
+
+:root[data-theme] .btn-primary:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+
+/* Narrow windows: the sidebar header keeps one line and its ＋ button. */
+:root[data-theme] .sidebar .panel-header {
+  min-width: 0;
+  gap: 8px;
+}
+
+:root[data-theme] .sidebar .brand-mark,
+:root[data-theme] .sidebar .sidebar-brand-copy {
+  min-width: 0;
+}
+
+:root[data-theme] .sidebar #store-summary {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:root[data-theme] .sidebar-header-actions {
+  flex-shrink: 0;
+}
