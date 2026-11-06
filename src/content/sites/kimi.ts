@@ -31,7 +31,12 @@ export const KIMI_SELECTORS = {
   answer: '.markdown-container:not(.toolcall-content-text) > .markdown',
   notAnswer: '.thinking-container, .toolcall-container, .toolcall-content-text',
   copyIcon: '.segment-assistant-actions .icon-button svg[name="Copy"]',
-  stopIcon: 'svg[name="Stop"], svg[name="Pause"]',
+  // While Kimi writes, its send button gets the class "stop" (next to "disabled", since the box is
+  // empty) and a lowercase "stop" icon.
+  generatingButton: '.send-button-container.stop',
+  stopIcon: 'svg[name="stop"], svg[name="Stop"], svg[name="pause"], svg[name="Pause"]',
+  // Parts of an answer that are page chrome: a code block's language label and copy control.
+  answerChrome: '.segment-code-header, .sticky-release-header',
   // Kimi's dialogs (sign-in, "too many people are chatting") sit in a full-page mask.
   modal: '.modal-mask .modal-container',
 }
@@ -161,7 +166,7 @@ async function waitForSendButton(timeoutMs: number): Promise<HTMLElement> {
   const startedAt = Date.now()
   while (Date.now() - startedAt <= timeoutMs) {
     const button = [...document.querySelectorAll<HTMLElement>(`${KIMI_SELECTORS.composer} ${KIMI_SELECTORS.sendButton}, ${KIMI_SELECTORS.sendButton}`)]
-      .find(candidate => !candidate.classList.contains('disabled') && candidate.getAttribute('aria-disabled') !== 'true' && !candidate.querySelector(KIMI_SELECTORS.stopIcon))
+      .find(candidate => !candidate.classList.contains('disabled') && !candidate.classList.contains('stop') && candidate.getAttribute('aria-disabled') !== 'true' && !candidate.querySelector(KIMI_SELECTORS.stopIcon))
     if (button) return button
     await new Promise(resolve => window.setTimeout(resolve, 50))
   }
@@ -234,9 +239,22 @@ function getResponseContainers(): Element[] {
   return [...document.querySelectorAll(KIMI_SELECTORS.assistantMessage)]
 }
 
+// Detached copies of the answer's Markdown blocks, without code block headers, and with Kimi's
+// <div class="paragraph"> read as the paragraph it is.
 function answerParts(node: Node): Element[] {
   if (node.nodeType !== Node.ELEMENT_NODE) return []
-  return [...(node as Element).querySelectorAll(KIMI_SELECTORS.answer)].filter(part => !part.closest(KIMI_SELECTORS.notAnswer))
+  return [...(node as Element).querySelectorAll(KIMI_SELECTORS.answer)]
+    .filter(part => !part.closest(KIMI_SELECTORS.notAnswer))
+    .map(part => {
+      const copy = part.cloneNode(true) as Element
+      copy.querySelectorAll(KIMI_SELECTORS.answerChrome).forEach(element => element.remove())
+      copy.querySelectorAll('div.paragraph').forEach(paragraph => {
+        const p = document.createElement('p')
+        p.append(...paragraph.childNodes)
+        paragraph.replaceWith(p)
+      })
+      return copy
+    })
 }
 
 function readKimiResponseText(node: Node): string {
@@ -256,9 +274,11 @@ function isKimiGenerating(): boolean {
 }
 
 function findStopButton(): HTMLElement | undefined {
+  const generating = document.querySelector<HTMLElement>(KIMI_SELECTORS.generatingButton)
+  if (generating) return generating
   return [...document.querySelectorAll(KIMI_SELECTORS.stopIcon)]
     .map(icon => icon.closest<HTMLElement>(`${KIMI_SELECTORS.sendButton}, .icon-button, button, [role="button"]`))
-    .find((button): button is HTMLElement => Boolean(button) && !button!.classList.contains('disabled'))
+    .find((button): button is HTMLElement => Boolean(button) && (button!.matches(KIMI_SELECTORS.sendButton) || !button!.classList.contains('disabled')))
 }
 
 function collectPromptDiagnostics(): Record<string, unknown> {

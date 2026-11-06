@@ -87,9 +87,14 @@ const FINISHED_TURN = `
         <div class="toolcall-rollup__part toolcall-container"><div class="markdown-container toolcall-content-text"><div class="markdown"><p>先想一想</p></div></div></div>
         <div class="toolcall-rollup__part toolcall-rollup__flat"><div class="markdown-container"><div class="markdown">
           <h2>结论</h2>
-          <p>我是 <strong>Kimi</strong>。</p>
+          <div class="paragraph">我是 <strong>Kimi</strong>。</div>
           <ul><li>长文本</li><li>搜索</li></ul>
-          <pre><code>print("hi")</code></pre>
+          <div class="segment-code">
+            <div class="sticky-release"><div class="sticky-release-rail"><div class="sticky-release-header">
+              <header class="segment-code-header"><div class="segment-code-header-content"><span>Python</span><div class="icon-button">Copy</div></div></header>
+            </div></div></div>
+            <div class="syntax-highlighter light segment-code-content"><pre class="language-python"><code class="language-python"><span class="token keyword">print</span><span class="token punctuation">(</span>"hi"<span class="token punctuation">)</span></code></pre></div>
+          </div>
         </div></div></div>
         <div class="toolcall-rollup__tail"></div>
       </div></div>
@@ -186,10 +191,13 @@ describe('Kimi site adapter', () => {
 
   it('counts the message as sent once Kimi starts generating', async () => {
     const composer = installKimiComposer()
+    // As on the live site: the box empties and the send button switches to its stop state.
     composer.sendButton.addEventListener('click', () => {
       composer.editor.replaceChildren()
-      window.setTimeout(() => composer.sendButton.replaceChildren(Object.assign(document.createElementNS('http://www.w3.org/2000/svg', 'svg'), {})), 0)
-      window.setTimeout(() => composer.sendButton.querySelector('svg')!.setAttribute('name', 'Stop'), 50)
+      window.setTimeout(() => {
+        composer.sendButton.classList.add('disabled', 'stop')
+        composer.sendButton.querySelector('svg')!.setAttribute('name', 'stop')
+      }, 50)
     })
     const startedAt = Date.now()
 
@@ -226,6 +234,7 @@ describe('Kimi site adapter', () => {
 
     expect(adapter.readResponseMarkdown?.(turn)).toBe('## 结论\n\n我是 **Kimi**。\n\n- 长文本\n- 搜索\n\n```\nprint("hi")\n```')
     expect(adapter.readResponseText(turn)).not.toContain('先想一想')
+    expect(adapter.readResponseText(turn)).not.toMatch(/Python|Copy/)
     expect(adapter.getAllAssistantReplies()).toHaveLength(1)
     expect(adapter.findResponseContainer(turn.querySelector('strong'))).toBe(turn)
     expect(adapter.findResponseContainer(document.querySelector('.segment-user'))).toBeNull()
@@ -250,8 +259,10 @@ describe('Kimi site adapter', () => {
     expect(clipboardText).toBe('用户原来的剪贴板')
   })
 
-  it('treats the Stop icon on the send button as generating and clicks it to stop', async () => {
-    document.body.innerHTML = COMPOSER.replace('<div class="send-button-container disabled"><svg name="Send"></svg></div>', '<div class="send-button-container"><svg name="Stop"></svg></div>')
+  it('treats the send button\'s stop state as generating and clicks it to stop', async () => {
+    // As on the live site while Kimi writes: "disabled" (the box is empty) plus "stop", and a
+    // lowercase stop icon.
+    document.body.innerHTML = COMPOSER.replace('<div class="send-button-container disabled"><svg name="Send"></svg></div>', '<div class="send-button-container disabled stop"><svg name="stop"></svg></div>')
     const adapter = createKimiAdapter()
     const stop = vi.fn()
     document.querySelector('.send-button-container')!.addEventListener('click', stop)
