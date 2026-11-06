@@ -98,7 +98,7 @@ Important modules:
 - [src/teamPage/notesView.ts](../src/teamPage/notesView.ts), [src/teamPage/allNotesView.ts](../src/teamPage/allNotesView.ts), [src/teamPage/tiptapNoteEditor.ts](../src/teamPage/tiptapNoteEditor.ts): chat/global notes and rich-text editing.
 - [src/teamPage/orchestrationModalView.ts](../src/teamPage/orchestrationModalView.ts), [src/teamPage/orchestrationCanvas.ts](../src/teamPage/orchestrationCanvas.ts), [src/teamPage/orchestrationStatusView.ts](../src/teamPage/orchestrationStatusView.ts): flow graph editing, review node settings, run status, and active run display.
 - [src/teamPage/externalModelsView.ts](../src/teamPage/externalModelsView.ts): OpenAI-compatible and Anthropic-compatible external model configuration.
-- [src/teamPage/languageController.ts](../src/teamPage/languageController.ts), [src/teamPage/themeController.ts](../src/teamPage/themeController.ts), [src/teamPage/floatingWindow.ts](../src/teamPage/floatingWindow.ts): language, theme, and floating-window behavior.
+- [src/teamPage/languageController.ts](../src/teamPage/languageController.ts), [src/teamPage/themeController.ts](../src/teamPage/themeController.ts), [src/teamPage/aiPagesView.ts](../src/teamPage/aiPagesView.ts): language, theme, and showing the members' AI pages (they run under the full-tab OpenTeam page and show only on request).
 
 ### Background Runtime
 

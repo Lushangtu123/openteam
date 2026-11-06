@@ -2,9 +2,6 @@ import { CHAT_SITES, type ChatSite } from '../group/chatSites'
 
 export interface TeamPageDomRefs {
   appShellEl: HTMLElement
-  closeWindowEl: HTMLButtonElement
-  toggleWindowSizeEl: HTMLButtonElement
-  toggleFullscreenEl: HTMLButtonElement
   storeSummaryEl: HTMLElement
   chatListEl: HTMLElement
   chatListSearchBoxEl: HTMLElement
@@ -166,8 +163,8 @@ export interface TeamPageDomRefs {
   temporaryPersonPromptEl: HTMLTextAreaElement
   togglePeopleDrawerEl: HTMLButtonElement
   rolePanelEl: HTMLElement
-  windowLauncherEl: HTMLButtonElement
-  windowResizeHandleEl: HTMLButtonElement
+  returnToTeamEl: HTMLButtonElement
+  showAiPagesEl: HTMLButtonElement
   iframeHostEl: HTMLElement
 }
 
@@ -180,9 +177,6 @@ export function requireElement<T extends Element>(selector: string): T {
 export function createTeamPageDomRefs(): TeamPageDomRefs {
   return {
     appShellEl: requireElement<HTMLElement>('#app'),
-    closeWindowEl: requireElement<HTMLButtonElement>('#close-window'),
-    toggleWindowSizeEl: requireElement<HTMLButtonElement>('#toggle-window-size'),
-    toggleFullscreenEl: requireElement<HTMLButtonElement>('#toggle-fullscreen'),
     storeSummaryEl: requireElement<HTMLElement>('#store-summary'),
     chatListEl: requireElement<HTMLElement>('#chat-list'),
     chatListSearchBoxEl: requireElement<HTMLElement>('#chat-list-search-box'),
@@ -343,8 +337,8 @@ export function createTeamPageDomRefs(): TeamPageDomRefs {
     temporaryPersonPromptEl: requireElement<HTMLTextAreaElement>('#temporary-person-prompt'),
     togglePeopleDrawerEl: requireElement<HTMLButtonElement>('#toggle-people-drawer'),
     rolePanelEl: requireElement<HTMLElement>('.role-panel'),
-    windowLauncherEl: requireElement<HTMLButtonElement>('#window-launcher'),
-    windowResizeHandleEl: requireElement<HTMLButtonElement>('#window-resize-handle'),
+    returnToTeamEl: requireElement<HTMLButtonElement>('#return-to-team'),
+    showAiPagesEl: requireElement<HTMLButtonElement>('#show-ai-pages'),
     iframeHostEl: requireElement<HTMLElement>('#iframe-host'),
   }
 }

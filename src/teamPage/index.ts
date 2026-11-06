@@ -11,7 +11,7 @@ import { createComposerAttachments } from './composerAttachments'
 import { createComposerView } from './composerView'
 import { createTeamPageDomRefs } from './domRefs'
 import { createExternalModelsView } from './externalModelsView'
-import { createFloatingWindowControls } from './floatingWindow'
+import { createAiPagesView } from './aiPagesView'
 import { createIframeHost } from './iframeHost'
 import { applyTeamLanguage, createLanguageSettingsController } from './languageController'
 import { createMessageSearchView } from './messageSearchView'
@@ -47,7 +47,7 @@ const imageAttachmentRepository = createIndexedDbImageAttachmentRepository()
 let store: OpenTeamStore = appState.store
 
 const teamDomRefs = createTeamPageDomRefs()
-const { appShellEl, closeWindowEl, toggleWindowSizeEl, toggleFullscreenEl, storeSummaryEl, chatListEl, chatTitleEl, chatTitleAvatarEl, chatSubtitleEl, chatStatusEl, messagesEl } = teamDomRefs
+const { appShellEl, storeSummaryEl, chatListEl, chatTitleEl, chatTitleAvatarEl, chatSubtitleEl, chatStatusEl, messagesEl } = teamDomRefs
 const { roleSummaryEl, roleListEl, roleTemplateSelectEl, templateListEl, targetPreviewEl, busyPreviewEl, composerFormEl, sendButtonEl } = teamDomRefs
 const { messageInputEl, referenceDraftEl, mentionPanelEl, errorEl, newChatNameEl, createChatFormEl, quickCreateChatEl } = teamDomRefs
 const { templateNameEl, templateDescriptionEl, templatePromptEl, templateAiDescriptionEl, generateTemplatePersonaEl, templatePersonaGenerationStatusEl, templateFormTitleEl, settingsButtonEl, settingsMenuEl, languageEnEl, languageZhEl, agentControlToggleEl, agentControlStatusEl, themeLightEl, themeDarkEl, uiStyleChatGptEl, uiStyleGrokEl, settingsUiStyleChatGptEl, settingsUiStyleGrokEl } = teamDomRefs
@@ -60,7 +60,7 @@ const { peopleLibrarySummaryEl, peopleLibraryListEl, peopleLibraryPaginationEl, 
 const { builtinTemplateDetailModalEl, builtinTemplateDetailTitleEl, builtinTemplateDetailMetaEl, builtinTemplateDetailPromptEl, closeBuiltinTemplateDetailEl, newTemplateEl, closePersonTemplateEl, closeAddPersonEl } = teamDomRefs
 const { openTemporaryPersonEl, closeTemporaryPersonEl, addRoleFormEl, addLibraryPeopleFormEl, addTemporaryPersonFormEl, peopleLibraryFormEl } = teamDomRefs
 const { templateSiteEls, templateSiteExternalEl, templateExternalModelFieldEl, templateExternalModelSelectEl, templateChatGptGptsFieldEl, templateChatGptGptsUrlEl, templateGrokProjectFieldEl, templateGrokProjectUrlEl, temporaryPersonNameEl, temporaryPersonDescriptionEl, temporaryPersonPromptEl } = teamDomRefs
-const { togglePeopleDrawerEl, rolePanelEl, windowLauncherEl, windowResizeHandleEl } = teamDomRefs
+const { togglePeopleDrawerEl, rolePanelEl, returnToTeamEl, showAiPagesEl } = teamDomRefs
 const log = teamPageLog
 const showError = createErrorPresenter(errorEl)
 const showSuccess = createSuccessPresenter(errorEl)
@@ -145,16 +145,8 @@ async function testExternalModel(modelId: string): Promise<void> {
 let renderComposerState = (): void => {}
 let insertMention = (_role: GroupRole): void => {}
 let insertTextIntoActiveNote = (_text: string): void => {}
-const floatingWindowControls = createFloatingWindowControls({
-  appShellEl,
-  closeWindowEl,
-  toggleWindowSizeEl,
-  toggleFullscreenEl,
-  windowLauncherEl,
-  windowResizeHandleEl,
-})
-const setWindowMinimized = floatingWindowControls.setWindowMinimized
-const registerFloatingWindowControls = floatingWindowControls.registerFloatingWindowControls
+const aiPagesView = createAiPagesView({ appShellEl, returnEl: returnToTeamEl, showPagesEl: showAiPagesEl })
+const showAiPages = aiPagesView.showAiPages
 const allNotesView = createAllNotesView({
   openAllNotesEl,
   closeAllNotesEl,
@@ -248,7 +240,7 @@ const roleRecoveryController = createRoleRecoveryController({
   refreshStore,
   switchChat,
   renderComposerState: () => renderComposerState(),
-  setWindowMinimized,
+  showAiPages,
   iframeHost,
   runCommand,
   showError,
@@ -816,7 +808,11 @@ async function boot(): Promise<void> {
   registerRuntimePush()
   themeController.registerThemeEvents()
   uiStyleController.registerStyleEvents()
-  registerFloatingWindowControls()
+  aiPagesView.registerAiPagesControls()
+  showAiPagesEl.addEventListener('click', () => {
+    settingsMenuEl.hidden = true
+    settingsButtonEl.setAttribute('aria-expanded', 'false')
+  })
   registerAllNotesEvents()
   languageSettingsController.registerEvents()
   registerReplyNotificationSettings()

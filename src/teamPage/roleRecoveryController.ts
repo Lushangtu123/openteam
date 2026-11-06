@@ -18,7 +18,7 @@ export interface RoleRecoveryDependencies {
   refreshStore(showFailure?: boolean): Promise<void>
   switchChat(chatId: string): void
   renderComposerState(): void
-  setWindowMinimized(minimized: boolean): void
+  showAiPages(shown: boolean): void
   iframeHost: RoleRecoveryIframeHost
   runCommand(type: string, payload?: Record<string, unknown>): Promise<void>
   showError(message: string): void
@@ -132,7 +132,7 @@ export function createRoleRecoveryController(deps: RoleRecoveryDependencies): Ro
 
   function focusRoleFrame(chatId: string, roleId: string | undefined): void {
     if (!roleId) return
-    deps.setWindowMinimized(true)
+    deps.showAiPages(true)
     const store = deps.getStore()
     const chat = store.chatsById[chatId]
     if (chat && deps.state.selectedChatId !== chatId) deps.switchChat(chatId)

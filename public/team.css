@@ -144,219 +144,57 @@ button {
   border: 0;
 }
 
+/* OpenTeam fills the tab. The members' AI pages run underneath it (#iframe-host), covered, and show
+   only when asked for, with a button back (.return-to-team). */
 .app-shell {
   position: fixed;
-  left: 50%;
-  top: 50%;
+  inset: 0;
   z-index: 2;
   display: grid;
-  width: min(1420px, calc(100vw - 52px));
-  height: min(900px, calc(100vh - 42px));
   grid-template-columns: 72px minmax(250px, 306px) minmax(520px, 1fr);
-  border: 1px solid rgba(104, 139, 164, 0.24);
-  border-radius: 16px;
-  background:
-    linear-gradient(140deg, rgba(20, 32, 44, 0.3), transparent 42%),
-    linear-gradient(180deg, rgba(5, 13, 22, 0.985), rgba(1, 7, 13, 0.985));
-  box-shadow: 0 36px 110px rgba(0, 0, 0, 0.62), 0 0 0 1px rgba(255, 255, 255, 0.02) inset;
-  transform: translate(-50%, -50%);
+  background: linear-gradient(180deg, rgb(5, 13, 22), rgb(1, 7, 13));
   overflow: hidden;
-  pointer-events: none;
-  backdrop-filter: blur(26px);
 }
 
-.app-shell.minimized {
+.app-shell.pages-shown {
   display: none;
 }
 
-.app-shell.fullscreen {
-  inset: 8px;
-  width: auto;
-  height: auto;
-  border-radius: 12px;
-  transform: none;
-}
-
-.app-shell.fullscreen .floating-toolbar {
-  left: auto;
-  right: 18px;
-  top: 6px;
-}
-
-.app-shell.fullscreen .message-inner {
-  max-width: min(86%, 980px);
-}
-
-.app-shell.fullscreen .messages {
-  padding-inline: 34px;
-}
-
-.launcher {
+/* Shown over the AI pages: back to OpenTeam. It sits on the group's title row, out of the pages'
+   own buttons. */
+.return-to-team {
   position: fixed;
-  right: 24px;
-  bottom: 24px;
+  left: 50%;
+  top: 18px;
   z-index: 4;
-  display: grid;
-  place-items: center;
-  width: 64px;
-  height: 64px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
   border: 1px solid rgba(var(--accent-rgb), 0.46);
-  border-radius: 50%;
-  background:
-    radial-gradient(circle at 35% 22%, rgba(var(--accent-rgb), 0.32), transparent 38%),
-    rgba(var(--surface-rgb), 0.94);
+  border-radius: 999px;
+  padding: 0 16px 0 12px;
+  background: rgba(var(--surface-rgb), 0.96);
   color: #eaffff;
   cursor: pointer;
-  font-size: 24px;
-  font-weight: 780;
-  box-shadow: var(--shadow), var(--glow);
-  backdrop-filter: blur(18px);
-}
-
-.launcher[hidden] {
-  display: none;
-}
-
-.floating-toolbar {
-  position: absolute;
-  left: auto;
-  right: 18px;
-  top: 6px;
-  z-index: 12;
-  display: flex;
-  flex-direction: row-reverse;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 6px;
-  width: auto;
-  height: 11px;
-  border: 0;
-  padding: 0;
-  background: transparent;
-  box-shadow: none;
-  transform: none;
-  backdrop-filter: none;
-  pointer-events: auto;
-}
-
-.floating-toolbar .icon-btn {
-  width: 11px;
-  height: 11px;
-  min-width: 11px;
-  border: 1px solid rgba(0, 0, 0, 0.18);
-  border-radius: 50%;
-  background: #d8dde4;
-  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.28);
-}
-
-.window-dot {
-  position: relative;
-  display: grid;
-  place-items: center;
-  padding: 0;
-  color: rgba(22, 24, 28, 0);
-  font-size: 0;
+  font-size: 14px;
+  font-weight: 650;
   line-height: 1;
+  white-space: nowrap;
+  box-shadow: 0 12px 30px -10px rgba(0, 0, 0, 0.55);
+  transform: translateX(-50%);
 }
 
-.window-dot::before {
-  color: rgba(22, 24, 28, 0);
-  font-size: 8px;
-  font-weight: 760;
-  line-height: 1;
-  transform: translateY(-0.5px);
-  transition: color 0.12s ease;
+.return-to-team svg {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
-.floating-toolbar:hover .window-dot::before,
-.floating-toolbar .window-dot:focus-visible::before {
-  color: rgba(22, 24, 28, 0.68);
-}
-
-.floating-toolbar .icon-btn.window-dot:hover {
-  border-color: rgba(0, 0, 0, 0.24);
-  filter: brightness(1.04);
-}
-
-.floating-toolbar .icon-btn.window-dot-close {
-  background: #ff5f57;
-}
-
-.window-dot-close::before {
-  content: "×";
-}
-
-.floating-toolbar .window-dot-close::before {
-  color: rgba(22, 24, 28, 0.68);
-}
-
-.floating-toolbar .icon-btn.window-dot-minimize {
-  background: #febc2e;
-}
-
-.window-dot-minimize::before {
-  content: "−";
-}
-
-.floating-toolbar .icon-btn.window-dot-fullscreen {
-  background: #28c840;
-}
-
-.window-dot-fullscreen::before {
-  content: "↗";
-  font-size: 7px;
-}
-
-#toggle-fullscreen[aria-pressed="true"]::before {
-  content: "↙";
-}
-
-.app-shell:not(.fullscreen) .panel-header,
-.app-shell:not(.fullscreen) .chat-header,
-.app-shell:not(.fullscreen) .rail > :first-child {
-  cursor: grab;
-}
-
-.app-shell.dragging,
-.app-shell.resizing,
-.app-shell.dragging .panel-header,
-.app-shell.dragging .chat-header,
-.app-shell.dragging .rail > :first-child {
-  cursor: grabbing;
-  user-select: none;
-}
-
-.app-shell:not(.fullscreen) button,
-.app-shell:not(.fullscreen) input,
-.app-shell:not(.fullscreen) textarea,
-.app-shell:not(.fullscreen) select {
-  cursor: revert;
-}
-
-.window-resize-handle {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  z-index: 8;
-  width: 24px;
-  height: 24px;
-  border: 0;
-  border-radius: 10px 0 16px 0;
-  background:
-    linear-gradient(135deg, transparent 0 44%, rgba(182, 196, 207, 0.42) 44% 50%, transparent 50% 62%, rgba(182, 196, 207, 0.5) 62% 68%, transparent 68%);
-  cursor: nwse-resize;
-  pointer-events: auto;
-}
-
-.app-shell:not(.fullscreen) .window-resize-handle {
-  cursor: nwse-resize;
-}
-
-.app-shell.fullscreen .window-resize-handle {
-  display: none;
-}
-
-.app-shell.minimized .window-resize-handle {
+.return-to-team[hidden] {
   display: none;
 }
 
@@ -2501,7 +2339,7 @@ select:focus {
   user-select: none;
 }
 
-.app-shell.minimized + .notes-panel {
+.app-shell.pages-shown + .notes-panel {
   display: none;
 }
 
@@ -5201,8 +5039,6 @@ select:focus {
   }
 
   .app-shell {
-    width: calc(100vw - 28px);
-    height: calc(100vh - 28px);
     grid-template-columns: 48px minmax(188px, 230px) minmax(300px, 1fr);
   }
 
@@ -5294,22 +5130,14 @@ select:focus {
 /* Window */
 
 :root[data-theme] .app-shell {
-  border: 1px solid var(--line);
-  border-radius: 20px;
   background: var(--shell-bg);
-  box-shadow: var(--shadow), inset 0 1px 0 rgba(255, 255, 255, 0.04);
-  backdrop-filter: blur(30px) saturate(1.3);
 }
 
-:root[data-theme] .app-shell.fullscreen {
-  border-radius: 14px;
-}
-
-:root[data-theme] .launcher {
+:root[data-theme] .return-to-team {
   border: 0;
   background: var(--accent-grad);
   color: #ffffff;
-  box-shadow: 0 18px 40px -12px rgba(var(--accent-rgb), 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  box-shadow: 0 12px 30px -10px rgba(var(--accent-rgb), 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 
 /* Navigation rail */
@@ -7024,7 +6852,6 @@ select.reply-compare-select {
   --gpt-send-disabled-text: #f4f4f4;
   --gpt-link: #0b66d6;
   --gpt-logo-bg: #0d0d0d;
-  --gpt-shell-shadow: 0 24px 64px -32px rgba(13, 13, 13, 0.28), 0 0 0 1px rgba(13, 13, 13, 0.08);
 }
 
 :root[data-theme="dark"] {
@@ -7065,7 +6892,6 @@ select.reply-compare-select {
   --gpt-send-disabled-text: #2f2f2f;
   --gpt-link: #7ab7ff;
   --gpt-logo-bg: #424242;
-  --gpt-shell-shadow: 0 24px 64px -28px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.06);
 }
 
 :root[data-theme] body {
@@ -7073,17 +6899,9 @@ select.reply-compare-select {
   -webkit-font-smoothing: antialiased;
 }
 
-/* The window over the AI pages: one soft edge, no glow. */
+/* The page itself: flat and opaque over the AI pages. */
 :root[data-theme] .app-shell {
-  border-color: transparent;
-  border-radius: 14px;
   background: var(--workspace-bg);
-  box-shadow: var(--gpt-shell-shadow);
-  backdrop-filter: none;
-}
-
-:root[data-theme] .app-shell.fullscreen {
-  border-radius: 12px;
 }
 
 :root[data-theme] #iframe-host .chat-frame-group,
@@ -7093,7 +6911,7 @@ select.reply-compare-select {
   box-shadow: none;
 }
 
-:root[data-theme] .launcher {
+:root[data-theme] .return-to-team {
   background: var(--brand);
   color: var(--gpt-on-brand);
   box-shadow: 0 12px 28px -12px rgba(0, 0, 0, 0.45);
@@ -7282,14 +7100,12 @@ select.reply-compare-select {
 
 /* The conversation in a centered column. The padding centers it, so the scrollbar stays at the
    window's edge. */
-:root[data-theme] .messages,
-:root[data-theme] .app-shell.fullscreen .messages {
+:root[data-theme] .messages {
   gap: 18px;
   padding: 18px max(24px, calc((100% - 768px) / 2)) 28px;
 }
 
-:root[data-theme] .message-inner,
-:root[data-theme] .app-shell.fullscreen .message-inner {
+:root[data-theme] .message-inner {
   max-width: 100%;
   gap: 12px;
 }
@@ -7801,16 +7617,12 @@ select.reply-compare-select {
   scrollbar-gutter: stable;
 }
 
-/* Symbols drawn a little low in their font (×, ⚙, the launcher's ⌁) are lifted to the middle,
+/* Symbols drawn a little low in their font (×, ⚙) are lifted to the middle,
    and the restore button's hidden label no longer pushes its ↺ to the left. */
 :root[data-theme] .modal-close,
 :root[data-theme] #close-notes-panel,
 :root[data-theme] #settings-button {
   padding-bottom: 2px;
-}
-
-:root[data-theme] .launcher {
-  padding-bottom: 3px;
 }
 
 :root[data-theme] #restore-chat {
@@ -7839,6 +7651,13 @@ select.reply-compare-select {
 :root[data-theme] #toggle-people-drawer {
   min-width: 64px;
   justify-content: center;
+}
+
+/* The closed people drawer waits just past the page's right edge. Once it has slid away it is
+   hidden, so its shadow does not show along that edge. */
+:root[data-theme] .role-panel:not(.open) {
+  visibility: hidden;
+  transition: transform 0.18s ease, visibility 0s linear 0.18s;
 }
 
 /* Group list search (shown for long lists) and the pin mark on pinned groups. The sidebar gets a
@@ -7977,7 +7796,6 @@ select.reply-compare-select {
   --gpt-send-disabled-text: #6e6e73;
   --gpt-link: #8ab4ff;
   --gpt-logo-bg: #2c2c30;
-  --gpt-shell-shadow: 0 30px 80px -30px rgba(0, 0, 0, 0.95), 0 0 0 1px rgba(255, 255, 255, 0.07);
   --gb-bubble: #232326;
   --gb-bubble-line: rgba(255, 255, 255, 0.05);
   --gb-tile: #232326;
@@ -7990,10 +7808,6 @@ select.reply-compare-select {
 
 :root[data-ui-style="grok"] body {
   font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
-}
-
-:root[data-ui-style="grok"] .app-shell {
-  border-radius: 18px;
 }
 
 /* Avatars: rounded squares in each member's color. */
@@ -8132,8 +7946,7 @@ select.reply-compare-select {
 }
 
 /* Conversation: replies in soft gray bubbles under the member's name. */
-:root[data-ui-style="grok"] .messages,
-:root[data-ui-style="grok"] .app-shell.fullscreen .messages {
+:root[data-ui-style="grok"] .messages {
   gap: 20px;
   padding: 16px max(24px, calc((100% - 860px) / 2)) 28px;
 }

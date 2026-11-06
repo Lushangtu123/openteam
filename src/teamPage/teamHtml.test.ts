@@ -184,7 +184,8 @@ describe('team.html chat creation UI', () => {
     expect(html).toContain('id="toggle-people-drawer"')
     expect(html).toContain('class="panel role-panel"')
     expect(html).toContain('id="close-people-drawer"')
-    expect(html).toContain('id="window-launcher"')
+    expect(html).toContain('id="return-to-team"')
+    expect(html).toContain('id="show-ai-pages"')
     expect(html).toContain('id="iframe-host"')
     expect(html).toContain('id="toggle-notes-panel"')
     expect(html).toContain('id="open-all-notes"')
@@ -334,37 +335,29 @@ describe('team.html chat creation UI', () => {
     expect(html).toMatch(/\.rail-btn\[data-tooltip\]:hover::after,\s*\.rail-btn\[data-tooltip\]:focus-visible::after\s*{[^}]*opacity:\s*1;/s)
   })
 
-  it('styles window controls as visible mac-style traffic lights', () => {
-    const html = readTeamDocument()
-    const toolbarRule = html.match(/(?:^|\n)\.floating-toolbar\s*{(?<body>[^}]*)}/)?.groups?.body ?? ''
-    const fullscreenToolbarRule = html.match(/(?:^|\n)\.app-shell\.fullscreen \.floating-toolbar\s*{(?<body>[^}]*)}/)?.groups?.body ?? ''
+  it('fills the whole tab, with the AI pages covered underneath it', () => {
+    const html = readTeamHtml()
+    const css = readTeamCss()
+    const shellRule = css.match(/(?:^|\n)\.app-shell\s*{(?<body>[^}]*)}/)?.groups?.body ?? ''
 
-    expect(html).toContain('class="icon-btn window-dot window-dot-close"')
-    expect(html).toContain('class="icon-btn window-dot window-dot-minimize"')
-    expect(html).toContain('class="icon-btn window-dot window-dot-fullscreen"')
-    expect(toolbarRule).toContain('left: auto;')
-    expect(toolbarRule).toContain('right: 18px;')
-    expect(toolbarRule).toContain('top: 6px;')
-    expect(toolbarRule).toContain('height: 11px;')
-    expect(toolbarRule).toContain('flex-direction: row-reverse;')
-    expect(toolbarRule).toContain('z-index: 12;')
-    expect(fullscreenToolbarRule).toContain('left: auto;')
-    expect(fullscreenToolbarRule).toContain('right: 18px;')
-    expect(fullscreenToolbarRule).toContain('top: 6px;')
-    expect(html).toMatch(/\.floating-toolbar \.icon-btn\s*{[^}]*width:\s*11px;[^}]*height:\s*11px;/s)
-    expect(html).toMatch(/\.floating-toolbar \.icon-btn\.window-dot-close\s*{[^}]*background:\s*#ff5f57;/s)
-    expect(html).toMatch(/\.floating-toolbar \.icon-btn\.window-dot-minimize\s*{[^}]*background:\s*#febc2e;/s)
-    expect(html).toMatch(/\.floating-toolbar \.icon-btn\.window-dot-fullscreen\s*{[^}]*background:\s*#28c840;/s)
-    expect(html).toMatch(/\.floating-toolbar \.icon-btn\.window-dot:hover\s*{[^}]*border-color:\s*rgba\(0,\s*0,\s*0,\s*0\.24\);[^}]*filter:\s*brightness\(1\.04\);/s)
+    expect(shellRule).toContain('inset: 0;')
+    expect(shellRule).not.toContain('border-radius')
+    expect(shellRule).not.toContain('pointer-events: none')
+    expect(css).toMatch(/\.app-shell\.pages-shown\s*{[^}]*display:\s*none;/s)
+    expect(css).toMatch(/\.return-to-team\[hidden\]\s*{[^}]*display:\s*none;/s)
+    expect(html).not.toContain('window-dot')
+    expect(html).not.toContain('id="window-resize-handle"')
+    expect(html).not.toContain('id="toggle-fullscreen"')
+    expect(html).toMatch(/id="return-to-team"[^>]*hidden/)
+    expect(css).not.toContain('.app-shell.fullscreen')
   })
 
-  it('uses the top-right close affordance to shrink the floating window', () => {
-    const html = readTeamDocument()
-    const source = readFileSync(resolve(process.cwd(), 'src/teamPage/floatingWindow.ts'), 'utf8')
+  it('opens the AI pages from the settings menu', () => {
+    const html = readTeamHtml()
+    const settingsMenu = html.match(/<div id="settings-menu"[\s\S]*?<\/nav>/)?.[0] ?? ''
 
-    expect(html).toContain('id="close-window"')
-    expect(html).toMatch(/id="close-window"[^>]*aria-label="缩小窗口"/)
-    expect(source).toContain("closeWindowEl?.addEventListener('click', () => setWindowMinimized(true))")
+    expect(settingsMenu).toContain('id="show-ai-pages"')
+    expect(settingsMenu).toContain('查看成员的 AI 网页')
   })
 
   it('keeps the orchestration entry visually hidden when the hidden attribute is set', () => {
@@ -613,15 +606,6 @@ describe('team.html chat creation UI', () => {
     expect(html).not.toMatch(/\.chat-action-menu\s*{[^}]*grid-column:\s*2 \/ 4;/s)
   })
 
-  it('renders a bottom-right floating window resize handle', () => {
-    const html = readTeamDocument()
-
-    expect(html).toContain('id="window-resize-handle"')
-    expect(html).toContain('class="window-resize-handle"')
-    expect(html).toMatch(/\.window-resize-handle\s*{[^}]*cursor:\s*nwse-resize;/s)
-    expect(html).toMatch(/\.app-shell\.fullscreen \.window-resize-handle\s*{[^}]*display:\s*none;/s)
-  })
-
   it('renders compact icon actions for assistant messages', () => {
     const html = readTeamDocument()
     const source = readFileSync(resolve(process.cwd(), 'src/teamPage/messagesView.ts'), 'utf8')
@@ -639,7 +623,7 @@ describe('team.html chat creation UI', () => {
     expect(source).toContain('navigator.clipboard.writeText(message.content)')
     expect(source).not.toContain("jump.textContent = '跳转'")
     expect(source).not.toContain("quote.textContent = '引用'")
-    expect(recoverySource).toContain('setWindowMinimized(true)')
+    expect(recoverySource).toContain('showAiPages(true)')
     expect(html).toContain('.role-frame-shell.jump-highlight')
     expect(html).toContain('.message-tool-btn')
     expect(html).toContain('.message-tool-btn::after')
@@ -734,13 +718,11 @@ describe('team.html chat creation UI', () => {
     expect(uiSource).not.toContain('refreshCurrentChat().catch')
   })
 
-  it('shrinks instead of closing the OpenTeam window from the close control', () => {
+  it('never closes the OpenTeam tab on its own', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/teamPage/teamUiController.ts'), 'utf8')
-    const floatingSource = readFileSync(resolve(process.cwd(), 'src/teamPage/floatingWindow.ts'), 'utf8')
 
     expect(source).not.toContain("window.confirm('确定要关闭 OpenTeam 窗口吗？')")
     expect(source).not.toContain('window.close()')
-    expect(floatingSource).toContain("closeWindowEl?.addEventListener('click', () => setWindowMinimized(true))")
   })
 
   it('uses a refined composer and desktop-style chat header', () => {

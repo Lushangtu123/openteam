@@ -8,12 +8,6 @@
   </head>
   <body>
     <div id="app" class="app-shell">
-      <div id="floating-toolbar" class="floating-toolbar">
-        <button id="close-window" class="icon-btn window-dot window-dot-close" type="button" aria-label="缩小窗口" title="缩小窗口">×</button>
-        <button id="toggle-window-size" class="icon-btn window-dot window-dot-minimize" type="button" aria-expanded="true" aria-label="缩小窗口" title="缩小窗口">−</button>
-        <button id="toggle-fullscreen" class="icon-btn window-dot window-dot-fullscreen" type="button" aria-pressed="false" aria-label="全屏窗口" title="全屏窗口">⛶</button>
-      </div>
-      <button id="window-resize-handle" class="window-resize-handle" type="button" aria-label="调整窗口大小" title="调整窗口大小"></button>
       <nav class="rail" aria-label="OpenTeam 导航">
         <div></div>
         <div class="rail-actions">
@@ -67,6 +61,8 @@
                 <button id="settings-ui-style-grok" class="settings-segment-option" type="button" aria-pressed="false">Grok</button>
               </div>
             </div>
+            <button id="show-ai-pages" class="btn settings-toggle" type="button">查看成员的 AI 网页</button>
+            <p class="tiny settings-hint">成员的网页在 OpenTeam 后面运行。需要登录、验证或关掉弹窗时打开它们，再点「返回 OpenTeam」回来。</p>
             <button id="reply-notifications-toggle" class="btn settings-toggle" type="button" aria-pressed="true">回复完成时通知：开启</button>
             <p class="tiny settings-hint">OpenTeam 不在前台时，成员都回复完会弹出桌面通知。</p>
             <button id="agent-control-toggle" class="btn settings-toggle" type="button" aria-pressed="false">本机智能体控制：关闭</button>
@@ -264,7 +260,10 @@
     </aside>
     <span id="template-summary" hidden></span>
     <div id="template-list" hidden></div>
-    <button id="window-launcher" class="launcher" type="button" aria-label="打开 OpenTeam" hidden>⌁</button>
+    <button id="return-to-team" class="return-to-team" type="button" hidden>
+      <svg aria-hidden="true" viewBox="0 0 24 24" fill="none"><path d="M14.5 6.5 9 12l5.5 5.5" /></svg>
+      <span>返回 OpenTeam</span>
+    </button>
 
     <div id="all-notes-modal" class="modal-backdrop" hidden>
       <section class="modal all-notes-modal" role="dialog" aria-modal="true" aria-labelledby="all-notes-title">

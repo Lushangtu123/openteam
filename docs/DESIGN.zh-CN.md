@@ -98,7 +98,7 @@ flowchart LR
 - [src/teamPage/notesView.ts](../src/teamPage/notesView.ts)、[src/teamPage/allNotesView.ts](../src/teamPage/allNotesView.ts)、[src/teamPage/tiptapNoteEditor.ts](../src/teamPage/tiptapNoteEditor.ts)：群聊/全局笔记和富文本编辑。
 - [src/teamPage/orchestrationModalView.ts](../src/teamPage/orchestrationModalView.ts)、[src/teamPage/orchestrationCanvas.ts](../src/teamPage/orchestrationCanvas.ts)、[src/teamPage/orchestrationStatusView.ts](../src/teamPage/orchestrationStatusView.ts)：流程图编辑、审核节点设置、运行状态和活跃 run 展示。
 - [src/teamPage/externalModelsView.ts](../src/teamPage/externalModelsView.ts)：OpenAI compatible 和 Anthropic compatible 外部模型配置。
-- [src/teamPage/languageController.ts](../src/teamPage/languageController.ts)、[src/teamPage/themeController.ts](../src/teamPage/themeController.ts)、[src/teamPage/floatingWindow.ts](../src/teamPage/floatingWindow.ts)：语言、主题和浮窗行为。
+- [src/teamPage/languageController.ts](../src/teamPage/languageController.ts)、[src/teamPage/themeController.ts](../src/teamPage/themeController.ts)、[src/teamPage/aiPagesView.ts](../src/teamPage/aiPagesView.ts)：语言、主题，以及成员 AI 网页的显示（网页在占满标签页的 OpenTeam 页面下面运行，只在需要时显示）。
 
 ### 后台运行时
 

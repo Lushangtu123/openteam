@@ -6,9 +6,6 @@ describe('team page dom refs', () => {
   it('collects required team page elements and fails clearly when a selector is missing', async () => {
     document.body.innerHTML = `
       <main id="app"><div id="iframe-host"></div></main>
-      <button id="close-window"></button>
-      <button id="toggle-window-size"></button>
-      <button id="toggle-fullscreen"></button>
       <section id="store-summary"></section>
       <section id="chat-list"></section>
       <h1 id="chat-title"></h1>
@@ -174,16 +171,14 @@ describe('team page dom refs', () => {
       <textarea id="temporary-person-prompt"></textarea>
       <button id="toggle-people-drawer"></button>
       <aside class="role-panel"></aside>
-      <button id="window-launcher"></button>
-      <button id="window-resize-handle"></button>
+      <button id="return-to-team"></button>
+      <button id="show-ai-pages"></button>
     `
 
     const { createTeamPageDomRefs, requireElement } = await import('./domRefs')
     const refs = createTeamPageDomRefs()
 
     expect(refs.appShellEl.id).toBe('app')
-    expect(refs.closeWindowEl.id).toBe('close-window')
-    expect(refs.toggleFullscreenEl.id).toBe('toggle-fullscreen')
     expect(refs.themeLightEl.id).toBe('theme-light')
     expect(refs.themeDarkEl.id).toBe('theme-dark')
     expect(refs.uiStyleChatGptEl.id).toBe('ui-style-chatgpt')
@@ -195,7 +190,8 @@ describe('team page dom refs', () => {
     expect(refs.generateTemplatePersonaEl.id).toBe('generate-template-persona')
     expect(refs.peopleLibraryCategoryFilterEl.id).toBe('people-library-category-filter')
     expect(refs.addPersonCategoryFilterEl.id).toBe('add-person-category-filter')
-    expect(refs.windowResizeHandleEl.id).toBe('window-resize-handle')
+    expect(refs.returnToTeamEl.id).toBe('return-to-team')
+    expect(refs.showAiPagesEl.id).toBe('show-ai-pages')
     expect(refs.messageInputEl.tagName).toBe('TEXTAREA')
     expect(refs.rolePanelEl.className).toBe('role-panel')
     expect(() => requireElement('#missing')).toThrow('Missing element: #missing')
