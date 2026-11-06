@@ -149,4 +149,19 @@ describe('backup', () => {
 
     expect(referencedImageIds(store)).toEqual(['img-1'])
   })
+
+  it('adds saved teams the current data does not have when merging', () => {
+    const current = createDefaultStore()
+    const member = (name: string) => ({ name, modelSource: 'site' as const, chatSite: 'claude' as const })
+    current.settings.teamTemplates = [{ id: 'team-a', name: '已有', task: 'x', createdAt: 1, members: [member('甲'), member('乙')] }]
+    const backupStore = createDefaultStore()
+    backupStore.settings.teamTemplates = [
+      { id: 'team-a', name: '备份里的同一个', task: 'x', createdAt: 1, members: [member('甲'), member('乙')] },
+      { id: 'team-b', name: '新的', task: 'y', createdAt: 2, members: [member('丙'), member('丁')] },
+    ]
+
+    const { store } = restoreBackup(current, backupStore, 'merge')
+
+    expect(store.settings.teamTemplates?.map(template => template.name)).toEqual(['已有', '新的'])
+  })
 })

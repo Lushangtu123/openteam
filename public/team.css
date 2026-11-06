@@ -6906,3 +6906,50 @@ select.reply-compare-select {
   margin: 0;
   font-weight: 600;
 }
+
+.team-setup-saved {
+  display: grid;
+  gap: 6px;
+}
+
+.team-setup-saved-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.team-setup-saved-text {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  gap: 2px;
+}
+
+.team-setup-saved-text .tiny {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.team-card-panel {
+  display: flex;
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.team-card-panel input.team-card-panel-input {
+  flex: 1 1 240px;
+  height: 34px;
+}
+
+.team-card-panel textarea.team-card-panel-input {
+  flex: 1 1 100%;
+}

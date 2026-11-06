@@ -1547,6 +1547,41 @@ describe('team formation in the background', () => {
     expect(await harness.invoke({ type: 'GROUP_TEAM_CREATE', task: ' ', members: [] })).toMatchObject({ ok: false, error: '请先写下要做的事' })
   })
 
+  it('saves a team and starts the same line-up again with its positions', async () => {
+    const store = makeStore()
+    store.currentChatId = 'chat-1'
+    store.chatsById['chat-1'] = { ...makeChat('chat-1', ['role-1', 'role-2']), name: '记账群', mode: 'collaborative', teamFormation: { task: '记账', requiredPositions: [], status: 'confirmed', rounds: [['role-1', 'role-2']], nextRound: 1, invitationIds: [], createdAt: 1 } }
+    store.chatOrder = ['chat-1']
+    store.rolesById['role-1'] = makeRole('chat-1', 'role-1', '产品负责人', { description: '需求和验收', systemPrompt: '你担任产品负责人', chatSite: 'claude', createdBy: 'team-formation' })
+    store.rolesById['role-2'] = makeRole('chat-1', 'role-2', '前端工程师', { systemPrompt: '你担任前端工程师', chatSite: 'kimi', createdBy: 'team-formation' })
+    const harness = await setupBackground(store)
+
+    const saved = await harness.invoke({ type: 'GROUP_TEAM_TEMPLATE_SAVE', chatId: 'chat-1', name: '记账团队' }) as { ok: boolean; template: { id: string } }
+    expect(saved.ok).toBe(true)
+    let current = await harness.getStore()
+    expect(current.settings.teamTemplates).toEqual([{ id: saved.template.id, name: '记账团队', task: '记账', createdAt: expect.any(Number), members: [
+      { name: '产品负责人', description: '需求和验收', systemPrompt: '你担任产品负责人', modelSource: 'site', chatSite: 'claude' },
+      { name: '前端工程师', systemPrompt: '你担任前端工程师', modelSource: 'site', chatSite: 'kimi' },
+    ] }])
+
+    const created = await harness.invoke({ type: 'GROUP_TEAM_CREATE', templateId: saved.template.id, task: '第二个项目' }) as { ok: boolean; chat: GroupChat }
+    expect(created.ok).toBe(true)
+    current = await harness.getStore()
+    const chat = current.chatsById[created.chat.id]
+    expect(chat.name).toBe('记账团队')
+    expect(chat.teamFormation).toMatchObject({ task: '第二个项目', status: 'checking', preset: true })
+    expect(chat.roleIds.map(id => current.rolesById[id]).map(role => [role.name, role.chatSite, role.systemPrompt, role.createdBy])).toEqual([
+      ['产品负责人', 'claude', '你担任产品负责人', 'team-formation'],
+      ['前端工程师', 'kimi', '你担任前端工程师', 'team-formation'],
+    ])
+
+    expect(await harness.invoke({ type: 'GROUP_TEAM_TEMPLATE_SAVE', chatId: created.chat.id })).toMatchObject({ ok: true })
+    expect(await harness.invoke({ type: 'GROUP_TEAM_TEMPLATE_DELETE', templateId: saved.template.id })).toMatchObject({ ok: true })
+    current = await harness.getStore()
+    expect(current.settings.teamTemplates?.map(template => template.name)).toEqual(['记账团队'])
+    expect(await harness.invoke({ type: 'GROUP_TEAM_CREATE', templateId: 'missing' })).toMatchObject({ ok: false, error: '找不到这个团队' })
+  })
+
   it('records each round of invitations once, and resends personas when asked', async () => {
     const store = makeStore()
     store.currentChatId = 'chat-1'

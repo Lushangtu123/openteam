@@ -3,10 +3,12 @@ import {
   buildTeamInvitation,
   buildTeamKickoff,
   buildTeamBrief,
+  buildTeamFlowInstruction,
   collectTeamMembers,
   invitationRaw,
   isTeamMemberSettled,
   parseTeamClaim,
+  planTeamRounds,
   resolveTeamPositions,
   splitPositions,
   TEAM_MAX_COPIES_PER_MODEL,
@@ -14,6 +16,7 @@ import {
   TEAM_MIN_MEMBERS,
   teamLabels,
   teamMemberNames,
+  teamModelKey,
   type TeamMember,
   type TeamResolution,
 } from '../group/teamFormation'
@@ -31,6 +34,8 @@ export interface TeamFormationViewDependencies {
   showSuccess(message: string): void
   // Called before the setup window opens, to close the new-chat popover.
   onSetupOpen?(): void
+  // Opens the orchestration editor and plans a flow for the task with this instruction.
+  openAutoPlan?(task: string, instruction: string): void
 }
 
 export interface TeamFormationView {
@@ -53,12 +58,14 @@ interface MemberChoice {
 
 export function createTeamFormationView(deps: TeamFormationViewDependencies): TeamFormationView {
   let setup: { backdrop: HTMLElement } | undefined
-  let card: { chatId: string; backdrop: HTMLElement; body: HTMLElement; footer: HTMLElement; title: HTMLElement; signature: string } | undefined
+  let card: { chatId: string; backdrop: HTMLElement; body: HTMLElement; footer: HTMLElement; title: HTMLElement; task: HTMLElement; signature: string } | undefined
   // Positions the user typed on the card, per chat and role, until the positions are confirmed.
   const edits = new Map<string, Map<string, string>>()
   // Chats whose card was opened automatically once every member answered, keyed by invitation count.
   const autoOpened = new Map<string, number>()
   let busy = false
+  // The inline form open in a confirmed team's card.
+  let panel: 'none' | 'save' | 'redivide' = 'none'
   let advancing = false
 
   function language(): OpenTeamLanguage {
@@ -157,7 +164,50 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
     const submit = button(t('组建团队', 'Form the team'), 'btn btn-primary')
     submit.type = 'submit'
     actions.append(cancel, submit)
-    form.append(taskField, membersField, requiredField, nameField, error, actions)
+    const savedField = savedTeamsField()
+    form.append(taskField, ...(savedField ? [savedField] : []), membersField, requiredField, nameField, error, actions)
+
+    function savedTeamsField(): HTMLElement | undefined {
+      const templates = deps.getStore().settings.teamTemplates ?? []
+      if (templates.length === 0) return undefined
+      const wrapper = field(t('已保存的团队', 'Saved teams'))
+      const list = element('div', 'team-setup-saved')
+      for (const template of templates) {
+        const row = element('div', 'team-setup-saved-row')
+        row.dataset.templateId = template.id
+        const text = element('div', 'team-setup-saved-text')
+        text.append(element('span', 'team-card-name', template.name), element('span', 'tiny', template.members.map(member => member.name).join(t('、', ', '))))
+        const use = button(t('用这个团队', 'Use this team'), 'btn btn-small')
+        use.addEventListener('click', () => {
+          use.disabled = true
+          deps.runCommand('GROUP_TEAM_CREATE', {
+            templateId: template.id,
+            ...(task.value.trim() ? { task: task.value.trim() } : {}),
+            ...(name.value.trim() ? { name: name.value.trim() } : {}),
+          }).then(() => {
+            closeSetup()
+            const chatId = deps.getStore().currentChatId
+            if (chatId && deps.getStore().chatsById[chatId]?.teamFormation) openCard(chatId)
+          }).catch(caught => {
+            error.textContent = message(caught)
+          }).finally(() => {
+            use.disabled = false
+          })
+        })
+        const remove = button(t('删除', 'Delete'), 'btn btn-ghost btn-small')
+        remove.addEventListener('click', () => {
+          deps.runCommand('GROUP_TEAM_TEMPLATE_DELETE', { templateId: template.id })
+            .then(() => row.remove())
+            .catch(caught => {
+              error.textContent = message(caught)
+            })
+        })
+        row.append(text, use, remove)
+        list.append(row)
+      }
+      wrapper.append(list, element('p', 'tiny', t('用保存的团队会保留它们之前的职位和人设，检查网页后就能开工；也可以让它们为新任务重新自荐。', 'A saved team keeps its positions and personas: check the pages and start, or let them choose again for the new task.')))
+      return wrapper
+    }
 
     function renderTotal(): void {
       const count = totalCount(counts)
@@ -243,7 +293,8 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
     const heading = element('div')
     const title = element('h2')
     title.id = 'team-card-title'
-    heading.append(title, element('p', 'team-card-task', chat.teamFormation.task))
+    const task = element('p', 'team-card-task', chat.teamFormation.task)
+    heading.append(title, task)
     header.append(heading, closeButton(() => closeCard()))
     const body = element('div', 'team-card-body')
     const footer = element('div', 'team-card-footer')
@@ -251,7 +302,8 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
     backdrop.append(dialog)
     document.body.append(backdrop)
     document.addEventListener('keydown', handleEscape)
-    card = { chatId, backdrop, body, footer, title, signature: '' }
+    card = { chatId, backdrop, body, footer, title, task, signature: '' }
+    panel = 'none'
     renderCard()
   }
 
@@ -288,9 +340,11 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
     const members = collectTeamMembers(store, chat)
     const resolution = resolution_(chat, members)
     const health = members.map(member => memberHealth(member.role))
-    const signature = JSON.stringify([formation.status, formation.invitationIds, members.map(member => [member.roleId, member.role.name, member.status, member.claim, member.replyText?.length]), health.map(item => [item.status, item.reason, item.detail]), [...chatEdits(card.chatId)], busy, language()])
+    const signature = JSON.stringify([formation.task, formation.status, formation.invitationIds, members.map(member => [member.roleId, member.role.name, member.status, member.claim, member.replyText?.length]), health.map(item => [item.status, item.reason, item.detail]), [...chatEdits(card.chatId)], busy, panel, formation.preset, formation.previousPositions, language()])
     if (signature === card.signature) return
     card.signature = signature
+    // Dividing the work again changes the task.
+    card.task.textContent = formation.task
 
     const focused = document.activeElement instanceof HTMLInputElement && card.body.contains(document.activeElement) ? document.activeElement.dataset.roleId : undefined
     if (formation.status === 'checking') renderChecking(chat, members, health)
@@ -336,11 +390,23 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
     card.body.replaceChildren(element('p', 'tiny', t('每位队员的网页都要能发送消息：没登录、有弹窗或额度用完的，请先处理或移除。', 'Every member\'s page has to be able to send: sign in, close dialogs, or remove members that are out of quota.')), ...rows)
 
     const ready = health.every(item => item.status === 'ready')
-    const invite = button(t('邀请它们自荐', 'Invite them to choose'), 'btn btn-primary')
+    const preset = chat.teamFormation?.preset === true
+    const invite = button(preset ? t('让它们重新自荐', 'Let them choose again') : t('邀请它们自荐', 'Invite them to choose'), preset ? 'btn' : 'btn btn-primary')
     invite.disabled = busy || !ready || members.length < TEAM_MIN_MEMBERS
     invite.addEventListener('click', () => void inviteRound(chat.id))
-    const hint = element('p', 'team-card-hint', ready ? t('它们会各自回答最适合自己的职位、备选职位和项目需要的职位。', 'Each will answer with the position that suits it, a fallback, and the positions the project needs.') : t('等所有队员的网页都显示“可以发送”。', 'Wait until every member\'s page says it can send.'))
-    card.footer.replaceChildren(hint, invite)
+    const hint = element('p', 'team-card-hint', !ready
+      ? t('等所有队员的网页都显示“可以发送”。', 'Wait until every member\'s page says it can send.')
+      : preset
+        ? t('这是保存的团队：职位和人设都在，可以直接开工。', 'This is a saved team: positions and personas are set, so it can start right away.')
+        : t('它们会各自回答最适合自己的职位、备选职位和项目需要的职位。', 'Each will answer with the position that suits it, a fallback, and the positions the project needs.'))
+    if (!preset) {
+      card.footer.replaceChildren(hint, invite)
+      return
+    }
+    const start = button(t('开工', 'Start'), 'btn btn-primary')
+    start.disabled = busy || !ready
+    start.addEventListener('click', () => void startPreset(chat.id))
+    card.footer.replaceChildren(hint, invite, start)
   }
 
   function renderClaims(chat: GroupChat, members: TeamMember[], resolution: TeamResolution): void {
@@ -383,7 +449,10 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
         row.append(positionRow)
       }
       const claim = member.claim
-      if (claim) {
+      if (confirmed && member.role.systemPrompt) {
+        // After confirming, what the member was told, not what it first asked for.
+        row.append(element('p', 'tiny team-card-detail', member.role.systemPrompt))
+      } else if (claim) {
         const details = element('dl', 'team-card-details')
         const add = (label: string, value: string | undefined) => {
           if (!value) return
@@ -421,9 +490,7 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
     card.body.replaceChildren(...notes, ...rows)
 
     if (confirmed) {
-      const done = button(t('关闭', 'Close'), 'btn')
-      done.addEventListener('click', () => closeCard())
-      card.footer.replaceChildren(done)
+      renderConfirmedActions(chat, members)
       return
     }
     const pending = members.some(member => !isTeamMemberSettled(member) && !editMap.has(member.roleId))
@@ -443,6 +510,76 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
           ? t('给每位队员填一个职位。', 'Give every member a position.')
           : t('确认后，每位队员会改名为它的职位，并收到开工消息和自己的分工。', 'On confirm, each member is renamed to its position and gets the kickoff message with its own brief.'))
     card.footer.replaceChildren(hint, repick, confirm)
+  }
+
+  function renderConfirmedActions(chat: GroupChat, members: TeamMember[]): void {
+    if (!card) return
+    const formation = chat.teamFormation!
+    if (panel === 'save') {
+      const form = element('div', 'team-card-panel')
+      const input = document.createElement('input')
+      input.type = 'text'
+      input.className = 'team-card-panel-input'
+      input.value = chat.name
+      input.setAttribute('aria-label', t('团队名称', 'Team name'))
+      const save = button(t('保存', 'Save'), 'btn btn-primary')
+      save.disabled = busy
+      save.addEventListener('click', () => void saveTemplate(chat.id, input.value))
+      const cancel = button(t('取消', 'Cancel'), 'btn')
+      cancel.addEventListener('click', () => {
+        panel = 'none'
+        renderCard()
+      })
+      form.append(element('span', '', t('团队名称', 'Team name')), input, cancel, save)
+      card.footer.replaceChildren(element('p', 'team-card-hint', t('保存职位、人设和用的 AI。下次在“按任务组队”里就能直接用。', 'Saves the positions, personas and AIs. Next time, use it from "Team up for a task".')), form)
+      input.focus()
+      input.select()
+      return
+    }
+    if (panel === 'redivide') {
+      const form = element('div', 'team-card-panel team-card-panel-wide')
+      const input = document.createElement('textarea')
+      input.className = 'team-card-panel-input'
+      input.rows = 3
+      input.value = formation.task
+      input.setAttribute('aria-label', t('这一阶段要做什么', 'What this phase is about'))
+      const go = button(t('重新分工', 'Divide again'), 'btn btn-primary')
+      go.disabled = busy
+      go.addEventListener('click', () => void redivide(chat.id, members, input.value))
+      const cancel = button(t('取消', 'Cancel'), 'btn')
+      cancel.addEventListener('click', () => {
+        panel = 'none'
+        renderCard()
+      })
+      form.append(input, cancel, go)
+      card.footer.replaceChildren(element('p', 'team-card-hint', t('写下这一阶段要做什么。队员会看到现在的分工，可以保持，也可以换。', 'Describe this phase. Members see the current positions and may keep or change theirs.')), form)
+      input.focus()
+      return
+    }
+    const actions: HTMLButtonElement[] = []
+    if (deps.openAutoPlan) {
+      const flow = button(t('按分工生成流程', 'Plan a flow from the roles'), 'btn')
+      flow.addEventListener('click', () => {
+        const store = deps.getStore()
+        const instruction = buildTeamFlowInstruction(members.map(member => ({ name: store.rolesById[member.roleId]?.name ?? member.role.name, modelLabel: member.modelLabel, description: store.rolesById[member.roleId]?.description })), language())
+        closeCard()
+        deps.openAutoPlan?.(formation.task, instruction)
+      })
+      actions.push(flow)
+    }
+    const save = button(t('存为群聊模板', 'Save as a team'), 'btn')
+    save.addEventListener('click', () => {
+      panel = 'save'
+      renderCard()
+    })
+    const again = button(t('重新分工', 'Divide again'), 'btn')
+    again.addEventListener('click', () => {
+      panel = 'redivide'
+      renderCard()
+    })
+    const done = button(t('关闭', 'Close'), 'btn btn-primary')
+    done.addEventListener('click', () => closeCard())
+    card.footer.replaceChildren(element('p', 'team-card-hint', t('接下来可以按分工生成编排流程、把团队存起来下次直接用，或在项目进入新阶段时重新分工。', 'Next: plan a flow from the roles, save the team for next time, or divide the work again when the project moves to a new phase.')), ...actions, save, again, done)
   }
 
   function memberStateText(member: TeamMember, chat: GroupChat): string | undefined {
@@ -481,7 +618,7 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
       const members = collectTeamMembers(store, chat)
       const resolution = resolution_(chat, members)
       const taken = Object.entries(resolution.assignments).map(([roleId, assignment]) => ({ position: assignment.position, holder: store.rolesById[roleId]?.name ?? roleId }))
-      const text = buildTeamInvitation({ task: formation.task, teamLabels: teamLabels(store, chatRoles(store, chat)), requiredPositions: formation.requiredPositions, taken, language: language() })
+      const text = buildTeamInvitation({ task: formation.task, teamLabels: teamLabels(store, chatRoles(store, chat)), requiredPositions: formation.requiredPositions, taken, previous: formation.previousPositions, language: language() })
       await deps.runCommand('GROUP_MESSAGE_SEND', { chatId, raw: invitationRaw(store, roles, text), teamInvitation: true, teamRound: round })
     } catch (caught) {
       // Another team page sent this round already.
@@ -547,8 +684,86 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
       })
       await deps.runCommand('GROUP_MESSAGE_SEND', { chatId, raw: kickoff, refreshPersona: true })
       edits.delete(chatId)
-      closeCard()
+      panel = 'none'
       deps.showSuccess(t('分工已确认，开工消息已发出', 'Positions confirmed; the kickoff message is out'))
+    } catch (caught) {
+      deps.showError(message(caught))
+    } finally {
+      busy = false
+      renderCard()
+    }
+  }
+
+  async function startPreset(chatId: string): Promise<void> {
+    const store = deps.getStore()
+    const chat = store.chatsById[chatId]
+    const formation = chat?.teamFormation
+    if (!chat || !formation || busy) return
+    busy = true
+    renderCard()
+    try {
+      const members = collectTeamMembers(store, chat)
+      const kickoff = buildTeamKickoff({
+        task: formation.task,
+        members: members.map(member => ({ name: member.role.name, modelLabel: member.modelLabel, responsibility: member.role.description && member.role.description !== member.role.name ? member.role.description : undefined })),
+        language: language(),
+      })
+      await deps.runCommand('GROUP_CHAT_UPDATE', { chatId, patch: { teamFormation: { status: 'confirmed', confirmedAt: Date.now() } } })
+      await deps.runCommand('GROUP_MESSAGE_SEND', { chatId, raw: kickoff, refreshPersona: true })
+      deps.showSuccess(t('已开工', 'Started'))
+    } catch (caught) {
+      deps.showError(message(caught))
+    } finally {
+      busy = false
+      renderCard()
+    }
+  }
+
+  async function saveTemplate(chatId: string, name: string): Promise<void> {
+    if (busy) return
+    busy = true
+    try {
+      await deps.runCommand('GROUP_TEAM_TEMPLATE_SAVE', { chatId, name: name.trim() })
+      panel = 'none'
+      deps.showSuccess(t(`已保存团队「${name.trim() || deps.getStore().chatsById[chatId]?.name}」`, `Saved the team "${name.trim() || deps.getStore().chatsById[chatId]?.name}"`))
+    } catch (caught) {
+      deps.showError(message(caught))
+    } finally {
+      busy = false
+      renderCard()
+    }
+  }
+
+  // A new phase: the members see their current positions and choose again.
+  async function redivide(chatId: string, members: TeamMember[], task: string): Promise<void> {
+    const store = deps.getStore()
+    const chat = store.chatsById[chatId]
+    if (!chat?.teamFormation || busy) return
+    if (!task.trim()) {
+      deps.showError(t('先写下这一阶段要做什么', 'Describe this phase first'))
+      return
+    }
+    busy = true
+    try {
+      const roles = chatRoles(store, chat)
+      await deps.runCommand('GROUP_CHAT_UPDATE', {
+        chatId,
+        patch: {
+          teamFormation: {
+            task: task.trim(),
+            status: 'checking',
+            preset: false,
+            rounds: planTeamRounds(roles.map(role => ({ roleId: role.id, modelKey: teamModelKey(role) }))),
+            nextRound: 0,
+            invitationIds: [],
+            previousPositions: members.map(member => ({ position: store.rolesById[member.roleId]?.name ?? member.role.name, holder: member.modelLabel })),
+            confirmedAt: null,
+          },
+        },
+      })
+      edits.delete(chatId)
+      autoOpened.delete(chatId)
+      panel = 'none'
     } catch (caught) {
       deps.showError(message(caught))
     } finally {
@@ -588,7 +803,9 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
     const members = collectTeamMembers(deps.getStore(), chat)
     const answered = members.filter(isTeamMemberSettled).length
     const banner = element('div', 'team-formation-banner')
-    banner.append(element('span', 'team-formation-banner-text', formation.status === 'checking'
+    banner.append(element('span', 'team-formation-banner-text', formation.status === 'checking' && formation.preset
+      ? t('团队已就绪：检查队员的网页后就能开工。', 'The team is ready: check the members\' pages, then start.')
+      : formation.status === 'checking'
       ? t('组队中：先检查队员的网页，再邀请它们自荐职位。', 'Forming a team: check the members\' pages, then invite them to choose positions.')
       : t(`组队中：${answered}/${members.length} 位已选好职位。`, `Forming a team: ${answered} of ${members.length} have chosen.`)))
     const open = button(t('查看分工', 'View positions'), 'btn btn-small')

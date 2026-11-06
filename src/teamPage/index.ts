@@ -745,6 +745,7 @@ const teamFormationView = createTeamFormationView({
   focusRoleFrame: (chatId, roleId) => focusRoleFrame(chatId, roleId),
   showError,
   showSuccess,
+  openAutoPlan: (task, instruction) => orchestrationModalView.openAutoPlan(task, instruction),
 })
 
 const messageSearchView = createMessageSearchView({

@@ -59,6 +59,25 @@ export interface OpenTeamSettings {
   agentControlEnabled: boolean
   agentControlPort: number
   language: OpenTeamLanguage
+  // Teams saved from "按任务组队", to start the same line-up again.
+  teamTemplates?: TeamTemplate[]
+}
+
+export interface TeamTemplateMember {
+  name: string
+  description?: string
+  systemPrompt?: string
+  modelSource: RoleModelSource
+  chatSite?: ChatSite
+  externalModelId?: string
+}
+
+export interface TeamTemplate {
+  id: string
+  name: string
+  task: string
+  members: TeamTemplateMember[]
+  createdAt: number
 }
 
 export interface ExternalModelConfig {
@@ -240,6 +259,10 @@ export interface TeamFormation {
   nextRound: number
   // The user messages that asked members to claim a position, oldest first (rounds and re-picks).
   invitationIds: string[]
+  // Members already have positions (a team started from a saved team): it can start right away.
+  preset?: boolean
+  // The positions before the members were asked to divide the work again.
+  previousPositions?: Array<{ position: string; holder: string }>
   createdAt: number
   confirmedAt?: number
 }

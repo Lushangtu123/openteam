@@ -4,7 +4,9 @@ import {
   buildTeamInvitation,
   buildTeamKickoff,
   buildTeamBrief,
+  buildTeamFlowInstruction,
   collectTeamMembers,
+  normalizeTeamTemplates,
   parseTeamClaim,
   planTeamRounds,
   readTeamFormation,
@@ -12,6 +14,7 @@ import {
   splitPositions,
   teamLabels,
   teamMemberNames,
+  teamTemplateFromChat,
   type TeamClaim,
 } from './teamFormation'
 import type { GroupMessage } from './types'
@@ -182,10 +185,38 @@ describe('team formation', () => {
     expect(teamLabels(store, Object.values(store.rolesById))).toEqual(['Claude ×2', 'ChatGPT', 'Kimi'])
   })
 
+  it('saves a team as its members\' positions, personas and models, and reads saved teams back safely', () => {
+    const store = createDefaultStore()
+    store.rolesById.r1 = { id: 'r1', chatId: 'c1', name: '产品负责人', description: '需求', systemPrompt: '你担任产品负责人', status: 'ready', contextCursor: 0, chatSite: 'claude', createdAt: 1, updatedAt: 1 }
+    store.rolesById.r2 = { id: 'r2', chatId: 'c1', name: '后端工程师', status: 'ready', contextCursor: 0, modelSource: 'external', externalModelId: 'm1', createdAt: 1, updatedAt: 1 }
+    store.chatsById.c1 = { id: 'c1', name: '记账', mode: 'collaborative', roleIds: ['r1', 'r2'], messageIds: [], nextMessageSeq: 1, status: 'ready', createdAt: 1, updatedAt: 1, teamFormation: { task: '做记账', requiredPositions: [], status: 'confirmed', rounds: [['r1', 'r2']], nextRound: 1, invitationIds: [], createdAt: 1 } }
+
+    const template = teamTemplateFromChat(store, store.chatsById.c1, '  ', 'team-1', 9)
+
+    expect(template).toEqual({ id: 'team-1', name: '记账', task: '做记账', createdAt: 9, members: [
+      { name: '产品负责人', description: '需求', systemPrompt: '你担任产品负责人', modelSource: 'site', chatSite: 'claude' },
+      { name: '后端工程师', modelSource: 'external', externalModelId: 'm1' },
+    ] })
+    expect(normalizeTeamTemplates([template, { id: 'bad', name: 'x', members: [{ name: 'a', modelSource: 'site', chatSite: 'nope' }] }, 'junk'])).toEqual([template])
+    expect(normalizeTeamTemplates(undefined)).toEqual([])
+  })
+
+  it('asks the planner for a flow that keeps the team as it is', () => {
+    expect(buildTeamFlowInstruction([{ name: '产品负责人', modelLabel: 'Claude', description: '需求' }, { name: '前端', modelLabel: 'Kimi', description: '前端' }], 'en')).toBe([
+      'Use only the 2 existing people in this chat. They have already divided the work by position:',
+      '- 产品负责人 (Claude): 需求',
+      '- 前端 (Kimi)',
+      'Do not create new people and do not change their personas. Give each node to the person whose position fits it, let work that depends on other work wait for it, and end with a review by the person best placed to judge the result.',
+    ].join('\n'))
+    expect(buildTeamInvitation({ task: 'Phase two', teamLabels: ['Claude'], requiredPositions: [], previous: [{ position: 'PM', holder: 'Claude' }], language: 'en' })).toContain('This is a new phase. The positions so far (keep yours or change it):\n- PM (Claude)')
+  })
+
   it('accepts only a well-formed formation', () => {
     expect(readTeamFormation({ task: '  ' }, 5)).toBeUndefined()
     expect(readTeamFormation({ task: '记账', rounds: [['r1', 3], []], nextRound: 9, requiredPositions: ['测试', '测试 '], status: 'weird' }, 5)).toEqual({
       task: '记账', requiredPositions: ['测试'], status: 'checking', rounds: [['r1']], nextRound: 1, invitationIds: [], createdAt: 5,
     })
+    expect(readTeamFormation({ task: '记账', preset: true, previousPositions: [{ position: 'PM', holder: 'Claude' }, { position: 3 }], confirmedAt: null }, 5)).toMatchObject({ preset: true, previousPositions: [{ position: 'PM', holder: 'Claude' }] })
+    expect(readTeamFormation({ task: '记账', preset: false, confirmedAt: null }, 5)).not.toHaveProperty('preset')
   })
 })

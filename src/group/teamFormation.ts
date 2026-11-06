@@ -1,11 +1,13 @@
 import { roleMentionLabel, roleModelLabel, roleMentionLabelOptionsFromSettings } from './mentionParser'
 import { collectReplies, type ComparedReplyStatus } from './replyComparison'
 import { ROLE_NAME_MAX_CHARACTERS } from './roleTemplates'
-import type { GroupChat, GroupMessage, GroupRole, OpenTeamLanguage, OpenTeamStore, TeamFormation } from './types'
+import { isChatSite } from './chatSites'
+import type { GroupChat, GroupMessage, GroupRole, OpenTeamLanguage, OpenTeamStore, TeamFormation, TeamTemplate, TeamTemplateMember } from './types'
 
 export const TEAM_MIN_MEMBERS = 2
 export const TEAM_MAX_MEMBERS = 6
 export const TEAM_MAX_COPIES_PER_MODEL = 3
+export const TEAM_MAX_TEMPLATES = 20
 
 // What a member answered when asked which position it wants.
 export interface TeamClaim {
@@ -104,6 +106,8 @@ export function buildTeamInvitation(input: {
   teamLabels: string[]
   requiredPositions: string[]
   taken?: Array<{ position: string; holder: string }>
+  // The current positions, when members divide the work again for a new phase.
+  previous?: Array<{ position: string; holder: string }>
   repick?: boolean
   language: OpenTeamLanguage
 }): string {
@@ -124,6 +128,12 @@ export function buildTeamInvitation(input: {
         '',
         `团队成员：${input.teamLabels.join('、')}（都是 AI，各自在自己的网页里）。`,
       ]
+  if (input.previous && input.previous.length > 0) {
+    lines.push(
+      english ? 'This is a new phase. The positions so far (keep yours or change it):' : '这是新阶段。到目前为止的分工（可以保持，也可以换）：',
+      ...input.previous.map(item => `- ${item.position}${english ? ` (${item.holder})` : `（${item.holder}）`}`),
+    )
+  }
   if (input.requiredPositions.length > 0) {
     lines.push(english ? `Positions the team must have: ${input.requiredPositions.join(', ')}.` : `团队必须有的职位：${input.requiredPositions.join('、')}。`)
   }
@@ -431,6 +441,11 @@ export function readTeamFormation(value: unknown, now: number): TeamFormation | 
   const invitationIds = Array.isArray(record.invitationIds) ? record.invitationIds.filter((id): id is string => typeof id === 'string') : []
   const nextRound = typeof record.nextRound === 'number' && Number.isInteger(record.nextRound) ? Math.min(Math.max(record.nextRound, 0), rounds.length) : 0
   const requiredPositions = Array.isArray(record.requiredPositions) ? uniquePositions(record.requiredPositions.filter((item): item is string => typeof item === 'string')) : []
+  const previousPositions = Array.isArray(record.previousPositions)
+    ? record.previousPositions.flatMap(item => item && typeof item === 'object' && typeof (item as Record<string, unknown>).position === 'string' && typeof (item as Record<string, unknown>).holder === 'string'
+      ? [{ position: (item as { position: string }).position, holder: (item as { holder: string }).holder }]
+      : [])
+    : []
   return {
     task,
     requiredPositions,
@@ -438,7 +453,64 @@ export function readTeamFormation(value: unknown, now: number): TeamFormation | 
     rounds,
     nextRound,
     invitationIds,
+    ...(record.preset === true ? { preset: true } : {}),
+    ...(previousPositions.length > 0 ? { previousPositions } : {}),
     createdAt: typeof record.createdAt === 'number' ? record.createdAt : now,
     ...(typeof record.confirmedAt === 'number' ? { confirmedAt: record.confirmedAt } : {}),
   }
+}
+
+// Asks the orchestration planner for a flow that uses the team as it is, by position.
+export function buildTeamFlowInstruction(members: Array<{ name: string; modelLabel: string; description?: string }>, language: OpenTeamLanguage): string {
+  const english = language === 'en'
+  return [
+    english
+      ? `Use only the ${members.length} existing people in this chat. They have already divided the work by position:`
+      : `只使用群聊里现有的 ${members.length} 位人员，他们已经按职位分好工：`,
+    ...members.map(member => `- ${member.name}${english ? ` (${member.modelLabel})` : `（${member.modelLabel}）`}${member.description && member.description !== member.name ? `${english ? ': ' : '：'}${member.description}` : ''}`),
+    english
+      ? 'Do not create new people and do not change their personas. Give each node to the person whose position fits it, let work that depends on other work wait for it, and end with a review by the person best placed to judge the result.'
+      : '不要新建人员，也不要改他们的人设。每个节点交给职位最合适的人；依赖别人产出的工作排在后面；最后由最适合把关的人审核结果。',
+  ].join('\n')
+}
+
+// A saved team: the members' positions, personas and models, to start the same line-up again.
+export function teamTemplateFromChat(store: OpenTeamStore, chat: GroupChat, name: string, id: string, now: number): TeamTemplate {
+  const members: TeamTemplateMember[] = chat.roleIds.flatMap(roleId => {
+    const role = store.rolesById[roleId]
+    if (!role) return []
+    return [{
+      name: role.name,
+      ...(role.description ? { description: role.description } : {}),
+      ...(role.systemPrompt ? { systemPrompt: role.systemPrompt } : {}),
+      modelSource: role.modelSource === 'external' ? 'external' as const : 'site' as const,
+      ...(role.modelSource === 'external' ? { externalModelId: role.externalModelId } : { chatSite: role.chatSite ?? store.settings.defaultChatSite }),
+    }]
+  })
+  return { id, name: name.trim() || chat.name, task: chat.teamFormation?.task ?? '', members, createdAt: now }
+}
+
+export function normalizeTeamTemplates(raw: unknown): TeamTemplate[] {
+  if (!Array.isArray(raw)) return []
+  return raw.flatMap((item): TeamTemplate[] => {
+    if (!item || typeof item !== 'object') return []
+    const record = item as Record<string, unknown>
+    if (typeof record.id !== 'string' || typeof record.name !== 'string' || !record.name.trim() || !Array.isArray(record.members)) return []
+    const members = record.members.flatMap((value): TeamTemplateMember[] => {
+      if (!value || typeof value !== 'object') return []
+      const member = value as Record<string, unknown>
+      if (typeof member.name !== 'string' || !member.name.trim()) return []
+      const external = member.modelSource === 'external'
+      if (external ? typeof member.externalModelId !== 'string' : !isChatSite(member.chatSite)) return []
+      return [{
+        name: member.name.trim(),
+        ...(typeof member.description === 'string' && member.description.trim() ? { description: member.description.trim() } : {}),
+        ...(typeof member.systemPrompt === 'string' && member.systemPrompt.trim() ? { systemPrompt: member.systemPrompt.trim() } : {}),
+        modelSource: external ? 'external' : 'site',
+        ...(external ? { externalModelId: member.externalModelId as string } : { chatSite: member.chatSite as TeamTemplateMember['chatSite'] }),
+      }]
+    })
+    if (members.length < TEAM_MIN_MEMBERS) return []
+    return [{ id: record.id, name: record.name.trim(), task: typeof record.task === 'string' ? record.task : '', members, createdAt: typeof record.createdAt === 'number' ? record.createdAt : 0 }]
+  }).slice(0, TEAM_MAX_TEMPLATES)
 }

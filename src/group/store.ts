@@ -1,3 +1,4 @@
+import { normalizeTeamTemplates } from './teamFormation'
 import { isChatSite } from './chatSites'
 import {
   DEFAULT_ORCHESTRATION_MAX_NODE_EXECUTIONS,
@@ -782,7 +783,13 @@ function normalizeSettings(raw: unknown, storedVersion = CURRENT_STORE_VERSION):
     agentControlEnabled: raw.agentControlEnabled === true,
     agentControlPort: readAgentControlPort(raw.agentControlPort, storedVersion),
     language: readSettingsLanguage(raw.language),
+    ...teamTemplatesSetting(raw.teamTemplates),
   }
+}
+
+function teamTemplatesSetting(raw: unknown): Pick<OpenTeamSettings, 'teamTemplates'> {
+  const teamTemplates = normalizeTeamTemplates(raw)
+  return teamTemplates.length > 0 ? { teamTemplates } : {}
 }
 
 function readSettingsLanguage(raw: unknown): OpenTeamSettings['language'] {

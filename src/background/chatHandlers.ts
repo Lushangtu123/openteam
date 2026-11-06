@@ -1,6 +1,6 @@
 import { chatSiteLabel, isChatSite } from '../group/chatSites'
 import { createGroupRole, createGroupRolesBatch, type GroupRoleBatchInput } from '../group/roleTemplates'
-import { planTeamRounds, readTeamFormation, splitPositions, TEAM_MAX_COPIES_PER_MODEL, TEAM_MAX_MEMBERS, TEAM_MIN_MEMBERS, teamModelKey } from '../group/teamFormation'
+import { planTeamRounds, readTeamFormation, splitPositions, TEAM_MAX_COPIES_PER_MODEL, TEAM_MAX_MEMBERS, TEAM_MAX_TEMPLATES, TEAM_MIN_MEMBERS, teamModelKey, teamTemplateFromChat } from '../group/teamFormation'
 import type { GroupChat, GroupMessage, GroupRole, OpenTeamStore, OrchestrationFlow, OrchestrationStage, RoomMode } from '../group/types'
 import type { BackgroundMessageRoute } from './messageRouter'
 import { messageTabId, type RuntimeMessage } from './runtimeClient'
@@ -10,6 +10,8 @@ import { mutateStore, requireChat } from './storeAccess'
 export const CHAT_ROUTE_TYPES = [
   'GROUP_CHAT_CREATE',
   'GROUP_TEAM_CREATE',
+  'GROUP_TEAM_TEMPLATE_SAVE',
+  'GROUP_TEAM_TEMPLATE_DELETE',
   'GROUP_CHAT_DUPLICATE',
   'GROUP_CHAT_SWITCH',
   'GROUP_CHAT_UPDATE',
@@ -48,6 +50,32 @@ export function createChatHandlers(deps: ChatHandlersDependencies): BackgroundMe
     deps.log.info('team-create:stored', { chatId: result.chat.id, roleIds: result.roles.map(role => role.id), rounds: result.chat.teamFormation?.rounds.length })
     await deps.broadcastStoreUpdated(store)
     return { ok: true, chat: result.chat, roles: result.roles, store }
+  }
+
+  const handleTeamTemplateSave = async (message: RuntimeMessage) => {
+    const { store, result } = await mutateStore(store => {
+      const chat = requireChat(store, message.chatId)
+      if (!chat.teamFormation) throw new Error('只有按任务组队的群聊可以存为团队')
+      const template = teamTemplateFromChat(store, chat, readOptionalString(message.name) ?? chat.name, deps.newId('team'), deps.now())
+      const templates = store.settings.teamTemplates ?? []
+      if (templates.length >= TEAM_MAX_TEMPLATES) throw new Error(`最多保存 ${TEAM_MAX_TEMPLATES} 个团队，请先删掉一个`)
+      store.settings.teamTemplates = [...templates, template]
+      return template
+    })
+    deps.log.info('team-template:saved', { templateId: result.id, members: result.members.length })
+    await deps.broadcastStoreUpdated(store)
+    return { ok: true, template: result, store }
+  }
+
+  const handleTeamTemplateDelete = async (message: RuntimeMessage) => {
+    const templateId = requireString(message.templateId, '缺少团队 ID')
+    const { store } = await mutateStore(store => {
+      const templates = (store.settings.teamTemplates ?? []).filter(template => template.id !== templateId)
+      if (templates.length > 0) store.settings.teamTemplates = templates
+      else delete store.settings.teamTemplates
+    })
+    await deps.broadcastStoreUpdated(store)
+    return { ok: true, store }
   }
 
   const handleChatDuplicate = async (message: RuntimeMessage) => {
@@ -226,6 +254,8 @@ export function createChatHandlers(deps: ChatHandlersDependencies): BackgroundMe
   return [
     { type: 'GROUP_CHAT_CREATE', handler: handleChatCreate },
     { type: 'GROUP_TEAM_CREATE', handler: handleTeamCreate },
+    { type: 'GROUP_TEAM_TEMPLATE_SAVE', handler: handleTeamTemplateSave },
+    { type: 'GROUP_TEAM_TEMPLATE_DELETE', handler: handleTeamTemplateDelete },
     { type: 'GROUP_CHAT_DUPLICATE', handler: handleChatDuplicate },
     { type: 'GROUP_CHAT_SWITCH', handler: handleChatSwitch },
     { type: 'GROUP_CHAT_UPDATE', handler: handleChatUpdate },
@@ -278,6 +308,8 @@ function createChat(store: OpenTeamStore, message: RuntimeMessage, deps: ChatHan
 }
 
 function createTeam(store: OpenTeamStore, message: RuntimeMessage, deps: ChatHandlersDependencies): { chat: GroupChat; roles: GroupRole[] } {
+  const templateId = readOptionalString(message.templateId)
+  if (templateId) return createTeamFromTemplate(store, message, templateId, deps)
   const task = requireString(message.task, '请先写下要做的事')
   const members = (Array.isArray(message.members) ? message.members : []).map(member => readTeamMember(store, member))
   if (members.length < TEAM_MIN_MEMBERS || members.length > TEAM_MAX_MEMBERS) throw new Error(`请选择 ${TEAM_MIN_MEMBERS}–${TEAM_MAX_MEMBERS} 位队员`)
@@ -314,6 +346,41 @@ function createTeam(store: OpenTeamStore, message: RuntimeMessage, deps: ChatHan
     task,
     requiredPositions,
     status: 'checking',
+    rounds: planTeamRounds(roles.map(role => ({ roleId: role.id, modelKey: teamModelKey(role) }))),
+    nextRound: 0,
+    invitationIds: [],
+    createdAt: deps.now(),
+  }, deps.now())
+  chat.status = 'initializing'
+  return { chat, roles }
+}
+
+// The saved line-up with its positions and personas. The members can start at once, or be asked to
+// choose again from the role card.
+function createTeamFromTemplate(store: OpenTeamStore, message: RuntimeMessage, templateId: string, deps: ChatHandlersDependencies): { chat: GroupChat; roles: GroupRole[] } {
+  const template = store.settings.teamTemplates?.find(item => item.id === templateId)
+  if (!template) throw new Error('找不到这个团队')
+  for (const member of template.members) {
+    if (member.modelSource === 'external' && !store.settings.externalModelsById[member.externalModelId ?? '']) throw new Error(`「${member.name}」用的外部模型已经删除，无法使用这个团队`)
+  }
+  const task = readOptionalString(message.task) ?? template.task
+  if (!task) throw new Error('请先写下要做的事')
+  const chat = createChat(store, { type: 'GROUP_CHAT_CREATE', name: readOptionalString(message.name) ?? template.name, mode: 'collaborative' }, deps)
+  const roles = createGroupRolesBatch(store, chat.id, template.members.map(member => ({
+    source: 'temporary',
+    createdBy: 'team-formation',
+    name: member.name,
+    ...(member.description ? { description: member.description } : {}),
+    systemPrompt: member.systemPrompt ?? '',
+    modelSource: member.modelSource,
+    ...(member.chatSite ? { chatSite: member.chatSite } : {}),
+    ...(member.externalModelId ? { externalModelId: member.externalModelId } : {}),
+  })), () => deps.newId('role'), deps.now())
+  chat.teamFormation = readTeamFormation({
+    task,
+    requiredPositions: [],
+    status: 'checking',
+    preset: true,
     rounds: planTeamRounds(roles.map(role => ({ roleId: role.id, modelKey: teamModelKey(role) }))),
     nextRound: 0,
     invitationIds: [],

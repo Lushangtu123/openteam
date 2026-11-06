@@ -152,6 +152,13 @@ export function restoreBackup(current: OpenTeamStore, backupStore: OpenTeamStore
     store.settings.externalModelOrder.push(modelId)
   }
 
+  // Saved teams the current data does not have.
+  for (const template of source.settings.teamTemplates ?? []) {
+    const templates = store.settings.teamTemplates ?? []
+    if (templates.some(existing => existing.id === template.id)) continue
+    store.settings.teamTemplates = [...templates, template]
+  }
+
   if (!store.globalNote && source.globalNote) store.globalNote = source.globalNote
   if (!store.currentChatId && addedChatIds.length > 0) store.currentChatId = addedChatIds[0]
   return { store, addedChatIds, skippedChatIds }

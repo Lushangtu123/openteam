@@ -43,6 +43,8 @@ export interface OrchestrationModalDependencies {
 export interface OrchestrationModalView {
   close(): void
   render(): void
+  // Opens the editor for the current chat and starts an auto plan for this task and instruction.
+  openAutoPlan(task: string, instruction: string): void
   registerOrchestrationEvents(): void
   handleRuntimeMessage(message: unknown): boolean
 }
@@ -1027,7 +1029,20 @@ export function createOrchestrationModalView(deps: OrchestrationModalDependencie
     deps.runOrchestrationEl.addEventListener('click', () => run().catch(error => deps.showError(error instanceof Error ? error.message : String(error))))
   }
 
-  return { close, render, registerOrchestrationEvents, handleRuntimeMessage }
+  function openAutoPlan(task: string, instruction: string): void {
+    open()
+    if (deps.orchestrationModalEl.hidden) return
+    if (!ensureExternalApiConfigured()) return
+    deps.orchestrationTaskEl.value = task
+    draft.task = task
+    autoPanelOpen = true
+    autoInstruction = instruction
+    renderAutoPanel()
+    updateActionButtons()
+    autoGenerate().catch(error => deps.showError(error instanceof Error ? error.message : String(error)))
+  }
+
+  return { close, render, openAutoPlan, registerOrchestrationEvents, handleRuntimeMessage }
 }
 
 function autoGenerateSuccessMessage(createdCount: number, reusedCount: number): string {
