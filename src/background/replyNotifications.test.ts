@@ -40,6 +40,30 @@ describe('reply notifications', () => {
     expect(findAnsweredPrompt(store, 'chat-1', 'm1')).toEqual({ chatId: 'chat-1', chatName: '上线评审', messageId: 'm1', repliedNames: ['设计师'], failedNames: [] })
   })
 
+  it('tells about a project when its plan is ready, when it asks, and when it ends, once each', async () => {
+    const store = storeWith({})
+    const chat = store.chatsById['chat-1']
+    store.messagesById.m1 = { id: 'm1', chatId: 'chat-1', seq: 1, type: 'user', content: '写方案', projectGoal: true, createdAt: 0, status: 'received' }
+    chat.project = { id: 'p1', goalMessageId: 'm1', coordinatorRoleId: 'r1', status: 'running', tasks: [], steps: 1, maxSteps: 30, planAttempts: 1, reviewAttempts: 0, createdAt: 0, updatedAt: 0 }
+    expect(findAnsweredPrompt(store, 'chat-1', 'm1')).toBeUndefined()
+
+    const create = vi.fn(async () => undefined)
+    const notifier = createReplyNotifier({ create, isTeamPageInView: async () => false, iconUrl: 'icon.png', log: { warn: vi.fn() } })
+    chat.project.status = 'awaiting-approval'
+    expect(await notifier.notify(store, 'chat-1', 'm1')).toBe(true)
+    expect(await notifier.notify(store, 'chat-1', 'm1')).toBe(false)
+    chat.project.status = 'waiting-user'
+    chat.project.question = '预算多少？'
+    expect(await notifier.notify(store, 'chat-1', 'm1')).toBe(true)
+    chat.project.status = 'done'
+    expect(await notifier.notify(store, 'chat-1', 'm1')).toBe(true)
+    expect(create.mock.calls.map(call => (call as unknown as [string, { title: string; message: string }])[1])).toEqual([
+      { type: 'basic', iconUrl: 'icon.png', title: '「上线评审」的项目计划拟好了', message: '请确认任务后开始执行。' },
+      { type: 'basic', iconUrl: 'icon.png', title: '「上线评审」的项目需要你决定', message: '预算多少？' },
+      { type: 'basic', iconUrl: 'icon.png', title: '「上线评审」的项目完成了', message: '最终交付已经写好。' },
+    ])
+  })
+
   it('words the notification in the chosen language', () => {
     const answered = { chatId: 'chat-1', chatName: '上线评审', messageId: 'm1', repliedNames: ['工程师', '设计师'], failedNames: ['增长'] }
     expect(replyNotificationText(answered, 'zh-CN')).toEqual({ title: '「上线评审」的回复都到了', message: '工程师、设计师 已回复；增长 没有回复成功' })

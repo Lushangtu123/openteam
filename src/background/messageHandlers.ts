@@ -2,6 +2,8 @@ import { isChatSite } from '../group/chatSites'
 import { extractSupportedConversationId, normalizeSupportedChatConversationUrl } from '../group/conversationUrl'
 import { readMessageUploads, type MessageUpload } from '../group/messageUploads'
 import { hasRoundSummary, pickSummarizer, readSummarizableRound, roundSummaryRequestText } from '../group/roundSummary'
+import { isProjectActive } from '../group/project'
+import { createProjectRunner } from './projectRunner'
 import { chooseNextSpeaker, discussionMaxTurns, discussionTranscript, discussionTurnRequestText, DISCUSSION_MAX_FAILED_TURNS, isDiscussionRunning, startsDiscussion, turnCountsOf } from '../group/discussion'
 import type { LoadedUpload, UploadedImage } from './imageAttachments'
 import { normalizeMessageHighlightColor } from '../group/highlightColors'
@@ -45,6 +47,12 @@ export const MESSAGE_ROUTE_TYPES = [
   'GROUP_ROUND_SUMMARY_REQUEST',
   'GROUP_DISCUSSION_STOP',
   'GROUP_DISCUSSION_CONTINUE',
+  'GROUP_PROJECT_START',
+  'GROUP_PROJECT_APPROVE',
+  'GROUP_PROJECT_REPLAN',
+  'GROUP_PROJECT_SET_OWNER',
+  'GROUP_PROJECT_STOP',
+  'GROUP_PROJECT_CONTINUE',
   'TEAM_FRAME_ROLE_READY',
   'TEAM_ROLE_CONVERSATION_UPDATED',
   'TEAM_SEND_ACK',
@@ -55,6 +63,12 @@ export const MESSAGE_ROUTE_TYPES = [
   'TEAM_ROLE_REPLY_RESYNC',
   'TEAM_ROLE_ERROR',
 ] as const
+
+// A request OpenTeam sent one member, with its prepared delivery.
+export interface OpenTeamRequest {
+  request: GroupMessage
+  prepared: PreparedRolePromptDelivery
+}
 
 export interface MessageHandlersDependencies {
   broadcastStoreUpdated(store: OpenTeamStore, excludeTabId?: number): Promise<void> | void
@@ -94,7 +108,9 @@ export function createMessageHandlers(baseDeps: MessageHandlersDependencies): Ba
   const deps: MessageHandlersDependencies = {
     ...baseDeps,
     onPromptSettled: (store, chatId, promptMessageId) => {
-      if (store.messagesById[promptMessageId]?.discussionTurnOf) scheduleDiscussionAdvance(chatId, promptMessageId)
+      const settled = store.messagesById[promptMessageId]
+      if (settled?.projectRequest) projectRunner.onSettled(chatId, promptMessageId)
+      else if (settled?.discussionTurnOf) scheduleDiscussionAdvance(chatId, promptMessageId)
       else scheduleRoundSummary(store, chatId, promptMessageId)
       return baseDeps.onPromptSettled?.(store, chatId, promptMessageId)
     },
@@ -145,6 +161,13 @@ export function createMessageHandlers(baseDeps: MessageHandlersDependencies): Ba
       }
       deps.log.debug('message-send:parsed-targets', { chatId: chat.id, targetRoleIds: finalTargetRoleIds })
 
+      // While a project runs, what the user sends is a note for its coordinator; an answer to the
+      // coordinator's question lets the project go on.
+      if (isProjectActive(chat.project)) {
+        if (uploads.length > 0) throw new Error('项目进行中，补充的消息暂不支持附件')
+        const { note, answered } = projectRunner.addNote(store, chat, raw, timestamp)
+        return { message: note, deliveries: [], externalDeliveries: [], resumeProject: answered }
+      }
       // While members take turns, what the user sends goes to the next speakers as a note.
       if (isDiscussionRunning(chat) && chat.discussion) {
         if (uploads.length > 0) throw new Error('讨论进行中，补充的消息暂不支持附件')
@@ -272,7 +295,12 @@ export function createMessageHandlers(baseDeps: MessageHandlersDependencies): Ba
       deps.log.info('message-send:orchestration-start', { chatId, flowId: orchestration.flowId, taskLength: orchestration.task.length })
       return { ok: true, ...(await startOrchestrationRun(deps, orchestration)) }
     }
-    const messageResult = result as { message: GroupMessage; deliveries: PromptDelivery[]; externalDeliveries: ExternalPromptDelivery[]; deliveryMessageId?: string }
+    const messageResult = result as { message: GroupMessage; deliveries: PromptDelivery[]; externalDeliveries: ExternalPromptDelivery[]; deliveryMessageId?: string; resumeProject?: boolean }
+    if (messageResult.resumeProject) {
+      await deps.broadcastStoreUpdated(store)
+      const resumed = await projectRunner.resume(chatId)
+      return { ok: true, message: messageResult.message, deliveries: [], store: resumed.store }
+    }
     // The images must be stored before any delivery reads them.
     const images = uploads.flatMap(({ id, upload }) => upload.kind === 'image' ? [{ id, fileName: upload.fileName, mimeType: upload.mimeType, data: upload.data }] : [])
     if (images.length > 0) {
@@ -446,33 +474,26 @@ export function createMessageHandlers(baseDeps: MessageHandlersDependencies): Ba
       : isRoleDeliverable(role, deps.runtimeFrames.getByRole(chat.id, role.id), timestamp)
   }
 
-  // Asks one member for the next turn (inside a store mutation).
-  function startDiscussionTurn(store: OpenTeamStore, chat: GroupChat, run: DiscussionRun, role: GroupRole, handoffFrom: string | undefined, timestamp: number) {
-    run.turn += 1
-    const handoffName = handoffFrom ? store.rolesById[handoffFrom]?.name : undefined
+  // Sends one member a request from OpenTeam itself (a discussion turn, a project step), inside a
+  // store mutation: the request message, its prepared delivery, and the member marked as replying.
+  function startOpenTeamRequest(store: OpenTeamStore, chat: GroupChat, role: GroupRole, fields: Pick<GroupMessage, 'content'> & Partial<GroupMessage>, timestamp: number) {
     const request: GroupMessage = {
       id: deps.newId('msg'),
       chatId: chat.id,
       seq: chat.nextMessageSeq,
       type: 'user',
-      content: discussionTurnRequestText(run.turn, run.maxTurns, role.name, handoffName, store.settings.language),
       targetRoleIds: [role.id],
       mentionedRoleIds: [role.id],
-      discussionTurnOf: run.topicMessageId,
-      discussionTurn: run.turn,
-      ...(handoffFrom ? { discussionHandoffFrom: handoffFrom } : {}),
       createdAt: timestamp,
       status: 'pending',
       deliveryStatus: { [role.id]: 'pending' },
+      ...fields,
     }
     store.messagesById[request.id] = request
     chat.messageIds.push(request.id)
     chat.nextMessageSeq += 1
     chat.updatedAt = timestamp
     chat.status = 'running'
-    run.currentRoleId = role.id
-    run.currentMessageId = request.id
-    run.updatedAt = timestamp
 
     const prepared = prepareRolePromptDelivery({ store, chat, role, userMessage: request, roles: getChatRoles(store, chat), messages: getChatMessages(store, chat), timestamp, newId: deps.newId, runtimeFrames: deps.runtimeFrames })
     recoverDeliverableRoleStatus(role, timestamp, deps.log)
@@ -484,10 +505,30 @@ export function createMessageHandlers(baseDeps: MessageHandlersDependencies): Ba
     return { request, prepared }
   }
 
-  async function deliverDiscussionTurn(chatId: string, turn: ReturnType<typeof startDiscussionTurn>): Promise<OpenTeamStore | undefined> {
-    if (turn.prepared.delivery) await sendPromptDeliveries(deps, chatId, turn.request.id, [turn.prepared.delivery])
-    if (turn.prepared.externalDelivery) return sendExternalModelDelivery(deps, externalModelClient, externalModelRuns, turn.prepared.externalDelivery)
+  async function deliverOpenTeamRequest(chatId: string, sent: OpenTeamRequest): Promise<OpenTeamStore | undefined> {
+    if (sent.prepared.delivery) await sendPromptDeliveries(deps, chatId, sent.request.id, [sent.prepared.delivery])
+    if (sent.prepared.externalDelivery) return sendExternalModelDelivery(deps, externalModelClient, externalModelRuns, sent.prepared.externalDelivery)
     return undefined
+  }
+
+  // Asks one member for the next turn (inside a store mutation).
+  function startDiscussionTurn(store: OpenTeamStore, chat: GroupChat, run: DiscussionRun, role: GroupRole, handoffFrom: string | undefined, timestamp: number) {
+    run.turn += 1
+    const handoffName = handoffFrom ? store.rolesById[handoffFrom]?.name : undefined
+    const sent = startOpenTeamRequest(store, chat, role, {
+      content: discussionTurnRequestText(run.turn, run.maxTurns, role.name, handoffName, store.settings.language),
+      discussionTurnOf: run.topicMessageId,
+      discussionTurn: run.turn,
+      ...(handoffFrom ? { discussionHandoffFrom: handoffFrom } : {}),
+    }, timestamp)
+    run.currentRoleId = role.id
+    run.currentMessageId = sent.request.id
+    run.updatedAt = timestamp
+    return sent
+  }
+
+  async function deliverDiscussionTurn(chatId: string, turn: OpenTeamRequest): Promise<OpenTeamStore | undefined> {
+    return deliverOpenTeamRequest(chatId, turn)
   }
 
   // After a turn: the next member speaks (the one @-mentioned, or whoever spoke least), until the
@@ -579,6 +620,41 @@ export function createMessageHandlers(baseDeps: MessageHandlersDependencies): Ba
     const responseStore = await deliverDiscussionTurn(chatId, result) ?? store
     return { ok: true, message: result.request, store: responseStore }
   }
+
+  const projectRunner = createProjectRunner({
+    now: () => deps.now(),
+    newId: prefix => deps.newId(prefix),
+    log: deps.log,
+    broadcastStoreUpdated: store => deps.broadcastStoreUpdated(store),
+    waitForStep: ms => waitForRetryDelay(deps, ms),
+    canTakeTurn,
+    startRequest: (store, chat, role, fields, timestamp) => startOpenTeamRequest(store, chat, role, fields, timestamp),
+    deliverRequest: (chatId, sent) => deliverOpenTeamRequest(chatId, sent as OpenTeamRequest),
+    reportMilestone: (store, chatId, goalMessageId) => {
+      try {
+        Promise.resolve(baseDeps.onPromptSettled?.(store, chatId, goalMessageId)).catch(error => deps.log.warn('project:milestone-failed', { error: error instanceof Error ? error.message : String(error) }))
+      } catch (error) {
+        deps.log.warn('project:milestone-failed', { error: error instanceof Error ? error.message : String(error) })
+      }
+    },
+    attachmentsFor: uploads => uploads.map(upload => uploadAttachment(deps.newId('attachment'), upload)),
+  })
+
+  const handleProjectStart = async (message: RuntimeMessage) => {
+    const chatId = requireString(message.chatId, '缺少群聊 ID')
+    const uploadCheck = readMessageUploads(message.uploads)
+    if (!uploadCheck.ok) throw new Error(uploadCheck.error)
+    if (uploadCheck.uploads.some(upload => upload.kind === 'image')) throw new Error('项目暂不支持图片附件，可以附上 PDF、Word 或文本文件')
+    return projectRunner.start({
+      chatId,
+      goal: requireString(message.goal, '请写下项目目标'),
+      coordinatorRoleId: readOptionalString(message.coordinatorRoleId),
+      maxSteps: typeof message.maxSteps === 'number' ? message.maxSteps : undefined,
+      uploads: uploadCheck.uploads,
+    })
+  }
+
+  const projectRoute = (run: (chatId: string, message: RuntimeMessage) => Promise<unknown>) => async (message: RuntimeMessage) => run(requireString(message.chatId, '缺少群聊 ID'), message)
 
   const handleRoundSummaryRequest = async (message: RuntimeMessage) => {
     const chatId = requireString(message.chatId, '缺少群聊 ID')
@@ -1201,6 +1277,12 @@ export function createMessageHandlers(baseDeps: MessageHandlersDependencies): Ba
     { type: 'GROUP_ROUND_SUMMARY_REQUEST', handler: handleRoundSummaryRequest },
     { type: 'GROUP_DISCUSSION_STOP', handler: handleDiscussionStop },
     { type: 'GROUP_DISCUSSION_CONTINUE', handler: handleDiscussionContinue },
+    { type: 'GROUP_PROJECT_START', handler: handleProjectStart },
+    { type: 'GROUP_PROJECT_APPROVE', handler: projectRoute(chatId => projectRunner.approve(chatId)) },
+    { type: 'GROUP_PROJECT_REPLAN', handler: projectRoute(chatId => projectRunner.replan(chatId)) },
+    { type: 'GROUP_PROJECT_SET_OWNER', handler: projectRoute((chatId, message) => projectRunner.setTaskOwner(chatId, requireString(message.taskId, '缺少任务 ID'), requireString(message.roleId, '缺少人员 ID'))) },
+    { type: 'GROUP_PROJECT_STOP', handler: projectRoute(chatId => projectRunner.stop(chatId)) },
+    { type: 'GROUP_PROJECT_CONTINUE', handler: projectRoute(chatId => projectRunner.resume(chatId)) },
     {
       type: 'TEAM_FRAME_ROLE_READY',
       handler: (message, sender) => readOptionalString(message.chatId) ? handleFrameRoleReady(message, sender) : { ok: false, error: 'TEAM_FRAME_ROLE_READY 缺少 chatId' },

@@ -17,6 +17,7 @@ import { applyTeamLanguage, createLanguageSettingsController } from './languageC
 import { createMessageSearchView } from './messageSearchView'
 import { createReplyComparisonView } from './replyComparisonView'
 import { createTeamFormationView } from './teamFormationView'
+import { createProjectView } from './projectView'
 import { createMessagesView } from './messagesView'
 import { createNotesView } from './notesView'
 import { createPeopleLibraryView } from './peopleLibraryView'
@@ -487,6 +488,7 @@ const messagesView = createMessagesView({
   isTeamInvitation: (chat, messageId) => teamFormationView.isInvitation(chat, messageId),
   openTeamCard: chatId => teamFormationView.openCard(chatId),
   renderTeamClaim: message => teamFormationView.renderClaim(message),
+  renderProjectBoard: (chat, messages) => projectView.renderBoard(chat, messages),
   log,
 })
 const renderMessages = messagesView.renderMessages
@@ -792,6 +794,16 @@ const teamFormationView = createTeamFormationView({
   openAutoPlan: (task, instruction) => orchestrationModalView.openAutoPlan(task, instruction),
 })
 
+const projectView = createProjectView({
+  getStore: () => store,
+  getCurrentChat,
+  getCurrentRoles,
+  getLanguage: () => normalizeLanguage(store.settings.language),
+  getDraft: () => teamDomRefs.messageInputEl.value.trim(),
+  runCommand,
+  showError,
+})
+
 const messageSearchView = createMessageSearchView({
   openButtonEl: teamDomRefs.openMessageSearchEl,
   getStore: () => store,
@@ -823,6 +835,7 @@ async function boot(): Promise<void> {
   uiStyleController.registerStyleEvents()
   aiPagesView.registerAiPagesControls()
   registerSettingsWindow({ windowEl: settingsMenuEl, settingsButtonEl })
+  document.querySelector<HTMLButtonElement>('#open-project')?.addEventListener('click', () => projectView.openSetup())
   showAiPagesEl.addEventListener('click', () => {
     settingsMenuEl.hidden = true
     settingsButtonEl.setAttribute('aria-expanded', 'false')

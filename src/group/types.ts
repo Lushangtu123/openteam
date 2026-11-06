@@ -256,6 +256,56 @@ export interface GroupChat {
   discussionMode?: boolean
   // The group's latest discussion.
   discussion?: DiscussionRun
+  // The group's latest 项目 (a coordinator plans tasks for the members and checks the results).
+  project?: ProjectRun
+  createdAt: number
+  updatedAt: number
+}
+
+export type ProjectStatus = 'planning' | 'awaiting-approval' | 'running' | 'reviewing' | 'waiting-user' | 'finishing' | 'done' | 'stopped'
+export type ProjectTaskStatus = 'todo' | 'redo' | 'doing' | 'done' | 'blocked' | 'failed'
+export type ProjectRequestKind = 'plan' | 'task' | 'review' | 'final'
+
+export interface ProjectTask {
+  id: string
+  title: string
+  // What to do and deliver.
+  detail: string
+  ownerRoleId: string
+  dependsOn: string[]
+  // How to tell it is done; the coordinator checks results against it.
+  doneWhen: string
+  status: ProjectTaskStatus
+  // Tries so far (the first one included).
+  attempts: number
+  summary?: string
+  // The coordinator's note (what to redo) or why the member was blocked.
+  note?: string
+  resultMessageId?: string
+  // The request out for this task.
+  requestId?: string
+  // The coordinator has checked the latest result.
+  checked?: boolean
+}
+
+export interface ProjectRun {
+  id: string
+  goalMessageId: string
+  coordinatorRoleId: string
+  status: ProjectStatus
+  tasks: ProjectTask[]
+  // Requests sent so far (plans, tasks, checks, the final write-up), and the most allowed.
+  steps: number
+  maxSteps: number
+  planAttempts: number
+  reviewAttempts: number
+  // The coordinator's question while it waits for the user.
+  question?: string
+  stopReason?: 'user' | 'budget' | 'failed' | 'unavailable'
+  stopDetail?: string
+  // The coordinator's request out (plan, check or final write-up).
+  coordinatorRequestId?: string
+  finalMessageId?: string
   createdAt: number
   updatedAt: number
 }
@@ -410,6 +460,13 @@ export interface GroupMessage {
   discussionHandoffFrom?: string
   // On a message the user sent while a discussion ran: the topic. It is shown to the next speakers.
   discussionNoteOf?: string
+  // On the user's message that started a 项目 (its goal).
+  projectGoal?: boolean
+  // On a request OpenTeam sends to a member for a project: a plan, a task, a check or the final
+  // write-up.
+  projectRequest?: { kind: ProjectRequestKind; taskId?: string }
+  // On a message the user sent while a project ran: the goal message. The coordinator reads it.
+  projectNoteOf?: string
   createdAt: number
   status: DeliveryStatus
   deliveryStatus?: Record<string, DeliveryStatus>

@@ -11,6 +11,9 @@ export interface AnsweredPrompt {
   messageId: string
   repliedNames: string[]
   failedNames: string[]
+  // For a project: the point that needs the user, or its end.
+  projectStage?: 'awaiting-approval' | 'waiting-user' | 'done' | 'stopped'
+  projectQuestion?: string
 }
 
 // The message, once each member it went to has replied or failed; undefined while any is still due.
@@ -20,6 +23,13 @@ export function findAnsweredPrompt(store: OpenTeamStore, chatId: string, message
   if (!chat || !message || message.type !== 'user' || message.chatId !== chatId) return undefined
   // A round's summary and a discussion turn are not questions the user asked.
   if (message.roundSummaryOf || message.discussionTurnOf) return undefined
+  // A project tells the user when its plan is ready, when it has a question, and when it ends.
+  if (message.projectGoal) {
+    const project = chat.project
+    const stage = project?.goalMessageId === messageId ? project.status : undefined
+    if (stage !== 'awaiting-approval' && stage !== 'waiting-user' && stage !== 'done' && stage !== 'stopped') return undefined
+    return { chatId, chatName: chat.name, messageId, repliedNames: [], failedNames: [], projectStage: stage, ...(project?.question ? { projectQuestion: project.question } : {}) }
+  }
   // A discussion is answered once it has finished.
   if (message.discussionTopic) {
     if (chat.discussion?.topicMessageId === messageId && chat.discussion.status === 'running') return undefined
@@ -41,6 +51,7 @@ export function findAnsweredPrompt(store: OpenTeamStore, chatId: string, message
 
 export function replyNotificationText(answered: AnsweredPrompt, language: unknown): { title: string; message: string } {
   const en = normalizeLanguage(language) === 'en'
+  if (answered.projectStage) return projectNotificationText(answered, en)
   const join = (names: string[]) => names.join(en ? ', ' : '、')
   const parts: string[] = []
   if (answered.repliedNames.length) parts.push(en ? `${join(answered.repliedNames)} replied` : `${join(answered.repliedNames)} 已回复`)
@@ -65,10 +76,12 @@ export function createReplyNotifier(deps: ReplyNotifierDependencies) {
   const notified = new Set<string>()
   return {
     async notify(store: OpenTeamStore, chatId: string, messageId: string): Promise<boolean> {
-      if (store.settings.replyNotifications === false || notified.has(messageId)) return false
+      if (store.settings.replyNotifications === false) return false
       const answered = findAnsweredPrompt(store, chatId, messageId)
-      if (!answered) return false
-      notified.add(messageId)
+      // Once per message; a project once per point it reaches.
+      const key = answered?.projectStage ? `${messageId}:${answered.projectStage}` : messageId
+      if (!answered || notified.has(key)) return false
+      notified.add(key)
       if (await deps.isTeamPageInView()) return false
       const text = replyNotificationText(answered, store.settings.language)
       try {
@@ -79,6 +92,27 @@ export function createReplyNotifier(deps: ReplyNotifierDependencies) {
         return false
       }
     },
+  }
+}
+
+function projectNotificationText(answered: AnsweredPrompt, en: boolean): { title: string; message: string } {
+  switch (answered.projectStage) {
+    case 'awaiting-approval':
+      return en
+        ? { title: `Project plan ready: ${answered.chatName}`, message: 'Check the tasks and start the work.' }
+        : { title: `「${answered.chatName}」的项目计划拟好了`, message: '请确认任务后开始执行。' }
+    case 'waiting-user':
+      return en
+        ? { title: `The project needs you: ${answered.chatName}`, message: answered.projectQuestion ?? 'The coordinator has a question.' }
+        : { title: `「${answered.chatName}」的项目需要你决定`, message: answered.projectQuestion ?? '协调员有问题要问你。' }
+    case 'done':
+      return en
+        ? { title: `Project finished: ${answered.chatName}`, message: 'The final deliverable is ready.' }
+        : { title: `「${answered.chatName}」的项目完成了`, message: '最终交付已经写好。' }
+    default:
+      return en
+        ? { title: `Project stopped: ${answered.chatName}`, message: 'Open the group to see why and continue.' }
+        : { title: `「${answered.chatName}」的项目停了下来`, message: '打开群聊看看原因，可以继续执行。' }
   }
 }
 

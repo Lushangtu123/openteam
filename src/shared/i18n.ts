@@ -198,6 +198,23 @@ const UI_TRANSLATIONS: Record<string, string> = {
   '汇总本轮回复': 'Summarize this round',
   '正在汇总本轮回复': 'Summarizing this round',
   '通用': 'General',
+  '项目': 'Project',
+  '项目目标': 'Project goal',
+  '补充给协调员': 'Note for the coordinator',
+  '最终交付': 'Final deliverable',
+  '协调员的任务计划（看板里有整理好的版本）': "The coordinator's task plan (see the board for a tidy version)",
+  '协调员的检查结果（看板里有整理好的版本）': "The coordinator's check (see the board for a tidy version)",
+  '让协调员把目标拆成任务，分给成员完成并检查结果': 'Have a coordinator break a goal into tasks for the members and check the results',
+  '项目进行中，补充的消息暂不支持附件': 'A project is running; notes cannot have attachments',
+  '这个群聊已经有进行中的项目，请先停止它': 'This group already has a project running; stop it first',
+  '项目至少需要两位成员': 'A project needs at least two members',
+  '请写下项目目标': 'Write the project goal',
+  '现在没有等待确认的计划': 'There is no plan waiting for approval',
+  '只有计划等待确认时才能重新规划': 'You can plan again only while the plan waits for approval',
+  '只有计划等待确认时才能改负责人': 'You can change owners only while the plan waits for approval',
+  '项目已经完成': 'The project is finished',
+  '项目正在进行': 'The project is running',
+  '项目暂不支持图片附件，可以附上 PDF、Word 或文本文件': 'Projects do not take images yet; attach PDF, Word or text files',
   '群聊回复': 'Group replies',
   'AI 网页': 'AI pages',
   '本机智能体': 'Local agents',
@@ -1026,6 +1043,12 @@ function translateUiPattern(source: string): string | undefined {
   if (discussionHandoff) return `Turn ${discussionHandoff[1]}/${discussionHandoff[2]}: ${discussionHandoff[3]} asked ${discussionHandoff[4]} to speak`
   const discussionTurn = source.match(/^第 (\d+)\/(\d+) 轮 · 请「(.+)」发言$/)
   if (discussionTurn) return `Turn ${discussionTurn[1]}/${discussionTurn[2]}: ${discussionTurn[3]} speaks`
+  const projectTask = source.match(/^任务 (\S+) · (.+)$/)
+  if (projectTask) return `Task ${projectTask[1]} · ${projectTask[2]}`
+  const projectPlan = source.match(/^项目 · 请「(.+)」(拆分任务|检查结果|整理最终交付)$/)
+  if (projectPlan) return `Project · ${projectPlan[1]} ${projectPlan[2] === '拆分任务' ? 'plans the tasks' : projectPlan[2] === '检查结果' ? 'checks the results' : 'writes the final deliverable'}`
+  const projectTaskTo = source.match(/^项目 · 任务 (\S+)「(.+)」交给「(.+)」(?:（第 (\d+) 次）)?$/)
+  if (projectTaskTo) return `Project · task ${projectTaskTo[1]} "${projectTaskTo[2]}" to ${projectTaskTo[3]}${projectTaskTo[4] ? ` (try ${projectTaskTo[4]})` : ''}`
   const documentPage = source.match(/^—— 第 (\d+) 页 ——$/)
   if (documentPage) return `—— Page ${documentPage[1]} ——`
   const documentSheet = source.match(/^—— 工作表：(.+) ——$/)

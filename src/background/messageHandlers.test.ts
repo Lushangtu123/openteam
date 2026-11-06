@@ -152,6 +152,12 @@ describe('background message handlers', () => {
       'GROUP_ROUND_SUMMARY_REQUEST',
       'GROUP_DISCUSSION_STOP',
       'GROUP_DISCUSSION_CONTINUE',
+      'GROUP_PROJECT_START',
+      'GROUP_PROJECT_APPROVE',
+      'GROUP_PROJECT_REPLAN',
+      'GROUP_PROJECT_SET_OWNER',
+      'GROUP_PROJECT_STOP',
+      'GROUP_PROJECT_CONTINUE',
       'TEAM_FRAME_ROLE_READY',
       'TEAM_ROLE_CONVERSATION_UPDATED',
       'TEAM_SEND_ACK',
@@ -1361,6 +1367,168 @@ describe('background message handlers', () => {
     expect(continued).toMatchObject({ ok: true, message: { discussionTurn: 3, targetRoleIds: ['role-1'] } })
     await vi.waitFor(() => expect(currentStore.chatsById['chat-1'].discussion).toMatchObject({ status: 'done', turn: 4, maxTurns: 4 }))
     await expect(route('GROUP_DISCUSSION_CONTINUE').handler({ type: 'GROUP_DISCUSSION_CONTINUE', chatId: 'chat-2' }, {})).rejects.toThrow()
+  })
+
+  it('runs a project: plan, approval, tasks in parallel and in order, a redo, the checks and the final deliverable', async () => {
+    vi.resetModules()
+    let currentStore = structuredClone(createStoreWithTwoApiRoles())
+    vi.doMock('./storeAccess', async importOriginal => {
+      const actual = await importOriginal<typeof import('./storeAccess')>()
+      return {
+        ...actual,
+        mutateStore: vi.fn(async (mutator: (store: OpenTeamStore) => unknown) => {
+          const result = await mutator(currentStore)
+          currentStore = structuredClone(currentStore)
+          return { store: currentStore, result }
+        }),
+      }
+    })
+
+    const { createMessageHandlers } = await import('./messageHandlers')
+    let reviews = 0
+    const complete = vi.fn(async (input: { prompt: string }): Promise<{ content: string }> => {
+      const prompt = input.prompt
+      if (prompt.includes('拆成 2–8 个具体任务')) {
+        return { content: '```json\n' + JSON.stringify({ tasks: [
+          { id: 't1', title: '技术方案', owner: '工程师', dependsOn: [], detail: '写技术方案', doneWhen: '有架构说明' },
+          { id: 't2', title: '界面草图', owner: '设计师', dependsOn: [], detail: '画界面', doneWhen: '有三个页面' },
+          { id: 't3', title: '上线清单', owner: '设计师', dependsOn: ['t1', 't2'], detail: '列上线清单', doneWhen: '包含风险' },
+        ] }) + '\n```' }
+      }
+      for (const id of ['t1', 't2', 't3']) {
+        if (prompt.includes(`你的任务（${id}`)) {
+          const redone = prompt.includes('上一次结果的检查意见：\n加上风险')
+          return { content: `${id} ${redone ? '改好的' : ''}成果\n【状态】完成\n【摘要】${id} 摘要${redone ? '（含风险）' : ''}` }
+        }
+      }
+      if (prompt.includes('任务和结果：')) {
+        reviews += 1
+        return { content: '```json\n' + JSON.stringify(reviews === 1
+          ? { decisions: [{ task: 't1', verdict: 'pass' }, { task: 't2', verdict: 'pass' }, { task: 't3', verdict: 'redo', note: '加上风险' }], newTasks: [], finish: false }
+          : { decisions: [{ task: 't3', verdict: 'pass' }], newTasks: [], finish: true }) + '\n```' }
+      }
+      if (prompt.includes('整合成一份完整的最终交付')) return { content: '# 最终方案\n全部内容' }
+      return { content: '?' }
+    })
+    const onPromptSettled = vi.fn()
+    let messageIdSeq = 0
+    const routes = createMessageHandlers({
+      broadcastStoreUpdated: vi.fn(),
+      externalModelClient: { complete },
+      getChatStatusFromRoles: () => 'ready',
+      log: { debug: vi.fn(), info: vi.fn(), warn: vi.fn() },
+      newId: vi.fn((prefix: string) => prefix === 'msg' ? `${prefix}-${++messageIdSeq}` : `${prefix}-${messageIdSeq}`),
+      now: vi.fn(() => 100),
+      onPromptSettled,
+      runtimeFrames: { bind: vi.fn(), getByAddress: vi.fn(), getByRole: vi.fn(() => undefined) },
+      sendRoleMessage: vi.fn(),
+      sendError: vi.fn(),
+      sendPrompt: vi.fn(),
+      waitForRetry: vi.fn(async () => {}),
+    })
+    const route = (type: string) => routes.find(candidate => candidate.type === type)!
+    const project = () => currentStore.chatsById['chat-1'].project!
+
+    const started = await route('GROUP_PROJECT_START').handler({ type: 'GROUP_PROJECT_START', chatId: 'chat-1', goal: '做一个记账 App 的上线方案', uploads: [{ kind: 'text', fileName: '需求.md', mimeType: 'text/markdown', text: '必须支持导出' }] }, {})
+    expect(started).toMatchObject({ ok: true, message: { projectGoal: true, content: '做一个记账 App 的上线方案' } })
+    await vi.waitFor(() => expect(project().status).toBe('awaiting-approval'))
+    expect(complete.mock.calls[0][0].prompt).toContain('附件 需求.md：')
+    expect(project()).toMatchObject({ coordinatorRoleId: 'role-1', steps: 1 })
+    expect(project().tasks.map(task => [task.id, task.ownerRoleId, task.dependsOn])).toEqual([['t1', 'role-1', []], ['t2', 'role-2', []], ['t3', 'role-2', ['t1', 't2']]])
+    await vi.waitFor(() => expect(onPromptSettled).toHaveBeenCalledWith(expect.anything(), 'chat-1', (started as { message: { id: string } }).message.id))
+
+    // The owner of t3 can be changed while the plan waits.
+    await route('GROUP_PROJECT_SET_OWNER').handler({ type: 'GROUP_PROJECT_SET_OWNER', chatId: 'chat-1', taskId: 't3', roleId: 'role-1' }, {})
+    await route('GROUP_PROJECT_SET_OWNER').handler({ type: 'GROUP_PROJECT_SET_OWNER', chatId: 'chat-1', taskId: 't3', roleId: 'role-2' }, {})
+    await route('GROUP_PROJECT_APPROVE').handler({ type: 'GROUP_PROJECT_APPROVE', chatId: 'chat-1' }, {})
+    await vi.waitFor(() => expect(project().status).toBe('done'))
+
+    const prompts = complete.mock.calls.map(([input]) => input.prompt)
+    const order = prompts.map(prompt => prompt.match(/你的任务（(t\d)/)?.[1] ?? (prompt.includes('任务和结果：') ? 'review' : prompt.includes('最终交付') ? 'final' : 'plan'))
+    expect(order.slice(0, 3)).toEqual(['plan', 't1', 't2'])
+    expect(order.slice(3)).toEqual(['t3', 'review', 't3', 'review', 'final'])
+    const firstT3 = prompts[3]
+    expect(firstT3).toContain('【t1 · 技术方案 · 工程师】\nt1 成果')
+    expect(firstT3).toContain('【t2 · 界面草图 · 设计师】\nt2 成果')
+    expect(prompts[5]).toContain('上一次结果的检查意见：\n加上风险')
+    expect(prompts[6]).toContain('结果：\nt1 摘要')
+    expect(prompts[6]).toContain('t3 改好的成果')
+
+    expect(project().tasks.map(task => [task.id, task.status, task.attempts, task.summary])).toEqual([
+      ['t1', 'done', 1, 't1 摘要'], ['t2', 'done', 1, 't2 摘要'], ['t3', 'done', 2, 't3 摘要（含风险）'],
+    ])
+    expect(project().steps).toBe(8)
+    expect(currentStore.messagesById[project().finalMessageId!]).toMatchObject({ type: 'assistant', content: '# 最终方案\n全部内容' })
+    const notices = Object.values(currentStore.messagesById).filter(message => message.projectRequest).sort((a, b) => a.seq - b.seq).map(message => message.content)
+    expect(notices).toContain('项目 · 任务 t3「上线清单」交给「设计师」（第 2 次）')
+    expect(notices[notices.length - 1]).toBe('项目 · 请「工程师」整理最终交付')
+  })
+
+  it('waits for the user when the coordinator asks, goes on with the answer, and can be stopped and continued', async () => {
+    vi.resetModules()
+    let currentStore = structuredClone(createStoreWithTwoApiRoles())
+    vi.doMock('./storeAccess', async importOriginal => {
+      const actual = await importOriginal<typeof import('./storeAccess')>()
+      return {
+        ...actual,
+        mutateStore: vi.fn(async (mutator: (store: OpenTeamStore) => unknown) => {
+          const result = await mutator(currentStore)
+          currentStore = structuredClone(currentStore)
+          return { store: currentStore, result }
+        }),
+      }
+    })
+
+    const { createMessageHandlers } = await import('./messageHandlers')
+    const complete = vi.fn(async (input: { prompt: string }): Promise<{ content: string }> => {
+      const prompt = input.prompt
+      if (prompt.includes('拆成 2–8 个具体任务')) {
+        return { content: '{"tasks":[{"id":"t1","title":"预算表","owner":"设计师","detail":"列预算","doneWhen":"有总数"},{"id":"t2","title":"排期","owner":"工程师","detail":"排期","doneWhen":"有日期"}]}' }
+      }
+      if (prompt.includes('你的任务（')) return { content: '成果\n【状态】完成\n【摘要】做好了' }
+      if (prompt.includes('任务和结果：')) {
+        return { content: prompt.includes('预算 5 万')
+          ? '{"decisions":[{"task":"t1","verdict":"pass"},{"task":"t2","verdict":"pass"}],"finish":true}'
+          : '{"decisions":[],"question":"预算上限是多少？","finish":false}' }
+      }
+      return { content: '最终交付' }
+    })
+    let messageIdSeq = 0
+    const routes = createMessageHandlers({
+      broadcastStoreUpdated: vi.fn(),
+      externalModelClient: { complete },
+      getChatStatusFromRoles: () => 'ready',
+      log: { debug: vi.fn(), info: vi.fn(), warn: vi.fn() },
+      newId: vi.fn((prefix: string) => prefix === 'msg' ? `${prefix}-${++messageIdSeq}` : `${prefix}-${messageIdSeq}`),
+      now: vi.fn(() => 100),
+      runtimeFrames: { bind: vi.fn(), getByAddress: vi.fn(), getByRole: vi.fn(() => undefined) },
+      sendRoleMessage: vi.fn(),
+      sendError: vi.fn(),
+      sendPrompt: vi.fn(),
+      waitForRetry: vi.fn(async () => {}),
+    })
+    const route = (type: string) => routes.find(candidate => candidate.type === type)!
+    const project = () => currentStore.chatsById['chat-1'].project!
+
+    await route('GROUP_PROJECT_START').handler({ type: 'GROUP_PROJECT_START', chatId: 'chat-1', goal: '办一场发布会' }, {})
+    await vi.waitFor(() => expect(project().status).toBe('awaiting-approval'))
+    await expect(route('GROUP_PROJECT_START').handler({ type: 'GROUP_PROJECT_START', chatId: 'chat-1', goal: '另一个' }, {})).rejects.toThrow('这个群聊已经有进行中的项目，请先停止它')
+    await route('GROUP_PROJECT_APPROVE').handler({ type: 'GROUP_PROJECT_APPROVE', chatId: 'chat-1' }, {})
+    await vi.waitFor(() => expect(project().status).toBe('waiting-user'))
+    expect(project().question).toBe('预算上限是多少？')
+
+    // The answer goes in through the message box, as a note for the coordinator.
+    await route('GROUP_MESSAGE_SEND').handler({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@all 预算 5 万' }, {})
+    expect(Object.values(currentStore.messagesById).find(message => message.projectNoteOf)).toMatchObject({ content: '@all 预算 5 万', targetRoleIds: [] })
+    await vi.waitFor(() => expect(project().status).toBe('done'))
+
+    // A new project can start once this one is done; stopping and continuing work on it.
+    await route('GROUP_PROJECT_START').handler({ type: 'GROUP_PROJECT_START', chatId: 'chat-1', goal: '第二个项目' }, {})
+    await route('GROUP_PROJECT_STOP').handler({ type: 'GROUP_PROJECT_STOP', chatId: 'chat-1' }, {})
+    await new Promise(resolve => setTimeout(resolve, 20))
+    expect(project()).toMatchObject({ status: 'stopped', stopReason: 'user' })
+    await route('GROUP_PROJECT_CONTINUE').handler({ type: 'GROUP_PROJECT_CONTINUE', chatId: 'chat-1' }, {})
+    await vi.waitFor(() => expect(project().status).toBe('awaiting-approval'))
   })
 
   it('delivers external model roles through the API runtime without requiring an iframe', async () => {

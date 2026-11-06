@@ -58,7 +58,7 @@ export function isRoundSummaryRequest(message: GroupMessage | undefined): boolea
 // What OpenTeam itself asks one member (a summary, or a discussion turn); members do not get these
 // as context, and the user did not write them.
 export function isOpenTeamRequest(message: GroupMessage | undefined): boolean {
-  return message?.type === 'user' && Boolean(message.roundSummaryOf || message.discussionTurnOf)
+  return message?.type === 'user' && Boolean(message.roundSummaryOf || message.discussionTurnOf || message.projectRequest)
 }
 
 // A summary request, or the summary written in answer to one.

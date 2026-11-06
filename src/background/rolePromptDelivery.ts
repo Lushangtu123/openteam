@@ -6,6 +6,7 @@ import { uploadedImageIds } from '../group/messageUploads'
 import { buildPrompt, roleUsesChatGptGptsPersona } from '../group/promptBuilder'
 import { buildRoundSummaryPrompt, keyPointsInstruction, readSummarizableRound, wantsKeyPoints } from '../group/roundSummary'
 import { buildDiscussionTurnPrompt, discussionTranscript } from '../group/discussion'
+import { buildProjectPrompt } from '../group/project'
 import type { ExternalModelConfig, GroupChat, GroupMessage, GroupRole, MessageReference, OpenTeamStore } from '../group/types'
 import type { PromptDelivery } from './promptDelivery'
 import type { RuntimeFrameRegistry } from './runtimeFrames'
@@ -45,11 +46,14 @@ export interface PrepareRolePromptDeliveryInput {
 export function prepareRolePromptDelivery(input: PrepareRolePromptDeliveryInput): PreparedRolePromptDelivery {
   const roleHistoryCount = countLocalRoleHistory(input.messages, input.role, input.userMessage.id)
   const summaryPrompt = roundSummaryPromptFor(input)
-  const includesPersona = !summaryPrompt && shouldIncludePersonaForPrompt(input.role, roleHistoryCount, input.userMessage)
-  // OpenTeam's own requests (a summary, a discussion turn) carry their whole prompt.
+  const projectKind = input.userMessage.projectRequest?.kind
+  const includesPersona = !summaryPrompt && (!projectKind || projectKind === 'task') && shouldIncludePersonaForPrompt(input.role, roleHistoryCount, input.userMessage)
+  // OpenTeam's own requests (a summary, a discussion turn, a project step) carry their whole prompt.
   const summary = summaryPrompt ?? (input.userMessage.discussionTurnOf
     ? buildDiscussionTurnPrompt({ store: input.store, chat: input.chat, request: input.userMessage, role: input.role, roles: input.roles, includePersona: includesPersona, language: input.store.settings.language })
-    : undefined)
+    : projectKind
+      ? buildProjectPromptFor(input, includesPersona)
+      : undefined)
   const replyAttemptId = input.newId('attempt')
   const responseInstruction = responseInstructionForMessage(input.userMessage, input.store.settings.language)
   const extraInstruction = wantsKeyPoints(input.store.settings, input.chat, input.userMessage) ? keyPointsInstruction(input.store.settings.language) : undefined
@@ -160,6 +164,12 @@ function shouldIncludePersonaForPrompt(role: GroupRole, roleHistoryCount: number
   return !roleUsesChatGptGptsPersona(role) && (roleHistoryCount === 0 || message.refreshPersona === true)
 }
 
+function buildProjectPromptFor(input: PrepareRolePromptDeliveryInput, includePersona: boolean): string {
+  const project = input.chat.project
+  if (!project) throw new Error('这个群聊没有进行中的项目')
+  return buildProjectPrompt({ store: input.store, chat: input.chat, project, request: input.userMessage, role: input.role, includePersona, language: input.store.settings.language })
+}
+
 // A member's first turn in a discussion carries the images the user attached to the topic.
 function discussionImagesSource(input: PrepareRolePromptDeliveryInput): GroupMessage | undefined {
   const topicId = input.userMessage.discussionTurnOf
@@ -181,7 +191,9 @@ function countLocalRoleHistory(messages: GroupMessage[], role: GroupRole, curren
 }
 
 function isRoleHistoryMessage(message: GroupMessage, roleId: string): boolean {
-  if (message.type !== 'user' || message.roundSummaryOf || !Array.isArray(message.targetRoleIds) || !message.targetRoleIds.includes(roleId)) return false
+  // A summary request, or a project's plan, check or write-up, is not the member's own conversation.
+  if (message.type !== 'user' || message.roundSummaryOf || (message.projectRequest && message.projectRequest.kind !== 'task')) return false
+  if (!Array.isArray(message.targetRoleIds) || !message.targetRoleIds.includes(roleId)) return false
   const deliveryStatus = message.deliveryStatus?.[roleId]
   return deliveryStatus === 'sent' || deliveryStatus === 'received'
 }

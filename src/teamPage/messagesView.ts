@@ -60,6 +60,8 @@ export interface MessagesViewDependencies {
   showError(message: string): void
   showSuccess(message: string): void
   renderOrchestrationStatus?(): HTMLElement | undefined
+  // The project's task board, at the end of the chat.
+  renderProjectBoard?(chat: GroupChat, messages: GroupMessage[]): HTMLElement | undefined
   log: {
     warn(event: string, details?: Record<string, unknown>): void
   }
@@ -179,6 +181,8 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     }
     const discussion = discussionBar(chat, messages)
     if (discussion) nodes.push(discussion)
+    const projectBoard = deps.renderProjectBoard?.(chat, messages)
+    if (projectBoard) nodes.push(projectBoard)
     reconcileChildren(deps.messagesEl, nodes)
     reveal.retain(new Set([
       ...messages.filter(message => message.type === 'assistant' && message.status === 'pending').map(message => streamingRevealKey(message)),
@@ -212,8 +216,8 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     article.className = `message-row message ${message.type}${showName ? '' : ' compact'}${showAvatar ? '' : ' no-avatar'}`
     article.dataset.messageId = message.id
 
-    if (message.type === 'user' && message.discussionTurnOf) {
-      article.className = 'message-row message system discussion-turn-request'
+    if (message.type === 'user' && (message.discussionTurnOf || message.projectRequest)) {
+      article.className = `message-row message system ${message.projectRequest ? 'project-request' : 'discussion-turn-request'}`
       const pill = document.createElement('div')
       pill.className = 'message-system-pill'
       pill.textContent = message.content
@@ -257,14 +261,17 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     stack.className = 'message-stack'
 
     const isSummary = isRoundSummaryReply(message)
-    if (isSummary) article.classList.add('round-summary')
-    if (message.type === 'assistant' && (showName || isSummary)) {
+    const projectRequest = message.type === 'assistant' && message.sourceMessageId ? deps.getStore().messagesById[message.sourceMessageId]?.projectRequest : undefined
+    const isFinal = projectRequest?.kind === 'final'
+    if (isSummary || isFinal) article.classList.add('round-summary')
+    if (isFinal) article.classList.add('project-final')
+    if (message.type === 'assistant' && (showName || isSummary || isFinal)) {
       const name = document.createElement('div')
       name.className = 'message-name'
-      if (isSummary) {
+      if (isSummary || isFinal) {
         const label = document.createElement('span')
         label.className = 'round-summary-label'
-        label.textContent = '本轮汇总'
+        label.textContent = isFinal ? '最终交付' : '本轮汇总'
         name.append(label)
       }
       const title = document.createElement('span')
@@ -287,10 +294,16 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     bubble.className = 'message-bubble'
     const orchestrationLabel = renderOrchestrationMessageLabel(message)
     if (orchestrationLabel) bubble.append(orchestrationLabel)
-    if (message.discussionTopic || message.discussionNoteOf) {
+    const bubbleLabel = message.discussionTopic ? '轮流讨论'
+      : message.discussionNoteOf ? '补充给下一位发言的成员'
+        : message.projectGoal ? '项目目标'
+          : message.projectNoteOf ? '补充给协调员'
+            : projectRequest?.kind === 'task' ? projectTaskLabel(message, projectRequest.taskId)
+              : undefined
+    if (bubbleLabel) {
       const label = document.createElement('div')
       label.className = 'discussion-message-label'
-      label.textContent = message.discussionTopic ? '轮流讨论' : '补充给下一位发言的成员'
+      label.textContent = bubbleLabel
       bubble.append(label)
     }
     const body = document.createElement('div')
@@ -315,7 +328,15 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     }
     renderSavedHighlights(body, message)
     const hasVisibleTextBody = message.status === 'pending' || Boolean(message.content.trim())
-    if (hasVisibleTextBody) bubble.append(body)
+    // A coordinator's plan or check is JSON for OpenTeam: folded under a title, the raw reply a click away.
+    if (hasVisibleTextBody && message.status === 'received' && (projectRequest?.kind === 'plan' || projectRequest?.kind === 'review')) {
+      const details = document.createElement('details')
+      details.className = 'project-coordinator-reply'
+      const summary = document.createElement('summary')
+      summary.textContent = projectRequest.kind === 'plan' ? '协调员的任务计划（看板里有整理好的版本）' : '协调员的检查结果（看板里有整理好的版本）'
+      details.append(summary, body)
+      bubble.append(details)
+    } else if (hasVisibleTextBody) bubble.append(body)
     const foldToggle = message.type === 'assistant' && message.status === 'received' ? foldToKeyPoints(body, message.id) : undefined
     if (foldToggle) bubble.append(foldToggle)
     const imageGrid = renderMessageImageGrid(message)
@@ -370,6 +391,12 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     article.append(inner)
     cacheMessageNode(message.id, signature, article, streamingSignature)
     return article
+  }
+
+  // "任务 t2 · 写方案" over a member's answer to a project task.
+  function projectTaskLabel(message: GroupMessage, taskId: string | undefined): string {
+    const task = deps.getStore().chatsById[message.chatId]?.project?.tasks.find(candidate => candidate.id === taskId)
+    return task ? `任务 ${task.id} · ${task.title}` : `任务 ${taskId ?? ''}`
   }
 
   function isRoundSummaryReply(message: GroupMessage): boolean {

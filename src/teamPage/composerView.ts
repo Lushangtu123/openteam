@@ -1,3 +1,4 @@
+import { isProjectActive } from '../group/project'
 import { defaultMentionTargetForMessage, parseGroupMentions, roleMentionLabel, roleMentionLabelOptionsFromSettings, roleModelLabel } from '../group/mentionParser'
 import type { GroupChat, GroupMessage, GroupRole, MessageReference, OpenTeamStore } from '../group/types'
 import type { TeamPageState } from './appState'
@@ -256,7 +257,8 @@ export function createComposerView(deps: ComposerViewDependencies): ComposerView
     const waitingRoles = targetResult.roles.filter(role => role.status === 'thinking' && !shouldAutoReconnectRole(role))
     const readyRoles = targetResult.roles.filter(role => role.status === 'ready')
     // During a discussion the message is a note for the next speakers, so busy members do not matter.
-    if (waitingRoles.length > 0 && readyRoles.length === 0 && chat.discussion?.status !== 'running') {
+    // During a project the message is a note for the coordinator.
+    if (waitingRoles.length > 0 && readyRoles.length === 0 && chat.discussion?.status !== 'running' && !isProjectActive(chat.project)) {
       deps.showError(`请等待人员回复完成：${waitingRoles.map(roleDisplayName).join('、')}`)
       return
     }
