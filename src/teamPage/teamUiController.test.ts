@@ -11,6 +11,55 @@ describe('createTeamUiController', () => {
     document.body.innerHTML = teamUiBody()
   })
 
+  it('opens settings as a window that stays open for clicks inside and closes on its backdrop or Esc', () => {
+    const chat = makeChat('chat-1', [])
+    const settingsMenuEl = document.querySelector<HTMLElement>('#settings-menu')!
+    settingsMenuEl.innerHTML = '<section class="modal"><button id="inside">x</button></section>'
+    const settingsButtonEl = document.querySelector<HTMLButtonElement>('#settings-button')!
+    createTeamUiController({
+      state: createTeamPageState(),
+      settingsButtonEl,
+      settingsMenuEl,
+      quickCreateChatEl: document.querySelector<HTMLButtonElement>('#quick-create-chat')!,
+      createChatFormEl: document.querySelector<HTMLFormElement>('#create-chat-form')!,
+      newChatNameEl: document.querySelector<HTMLInputElement>('#new-chat-name')!,
+      togglePeopleDrawerEl: document.querySelector<HTMLButtonElement>('#toggle-people-drawer')!,
+      rolePanelEl: document.querySelector<HTMLElement>('#role-panel')!,
+      iframeHost: { restoreChat: vi.fn(() => []) },
+      getLanguage: () => 'zh-CN',
+      getCurrentChat: () => chat,
+      getCurrentRoles: () => [],
+      getSelectedLoginSite: () => 'gemini',
+      render: vi.fn(),
+      renderChatList: vi.fn(),
+      renderRolePanel: vi.fn(),
+      renderAddPersonDialog: vi.fn(),
+      closePeopleModals: vi.fn(),
+      closeExternalModels: vi.fn(),
+      registerComposerEvents: vi.fn(),
+      registerPeopleLibraryEvents: vi.fn(),
+      registerExternalModelsEvents: vi.fn(),
+      runCommand: vi.fn(async () => undefined),
+      showError: vi.fn(),
+      log: { debug: vi.fn(), info: vi.fn() },
+    }).registerUi()
+
+    settingsButtonEl.click()
+    expect(settingsMenuEl.hidden).toBe(false)
+    expect(settingsButtonEl.getAttribute('aria-expanded')).toBe('true')
+
+    document.querySelector<HTMLButtonElement>('#inside')!.click()
+    expect(settingsMenuEl.hidden).toBe(false)
+
+    settingsMenuEl.click()
+    expect(settingsMenuEl.hidden).toBe(true)
+    expect(settingsButtonEl.getAttribute('aria-expanded')).toBe('false')
+
+    settingsButtonEl.click()
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    expect(settingsMenuEl.hidden).toBe(true)
+  })
+
   it('does not recover roles whose existing iframe is already assigned', () => {
     const chat = makeChat('chat-1', ['role-1', 'role-2'])
     const roles = [

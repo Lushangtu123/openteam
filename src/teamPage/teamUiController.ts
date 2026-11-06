@@ -97,7 +97,9 @@ export function createTeamUiController(deps: TeamUiControllerDependencies): Team
 
     document.addEventListener('click', event => {
       const target = event.target as Element | null
-      if (!deps.settingsMenuEl.hidden && !deps.settingsMenuEl.contains(event.target as Node) && event.target !== deps.settingsButtonEl) {
+      // The settings window closes on a click outside it: on its backdrop, or anywhere else.
+      const outsideSettings = event.target === deps.settingsMenuEl || !deps.settingsMenuEl.contains(event.target as Node)
+      if (!deps.settingsMenuEl.hidden && outsideSettings && event.target !== deps.settingsButtonEl) {
         deps.settingsMenuEl.hidden = true
         deps.settingsButtonEl.setAttribute('aria-expanded', 'false')
       }

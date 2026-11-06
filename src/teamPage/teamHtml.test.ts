@@ -313,7 +313,8 @@ describe('team.html chat creation UI', () => {
   it('promotes people library and external models from settings into the left rail', () => {
     const html = readTeamDocument()
     const railActions = html.match(/<div class="rail-actions">(?<body>[\s\S]*?)<\/div>/)?.groups?.body ?? ''
-    const settingsMenu = html.match(/<div id="settings-menu" class="settings-menu" hidden>(?<body>[\s\S]*?)<\/div>/)?.groups?.body ?? ''
+    const settingsMenu = html.match(/<div id="settings-menu"[\s\S]*?<div id="all-notes-modal"/)?.[0] ?? ''
+    expect(settingsMenu).toContain('id="language-zh"')
 
     expect(railActions).toContain('id="open-people-library"')
     expect(railActions).toContain('aria-label="群聊"')
@@ -352,12 +353,27 @@ describe('team.html chat creation UI', () => {
     expect(css).not.toContain('.app-shell.fullscreen')
   })
 
-  it('opens the AI pages from the settings menu', () => {
+  it('opens settings as their own window, with categories and a row per setting', () => {
     const html = readTeamHtml()
-    const settingsMenu = html.match(/<div id="settings-menu"[\s\S]*?<\/nav>/)?.[0] ?? ''
+    const settings = html.match(/<div id="settings-menu"[\s\S]*?<div id="all-notes-modal"/)?.[0] ?? ''
+    const rail = html.match(/<nav class="rail"[\s\S]*?<\/nav>/)?.[0] ?? ''
 
-    expect(settingsMenu).toContain('id="show-ai-pages"')
-    expect(settingsMenu).toContain('查看成员的 AI 网页')
+    expect(settings).toMatch(/<div id="settings-menu" class="modal-backdrop settings-backdrop" hidden>/)
+    expect(settings).toContain('role="dialog"')
+    expect(settings).toContain('id="close-settings"')
+    for (const tab of ['general', 'replies', 'pages', 'agent', 'data']) {
+      expect(settings).toContain(`data-settings-tab="${tab}"`)
+      expect(settings).toContain(`data-settings-panel="${tab}"`)
+    }
+    for (const id of ['reply-key-points-toggle', 'round-summary-toggle', 'reply-notifications-toggle', 'agent-control-toggle']) {
+      expect(settings).toMatch(new RegExp(`id="${id}" class="settings-switch"[^>]*role="switch"`))
+    }
+    expect(settings).toContain('id="show-ai-pages"')
+    expect(settings).toContain('查看成员的 AI 网页')
+    expect(settings).toContain('id="settings-theme-dark"')
+    // The window is not squeezed into the left rail any more.
+    expect(rail).not.toContain('id="settings-menu"')
+    expect(rail).toContain('aria-haspopup="dialog"')
   })
 
   it('keeps the orchestration entry visually hidden when the hidden attribute is set', () => {

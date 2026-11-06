@@ -6,6 +6,8 @@ export interface ThemeControllerDependencies {
   root: HTMLElement
   lightButton: HTMLButtonElement
   darkButton: HTMLButtonElement
+  // The same choice elsewhere (the settings window).
+  extraButtons?: { light: HTMLButtonElement; dark: HTMLButtonElement }[]
   storage?: Storage
 }
 
@@ -32,8 +34,10 @@ export function createThemeController(deps: ThemeControllerDependencies): ThemeC
   function registerThemeEvents(): void {
     if (registered) return
     registered = true
-    deps.lightButton.addEventListener('click', () => setTheme('light'))
-    deps.darkButton.addEventListener('click', () => setTheme('dark'))
+    for (const pair of [{ light: deps.lightButton, dark: deps.darkButton }, ...(deps.extraButtons ?? [])]) {
+      pair.light.addEventListener('click', () => setTheme('light'))
+      pair.dark.addEventListener('click', () => setTheme('dark'))
+    }
   }
 
   function getTheme(): TeamTheme {
@@ -43,8 +47,10 @@ export function createThemeController(deps: ThemeControllerDependencies): ThemeC
   function applyTheme(theme: TeamTheme, persist: boolean): void {
     currentTheme = theme
     deps.root.dataset.theme = theme
-    deps.lightButton.setAttribute('aria-pressed', String(theme === 'light'))
-    deps.darkButton.setAttribute('aria-pressed', String(theme === 'dark'))
+    for (const pair of [{ light: deps.lightButton, dark: deps.darkButton }, ...(deps.extraButtons ?? [])]) {
+      pair.light.setAttribute('aria-pressed', String(theme === 'light'))
+      pair.dark.setAttribute('aria-pressed', String(theme === 'dark'))
+    }
     if (persist) safeSetStoredTheme(storage, theme)
   }
 

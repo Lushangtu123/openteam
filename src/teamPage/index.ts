@@ -30,6 +30,7 @@ import { createTeamPagePrimaryCoordinator } from './teamPagePrimary'
 import { createErrorPresenter, createSuccessPresenter, teamPageLog } from './teamPageServices'
 import { createThemeController } from './themeController'
 import { createUiStyleController } from './uiStyleController'
+import { registerSettingsWindow } from './settingsWindow'
 import { createVoiceInput, speechRecognitionFromWindow } from './voiceInput'
 import { replyChoiceAnswer } from '../group/replyChoices'
 import { createTeamUiController } from './teamUiController'
@@ -68,6 +69,7 @@ const themeController = createThemeController({
   root: document.documentElement,
   lightButton: themeLightEl,
   darkButton: themeDarkEl,
+  extraButtons: [{ light: teamDomRefs.settingsThemeLightEl, dark: teamDomRefs.settingsThemeDarkEl }],
 })
 themeController.initializeTheme()
 const uiStyleController = createUiStyleController({
@@ -619,17 +621,19 @@ function render(): void {
 
 // On/off settings that are on unless set to false, each with its switch in the settings menu.
 const REPLY_SETTING_TOGGLES = [
-  { key: 'replyNotifications', label: '回复完成时通知', element: () => teamDomRefs.replyNotificationsToggleEl },
-  { key: 'replyKeyPoints', label: '多人回复先列要点', element: () => teamDomRefs.replyKeyPointsToggleEl },
-  { key: 'roundSummary', label: '每轮自动汇总', element: () => teamDomRefs.roundSummaryToggleEl },
+  { key: 'replyNotifications', element: () => teamDomRefs.replyNotificationsToggleEl },
+  { key: 'replyKeyPoints', element: () => teamDomRefs.replyKeyPointsToggleEl },
+  { key: 'roundSummary', element: () => teamDomRefs.roundSummaryToggleEl },
 ] as const
 
 function renderReplyNotificationSettings(): void {
-  for (const toggle of REPLY_SETTING_TOGGLES) {
-    const enabled = store.settings[toggle.key] !== false
-    toggle.element().setAttribute('aria-pressed', String(enabled))
-    toggle.element().textContent = `${toggle.label}：${enabled ? '开启' : '关闭'}`
-  }
+  for (const toggle of REPLY_SETTING_TOGGLES) renderSettingSwitch(toggle.element(), store.settings[toggle.key] !== false)
+}
+
+// A switch in the settings window; its row's title names it.
+function renderSettingSwitch(element: HTMLButtonElement, on: boolean): void {
+  element.setAttribute('aria-pressed', String(on))
+  element.setAttribute('aria-checked', String(on))
 }
 
 function registerReplyNotificationSettings(): void {
@@ -643,9 +647,7 @@ function registerReplyNotificationSettings(): void {
 }
 
 function renderAgentControlSettings(): void {
-  const enabled = store.settings.agentControlEnabled
-  agentControlToggleEl.setAttribute('aria-pressed', String(enabled))
-  agentControlToggleEl.textContent = `本机智能体控制：${enabled ? '开启' : '关闭'}`
+  renderSettingSwitch(agentControlToggleEl, store.settings.agentControlEnabled)
   agentControlStatusEl.dataset.controlState = agentControlStatusState(store, appState.controlStatus)
   agentControlStatusEl.textContent = agentControlStatusText(store, appState.controlStatus)
 }
@@ -820,6 +822,7 @@ async function boot(): Promise<void> {
   themeController.registerThemeEvents()
   uiStyleController.registerStyleEvents()
   aiPagesView.registerAiPagesControls()
+  registerSettingsWindow({ windowEl: settingsMenuEl, settingsButtonEl })
   showAiPagesEl.addEventListener('click', () => {
     settingsMenuEl.hidden = true
     settingsButtonEl.setAttribute('aria-expanded', 'false')

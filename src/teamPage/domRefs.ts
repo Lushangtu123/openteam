@@ -40,6 +40,8 @@ export interface TeamPageDomRefs {
   agentControlToggleEl: HTMLButtonElement
   replyNotificationsToggleEl: HTMLButtonElement
   replyKeyPointsToggleEl: HTMLButtonElement
+  settingsThemeLightEl: HTMLButtonElement
+  settingsThemeDarkEl: HTMLButtonElement
   roundSummaryToggleEl: HTMLButtonElement
   agentControlStatusEl: HTMLElement
   backupExportEl: HTMLButtonElement
@@ -217,6 +219,8 @@ export function createTeamPageDomRefs(): TeamPageDomRefs {
     agentControlToggleEl: requireElement<HTMLButtonElement>('#agent-control-toggle'),
     replyNotificationsToggleEl: requireElement<HTMLButtonElement>('#reply-notifications-toggle'),
     replyKeyPointsToggleEl: requireElement<HTMLButtonElement>('#reply-key-points-toggle'),
+    settingsThemeLightEl: requireElement<HTMLButtonElement>('#settings-theme-light'),
+    settingsThemeDarkEl: requireElement<HTMLButtonElement>('#settings-theme-dark'),
     roundSummaryToggleEl: requireElement<HTMLButtonElement>('#round-summary-toggle'),
     agentControlStatusEl: requireElement<HTMLElement>('#agent-control-status'),
     backupExportEl: requireElement<HTMLButtonElement>('#backup-export'),
