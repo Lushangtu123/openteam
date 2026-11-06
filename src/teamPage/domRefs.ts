@@ -49,6 +49,10 @@ export interface TeamPageDomRefs {
   openMessageSearchEl: HTMLButtonElement
   themeLightEl: HTMLButtonElement
   themeDarkEl: HTMLButtonElement
+  uiStyleChatGptEl: HTMLButtonElement
+  uiStyleGrokEl: HTMLButtonElement
+  settingsUiStyleChatGptEl: HTMLButtonElement
+  settingsUiStyleGrokEl: HTMLButtonElement
   openAllNotesEl: HTMLButtonElement
   closeAllNotesEl: HTMLButtonElement
   allNotesModalEl: HTMLElement
@@ -218,6 +222,10 @@ export function createTeamPageDomRefs(): TeamPageDomRefs {
     openMessageSearchEl: requireElement<HTMLButtonElement>('#open-message-search'),
     themeLightEl: requireElement<HTMLButtonElement>('#theme-light'),
     themeDarkEl: requireElement<HTMLButtonElement>('#theme-dark'),
+    uiStyleChatGptEl: requireElement<HTMLButtonElement>('#ui-style-chatgpt'),
+    uiStyleGrokEl: requireElement<HTMLButtonElement>('#ui-style-grok'),
+    settingsUiStyleChatGptEl: requireElement<HTMLButtonElement>('#settings-ui-style-chatgpt'),
+    settingsUiStyleGrokEl: requireElement<HTMLButtonElement>('#settings-ui-style-grok'),
     openAllNotesEl: requireElement<HTMLButtonElement>('#open-all-notes'),
     closeAllNotesEl: requireElement<HTMLButtonElement>('#close-all-notes'),
     allNotesModalEl: requireElement<HTMLElement>('#all-notes-modal'),

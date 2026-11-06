@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN" data-theme="light">
+<html lang="zh-CN" data-theme="light" data-ui-style="chatgpt">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -58,6 +58,13 @@
               <div class="settings-segment" role="group" aria-label="语言">
                 <button id="language-en" class="settings-segment-option" type="button" aria-pressed="true">English</button>
                 <button id="language-zh" class="settings-segment-option" type="button" aria-pressed="false">中文</button>
+              </div>
+            </div>
+            <div class="settings-section">
+              <div class="settings-label">界面风格</div>
+              <div class="settings-segment" role="group" aria-label="界面风格">
+                <button id="settings-ui-style-chatgpt" class="settings-segment-option" type="button" aria-pressed="true">ChatGPT</button>
+                <button id="settings-ui-style-grok" class="settings-segment-option" type="button" aria-pressed="false">Grok</button>
               </div>
             </div>
             <button id="agent-control-toggle" class="btn settings-toggle" type="button" aria-pressed="false">本机智能体控制：关闭</button>
@@ -137,6 +144,10 @@
             <p id="chat-subtitle" class="chat-subtitle">创建或选择一个群聊开始协作</p>
           </div>
           <div class="chat-row">
+            <div id="ui-style-switch" class="theme-switch ui-style-switch" role="group" aria-label="界面风格">
+              <button id="ui-style-chatgpt" class="theme-option ui-style-option" type="button" aria-pressed="true" title="ChatGPT 风格界面">GPT</button>
+              <button id="ui-style-grok" class="theme-option ui-style-option" type="button" aria-pressed="false" title="Grok 风格界面">Grok</button>
+            </div>
             <div id="theme-switch" class="theme-switch" role="group" aria-label="界面模式">
               <button id="theme-light" class="theme-option" type="button" aria-pressed="false" title="浅色模式">
                 <span aria-hidden="true">☼</span>

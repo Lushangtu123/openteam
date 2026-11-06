@@ -29,6 +29,7 @@ import { createTeamPageRuntimeClient, type StorePushMessage } from './runtimeCli
 import { createTeamPagePrimaryCoordinator } from './teamPagePrimary'
 import { createErrorPresenter, createSuccessPresenter, teamPageLog } from './teamPageServices'
 import { createThemeController } from './themeController'
+import { createUiStyleController } from './uiStyleController'
 import { createTeamUiController } from './teamUiController'
 import { emptyCard, getChatRecentSummary as getStoreChatRecentSummary, messageTitle, roleAvatarLabel, roleToneClass } from './viewHelpers'
 import { agentControlStatusState, agentControlStatusText } from './agentControlStatusView'
@@ -47,7 +48,7 @@ const teamDomRefs = createTeamPageDomRefs()
 const { appShellEl, closeWindowEl, toggleWindowSizeEl, toggleFullscreenEl, storeSummaryEl, chatListEl, chatTitleEl, chatSubtitleEl, chatStatusEl, messagesEl } = teamDomRefs
 const { roleSummaryEl, roleListEl, roleTemplateSelectEl, templateListEl, targetPreviewEl, busyPreviewEl, composerFormEl, sendButtonEl } = teamDomRefs
 const { messageInputEl, referenceDraftEl, mentionPanelEl, errorEl, newChatNameEl, createChatFormEl, quickCreateChatEl } = teamDomRefs
-const { templateNameEl, templateDescriptionEl, templatePromptEl, templateAiDescriptionEl, generateTemplatePersonaEl, templatePersonaGenerationStatusEl, templateFormTitleEl, settingsButtonEl, settingsMenuEl, languageEnEl, languageZhEl, agentControlToggleEl, agentControlStatusEl, themeLightEl, themeDarkEl } = teamDomRefs
+const { templateNameEl, templateDescriptionEl, templatePromptEl, templateAiDescriptionEl, generateTemplatePersonaEl, templatePersonaGenerationStatusEl, templateFormTitleEl, settingsButtonEl, settingsMenuEl, languageEnEl, languageZhEl, agentControlToggleEl, agentControlStatusEl, themeLightEl, themeDarkEl, uiStyleChatGptEl, uiStyleGrokEl, settingsUiStyleChatGptEl, settingsUiStyleGrokEl } = teamDomRefs
 const { openAllNotesEl, closeAllNotesEl, allNotesModalEl, allNotesListEl, allNotesActiveTitleEl, allNotesActiveMetaEl, allNotesEditorEl } = teamDomRefs
 const { allNoteBoldEl, allNoteItalicEl, allNoteStrikeEl, allNoteBulletListEl, allNoteOrderedListEl, allNoteUndoEl, allNoteRedoEl } = teamDomRefs
 const { openPeopleLibraryEl, openExternalModelsEl, openOrchestrationEl, closeOrchestrationEl, orchestrationModalEl, orchestrationAutoModalEl, orchestrationTaskEl, autoOrchestrationEl, openOrchestrationTemplateEl, orchestrationTemplateModalEl, closeOrchestrationTemplateEl, orchestrationTemplateContentEl, closeAutoOrchestrationEl, orchestrationAutoContentEl, orchestrationPeopleListEl, arrangeOrchestrationEl, orchestrationCanvasEl, orchestrationHintEl, orchestrationStageSettingsEl, orchestrationReviewSettingsEl, orchestrationMaxRoundsEl, saveOrchestrationEl, runOrchestrationEl, closeExternalModelsEl, externalModelsModalEl, externalModelsListEl, externalModelFormEl, externalModelIdEl, externalModelNameEl, externalModelFormatEl, externalModelBaseUrlEl, externalModelApiKeyEl, externalModelModelNameEl, resetExternalModelFormEl, closePeopleLibraryEl, peopleLibraryModalEl, personTemplateModalEl, addPersonModalEl, temporaryPersonModalEl } = teamDomRefs
@@ -67,6 +68,12 @@ const themeController = createThemeController({
   darkButton: themeDarkEl,
 })
 themeController.initializeTheme()
+const uiStyleController = createUiStyleController({
+  root: document.documentElement,
+  // The header switch, and the same choice in the settings menu for narrow windows.
+  buttons: { chatgpt: [uiStyleChatGptEl, settingsUiStyleChatGptEl], grok: [uiStyleGrokEl, settingsUiStyleGrokEl] },
+})
+uiStyleController.initializeStyle()
 
 let roleHealthRenderPending = false
 const roleHealth = createRoleHealthTracker({
@@ -776,6 +783,7 @@ async function boot(): Promise<void> {
   window.addEventListener('pagehide', () => primaryCoordinator.dispose(), { once: true })
   registerRuntimePush()
   themeController.registerThemeEvents()
+  uiStyleController.registerStyleEvents()
   registerFloatingWindowControls()
   registerAllNotesEvents()
   languageSettingsController.registerEvents()

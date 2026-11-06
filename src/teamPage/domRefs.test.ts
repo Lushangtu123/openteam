@@ -53,6 +53,10 @@ describe('team page dom refs', () => {
       <button id="open-message-search"></button>
       <button id="theme-light"></button>
       <button id="theme-dark"></button>
+      <button id="ui-style-chatgpt"></button>
+      <button id="ui-style-grok"></button>
+      <button id="settings-ui-style-chatgpt"></button>
+      <button id="settings-ui-style-grok"></button>
       <button id="open-all-notes"></button>
       <button id="open-external-models"></button>
       <button id="open-orchestration"></button>
@@ -178,6 +182,9 @@ describe('team page dom refs', () => {
     expect(refs.toggleFullscreenEl.id).toBe('toggle-fullscreen')
     expect(refs.themeLightEl.id).toBe('theme-light')
     expect(refs.themeDarkEl.id).toBe('theme-dark')
+    expect(refs.uiStyleChatGptEl.id).toBe('ui-style-chatgpt')
+    expect(refs.uiStyleGrokEl.id).toBe('ui-style-grok')
+    expect(refs.settingsUiStyleGrokEl.id).toBe('settings-ui-style-grok')
     expect(refs.openOrchestrationEl.id).toBe('open-orchestration')
     expect(refs.autoOrchestrationEl.id).toBe('auto-orchestration')
     expect(refs.orchestrationMaxRoundsEl.id).toBe('orchestration-max-rounds')
