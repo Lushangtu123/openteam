@@ -1722,7 +1722,7 @@ function readSiteHealthStatus(value: unknown): RoleSiteHealthStatus | undefined 
 }
 
 function readSiteHealthReason(value: unknown): RoleSiteHealthReason | undefined {
-  if (value === 'verification' || value === 'http-error' || value === 'overlay' || value === 'login' || value === 'guest' || value === 'no-editor' || value === 'site-error') return value
+  if (value === 'verification' || value === 'http-error' || value === 'overlay' || value === 'embed-blocked' || value === 'login' || value === 'guest' || value === 'no-editor' || value === 'site-error') return value
   return undefined
 }
 

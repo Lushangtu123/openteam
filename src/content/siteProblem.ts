@@ -14,6 +14,7 @@ export function siteProblemReason(siteLabel: string, status: SiteStatusInfo): st
   const detail = status.detail?.trim()
   if (status.status === 'unauthorized') return `${siteLabel} 需要登录才能回复，请在 ${siteLabel} 页面登录后重试${detail ? `（${detail}）` : ''}`
   if (status.status === 'error' && status.reason === 'site-error') return `${siteLabel} 页面报错${detail ? `：「${detail}」` : ''}`
+  if (status.status === 'blocked' && status.reason === 'embed-blocked') return `${siteLabel} 网页不允许在 OpenTeam 里打开，消息发不过去。请改用 ${siteLabel} 的 API 成员`
   if (status.status === 'blocked' && status.reason === 'overlay') return `${siteLabel} 页面上有弹窗挡住了回复${detail ? `：「${detail}」` : ''}，请在 ${siteLabel} 页面里处理后重试`
   return undefined
 }

@@ -848,7 +848,7 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
     return ({
       网页未打开: 'Page not open', 正在打开网页: 'Opening the page', 网页没有响应: 'Page not responding', 正在检查网页: 'Checking the page', 网页加载中: 'Page loading',
       可以发送: 'Ready', '可以发送（未登录）': 'Ready (signed out)', 网页回复中: 'Replying', 需要登录: 'Sign-in needed', 需要人机验证: 'Verification needed',
-      网站拒绝访问: 'Site refused access', 有弹窗挡住页面: 'A dialog covers the page', 页面被拦截: 'Page blocked', 找不到输入框: 'No input box', 网站报错: 'Site error', 网页异常: 'Page problem',
+      网站拒绝访问: 'Site refused access', 有弹窗挡住页面: 'A dialog covers the page', 网站不允许嵌入: 'Site blocks embedding', 页面被拦截: 'Page blocked', 找不到输入框: 'No input box', 网站报错: 'Site error', 网页异常: 'Page problem',
     } as Record<string, string>)[label] ?? label
   }
 

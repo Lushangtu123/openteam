@@ -96,6 +96,7 @@ describe('role page health tracker', () => {
   it('labels each state', () => {
     expect(rolePageHealthLabel({ status: 'ready', reason: 'guest' })).toBe('可以发送（未登录）')
     expect(rolePageHealthLabel({ status: 'blocked', reason: 'verification' })).toBe('需要人机验证')
+    expect(rolePageHealthLabel({ status: 'blocked', reason: 'embed-blocked' })).toBe('网站不允许嵌入')
     expect(rolePageHealthLabel({ status: 'error', reason: 'no-editor' })).toBe('找不到输入框')
     expect(rolePageHealthLabel({ status: 'unresponsive' })).toBe('网页没有响应')
   })

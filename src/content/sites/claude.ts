@@ -1,3 +1,4 @@
+import { isEmbeddedFrame } from '../frameEnvironment'
 import { checkSiteHealth, type SiteHealthContext } from './siteHealth'
 import type { ChatSiteAdapter, ConversationSnapshot, SiteStatusInfo } from './types'
 import { keepDeepestResponseContainers } from '../responseContainers'
@@ -29,6 +30,8 @@ const CLAUDE_SELECTORS = {
     'button[data-testid="action-bar-copy"], [role="group"][aria-label="Message actions"] button[aria-label="Copy"], button[aria-label="Copy"], button[aria-label="复制"]',
   blocker: '[role="dialog"], .cookie-banner, [aria-label*="Cookie"], [aria-label*="Consent"]',
   loginOverlay: 'div[role="dialog"] button[aria-label*="Sign in"], div[role="dialog"] button[aria-label*="登录"]',
+  // The notice Claude shows in place of the whole app when it is framed.
+  embedNotice: 'main > [role="alert"]:only-child',
 }
 
 const SKIP_TAGS = new Set(['SCRIPT', 'STYLE', 'BUTTON', 'TEXTAREA', 'SVG'])
@@ -180,7 +183,18 @@ function findClaudeStopButton(): HTMLButtonElement | undefined {
   return [...document.querySelectorAll<HTMLButtonElement>('button')].find(button => buttonLabelMatches(button, /stop|stopping|停止|中止/) && isClickableButton(button))
 }
 
+// Claude.ai checks whether it runs inside another page and, when it does, shows only a notice
+// ("This page can't run in an embedded view…") in place of the app. Nothing OpenTeam sends can
+// reach it, so report that instead of waiting for an input box that never comes.
+export function findClaudeEmbedBlock(doc: Document = document, embedded: boolean = isEmbeddedFrame()): string | undefined {
+  if (!embedded || doc.querySelector(CLAUDE_SELECTORS.editor)) return undefined
+  const notice = doc.querySelector<HTMLElement>(CLAUDE_SELECTORS.embedNotice)
+  return notice?.textContent?.replace(/\s+/g, ' ').trim() || undefined
+}
+
 function checkClaudeStatus(context: SiteHealthContext): SiteStatusInfo {
+  const embedBlock = findClaudeEmbedBlock(context.document ?? document)
+  if (embedBlock) return { status: 'blocked', reason: 'embed-blocked', detail: embedBlock.slice(0, 160), timestamp: context.now ?? Date.now() }
   return checkSiteHealth({
     findEditor: () => document.querySelector(CLAUDE_SELECTORS.editor),
     isGenerating: isClaudeGenerating,

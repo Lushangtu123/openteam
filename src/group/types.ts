@@ -15,7 +15,7 @@ export type RoleStatus = 'pending' | 'loading' | 'ready' | 'thinking' | 'stopped
 export type RoleSiteHealthStatus = 'ready' | 'generating' | 'loading' | 'error' | 'blocked' | 'unauthorized'
 // Why a site page is in its state: a verification interstitial, an HTTP error page, an overlay over
 // the input box, a login page, usable without being logged in, no input box found, or a site error.
-export type RoleSiteHealthReason = 'verification' | 'http-error' | 'overlay' | 'login' | 'guest' | 'no-editor' | 'site-error'
+export type RoleSiteHealthReason = 'verification' | 'http-error' | 'overlay' | 'embed-blocked' | 'login' | 'guest' | 'no-editor' | 'site-error'
 
 export type DeliveryStatus = 'pending' | 'sent' | 'received' | 'error'
 

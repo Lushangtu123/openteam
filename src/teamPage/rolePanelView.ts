@@ -229,7 +229,7 @@ export function createRolePanelView(deps: RolePanelViewDependencies): RolePanelV
     const help = document.createElement('div')
     help.className = 'reference-box role-health-help'
     const text = document.createElement('p')
-    text.textContent = ui(roleHealthAdvice(health))
+    text.textContent = ui(roleHealthAdvice(health, role))
     help.append(text)
     if (health.detail) {
       const detail = document.createElement('p')
@@ -474,7 +474,13 @@ function roleContextProgress(role: GroupRole, ui: (source: string) => string): H
   return progress
 }
 
-function roleHealthAdvice(health: RolePageHealth): string {
+// Claude.ai refuses to run inside another page, so a Claude web member cannot work here.
+const CLAUDE_EMBED_ADVICE = 'Claude 网页会检查自己是否被嵌在别的页面里，发现后就拒绝运行，所以在 OpenTeam 里用不了 Claude 网页版。可以改用 Claude API：在「外部模型」里添加 Anthropic 格式的模型，再让这个人员使用它。'
+
+export function roleHealthAdvice(health: RolePageHealth, role?: Pick<GroupRole, 'chatSite' | 'modelSource'>): string {
+  const claudeWeb = role?.modelSource !== 'external' && role?.chatSite === 'claude'
+  if (health.reason === 'embed-blocked') return claudeWeb ? CLAUDE_EMBED_ADVICE : '这个网站会检查自己是否被嵌在别的页面里，发现后就拒绝运行，所以在 OpenTeam 里用不了它的网页版。可以改用这个模型的 API，在「外部模型」里添加。'
+  if (health.status === 'unresponsive' && claudeWeb) return CLAUDE_EMBED_ADVICE
   if (health.status === 'unresponsive') return '网页 20 秒内没有连上 OpenTeam。常见原因是网站跳转到了登录页、网络不通，或者网站拒绝在这里打开。可以先在新标签页打开网站登录，再点「重新加载」。'
   if (health.status === 'login-required') return '这个网站还没有登录。请在新标签页打开网站登录，然后点「重新加载」。'
   if (health.reason === 'verification') return '网站要求完成人机验证。请在新标签页打开网站完成验证，然后点「重新加载」。'

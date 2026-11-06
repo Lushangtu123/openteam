@@ -143,6 +143,7 @@ export function rolePageHealthLabel(health: RolePageHealth): string {
       if (health.reason === 'verification') return '需要人机验证'
       if (health.reason === 'http-error') return '网站拒绝访问'
       if (health.reason === 'overlay') return '有弹窗挡住页面'
+      if (health.reason === 'embed-blocked') return '网站不允许嵌入'
       return '页面被拦截'
     case 'error':
       if (health.reason === 'no-editor') return '找不到输入框'

@@ -6,10 +6,20 @@ import { describe, expect, it, vi } from 'vitest'
 import { createDefaultStore } from '../group/store'
 import type { GroupChat, GroupRole, OpenTeamStore } from '../group/types'
 import { createTeamPageState } from './appState'
-import { createRolePanelView } from './rolePanelView'
+import { createRolePanelView, roleHealthAdvice } from './rolePanelView'
 import type { RolePageHealth } from './roleHealth'
 
 describe('team page role panel view boundary', () => {
+  it('tells Claude web members that Claude refuses to run here and points to the API', () => {
+    const claudeWeb = { chatSite: 'claude', modelSource: 'site' } as const
+    const blocked = roleHealthAdvice({ status: 'blocked', reason: 'embed-blocked' }, claudeWeb)
+    expect(blocked).toContain('Claude 网页会检查自己是否被嵌在别的页面里')
+    expect(blocked).toContain('Anthropic 格式')
+    expect(roleHealthAdvice({ status: 'unresponsive' }, claudeWeb)).toBe(blocked)
+    expect(roleHealthAdvice({ status: 'unresponsive' }, { chatSite: 'grok', modelSource: 'site' })).toContain('20 秒内没有连上')
+    expect(roleHealthAdvice({ status: 'blocked', reason: 'embed-blocked' }, { chatSite: 'kimi', modelSource: 'site' })).toContain('改用这个模型的 API')
+  })
+
   it('keeps role panel rendering and role site switching outside the entrypoint', () => {
     const entrySource = readFileSync(resolve(process.cwd(), 'src/teamPage/index.ts'), 'utf8')
     const viewSource = readFileSync(resolve(process.cwd(), 'src/teamPage/rolePanelView.ts'), 'utf8')

@@ -1,9 +1,44 @@
 // @vitest-environment jsdom
 
 import { describe, expect, it, vi } from 'vitest'
-import { createClaudeAdapter } from './claude'
+import { createClaudeAdapter, findClaudeEmbedBlock } from './claude'
+import { isEmbeddedFrame } from '../frameEnvironment'
+
+vi.mock('../frameEnvironment', () => ({ isEmbeddedFrame: vi.fn(() => false), isDirectEmbeddedFrame: vi.fn(() => false) }))
+
+const EMBED_NOTICE_PAGE = `
+  <div><main><div data-cds="Banner" role="alert"><span><span aria-hidden="true"></span></span><div><div>This page can’t run in an embedded view. Open it in its own tab to continue.</div></div></div></main></div>
+  <footer><a href="/login">Log in</a></footer>`
 
 describe('Claude site adapter', () => {
+  it("recognizes Claude's notice that it refuses to run inside another page", () => {
+    document.body.innerHTML = EMBED_NOTICE_PAGE
+    expect(findClaudeEmbedBlock(document, true)).toBe('This page can’t run in an embedded view. Open it in its own tab to continue.')
+    // The same banner in a normal tab, or a page that still has its input box, is not the block.
+    expect(findClaudeEmbedBlock(document, false)).toBeUndefined()
+    document.body.insertAdjacentHTML('beforeend', '<div data-testid="chat-input" contenteditable="true"></div>')
+    expect(findClaudeEmbedBlock(document, true)).toBeUndefined()
+    // An alert next to other page content is an ordinary banner.
+    document.body.innerHTML = '<main><div role="alert">Something went wrong</div><section>Recent chats</section></main>'
+    expect(findClaudeEmbedBlock(document, true)).toBeUndefined()
+  })
+
+  it('reports the embed block as the page status inside an OpenTeam frame', () => {
+    document.body.innerHTML = EMBED_NOTICE_PAGE
+    vi.mocked(isEmbeddedFrame).mockReturnValue(true)
+    try {
+      const adapter = createClaudeAdapter({ href: 'https://claude.ai/logout?involuntary=1' })
+      expect(adapter.checkStatus?.({ pageAgeMs: 30000, now: 5 })).toEqual({
+        status: 'blocked',
+        reason: 'embed-blocked',
+        detail: 'This page can’t run in an embedded view. Open it in its own tab to continue.',
+        timestamp: 5,
+      })
+    } finally {
+      vi.mocked(isEmbeddedFrame).mockReturnValue(false)
+    }
+  })
+
   it('reads assistant prose in the new transcript without the message heading or user prompt', () => {
     document.body.innerHTML = `
       <div data-testid="user-message"><div data-perf-reply-text>Question</div></div>
