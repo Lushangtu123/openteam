@@ -7629,13 +7629,11 @@ select.reply-compare-select {
 }
 
 /* ==========================================================================
-   Grok style (html[data-ui-style="grok"]): a messaging-app look on top of the
-   ChatGPT-like layer. A soft gray sidebar where the current group is a large
-   tile and the others are rows with big avatars and their last message; the
-   group's title in a floating pill; replies in soft gray bubbles under the
-   member's name, with their tools beside them; notes and times as centered
-   gray text; a single rounded input bar with round buttons. Avatars are soft
-   blob shapes in each member's color. Light and dark both defined.
+   Grok style (html[data-ui-style="grok"]): a soft, friendly chat-app feel on
+   top of the ChatGPT-like layer, in OpenTeam's own design. Soft gray panels,
+   replies in rounded gray bubbles under the member's name, big rounded
+   avatars in the group list with each group's last message, round buttons,
+   one rounded input bar, and an indigo accent. Light and dark both defined.
    ========================================================================== */
 
 :root[data-ui-style="grok"][data-theme="light"] {
@@ -7675,6 +7673,9 @@ select.reply-compare-select {
   --gb-tile: #e7e7e9;
   --gb-pill: #ffffff;
   --gb-pill-shadow: 0 0 0 1px rgba(17, 17, 17, 0.05), 0 4px 16px -6px rgba(17, 17, 17, 0.18);
+  --gb-accent: #5b5bd6;
+  --gb-accent-soft: rgba(91, 91, 214, 0.1);
+  --gpt-link: #4f4fcf;
 }
 
 :root[data-ui-style="grok"][data-theme="dark"] {
@@ -7718,6 +7719,9 @@ select.reply-compare-select {
   --gb-tile: #232326;
   --gb-pill: #232326;
   --gb-pill-shadow: 0 0 0 1px rgba(255, 255, 255, 0.07), 0 6px 18px -8px rgba(0, 0, 0, 0.8);
+  --gb-accent: #8f8fff;
+  --gb-accent-soft: rgba(143, 143, 255, 0.14);
+  --gpt-link: #a5a5ff;
 }
 
 :root[data-ui-style="grok"] body {
@@ -7728,19 +7732,13 @@ select.reply-compare-select {
   border-radius: 18px;
 }
 
-/* Avatars: soft blobs in each member's color, each tone its own shape. */
+/* Avatars: rounded squares in each member's color. */
 :root[data-ui-style="grok"] .chat-avatar,
 :root[data-ui-style="grok"] .message-avatar,
 :root[data-ui-style="grok"] .role-avatar {
-  border-radius: 48% 52% 44% 56% / 56% 46% 54% 44%;
+  border-radius: 32%;
   font-weight: 700;
 }
-
-:root[data-ui-style="grok"] .role-tone-1 { border-radius: 58% 42% 52% 48% / 48% 56% 44% 52%; }
-:root[data-ui-style="grok"] .role-tone-2 { border-radius: 44% 56% 60% 40% / 52% 44% 56% 48%; }
-:root[data-ui-style="grok"] .role-tone-3 { border-radius: 52% 48% 40% 60% / 44% 58% 42% 56%; }
-:root[data-ui-style="grok"] .role-tone-4 { border-radius: 40% 60% 50% 50% / 58% 42% 58% 42%; }
-:root[data-ui-style="grok"] .role-tone-5 { border-radius: 56% 44% 46% 54% / 46% 52% 48% 54%; }
 
 :root[data-ui-style="grok"] .chat-avatar.role-tone-0, :root[data-ui-style="grok"] .message-avatar.role-tone-0, :root[data-ui-style="grok"] .role-avatar.role-tone-0 { background: #18b48b; }
 :root[data-ui-style="grok"] .chat-avatar.role-tone-1, :root[data-ui-style="grok"] .message-avatar.role-tone-1, :root[data-ui-style="grok"] .role-avatar.role-tone-1 { background: #3d7ff5; }
@@ -7763,10 +7761,6 @@ select.reply-compare-select {
 :root[data-ui-style="grok"] .rail-btn.active {
   background: var(--gb-pill);
   box-shadow: var(--gb-pill-shadow);
-}
-
-:root[data-ui-style="grok"] .sidebar .brand-mark {
-  visibility: hidden;
 }
 
 :root[data-ui-style="grok"] #quick-create-chat {
@@ -7812,88 +7806,51 @@ select.reply-compare-select {
   font-weight: 600;
 }
 
-/* The group on screen: a tile at the top of the list. */
+/* The group on screen: the same row, on a soft accent card. */
 :root[data-ui-style="grok"] .chat-item.active {
-  order: -1;
-  display: flex;
-  flex: 0 0 auto;
-  flex-direction: column;
-  align-items: center;
-  width: 190px;
-  min-height: 0;
-  margin: 2px auto 14px;
-  padding: 18px 12px 12px;
-  border-radius: 22px;
-  background: var(--gb-tile);
-}
-
-:root[data-ui-style="grok"] .chat-item.active .chat-avatar {
-  width: 92px;
-  height: 92px;
-  margin-bottom: 10px;
-  font-size: 30px;
-}
-
-:root[data-ui-style="grok"] .chat-item.active .chat-item-body {
-  max-width: 100%;
-  text-align: center;
-}
-
-:root[data-ui-style="grok"] .chat-item.active .chat-item-title {
-  justify-content: center;
+  background: var(--gb-accent-soft);
 }
 
 :root[data-ui-style="grok"] .chat-item.active .chat-name {
-  font-weight: 500;
+  color: var(--text);
 }
 
-:root[data-ui-style="grok"] .chat-item.active .summary-line {
-  display: none;
-}
-
-:root[data-ui-style="grok"] .chat-item.active .chat-item-side {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-}
-
-/* Header: the group's avatar and name in a floating pill; plain round buttons. */
+/* Header: the group's avatar beside its title and subtitle. */
 :root[data-ui-style="grok"] .chat-header {
   min-height: 68px;
-  padding: 16px 18px 8px 20px;
+  padding: 18px 18px 8px 22px;
 }
 
 :root[data-ui-style="grok"] .chat-title-block {
-  display: inline-flex;
-  flex: 0 1 auto;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
-  gap: 10px;
+  column-gap: 12px;
   min-width: 0;
-  max-width: 42%;
-  border-radius: 999px;
-  padding: 5px 18px 5px 5px;
-  background: var(--gb-pill);
-  box-shadow: var(--gb-pill-shadow);
 }
 
 :root[data-ui-style="grok"] .chat-title-avatar:not([hidden]) {
   display: grid;
-  flex: 0 0 32px;
-  width: 32px;
-  height: 32px;
-  font-size: 13px;
+  grid-row: 1 / span 2;
+  width: 38px;
+  height: 38px;
+  font-size: 15px;
 }
 
 :root[data-ui-style="grok"] .chat-title {
   overflow: hidden;
-  font-size: 15px;
-  font-weight: 600;
+  font-size: 16px;
+  font-weight: 650;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 :root[data-ui-style="grok"] .chat-subtitle {
-  display: none;
+  margin-top: 1px;
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 :root[data-ui-style="grok"] .chat-header .btn,
@@ -8041,6 +7998,23 @@ select.reply-compare-select {
   width: 44px;
   min-width: 44px;
   height: 44px;
+  background: var(--gb-accent);
+  color: #ffffff;
+}
+
+:root[data-ui-style="grok"] #send-message:disabled {
+  background: var(--gpt-send-disabled-bg);
+  color: var(--gpt-send-disabled-text);
+}
+
+:root[data-ui-style="grok"] .composer:focus-within {
+  box-shadow: 0 0 0 1px var(--gb-accent), 0 0 0 4px var(--gb-accent-soft);
+}
+
+:root[data-ui-style="grok"] .btn-primary,
+:root[data-ui-style="grok"] .btn-primary:hover:not(:disabled) {
+  background: var(--gb-accent);
+  color: #ffffff;
 }
 
 /* Buttons, cards and menus: rounder. */
