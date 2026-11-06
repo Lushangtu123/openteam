@@ -33,6 +33,7 @@ import { createControlActionExecutor } from './controlHandlers'
 import { createControlClient } from './controlClient'
 import { createImageAttachmentService } from './imageAttachments'
 import { createWebSocketCookieSync } from './websocketCookies'
+import { chatIdFromNotificationId, createReplyNotifier } from './replyNotifications'
 import { createIndexedDbImageAttachmentRepository } from '../shared/imageAttachmentRepository'
 
 const runtimeFrames = createRuntimeFrameRegistry()
@@ -111,6 +112,10 @@ async function handleSettingsUpdate(message: RuntimeMessage) {
     if (language === 'en' || language === 'zh-CN') {
       store.settings.language = language
     }
+    if (typeof message.replyNotifications === 'boolean') {
+      if (message.replyNotifications) delete store.settings.replyNotifications
+      else store.settings.replyNotifications = false
+    }
   })
   await broadcastStoreUpdated(store)
   syncControlClient().catch(error => log.warn('control-client:settings-sync-failed', { error: errorReason(error) }))
@@ -147,7 +152,7 @@ const routeMessage = createMessageRouter([
   ...createExternalModelHandlers({ broadcastStoreUpdated, externalModelClient, newId, now }),
   ...createRoleHandlers({ broadcastStoreUpdated, externalModelClient, log, newId, now, runtimeFrames, sendPrompt }),
   ...createOrchestrationHandlers({ broadcastStoreUpdated, broadcastAutoGenerateStream, externalModelClient, getChatStatusFromRoles, log, newId, now, promptDeliveryLimiter, requestRoleRecovery, runtimeFrames, sendPrompt }),
-  ...createMessageHandlers({ broadcastStoreUpdated, externalModelClient, getChatStatusFromRoles, imageAttachments, log, newId, now, promptDeliveryLimiter, requestRoleRecovery, runtimeFrames, sendError, sendPrompt, sendRoleMessage }),
+  ...createMessageHandlers({ broadcastStoreUpdated, externalModelClient, getChatStatusFromRoles, imageAttachments, log, newId, now, onPromptSettled: notifyWhenAnswered, promptDeliveryLimiter, requestRoleRecovery, runtimeFrames, sendError, sendPrompt, sendRoleMessage }),
 ])
 
 const executeControlCommand = createControlActionExecutor({
@@ -231,6 +236,55 @@ function getExtensionVersion(): string {
 
 function getExtensionId(): string {
   return chrome.runtime.id ?? 'unknown-extension'
+}
+
+// Every member answered a message: a desktop notification if no OpenTeam tab is in view. Needs the
+// notifications permission; without it, nothing happens.
+function teamPageTabs(): Promise<chrome.tabs.Tab[]> {
+  return chrome.tabs.query({ url: `${chrome.runtime.getURL('team.html')}*` })
+}
+
+const replyNotifier = createReplyNotifier({
+  create: (id, options) => new Promise(resolve => chrome.notifications.create(id, options, resolve)),
+  async isTeamPageInView() {
+    for (const tab of await teamPageTabs()) {
+      if (!tab.active) continue
+      const window = await chrome.windows.get(tab.windowId)
+      if (window.focused && window.state !== 'minimized') return true
+    }
+    return false
+  },
+  iconUrl: chrome.runtime.getURL('icons/openteam-128.png'),
+  log,
+})
+
+function notifyWhenAnswered(store: OpenTeamStore, chatId: string, promptMessageId: string): Promise<unknown> | void {
+  if (!chrome.notifications?.create) return
+  return replyNotifier.notify(store, chatId, promptMessageId)
+}
+
+if (chrome.notifications?.onClicked) {
+  chrome.notifications.onClicked.addListener(notificationId => {
+    const chatId = chatIdFromNotificationId(notificationId)
+    if (!chatId) return
+    chrome.notifications.clear(notificationId)
+    showTeamPageChat(chatId).catch(error => logBackgroundFailure('reply-notification:open-failed', error))
+  })
+}
+
+// Brings an OpenTeam tab to the front on the given group (opening one if none is open).
+async function showTeamPageChat(chatId: string): Promise<void> {
+  const { store } = await mutateStore(store => {
+    if (store.chatsById[chatId]) store.currentChatId = chatId
+  })
+  await broadcastStoreUpdated(store)
+  const [tab] = await teamPageTabs()
+  if (!tab?.id) {
+    await openTeamPage()
+    return
+  }
+  await chrome.tabs.update(tab.id, { active: true })
+  await chrome.windows.update(tab.windowId, { focused: true })
 }
 
 async function openTeamPage(): Promise<void> {

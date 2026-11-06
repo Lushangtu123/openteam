@@ -784,6 +784,7 @@ function normalizeSettings(raw: unknown, storedVersion = CURRENT_STORE_VERSION):
     agentControlPort: readAgentControlPort(raw.agentControlPort, storedVersion),
     language: readSettingsLanguage(raw.language),
     ...teamTemplatesSetting(raw.teamTemplates),
+    ...(raw.replyNotifications === false ? { replyNotifications: false } : {}),
   }
 }
 

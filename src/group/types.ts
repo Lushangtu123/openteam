@@ -61,6 +61,9 @@ export interface OpenTeamSettings {
   language: OpenTeamLanguage
   // Teams saved from "按任务组队", to start the same line-up again.
   teamTemplates?: TeamTemplate[]
+  // A desktop notification when every member has answered while OpenTeam is not in front. On
+  // unless set to false.
+  replyNotifications?: boolean
 }
 
 export interface TeamTemplateMember {

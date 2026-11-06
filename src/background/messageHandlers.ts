@@ -51,6 +51,9 @@ export const MESSAGE_ROUTE_TYPES = [
 
 export interface MessageHandlersDependencies {
   broadcastStoreUpdated(store: OpenTeamStore, excludeTabId?: number): Promise<void> | void
+  // Told when a member finished with a message (replied or failed for good), to notify the user
+  // once every member it went to has.
+  onPromptSettled?(store: OpenTeamStore, chatId: string, promptMessageId: string): Promise<unknown> | void
   getChatStatusFromRoles(store: OpenTeamStore, chat: GroupChat): GroupChat['status']
   log: {
     debug(event: string, details?: Record<string, unknown>): void
@@ -731,6 +734,7 @@ export function createMessageHandlers(deps: MessageHandlersDependencies): Backgr
 
     deps.log.info('role-reply:stored', { chatId: result.reply.chatId, roleId: result.reply.roleId, replyMessageId: result.reply.id })
     await deps.broadcastStoreUpdated(store)
+    if (promptMessageId) reportPromptSettled(deps, store, identity.chatId, promptMessageId)
     if (promptMessageId) clearRoleErrorRetryCount(roleErrorRetryCounts, identity.chatId, identity.roleId, promptMessageId)
     if (promptMessageId) await deps.promptDeliveryLimiter?.complete(identity.chatId, promptMessageId, identity.roleId)
     if (promptMessageId) await maybeAdvanceOrchestrationRun(deps, { chatId: identity.chatId, roleId: identity.roleId, promptMessageId, replyMessage: result.reply })
@@ -869,6 +873,7 @@ export function createMessageHandlers(deps: MessageHandlersDependencies): Backgr
     })
 
     await deps.broadcastStoreUpdated(store)
+    if (promptMessageId) reportPromptSettled(deps, store, identity.chatId, promptMessageId)
     await deps.sendError(reason)
     if (promptMessageId) clearRoleErrorRetryCount(roleErrorRetryCounts, identity.chatId, identity.roleId, promptMessageId)
     if (promptMessageId) await deps.promptDeliveryLimiter?.complete(identity.chatId, promptMessageId, identity.roleId)
@@ -1246,6 +1251,7 @@ async function sendExternalModelDelivery(deps: MessageHandlersDependencies, clie
     }
     deps.log.info('external-model:reply:stored', { chatId: delivery.chatId, roleId: delivery.roleId, messageId: delivery.messageId, replyMessageId })
     await deps.broadcastStoreUpdated(finalized.store)
+    reportPromptSettled(deps, finalized.store, delivery.chatId, delivery.messageId)
     return finalized.store
   } catch (error) {
     if (isAbortError(error) || controller.signal.aborted) {
@@ -1435,6 +1441,14 @@ function finalizeActiveExternalAssistantReply(store: OpenTeamStore, chat: GroupC
   delete role.lastPromptMessageId
   delete role.replyAttemptId
   return true
+}
+
+function reportPromptSettled(deps: MessageHandlersDependencies, store: OpenTeamStore, chatId: string, promptMessageId: string): void {
+  try {
+    Promise.resolve(deps.onPromptSettled?.(store, chatId, promptMessageId)).catch(error => deps.log.warn('prompt-settled:failed', { error: error instanceof Error ? error.message : String(error) }))
+  } catch (error) {
+    deps.log.warn('prompt-settled:failed', { error: error instanceof Error ? error.message : String(error) })
+  }
 }
 
 // Stopping a web member keeps what it had written as its reply, like an API member's.

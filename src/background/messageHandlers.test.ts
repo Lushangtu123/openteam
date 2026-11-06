@@ -1222,10 +1222,12 @@ describe('background message handlers', () => {
     }
     const broadcasts: OpenTeamStore[] = []
     let messageIdSeq = 0
+    const onPromptSettled = vi.fn()
     const routes = createMessageHandlers({
       broadcastStoreUpdated: vi.fn(async (store: OpenTeamStore) => {
         broadcasts.push(structuredClone(store))
       }),
+      onPromptSettled,
       externalModelClient: externalModelClient as never,
       getChatStatusFromRoles: () => 'ready',
       log: { debug: vi.fn(), info: vi.fn(), warn: vi.fn() },
@@ -1267,6 +1269,8 @@ describe('background message handlers', () => {
       status: 'received',
     })
     expect(response?.store.rolesById['role-1']).toMatchObject({ status: 'ready' })
+    // Every member answered: the background is told, to notify the user.
+    expect(onPromptSettled).toHaveBeenCalledWith(expect.objectContaining({ messagesById: expect.any(Object) }), 'chat-1', 'msg-1')
   })
 
   it('retries external model failures before content starts and keeps one assistant placeholder', async () => {

@@ -133,6 +133,13 @@ describe('extension security configuration', () => {
     for (const site of WEBSOCKET_COOKIE_SITES) expect(manifest.host_permissions).toContain(`wss://${site.initiatorDomain}/*`)
   })
 
+  it('can notify the user when every member has answered, with an icon of its own', () => {
+    const manifest = JSON.parse(readFileSync(resolve(process.cwd(), 'public/manifest.json'), 'utf8')) as { permissions: string[]; icons: Record<string, string> }
+
+    expect(manifest.permissions).toContain('notifications')
+    expect(manifest.icons['128']).toBe('icons/openteam-128.png')
+  })
+
   it('only lets the OpenTeam extension origin connect to the local control daemon', () => {
     const manifest = JSON.parse(readFileSync(resolve(process.cwd(), 'public/manifest.json'), 'utf8')) as { key: string }
     const daemonSource = readFileSync(resolve(process.cwd(), 'packages/openteamcli/openteam-daemon.mjs'), 'utf8')
