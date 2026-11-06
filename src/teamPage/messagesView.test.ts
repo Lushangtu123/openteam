@@ -1087,6 +1087,61 @@ describe('team page messages view boundary', () => {
     expect(messagesEl.querySelector('.message-body')?.textContent).toContain('第一段第二段')
   })
 
+  it('turns the options a new reply ends with into buttons that answer that member', () => {
+    const now = Date.now()
+    const chat: GroupChat = { id: 'chat-1', name: '群聊', mode: 'independent', roleIds: ['role-1'], messageIds: ['q1', 'r1', 'q2', 'r2'], nextMessageSeq: 5, status: 'ready', createdAt: now, updatedAt: now }
+    const role: GroupRole = { id: 'role-1', chatId: chat.id, name: '工程师', status: 'ready', contextCursor: 0, createdAt: now, updatedAt: now }
+    const options = '先选方向？\n\nA. 先压测\nB. 先灰度'
+    const q1: GroupMessage = { id: 'q1', chatId: chat.id, seq: 1, type: 'user', content: '怎么上线', createdAt: now, status: 'sent' }
+    const r1: GroupMessage = { id: 'r1', chatId: chat.id, seq: 2, type: 'assistant', roleId: role.id, roleName: role.name, content: options, createdAt: now, status: 'received' }
+    const q2: GroupMessage = { id: 'q2', chatId: chat.id, seq: 3, type: 'user', content: '再想想', createdAt: now, status: 'sent' }
+    const r2: GroupMessage = { id: 'r2', chatId: chat.id, seq: 4, type: 'assistant', roleId: role.id, roleName: role.name, content: options, createdAt: now, status: 'received' }
+    const messages = [q1, r1, q2, r2]
+    const store: OpenTeamStore = { ...createDefaultStore(), currentChatId: chat.id, chatOrder: [chat.id], chatsById: { [chat.id]: chat }, rolesById: { [role.id]: role }, messagesById: Object.fromEntries(messages.map(message => [message.id, message])) }
+    const answerChoice = vi.fn()
+    const messagesEl = document.createElement('section')
+    const view = createMessagesView({
+      state: createTeamPageState(),
+      getStore: () => store,
+      messagesEl,
+      getCurrentChat: () => chat,
+      getCurrentRoles: () => [role],
+      getCurrentMessages: () => messages,
+      emptyCard: () => document.createElement('div'),
+      openAddPersonDialog: vi.fn(),
+      roleToneClass: () => 'role-tone-1',
+      roleAvatarLabel: () => '工',
+      messageTitle: message => message.roleName ?? '你',
+      focusRoleFrame: vi.fn(),
+      insertMention: vi.fn(),
+      setReference: vi.fn(),
+      answerChoice,
+      resyncMessageReply: vi.fn(async () => undefined),
+      retryRoleReply: vi.fn(async () => undefined),
+      stopRoleReply: vi.fn(async () => undefined),
+      runCommand: vi.fn(async () => undefined),
+      render: vi.fn(),
+      showError: vi.fn(),
+      showSuccess: vi.fn(),
+      log: { warn: vi.fn() },
+    })
+
+    view.renderMessages()
+    // Only the reply after the user's latest message offers its options.
+    const blocks = [...messagesEl.querySelectorAll('.reply-choices')]
+    expect(blocks).toHaveLength(1)
+    const buttons = [...blocks[0].querySelectorAll<HTMLButtonElement>('.reply-choice')]
+    expect(buttons.map(button => button.textContent)).toEqual(['A先压测', 'B先灰度'])
+    buttons[1].click()
+    expect(answerChoice).toHaveBeenCalledWith(role, { label: 'B', text: '先灰度' })
+
+    // Once the user writes again, the options go away.
+    const q3: GroupMessage = { ...q2, id: 'q3', seq: 5 }
+    messages.push(q3)
+    view.renderMessages()
+    expect(messagesEl.querySelectorAll('.reply-choices')).toHaveLength(0)
+  })
+
   it("offers to edit and resend the user's own messages", () => {
     const now = Date.now()
     const chat: GroupChat = { id: 'chat-1', name: '群聊', mode: 'independent', roleIds: [], messageIds: ['msg-user', 'msg-task'], nextMessageSeq: 3, status: 'ready', createdAt: now, updatedAt: now }

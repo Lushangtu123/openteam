@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { createDefaultStore } from '../group/store'
-import type { GroupChat, GroupRole } from '../group/types'
+import type { GroupChat, GroupMessage, GroupRole } from '../group/types'
 import { createTeamPageState } from './appState'
 import { applyTeamLanguage } from './languageController'
 import { createComposerView, editableMessageText, type ComposerViewDependencies } from './composerView'
@@ -54,7 +54,7 @@ describe('team page composer targeting', () => {
 
   it('puts a sent message back in the input box with its mentions, to send again', () => {
     const { view, deps } = createComposerHarness()
-    const message = { id: 'msg-1', chatId: 'chat-1', seq: 1, type: 'user', content: '再评审一次', targetRoleIds: ['role-1'], createdAt: 1, status: 'sent' } as const
+    const message: GroupMessage = { id: 'msg-1', chatId: 'chat-1', seq: 1, type: 'user', content: '再评审一次', targetRoleIds: ['role-1'], createdAt: 1, status: 'sent' }
 
     view.editMessage(message)
 
@@ -63,9 +63,23 @@ describe('team page composer targeting', () => {
     expect(deps.targetPreviewEl.textContent).toContain('工程师')
   })
 
+  it('sends a clicked choice to its member, or adds it to a waiting draft', async () => {
+    const { view, deps, runCommand } = createComposerHarness()
+    const [role] = deps.getCurrentRoles()
+
+    await view.sendToRole(role, '我选 B：先灰度')
+    expect(runCommand).toHaveBeenCalledWith('GROUP_MESSAGE_SEND', expect.objectContaining({ chatId: 'chat-1', raw: '@工程师（DeepSeek） 我选 B：先灰度' }))
+
+    runCommand.mockClear()
+    deps.messageInputEl.value = '还有个问题'
+    await view.sendToRole(role, '我选 A：先压测')
+    expect(runCommand).not.toHaveBeenCalled()
+    expect(deps.messageInputEl.value).toBe('还有个问题\n@工程师（DeepSeek） 我选 A：先压测')
+  })
+
   it('writes a sent message back as it was typed', () => {
     const roles = [makeRole('chat-1', 'role-1', '工程师', 'ready'), makeRole('chat-1', 'role-2', '设计师', 'ready')]
-    const base = { id: 'msg', chatId: 'chat-1', seq: 1, type: 'user', createdAt: 1, status: 'sent' } as const
+    const base: Omit<GroupMessage, 'content'> = { id: 'msg', chatId: 'chat-1', seq: 1, type: 'user', createdAt: 1, status: 'sent' }
     const label = (role: GroupRole) => role.name
 
     expect(editableMessageText({ ...base, content: '大家看看', mentionsAll: true, targetRoleIds: ['role-1', 'role-2'] }, roles, label)).toBe('@所有人 大家看看')

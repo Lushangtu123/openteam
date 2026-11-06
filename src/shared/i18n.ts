@@ -51,6 +51,7 @@ const UI_TRANSLATIONS: Record<string, string> = {
   '搜索群聊': 'Search groups',
   '编辑后重新发送': 'Edit and send again',
   '语音输入': 'Voice input',
+  '回复选项': 'Reply options',
   '置顶群聊': 'Pin to top',
   '取消置顶': 'Unpin',
   '已置顶': 'Pinned',

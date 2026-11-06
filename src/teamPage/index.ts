@@ -31,6 +31,7 @@ import { createErrorPresenter, createSuccessPresenter, teamPageLog } from './tea
 import { createThemeController } from './themeController'
 import { createUiStyleController } from './uiStyleController'
 import { createVoiceInput, speechRecognitionFromWindow } from './voiceInput'
+import { replyChoiceAnswer } from '../group/replyChoices'
 import { createTeamUiController } from './teamUiController'
 import { emptyCard, getChatRecentSummary as getStoreChatRecentSummary, messageTitle, roleAvatarLabel, roleToneClass } from './viewHelpers'
 import { agentControlStatusState, agentControlStatusText } from './agentControlStatusView'
@@ -473,6 +474,10 @@ const messagesView = createMessagesView({
   insertMention,
   setReference,
   editAndResend: message => composerView.editMessage(message),
+  answerChoice: (role, choice) => {
+    composerView.sendToRole(role, replyChoiceAnswer(choice, store.settings.language === 'en' ? 'en' : 'zh-CN'))
+      .catch(error => showError(error instanceof Error ? error.message : String(error)))
+  },
   insertTextIntoActiveNote,
   resyncMessageReply,
   retryRoleReply,

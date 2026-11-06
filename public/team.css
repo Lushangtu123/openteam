@@ -7691,6 +7691,67 @@ select.reply-compare-select {
   }
 }
 
+/* Choices a reply ends with: a card of buttons under it that answer that member. */
+:root[data-theme] .reply-choices {
+  display: grid;
+  gap: 2px;
+  width: min(100%, 520px);
+  margin-top: 8px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 6px;
+  background: var(--surface);
+  box-shadow: 0 6px 18px -14px rgba(0, 0, 0, 0.35);
+}
+
+:root[data-theme] .reply-choice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  border: 0;
+  border-radius: 12px;
+  padding: 9px 10px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 14.5px;
+  text-align: left;
+}
+
+:root[data-theme] .reply-choice:hover,
+:root[data-theme] .reply-choice:focus-visible {
+  background: var(--hover);
+}
+
+:root[data-theme] .reply-choice-label {
+  display: inline-grid;
+  flex: 0 0 26px;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+:root[data-theme] .reply-choice:hover .reply-choice-label {
+  border-color: var(--line-hover);
+  color: var(--text);
+}
+
+:root[data-ui-style="grok"] .reply-choice-label {
+  border-radius: 999px;
+}
+
+:root[data-ui-style="grok"] .reply-choice:hover .reply-choice-label {
+  border-color: var(--gb-accent);
+  color: var(--gb-accent);
+}
+
 /* Group list search (shown for long lists) and the pin mark on pinned groups. The sidebar gets a
    row for the search box only while it shows. */
 :root[data-theme] .sidebar:has(.chat-list-search:not([hidden])) {

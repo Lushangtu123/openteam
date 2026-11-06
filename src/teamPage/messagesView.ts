@@ -1,3 +1,4 @@
+import { extractReplyChoices, type ReplyChoice } from '../group/replyChoices'
 import { normalizeLanguage } from '../shared/i18n'
 import { DEFAULT_MESSAGE_HIGHLIGHT_COLOR, MESSAGE_HIGHLIGHT_COLORS, messageHighlightColorRgb, type MessageHighlightColor } from '../group/highlightColors'
 import { roleMentionLabel, roleMentionLabelOptionsFromSettings, roleModelLabel } from '../group/mentionParser'
@@ -35,6 +36,8 @@ export interface MessagesViewDependencies {
   setReference(message: GroupMessage): void
   // Puts one of the user's messages back in the input box to be sent again.
   editAndResend?(message: GroupMessage): void
+  // Answers a choice at the end of a member's reply.
+  answerChoice?(role: GroupRole, choice: ReplyChoice): void
   insertTextIntoActiveNote?(text: string): void
   resyncMessageReply(message: GroupMessage): Promise<void>
   retryRoleReply(role: GroupRole, messageId?: string): Promise<void>
@@ -88,11 +91,14 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
   let timeDividers = new Map<string, HTMLElement>()
   // People who answered each question in the chat on screen, counted once per render.
   let replyCounts = new Map<string, number>()
+  // Choices are offered only on replies newer than the user's latest message.
+  let latestUserSeq = 0
 
   function renderMessages(): void {
     const chat = deps.getCurrentChat()
     const messages = deps.getCurrentMessages()
     replyCounts = countRepliesByQuestion(messages)
+    latestUserSeq = messages.reduce((latest, message) => message.type === 'user' ? Math.max(latest, message.seq) : latest, 0)
     releaseUnusedImageUrls(messages)
     const preserveScroll = deps.state.preserveNextMessageScroll
     const previousScrollTop = deps.messagesEl.scrollTop
@@ -281,10 +287,43 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     stack.append(bubble)
     const compare = compareButton(message)
     if (compare) stack.append(compare)
+    const choices = replyChoicesBlock(message)
+    if (choices) stack.append(choices)
     inner.append(avatar, stack)
     article.append(inner)
     cacheMessageNode(message.id, signature, article, streamingSignature)
     return article
+  }
+
+  function choicesOpen(message: GroupMessage): boolean {
+    return message.type === 'assistant' && message.status === 'received' && message.seq > latestUserSeq && Boolean(deps.answerChoice)
+  }
+
+  // The options a reply ends with, as buttons that answer that member.
+  function replyChoicesBlock(message: GroupMessage): HTMLElement | undefined {
+    if (!choicesOpen(message)) return undefined
+    const role = roleForMessage(message)
+    const choices = role ? extractReplyChoices(message.content) : undefined
+    if (!role || !choices) return undefined
+    const block = document.createElement('div')
+    block.className = 'reply-choices'
+    block.setAttribute('role', 'group')
+    block.setAttribute('aria-label', '回复选项')
+    for (const choice of choices) {
+      const button = document.createElement('button')
+      button.type = 'button'
+      button.className = 'reply-choice'
+      const label = document.createElement('span')
+      label.className = 'reply-choice-label'
+      label.textContent = choice.label
+      const text = document.createElement('span')
+      text.className = 'reply-choice-text'
+      text.textContent = choice.text
+      button.append(label, text)
+      button.addEventListener('click', () => deps.answerChoice?.(role, choice))
+      block.append(button)
+    }
+    return block
   }
 
   // How many tokens an API reply used, with the input/output split on hover.
@@ -740,6 +779,7 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
       createdAt: message.createdAt,
       status: message.status,
       usage: message.usage,
+      choicesOpen: choicesOpen(message),
       references: message.references,
       orchestrationRunId: message.orchestrationRunId,
       orchestrationRound: message.orchestrationRound,

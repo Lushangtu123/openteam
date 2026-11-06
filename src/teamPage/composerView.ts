@@ -36,6 +36,9 @@ export interface ComposerView {
   setReference(message: GroupMessage): void
   // Puts a sent message back in the input box, with its @mentions, to be changed and sent again.
   editMessage(message: GroupMessage): void
+  // Sends text to one member (a clicked choice). With a draft or files waiting in the input box,
+  // adds it to the draft instead, for the user to send.
+  sendToRole(role: GroupRole, text: string): Promise<void>
   submitComposerMessage(): Promise<void>
 }
 
@@ -294,6 +297,22 @@ export function createComposerView(deps: ComposerViewDependencies): ComposerView
     renderComposerState()
   }
 
+  async function sendToRole(role: GroupRole, text: string): Promise<void> {
+    const line = `@${roleMentionLabel(role, mentionLabelOptions())} ${text}`
+    const draft = deps.messageInputEl.value.trimEnd()
+    if (draft || (deps.attachments?.list().length ?? 0) > 0) {
+      deps.messageInputEl.value = draft ? `${draft}\n${line}` : line
+      const end = deps.messageInputEl.value.length
+      deps.messageInputEl.setSelectionRange(end, end)
+      deps.messageInputEl.focus()
+      renderComposerState()
+      return
+    }
+    deps.messageInputEl.value = line
+    renderComposerState()
+    await submitComposerMessage()
+  }
+
   function editMessage(message: GroupMessage): void {
     deps.messageInputEl.value = editableMessageText(message, deps.getCurrentRoles(), role => roleMentionLabel(role, mentionLabelOptions()))
     const reference = message.references?.[0]
@@ -351,7 +370,7 @@ export function createComposerView(deps: ComposerViewDependencies): ComposerView
     renderComposerState()
   }
 
-  return { renderComposerState, registerComposerEvents, insertMention, setReference, editMessage, submitComposerMessage }
+  return { renderComposerState, registerComposerEvents, insertMention, setReference, editMessage, sendToRole, submitComposerMessage }
 }
 
 // A sent message as it was typed: its @mentions (everyone, or each member it went to who is still in
