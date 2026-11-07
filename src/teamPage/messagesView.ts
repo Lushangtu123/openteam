@@ -563,7 +563,7 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     const button = document.createElement('button')
     button.type = 'button'
     button.className = 'message-compare-btn message-summary-btn'
-    button.textContent = '✦ 汇总本轮'
+    button.replaceChildren(createIcon('summary'), document.createTextNode('汇总本轮'))
     button.addEventListener('click', event => {
       event.stopPropagation()
       button.disabled = true

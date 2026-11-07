@@ -20,6 +20,12 @@ describe('shared i18n configuration', () => {
     expect(translateUi('9 个群聊 · 311 个人员库人员', 'en')).toBe('9 chats · 311 people')
   })
 
+  it('translates the chat buttons whose icons are drawn, not written', () => {
+    expect(translateUi('对比 2 个回复', 'en')).toBe('Compare 2 replies')
+    expect(translateUi('汇总本轮', 'en')).toBe('Summarize round')
+    expect(translateUi('查看分工', 'en')).toBe('View positions')
+  })
+
   it('translates page health copy, including the composer warning', () => {
     expect(translateUi('需要人机验证', 'en')).toBe('Verification required')
     expect(translateUi('网页暂时无法接收：Product Lead（DeepSeek） 需要登录；设计师 可以发送（未登录）', 'en'))

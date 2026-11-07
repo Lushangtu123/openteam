@@ -244,7 +244,8 @@ describe('team page messages view boundary', () => {
     // The summarized round has no button; the other one does.
     expect(messagesEl.querySelector('[data-message-id="q1"] .message-summary-btn')).toBeNull()
     const button = messagesEl.querySelector<HTMLButtonElement>('[data-message-id="q2"] .message-summary-btn')
-    expect(button?.textContent).toBe('✦ 汇总本轮')
+    expect(button?.textContent).toBe('汇总本轮')
+    expect(button?.querySelector('svg')).not.toBeNull()
     button?.click()
     expect(runCommand).toHaveBeenCalledWith('GROUP_ROUND_SUMMARY_REQUEST', { chatId: 'chat-1', messageId: 'q2' })
     expect(button?.disabled).toBe(true)

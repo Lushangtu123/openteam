@@ -312,7 +312,7 @@ const UI_TRANSLATIONS: Record<string, string> = {
   '正在回复…': 'Replying…',
   '回复失败': 'Reply failed',
   '按任务组队': 'Team up for a task',
-  '⚑ 查看分工': '⚑ View positions',
+  '查看分工': 'View positions',
   '还没有回复': 'No reply yet',
   '这位人员没有给出回复。': 'This person did not reply.',
   '回复到了会显示在这里。': 'The reply will show up here.',
@@ -1057,8 +1057,8 @@ function translateUiPattern(source: string): string | undefined {
   if (source.includes(' · ')) return source.split(' · ').map(part => translateUi(part, 'en')).join(' · ')
   const sendWithConnecting = source.match(/^将发送给：(.+)；正在连接：(.+)$/)
   if (sendWithConnecting) return `Will send to: ${sendWithConnecting[1]}; connecting: ${sendWithConnecting[2]}`
-  const compareReplies = source.match(/^⇆ 对比 (\d+) 个回复$/)
-  if (compareReplies) return `⇆ Compare ${compareReplies[1]} replies`
+  const compareReplies = source.match(/^对比 (\d+) 个回复$/)
+  if (compareReplies) return `Compare ${compareReplies[1]} replies`
   const discussionRequested = source.match(/^已请 (\d+) 位人员针对分歧讨论$/)
   if (discussionRequested) return `Asked ${discussionRequested[1]} people to discuss their differences`
   const summaryRequested = source.match(/^已请 (.+) 汇总异同$/)
