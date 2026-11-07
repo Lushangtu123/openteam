@@ -138,9 +138,9 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
       const label = element('span', `role-site-badge ${choice.pillClass}`, choice.label)
       label.title = choice.label
       const stepper = element('div', 'team-setup-stepper')
-      const minus = stepButton('−', t(`少一个 ${choice.label}`, `One fewer ${choice.label}`))
+      const minus = stepButton('minus', t(`少一个 ${choice.label}`, `One fewer ${choice.label}`))
       const value = element('span', 'team-setup-count', '0')
-      const plus = stepButton('+', t(`多一个 ${choice.label}`, `One more ${choice.label}`))
+      const plus = stepButton('plus', t(`多一个 ${choice.label}`, `One more ${choice.label}`))
       const update = (delta: number) => {
         const next = Math.max(0, Math.min(TEAM_MAX_COPIES_PER_MODEL, (counts.get(choice.key) ?? 0) + delta))
         if (delta > 0 && totalCount(counts) >= TEAM_MAX_MEMBERS && next > (counts.get(choice.key) ?? 0)) return
@@ -941,8 +941,9 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
     return close
   }
 
-  function stepButton(text: string, label: string): HTMLButtonElement {
-    const step = button(text, 'icon-btn team-setup-step')
+  function stepButton(icon: 'minus' | 'plus', label: string): HTMLButtonElement {
+    const step = button('', 'icon-btn team-setup-step')
+    step.append(createIcon(icon))
     step.setAttribute('aria-label', label)
     return step
   }

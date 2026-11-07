@@ -9418,3 +9418,131 @@ select.reply-compare-select {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* The note editor is a text area, not a control: no focus frame (the page-wide focus outline drew a
+   thick dark box around it); the caret shows where typing goes, and the area tints slightly. */
+:root[data-theme] .notes-editor .ProseMirror:focus,
+:root[data-theme] .notes-editor .ProseMirror:focus-visible {
+  outline: none;
+}
+
+:root[data-theme] .notes-editor:focus-within {
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+/* Search excerpts: matches in a highlighter yellow, readable in both themes. */
+:root[data-theme] .message-search-snippet mark {
+  padding: 0 2px;
+  background: rgba(250, 204, 21, 0.42);
+  color: inherit;
+  font-weight: 600;
+}
+
+/* Icons inside text buttons: the compare and positions buttons, menu checks, steppers. */
+:root[data-theme] .message-compare-btn {
+  gap: 5px;
+}
+
+:root[data-theme] .message-compare-btn .ui-icon {
+  width: 14px;
+  height: 14px;
+}
+
+:root[data-theme] .role-site-option {
+  gap: 6px;
+}
+
+:root[data-theme] .role-site-option .ui-icon {
+  width: 14px;
+  height: 14px;
+}
+
+:root[data-theme] .team-setup-step .ui-icon {
+  width: 16px;
+  height: 16px;
+}
+
+/* Adding members: the person's text takes the row; the models are one button with a checklist. */
+:root[data-theme] .add-person-site-control {
+  flex-wrap: nowrap;
+}
+
+:root[data-theme] .add-person-model-btn {
+  max-width: 220px;
+  min-height: 30px;
+  overflow: hidden;
+  padding: 0 12px;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 1;
+}
+
+:root[data-theme] .select-row > .add-person-model-menu {
+  position: static;
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 2px;
+  min-width: 0;
+  padding: 6px;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+:root[data-theme] .add-person-model-menu .add-person-model-hint {
+  grid-column: 1 / -1;
+}
+
+:root[data-theme] .add-person-model-menu .add-person-site-option input[type="checkbox"] {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+}
+
+:root[data-theme] .add-person-model-menu .add-person-site-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  border: 0;
+  border-radius: 8px;
+  padding: 0 10px;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  opacity: 1;
+}
+
+:root[data-theme] .add-person-model-menu .add-person-site-option input {
+  position: static;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+:root[data-theme] .add-person-model-menu .add-person-site-option.disabled {
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+:root[data-theme] .add-person-site-note {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 400;
+}
+
+:root[data-theme] .role-site-option:disabled {
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+:root[data-theme] .add-person-model-hint {
+  margin: 4px 10px 2px;
+  color: var(--muted);
+  font-size: 12px;
+}

@@ -248,9 +248,12 @@ describe('team page people library view boundary', () => {
 
     view.registerPeopleLibraryEvents()
     view.renderAddPersonDialog()
-    const claudeSite = addLibraryPeopleListEl.querySelector<HTMLInputElement>('input[type="checkbox"][value="site:claude"]')!
-    claudeSite.checked = true
-    claudeSite.dispatchEvent(new Event('change', { bubbles: true }))
+    // The person's model button opens a checklist; each model checked adds one member.
+    addLibraryPeopleListEl.querySelector<HTMLButtonElement>('[data-add-person-models="library:template-1"]')!.click()
+    const chatGptSite = addLibraryPeopleListEl.querySelector<HTMLInputElement>('input[type="checkbox"][value="site:chatgpt"]')!
+    chatGptSite.checked = true
+    chatGptSite.dispatchEvent(new Event('change', { bubbles: true }))
+    expect(addLibraryPeopleListEl.querySelector('[data-add-person-models="library:template-1"]')!.textContent).toBe('Gemini、ChatGPT')
     addLibraryPeopleListEl.querySelector<HTMLInputElement>('input[type="checkbox"][value="library:template-1"]')!.checked = true
     addLibraryPeopleFormEl.dispatchEvent(new SubmitEvent('submit', { bubbles: true, cancelable: true }))
     await Promise.resolve()
@@ -259,7 +262,7 @@ describe('team page people library view boundary', () => {
       chatId: chat.id,
       items: [
         { source: 'library', roleTemplateId: template.id, modelSource: 'site', chatSite: 'gemini' },
-        { source: 'library', roleTemplateId: template.id, modelSource: 'site', chatSite: 'claude' },
+        { source: 'library', roleTemplateId: template.id, modelSource: 'site', chatSite: 'chatgpt' },
       ],
     })
   })
@@ -282,9 +285,10 @@ describe('team page people library view boundary', () => {
     const personCheckbox = addLibraryPeopleListEl.querySelector<HTMLInputElement>('input[type="checkbox"][value="library:template-1"]')!
     personCheckbox.checked = true
     personCheckbox.dispatchEvent(new Event('change', { bubbles: true }))
-    const claudeSite = addLibraryPeopleListEl.querySelector<HTMLInputElement>('input[type="checkbox"][value="site:claude"]')!
-    claudeSite.checked = true
-    claudeSite.dispatchEvent(new Event('change', { bubbles: true }))
+    addLibraryPeopleListEl.querySelector<HTMLButtonElement>('[data-add-person-models="library:template-1"]')!.click()
+    const chatGptSite = addLibraryPeopleListEl.querySelector<HTMLInputElement>('input[type="checkbox"][value="site:chatgpt"]')!
+    chatGptSite.checked = true
+    chatGptSite.dispatchEvent(new Event('change', { bubbles: true }))
 
     expect(addLibraryPeopleListEl.querySelector<HTMLInputElement>('input[type="checkbox"][value="library:template-1"]')!.checked).toBe(true)
   })

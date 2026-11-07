@@ -25,7 +25,7 @@ export function createLocalAgentClient(deps: LocalAgentClientDependencies) {
     const model = input.model
     const context = input.context
     if (!context) throw new Error('本机智能体只能作为群聊成员使用')
-    if (!model.localAgentId || !model.workspace) throw new Error('这个本机智能体缺少设置，请在「添加大模型」里重新保存')
+    if (!model.localAgentId || !model.workspace) throw new Error('这个本机智能体缺少设置，请在「设置 → 模型」里重新保存')
     const en = normalizeLanguage(deps.getLanguage()) === 'en'
     const who = context.roleName ?? model.name
     const signal = input.abortSignal

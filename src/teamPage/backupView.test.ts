@@ -143,7 +143,7 @@ describe('team page backup', () => {
 
     const restoring = view.restoreFromFile(backupFile(source))
     await vi.waitFor(() => expect(document.querySelector('.backup-restore-notes')).not.toBeNull())
-    expect(document.querySelector('.backup-restore-notes')?.textContent).toContain('需要在「添加大模型」里重新添加：Claude API')
+    expect(document.querySelector('.backup-restore-notes')?.textContent).toContain('需要在「设置 → 模型」里重新添加：Claude API')
     await clickInDialog('取消')
     await restoring
   })

@@ -1,4 +1,5 @@
 import { createStreamingReveal } from './streamingReveal'
+import { createIcon } from './icons'
 import { createApprovalCards } from './approvalCard'
 import { extractReplyChoices, type ReplyChoice } from '../group/replyChoices'
 import { normalizeLanguage } from '../shared/i18n'
@@ -704,7 +705,7 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
       const button = document.createElement('button')
       button.type = 'button'
       button.className = 'message-compare-btn message-team-btn'
-      button.textContent = '⚑ 查看分工'
+      button.replaceChildren(createIcon('flag'), document.createTextNode('查看分工'))
       button.addEventListener('click', event => {
         event.stopPropagation()
         deps.openTeamCard?.(chat.id)
@@ -716,7 +717,7 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     const button = document.createElement('button')
     button.type = 'button'
     button.className = 'message-compare-btn'
-    button.textContent = `⇆ 对比 ${count} 个回复`
+    button.replaceChildren(createIcon('compare'), document.createTextNode(`对比 ${count} 个回复`))
     button.addEventListener('click', event => {
       event.stopPropagation()
       deps.openReplyComparison?.(message.id)
@@ -904,29 +905,9 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     button.replaceChildren(messageActionIcon(icon))
   }
 
+  // The page's line icons ('jump' is the external-window one).
   function messageActionIcon(icon: MessageActionIcon): SVGSVGElement {
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
-    svg.setAttribute('viewBox', '0 0 24 24')
-    svg.setAttribute('aria-hidden', 'true')
-    svg.setAttribute('focusable', 'false')
-
-    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path')
-    path.setAttribute('d', messageActionIconPath(icon))
-    // The quote marks are drawn up and to the left of the middle of their box.
-    if (icon === 'quote') path.setAttribute('transform', 'translate(0.9 1.6)')
-    svg.append(path)
-    return svg
-  }
-
-  function messageActionIconPath(icon: MessageActionIcon): string {
-    if (icon === 'copy') return 'M8 7.5A2.5 2.5 0 0 1 10.5 5h6A2.5 2.5 0 0 1 19 7.5v6A2.5 2.5 0 0 1 16.5 16h-6A2.5 2.5 0 0 1 8 13.5v-6Zm-3 3A2.5 2.5 0 0 1 7.5 8H8v5.5a2.5 2.5 0 0 0 2.5 2.5H16v.5a2.5 2.5 0 0 1-2.5 2.5h-6A2.5 2.5 0 0 1 5 16.5v-6Z'
-    if (icon === 'quote') return 'M7.2 6.5c-1.7 1.4-2.7 3-2.7 5.1 0 1.9 1.1 3.2 2.8 3.2 1.3 0 2.3-.9 2.3-2.2 0-1.2-.8-2-2-2.1.2-1.1.9-2 2.1-3l-1.1-1.4c-.5.1-1 .2-1.4.4Zm8 0c-1.7 1.4-2.7 3-2.7 5.1 0 1.9 1.1 3.2 2.8 3.2 1.3 0 2.3-.9 2.3-2.2 0-1.2-.8-2-2-2.1.2-1.1.9-2 2.1-3l-1.1-1.4c-.5.1-1 .2-1.4.4Z'
-    if (icon === 'check') return 'M9.2 16.4 4.8 12l1.4-1.4 3 3 8.6-8.6 1.4 1.4-10 10Z'
-    if (icon === 'stop') return 'M7.5 6h9A1.5 1.5 0 0 1 18 7.5v9a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 6 16.5v-9A1.5 1.5 0 0 1 7.5 6Z'
-    if (icon === 'retry') return 'M12 5a7 7 0 1 1-6.3 4H4a9 9 0 1 0 2.6-4.4L4 2v7h7L8.1 6.1A7 7 0 0 1 12 5Z'
-    if (icon === 'edit') return 'M15.3 4.9a2.2 2.2 0 0 1 3.1 0l.7.7a2.2 2.2 0 0 1 0 3.1L9.6 18.2 5 19l.8-4.6 9.5-9.5Zm-1.2 3.6-6.6 6.6-.4 1.9 1.9-.4 6.6-6.6-1.5-1.5Z'
-    if (icon === 'download') return 'M11 4h2v8.2l2.6-2.6L17 11l-5 5-5-5 1.4-1.4 2.6 2.6V4Zm-5 13h12v2H6v-2Z'
-    return 'M14 5h5v5h-1.6V7.7l-7.1 7.1-1.1-1.1 7.1-7.1H14V5ZM6.5 6h4v1.6h-4a.9.9 0 0 0-.9.9v9a.9.9 0 0 0 .9.9h9a.9.9 0 0 0 .9-.9v-4H18v4A2.5 2.5 0 0 1 15.5 20h-9A2.5 2.5 0 0 1 4 17.5v-9A2.5 2.5 0 0 1 6.5 6Z'
+    return createIcon(icon === 'jump' ? 'external' : icon)
   }
 
   async function handleCopyMessage(button: HTMLButtonElement, message: GroupMessage): Promise<void> {

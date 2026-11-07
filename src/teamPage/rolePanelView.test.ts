@@ -13,7 +13,7 @@ describe('team page role panel view boundary', () => {
   it('tells Claude web members that Claude refuses to run here and points to the API', () => {
     const claudeWeb = { chatSite: 'claude', modelSource: 'site' } as const
     const blocked = roleHealthAdvice({ status: 'blocked', reason: 'embed-blocked' }, claudeWeb)
-    expect(blocked).toContain('Claude 网页会检查自己是否被嵌在别的页面里')
+    expect(blocked).toContain('把这个成员移出群聊，再重新添加')
     expect(blocked).toContain('Anthropic 格式')
     expect(roleHealthAdvice({ status: 'unresponsive' }, claudeWeb)).toBe(blocked)
     expect(roleHealthAdvice({ status: 'unresponsive' }, { chatSite: 'grok', modelSource: 'site' })).toContain('20 秒内没有连上')

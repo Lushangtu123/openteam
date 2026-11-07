@@ -53,7 +53,7 @@ export function createRoleHandlers(deps: RoleHandlersDependencies): BackgroundMe
       // A local agent works only as a group member, so writing a persona uses an API model.
       const modelId = readOptionalString(message.modelId) ?? store.settings.externalModelOrder.find(id => store.settings.externalModelsById[id]?.format !== 'local-agent')
       const model = modelId ? store.settings.externalModelsById[modelId] : undefined
-      if (!model) throw new Error('请先配置外部模型后再使用 AI 生成人设')
+      if (!model) throw new Error('请先在「设置 → 模型」里添加模型，再用 AI 生成人设')
       return { model, language: store.settings.language }
     })
     if (!deps.externalModelClient) throw new Error('AI 生成人设客户端不可用')

@@ -81,7 +81,7 @@ describe('background external model handlers', () => {
       updatedAt: 1,
     }
     const remove = routes.find(route => route.type === 'EXTERNAL_MODEL_DELETE')!
-    await expect(remove.handler({ type: 'EXTERNAL_MODEL_DELETE', modelId: 'external-model-1' }, {})).rejects.toThrow('外部模型正在被人员使用')
+    await expect(remove.handler({ type: 'EXTERNAL_MODEL_DELETE', modelId: 'external-model-1' }, {})).rejects.toThrow('这个模型正在被成员使用')
   })
 
   it('tests a saved external model with a lightweight completion prompt', async () => {

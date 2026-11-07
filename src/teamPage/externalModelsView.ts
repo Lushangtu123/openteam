@@ -99,7 +99,7 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
     if (models.length === 0) {
       const empty = document.createElement('div')
       empty.className = 'empty-card'
-      empty.textContent = ui('暂无外部模型')
+      empty.textContent = ui('还没有模型')
       deps.externalModelsListEl.append(empty)
       return
     }

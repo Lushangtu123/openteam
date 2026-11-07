@@ -388,7 +388,8 @@ describe('team.html chat creation UI', () => {
   it('uses template default sites for library people and the add-person picker for temporary people', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/teamPage/peopleLibraryView.ts'), 'utf8')
 
-    expect(source).toContain('function addPersonSiteControl(itemKey: string, chatSites: string[], disabledSites: Set<string>): HTMLElement')
+    expect(source).toContain('function addPersonSiteControl(itemKey: string, chatSites: string[]): HTMLElement')
+    expect(source).toContain('function addPersonModelMenu(itemKey: string, chatSites: string[], disabledSites: Set<string>): HTMLElement')
     expect(source).toContain('function selectedAddPersonSites(itemKey: string, fallbackSite: string, disabledSites = new Set<string>()): string[]')
     expect(source).toContain("item.chatSites.map(chatSite =>")
     expect(source).toContain("if (item.source === 'library') return { source: 'library', roleTemplateId: item.roleTemplateId, ...modelPatch }")

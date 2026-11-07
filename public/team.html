@@ -357,7 +357,7 @@
         <div class="settings-body">
           <nav class="settings-nav" role="tablist" aria-label="设置分类" aria-orientation="vertical">
             <button class="settings-nav-item" type="button" role="tab" data-settings-tab="general" aria-selected="true">通用</button>
-            <button class="settings-nav-item" type="button" role="tab" data-settings-tab="models" aria-selected="false">大模型</button>
+            <button class="settings-nav-item" type="button" role="tab" data-settings-tab="models" aria-selected="false">模型</button>
             <button class="settings-nav-item" type="button" role="tab" data-settings-tab="replies" aria-selected="false">群聊回复</button>
             <button class="settings-nav-item" type="button" role="tab" data-settings-tab="pages" aria-selected="false">AI 网页</button>
             <button class="settings-nav-item" type="button" role="tab" data-settings-tab="agent" aria-selected="false">本机智能体</button>
@@ -387,13 +387,13 @@
                 </div>
               </div>
             </section>
-            <section class="settings-panel" role="tabpanel" data-settings-panel="models" aria-label="大模型" hidden>
+            <section class="settings-panel" role="tabpanel" data-settings-panel="models" aria-label="模型" hidden>
               <div class="settings-row">
                 <div class="settings-row-text">
                   <div class="settings-row-title">API 模型和本机智能体</div>
                   <p class="settings-row-hint">添加或修改成员能用的 API 模型（OpenAI 或 Anthropic 格式）和本机智能体（Claude Code、Codex 等）。</p>
                 </div>
-                <button id="open-external-models" class="btn settings-action" type="button">管理大模型</button>
+                <button id="open-external-models" class="btn settings-action" type="button">管理模型</button>
               </div>
             </section>
             <section class="settings-panel" role="tabpanel" data-settings-panel="replies" aria-label="群聊回复" hidden>
@@ -555,10 +555,10 @@
       <section class="modal template-editor-modal" role="dialog" aria-modal="true" aria-labelledby="external-models-title">
         <div class="modal-header">
           <div>
-            <h2 id="external-models-title">外部模型</h2>
+            <h2 id="external-models-title">模型</h2>
             <p class="tiny">配置 OpenAI 或 Anthropic 兼容 API，或本机的智能体（Claude Code、Codex 等，经 ACP 连接），人员可直接选择这些模型。</p>
           </div>
-          <button id="close-external-models" class="icon-btn modal-close" type="button" aria-label="关闭外部模型"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none"><path d="M6.5 6.5l11 11" /><path d="M17.5 6.5l-11 11" /></svg></button>
+          <button id="close-external-models" class="icon-btn modal-close" type="button" aria-label="关闭模型"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none"><path d="M6.5 6.5l11 11" /><path d="M17.5 6.5l-11 11" /></svg></button>
         </div>
         <div id="external-models-list" class="template-list"></div>
         <form id="external-model-form" class="modal-form">
@@ -600,7 +600,7 @@
           </div>
           <div class="template-actions">
             <button id="reset-external-model-form" class="btn" type="button">新建</button>
-            <button class="btn btn-primary" type="submit">保存外部模型</button>
+            <button class="btn btn-primary" type="submit">保存模型</button>
           </div>
         </form>
       </section>
@@ -671,7 +671,7 @@
               </label>
               <label class="site-segment" for="template-site-external">
                 <input id="template-site-external" type="radio" name="template-chat-site" value="external" />
-                <span>外部模型</span>
+                <span>API 模型</span>
               </label>
             </div>
           </div>
@@ -686,7 +686,7 @@
             <p class="tiny">选填。保存后，该人员使用 Grok 时会优先打开这个项目。</p>
           </div>
           <div id="template-external-model-field" class="field" hidden>
-            <label for="template-external-model-select">外部模型</label>
+            <label for="template-external-model-select">API 模型</label>
             <select id="template-external-model-select"></select>
           </div>
           <div class="template-actions">

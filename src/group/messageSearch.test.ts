@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildSnippet, searchMessages } from './messageSearch'
+import { buildSnippet, markdownToPlainText, searchMessages } from './messageSearch'
 import { createDefaultStore } from './store'
 import type { GroupMessage, OpenTeamStore } from './types'
 
@@ -61,6 +61,12 @@ describe('message search', () => {
 
   it('ignores an empty query', () => {
     expect(searchMessages(storeWith({ a: [{ content: 'x' }] }), '   ', { speakerName })).toEqual({ results: [], total: 0 })
+  })
+
+  it('shows the words of a Markdown reply in its excerpt, not the marks', () => {
+    const reply = '## 要点\n- 选 **Go**：单个二进制\n- 用 `go build` 打包\n\n| 语言 | 理由 |\n| --- | --- |\n| Go | 部署省事 |\n\n详见[文档](https://example.com)'
+    expect(markdownToPlainText(reply).replace(/\s+/g, ' ').trim()).toBe('要点 选 Go：单个二进制 用 go build 打包 语言 理由 Go 部署省事 详见文档')
+    expect(buildSnippet(markdownToPlainText(reply), ['go']).map(part => part.text).join('')).not.toMatch(/[#*`|]/)
   })
 
   it('cuts an excerpt around the first match and marks every match', () => {

@@ -480,7 +480,9 @@ export function createPeopleLibraryView(deps: PeopleLibraryViewDependencies): Pe
       site.className = 'template-description'
       site.textContent = item.chatSites.length === 0 ? ui('所有可用站点已添加') : item.source === 'temporary' ? ui('临时人员') : addPersonMetaText(displayItem, language())
       content.append(name, description, site)
-      label.append(checkbox, content, addPersonSiteControl(item.key, item.chatSites, item.disabledSites))
+      label.append(checkbox, content, addPersonSiteControl(item.key, item.chatSites))
+      // The checklist opens under the person, across the row, so the scrolling list never clips it.
+      if (deps.state.addPersonSiteMenuId === item.key) label.append(addPersonModelMenu(item.key, item.chatSites, item.disabledSites))
       deps.addLibraryPeopleListEl.append(label)
     }
   }
@@ -668,21 +670,50 @@ export function createPeopleLibraryView(deps: PeopleLibraryViewDependencies): Pe
     deps.addPersonCustomTabEl.setAttribute('aria-selected', String(!builtinActive))
   }
 
-  function addPersonSiteControl(itemKey: string, chatSites: string[], disabledSites: Set<string>): HTMLElement {
+  // One button per person with the chosen models; it opens a checklist. Several models add one member
+  // per model. A model this person already has in the group cannot be picked again.
+  function addPersonSiteControl(itemKey: string, chatSites: string[]): HTMLElement {
     const control = document.createElement('div')
     control.className = 'role-site-control add-person-site-control'
+    const models = selectableModels(deps.getStore())
     const selectedSites = new Set(chatSites)
-    for (const model of selectableModels(deps.getStore())) {
+    const open = deps.state.addPersonSiteMenuId === itemKey
+    const trigger = document.createElement('button')
+    trigger.type = 'button'
+    trigger.className = 'site-pill add-person-model-btn'
+    trigger.dataset.addPersonModels = itemKey
+    trigger.setAttribute('aria-haspopup', 'true')
+    trigger.setAttribute('aria-expanded', String(open))
+    const labels = models.filter(model => selectedSites.has(model.key)).map(model => model.label)
+    trigger.textContent = labels.length > 0 ? labels.join(language() === 'en' ? ', ' : '、') : ui('选择模型')
+    trigger.title = ui('选择用哪个模型；选几个就加几位成员')
+    trigger.addEventListener('click', event => {
+      event.stopPropagation()
+      deps.state.addPersonSiteMenuId = open ? undefined : itemKey
+      renderAddPersonDialog()
+    })
+    control.append(trigger)
+    return control
+  }
+
+  function addPersonModelMenu(itemKey: string, chatSites: string[], disabledSites: Set<string>): HTMLElement {
+    const models = selectableModels(deps.getStore())
+    const selectedSites = new Set(chatSites)
+    const menu = document.createElement('div')
+    menu.className = 'role-site-menu add-person-model-menu'
+    menu.addEventListener('click', event => event.stopPropagation())
+    for (const model of models) {
+      const used = disabledSites.has(model.key)
       const option = document.createElement('label')
-      option.className = `site-pill ${model.className} add-person-site-option${selectedSites.has(model.key) ? ' active' : ''}${disabledSites.has(model.key) ? ' disabled' : ''}`
+      option.className = `role-site-option add-person-site-option${selectedSites.has(model.key) ? ' active' : ''}${used ? ' disabled' : ''}`
       const input = document.createElement('input')
       input.type = 'checkbox'
       input.value = model.key
       input.checked = selectedSites.has(model.key)
-      input.disabled = disabledSites.has(model.key)
+      input.disabled = used
       input.addEventListener('change', event => {
         event.stopPropagation()
-        if (disabledSites.has(model.key)) return
+        if (input.disabled) return
         const nextSites = new Set(selectedAddPersonSites(itemKey, model.key, disabledSites))
         if (input.checked) {
           nextSites.add(model.key)
@@ -695,10 +726,22 @@ export function createPeopleLibraryView(deps: PeopleLibraryViewDependencies): Pe
         deps.state.addPersonSiteByKey.set(itemKey, nextSites)
         renderAddPersonDialog()
       })
-      option.append(input, document.createTextNode(model.label))
-      control.append(option)
+      const text = document.createElement('span')
+      text.textContent = model.label
+      option.append(input, text)
+      if (used) {
+        const note = document.createElement('span')
+        note.className = 'add-person-site-note'
+        note.textContent = ui('已在群里')
+        option.append(note)
+      }
+      menu.append(option)
     }
-    return control
+    const hint = document.createElement('p')
+    hint.className = 'add-person-model-hint'
+    hint.textContent = ui('可以多选：每选一个模型，就加一位成员。')
+    menu.append(hint)
+    return menu
   }
 
   function selectedAddPersonSites(itemKey: string, fallbackSite: string, disabledSites = new Set<string>()): string[] {
@@ -836,7 +879,7 @@ export function createPeopleLibraryView(deps: PeopleLibraryViewDependencies): Pe
     const models = externalModels(deps.getStore())
     deps.templateExternalModelSelectEl.replaceChildren()
     if (models.length === 0) {
-      deps.templateExternalModelSelectEl.append(new Option(ui('先在设置中添加外部模型'), ''))
+      deps.templateExternalModelSelectEl.append(new Option(ui('先在「设置 → 模型」里添加模型'), ''))
       deps.templateSiteExternalEl.disabled = true
       return
     }

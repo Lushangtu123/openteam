@@ -52,7 +52,7 @@ export function createExternalModelHandlers(deps: ExternalModelHandlersDependenc
     const modelId = requireString(message.modelId, '缺少外部模型 ID')
     const { store } = await mutateStore(store => {
       if (Object.values(store.rolesById).some(role => role.modelSource === 'external' && role.externalModelId === modelId)) {
-        throw new Error('外部模型正在被人员使用，不能删除')
+        throw new Error('这个模型正在被成员使用，不能删除')
       }
       delete store.settings.externalModelsById[modelId]
       store.settings.externalModelOrder = store.settings.externalModelOrder.filter(id => id !== modelId)

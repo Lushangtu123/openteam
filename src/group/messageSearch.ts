@@ -59,9 +59,27 @@ export function searchMessages(store: OpenTeamStore, query: string, options: Mes
     chatName: match.chatName,
     messageId: match.message.id,
     message: match.message,
-    snippet: buildSnippet(match.message.content || match.attachmentNames, terms),
+    snippet: buildSnippet(markdownToPlainText(match.message.content) || match.attachmentNames, terms),
   }))
   return { results, total: matches.length }
+}
+
+// Replies are Markdown; an excerpt shows the words, not the marks around them (## headings,
+// - list items, **bold**, `code`, links, table pipes).
+export function markdownToPlainText(text: string): string {
+  // [ \t] rather than \s at line ends, so a pattern never eats the newline between two lines.
+  return text
+    .replace(/^[ \t]*```[^\n]*$/gm, '')
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/^[ \t]{0,3}#{1,6}[ \t]+/gm, '')
+    .replace(/^[ \t]{0,3}>[ \t]?/gm, '')
+    .replace(/^[ \t]*(?:[-*+]|\d+[.)])[ \t]+(?:\[[ xX]\][ \t]+)?/gm, '')
+    .replace(/^[ \t]*\|?(?:[ \t]*:?-{3,}:?[ \t]*\|?)+[ \t]*$/gm, '')
+    .replace(/^[ \t]*\|(.*)\|[ \t]*$/gm, (_row, cells: string) => cells.split('|').map(cell => cell.trim()).join('  '))
+    .replace(/(\*\*|__)(?=\S)(.+?)\1/g, '$2')
+    .replace(/~~(?=\S)(.+?)~~/g, '$1')
+    .replace(/`([^`\n]+)`/g, '$1')
 }
 
 export function searchTerms(query: string): string[] {

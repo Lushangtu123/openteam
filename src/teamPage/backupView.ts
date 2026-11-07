@@ -206,7 +206,7 @@ export function createBackupView(deps: BackupViewDependencies): BackupView {
       notes.append(paragraph(ui('替换：用备份覆盖当前全部数据，替换前会先下载一份当前数据的备份。已配置的 API 模型会保留。')))
       if (modelsToReAdd.length > 0) {
         // The names stay in their own text node, so only the sentence is translated.
-        const models = paragraph(ui('这些 API 模型在备份里没有 API Key，需要在「添加大模型」里重新添加：'))
+        const models = paragraph(ui('这些 API 模型在备份里没有 API Key，需要在「设置 → 模型」里重新添加：'))
         models.append(text(modelsToReAdd.join('、')))
         notes.append(models)
       }
