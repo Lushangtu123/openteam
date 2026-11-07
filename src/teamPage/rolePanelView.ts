@@ -3,6 +3,7 @@ import { roleMentionLabel, roleMentionLabelOptionsFromSettings } from '../group/
 import type { ChatSite, ExternalModelConfig, GroupRole, OpenTeamStore, RoleModelSource, RoleStatus } from '../group/types'
 import { normalizeLanguage, translateUi } from '../shared/i18n'
 import type { TeamPageState } from './appState'
+import { createIcon } from './icons'
 import { PROBLEM_HEALTH_STATUSES, rolePageHealthLabel, type RolePageHealth } from './roleHealth'
 
 const VISIBLE_CHAT_SITES = CHAT_SITES
@@ -43,14 +44,13 @@ export function createRolePanelView(deps: RolePanelViewDependencies): RolePanelV
     const store = deps.getStore()
     const selectedRole = deps.state.selectedRoleId ? store.rolesById[deps.state.selectedRoleId] : undefined
     deps.rolePanelEl.classList.toggle('open', deps.state.peopleDrawerOpen)
-    deps.roleSummaryEl.textContent = ui(`${roles.length} 人员${selectedRole ? ` · 当前：${selectedRole.name}` : ''}`)
-    renderRolePanelActions()
+    deps.roleSummaryEl.textContent = ui(`${roles.length} 位成员${selectedRole ? ` · 当前：${selectedRole.name}` : ''}`)
     deps.roleListEl.replaceChildren()
 
     if (!deps.getCurrentChat()) {
       deps.roleListEl.append(deps.emptyCard(ui('未选择群聊'), ui('选择群聊后可添加、查看、恢复和唤醒人员。')))
     } else if (roles.length === 0) {
-      deps.roleListEl.append(deps.emptyCard(ui('暂无人员'), ui('点击添加人员，可从人员库批量加入或临时添加。')))
+      deps.roleListEl.append(deps.emptyCard(ui('暂无人员'), ui('点「添加成员」，从人员库批量加入或临时添加。')))
     } else {
       for (const role of roles) deps.roleListEl.append(roleCard(role))
     }
@@ -92,13 +92,11 @@ export function createRolePanelView(deps: RolePanelViewDependencies): RolePanelV
     meta.append(roleSiteControl(role), roleContextProgress(role, ui), health ? roleHealthBadge(health) : roleConnectionStatus(role, ui))
     main.append(row, description, meta)
 
+    // One ⋯ button per card; its menu holds the prompt, the web page's actions and, last, removing.
     const actions = document.createElement('div')
     actions.className = 'role-card-actions'
-    const promptDetail = rolePromptDetailButton(role)
-    const refresh = roleRefreshButton(role)
-    const jump = roleJumpButton(role)
-    const remove = roleDeleteButton(role)
-    actions.append(promptDetail, refresh, jump, remove)
+    actions.append(roleMoreButton(role))
+    if (deps.state.roleActionMenuRoleId === role.id) actions.append(roleActionMenu(role))
     card.append(avatar, main, actions)
 
     const healthHelp = health ? roleHealthHelp(role, health) : undefined
@@ -114,18 +112,79 @@ export function createRolePanelView(deps: RolePanelViewDependencies): RolePanelV
     return card
   }
 
-  function rolePromptDetailButton(role: GroupRole): HTMLButtonElement {
+  function roleMoreButton(role: GroupRole): HTMLButtonElement {
     const button = document.createElement('button')
     button.type = 'button'
-    button.className = 'role-prompt-detail'
-    button.dataset.rolePromptDetail = role.id
-    button.setAttribute('aria-label', language() === 'en' ? `View ${role.name}'s prompt` : `查看 ${role.name} 的提示词`)
-    button.title = ui('查看提示词')
-    button.append(promptDetailIcon())
+    button.className = 'icon-btn role-more-btn'
+    button.dataset.roleMore = role.id
+    const open = deps.state.roleActionMenuRoleId === role.id
+    button.setAttribute('aria-label', language() === 'en' ? `More for ${role.name}` : `${role.name} 的更多操作`)
+    button.setAttribute('aria-haspopup', 'menu')
+    button.setAttribute('aria-expanded', String(open))
+    button.append(createIcon('more'))
     button.addEventListener('click', event => {
       event.stopPropagation()
+      deps.state.roleSiteMenuRoleId = undefined
+      deps.state.roleActionMenuRoleId = open ? undefined : role.id
+      renderRolePanel()
+      if (!open) deps.roleListEl.querySelector<HTMLButtonElement>('.role-action-menu [role="menuitem"]')?.focus()
+    })
+    return button
+  }
+
+  function roleActionMenu(role: GroupRole): HTMLElement {
+    const menu = document.createElement('div')
+    menu.className = 'role-action-menu'
+    menu.setAttribute('role', 'menu')
+    menu.addEventListener('click', event => event.stopPropagation())
+    const web = role.modelSource !== 'external'
+    menu.append(rolePromptDetailButton(role))
+    if (web) menu.append(roleRefreshButton(role), roleJumpButton(role))
+    menu.append(roleDeleteButton(role))
+    menu.addEventListener('keydown', event => {
+      const items = [...menu.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')]
+      const at = items.indexOf(document.activeElement as HTMLButtonElement)
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault()
+        items[(at + (event.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length]?.focus()
+      } else if (event.key === 'Escape') {
+        event.preventDefault()
+        event.stopPropagation()
+        closeRoleActionMenu()
+        deps.roleListEl.querySelector<HTMLButtonElement>(`[data-role-more="${CSS.escape(role.id)}"]`)?.focus()
+      }
+    })
+    return menu
+  }
+
+  function closeRoleActionMenu(): void {
+    deps.state.roleActionMenuRoleId = undefined
+    renderRolePanel()
+  }
+
+  function roleMenuItem(className: string, icon: Parameters<typeof createIcon>[0], label: string, ariaLabel: string, run: () => void): HTMLButtonElement {
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.className = `role-action-item ${className}`
+    button.setAttribute('role', 'menuitem')
+    button.setAttribute('aria-label', ariaLabel)
+    const text = document.createElement('span')
+    text.textContent = ui(label)
+    button.append(createIcon(icon), text)
+    button.addEventListener('click', event => {
+      event.stopPropagation()
+      deps.state.roleActionMenuRoleId = undefined
+      run()
+    })
+    return button
+  }
+
+  function rolePromptDetailButton(role: GroupRole): HTMLButtonElement {
+    const button = roleMenuItem('role-prompt-detail', 'prompt', '查看提示词', language() === 'en' ? `View ${role.name}'s prompt` : `查看 ${role.name} 的提示词`, () => {
+      renderRolePanel()
       openRolePromptDetail(role)
     })
+    button.dataset.rolePromptDetail = role.id
     return button
   }
 
@@ -160,7 +219,7 @@ export function createRolePanelView(deps: RolePanelViewDependencies): RolePanelV
     close.type = 'button'
     close.className = 'icon-btn modal-close role-prompt-close'
     close.setAttribute('aria-label', ui('关闭提示词详情'))
-    close.textContent = '×'
+    close.append(createIcon('close'))
     close.addEventListener('click', () => backdrop.remove())
     header.append(copy, close)
 
@@ -174,37 +233,13 @@ export function createRolePanelView(deps: RolePanelViewDependencies): RolePanelV
     close.focus()
   }
 
-  function renderRolePanelActions(): void {
-    const header = deps.roleSummaryEl.parentElement?.parentElement
-    if (!header) return
-    let actions = header.querySelector<HTMLElement>('.role-panel-actions')
-    if (!actions) {
-      actions = document.createElement('div')
-      actions.className = 'role-panel-actions'
-      const login = header.querySelector('#open-gemini-login')
-      if (login) {
-        header.insertBefore(actions, login)
-        actions.append(login)
-      } else {
-        header.append(actions)
-      }
-    }
-  }
-
+  // Web members only: reloads the member's AI page.
   function roleRefreshButton(role: GroupRole): HTMLButtonElement {
-    const button = document.createElement('button')
-    button.type = 'button'
-    button.className = 'role-refresh'
-    button.dataset.roleRefresh = role.id
-    button.setAttribute('aria-label', language() === 'en' ? `Refresh ${role.name}'s member window` : `刷新 ${role.name} 的成员窗口`)
-    button.title = role.modelSource === 'external' ? ui('API 成员无需刷新窗口') : ui('刷新成员窗口')
-    button.textContent = '↻'
-    if (role.modelSource === 'external') button.disabled = true
-    button.addEventListener('click', event => {
-      event.stopPropagation()
-      if (role.modelSource === 'external') return
+    const button = roleMenuItem('role-refresh', 'refresh', '刷新网页', language() === 'en' ? `Refresh ${role.name}'s member window` : `刷新 ${role.name} 的成员窗口`, () => {
+      renderRolePanel()
       reloadRoleFrame(role)
     })
+    button.dataset.roleRefresh = role.id
     return button
   }
 
@@ -260,34 +295,21 @@ export function createRolePanelView(deps: RolePanelViewDependencies): RolePanelV
     return button
   }
 
+  // Web members only: shows the member's AI page.
   function roleJumpButton(role: GroupRole): HTMLButtonElement {
-    const button = document.createElement('button')
-    button.type = 'button'
-    button.className = 'role-jump'
-    button.setAttribute('aria-label', language() === 'en' ? `Jump to ${role.name}'s source window` : `跳转到 ${role.name} 的原始窗口`)
-    button.title = ui('跳转到原始窗口')
-    button.textContent = '↗'
-    button.addEventListener('click', event => {
-      event.stopPropagation()
+    return roleMenuItem('role-jump', 'external', '查看网页', language() === 'en' ? `Jump to ${role.name}'s source window` : `跳转到 ${role.name} 的原始窗口`, () => {
+      renderRolePanel()
       deps.focusRoleFrame(role.chatId, role.id)
     })
-    return button
   }
 
+  // Last in the menu, and asks first.
   function roleDeleteButton(role: GroupRole): HTMLButtonElement {
-    const button = document.createElement('button')
-    button.type = 'button'
-    button.className = 'role-delete'
-    button.dataset.roleDelete = role.id
-    button.setAttribute('aria-label', language() === 'en' ? `Delete ${role.name}` : `删除 ${role.name}`)
-    button.title = ui('删除成员')
-    button.append(trashIcon())
-    button.addEventListener('click', event => {
-      event.stopPropagation()
+    const button = roleMenuItem('role-delete', 'trash', '移出群聊', language() === 'en' ? `Delete ${role.name}` : `删除 ${role.name}`, () => {
       deps.state.roleSiteMenuRoleId = undefined
-      deps.state.roleActionMenuRoleId = undefined
       kickRoleFromChat(role).catch(error => deps.showError(error instanceof Error ? error.message : String(error)))
     })
+    button.dataset.roleDelete = role.id
     return button
   }
 
@@ -378,43 +400,6 @@ export function createRolePanelView(deps: RolePanelViewDependencies): RolePanelV
   }
 }
 
-function trashIcon(): SVGSVGElement {
-  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
-  svg.setAttribute('viewBox', '0 0 24 24')
-  svg.setAttribute('aria-hidden', 'true')
-  svg.setAttribute('focusable', 'false')
-  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path')
-  path.setAttribute('d', 'M9 4h6l1 2h4v2H4V6h4l1-2Zm-2 6h10l-.7 9.1A2 2 0 0 1 14.3 21H9.7a2 2 0 0 1-2-1.9L7 10Zm3 2v6h1.6v-6H10Zm2.4 0v6H14v-6h-1.6Z')
-  svg.append(path)
-  return svg
-}
-
-function promptDetailIcon(): SVGSVGElement {
-  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
-  svg.setAttribute('viewBox', '0 0 24 24')
-  svg.setAttribute('aria-hidden', 'true')
-  svg.setAttribute('focusable', 'false')
-  svg.setAttribute('fill', 'none')
-  svg.setAttribute('stroke', 'currentColor')
-  svg.setAttribute('stroke-width', '1.8')
-  svg.setAttribute('stroke-linecap', 'round')
-  svg.setAttribute('stroke-linejoin', 'round')
-
-  const page = document.createElementNS('http://www.w3.org/2000/svg', 'path')
-  page.setAttribute('d', 'M7 3.8h6.4L17 7.4V20H7V3.8Z')
-  const fold = document.createElementNS('http://www.w3.org/2000/svg', 'path')
-  fold.setAttribute('d', 'M13.2 4v3.6h3.6')
-  const line1 = document.createElementNS('http://www.w3.org/2000/svg', 'path')
-  line1.setAttribute('d', 'M9.6 11h4.8')
-  const line2 = document.createElementNS('http://www.w3.org/2000/svg', 'path')
-  line2.setAttribute('d', 'M9.6 14h4.8')
-  const line3 = document.createElementNS('http://www.w3.org/2000/svg', 'path')
-  line3.setAttribute('d', 'M9.6 17h2.8')
-
-  svg.append(page, fold, line1, line2, line3)
-  return svg
-}
-
 function siteLabel(site: ChatSite | undefined): string {
   return chatSiteLabel(site)
 }
@@ -470,7 +455,7 @@ function statusPill(status: string, label: string): HTMLElement {
 function roleContextProgress(role: GroupRole, ui: (source: string) => string): HTMLElement {
   const progress = document.createElement('span')
   progress.className = 'role-meta-item'
-  progress.textContent = ui(role.contextCursor > 0 ? `已读 ${role.contextCursor} 条` : '尚未读取消息')
+  progress.textContent = ui(role.contextCursor > 0 ? `已读 ${role.contextCursor} 条` : '还没读过群消息')
   return progress
 }
 
@@ -499,7 +484,7 @@ function roleConnectionStatus(role: GroupRole, ui: (source: string) => string): 
     status.textContent = role.siteHealth.detail ? `${label}：${role.siteHealth.detail}` : label
     return status
   }
-  status.textContent = ui(role.modelSource === 'external' ? '连接 API' : role.geminiConversationUrl ? '网页已连接' : '等待连接')
+  status.textContent = ui(role.modelSource === 'external' ? '通过 API 回复' : role.geminiConversationUrl ? '网页已连接' : '等待连接')
   return status
 }
 

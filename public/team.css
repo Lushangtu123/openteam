@@ -9152,3 +9152,269 @@ select.reply-compare-select {
     transition: none;
   }
 }
+
+/*
+ * Sidebar, empty chat area and member panel.
+ * New groups start from three equal choices; the empty chat area offers the same three. Each member
+ * card has one ⋯ menu (prompt, the web page's actions, then removing). From 1280px the member
+ * panel sits beside the chat instead of covering it.
+ */
+:root[data-theme] .icon-btn > svg,
+:root[data-theme] .note-tool-btn > svg,
+:root[data-theme] .ui-icon {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+:root[data-theme] .note-tool-btn > svg {
+  width: 16px;
+  height: 16px;
+}
+
+:root[data-theme] .icon-dots circle,
+:root[data-theme] .ui-icon-more circle {
+  fill: currentColor;
+}
+
+:root[data-theme] .attachment-chip-remove .ui-icon {
+  width: 12px;
+  height: 12px;
+}
+
+/* The group and people counts under the name were noise; the list itself shows the groups. */
+:root[data-theme] .sidebar #store-summary {
+  display: none;
+}
+
+:root[data-theme] .chat-create-choices {
+  display: grid;
+  gap: 4px;
+}
+
+:root[data-theme] .chat-create-choices[hidden],
+:root[data-theme] .chat-create-blank[hidden] {
+  display: none;
+}
+
+:root[data-theme] .chat-create-blank {
+  display: grid;
+  gap: 12px;
+}
+
+:root[data-theme] .chat-create-choice {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  width: 100%;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+:root[data-theme] .chat-create-choice:hover,
+:root[data-theme] .chat-create-choice:focus-visible {
+  border-color: var(--line-hover);
+  background: var(--hover);
+  outline: none;
+}
+
+:root[data-theme] .chat-create-choice svg {
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+:root[data-theme] .chat-create-choice-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+:root[data-theme] .chat-create-choice-label {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+:root[data-theme] .chat-create-choice-hint {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+:root[data-theme] .no-chat-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+/* Member panel: one heading, and its actions in the header. */
+:root[data-theme] .role-panel-header {
+  gap: 10px;
+}
+
+:root[data-theme] .role-panel-heading {
+  min-width: 0;
+}
+
+:root[data-theme] .role-panel-actions {
+  flex-wrap: nowrap;
+  gap: 4px;
+}
+
+:root[data-theme] .role-add-form {
+  display: flex;
+  margin: 0;
+}
+
+:root[data-theme] .role-add-form .btn svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+:root[data-theme] .role-add-form .btn {
+  gap: 4px;
+}
+
+:root[data-theme] .role-card-actions {
+  position: relative;
+  align-self: end;
+}
+
+:root[data-theme] .role-more-btn {
+  width: 30px;
+  height: 30px;
+  color: var(--muted);
+}
+
+:root[data-theme] .role-more-btn:hover,
+:root[data-theme] .role-more-btn[aria-expanded="true"] {
+  background: var(--hover);
+  color: var(--text);
+}
+
+:root[data-theme] .role-action-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 6;
+  display: grid;
+  gap: 2px;
+  min-width: 168px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-raised);
+  box-shadow: 0 16px 36px -12px rgba(0, 0, 0, 0.36);
+}
+
+:root[data-theme] .role-action-menu .role-action-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: auto;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 1.3;
+  text-align: left;
+  opacity: 1;
+  cursor: pointer;
+}
+
+:root[data-theme] .role-action-menu .role-action-item svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+}
+
+:root[data-theme] .role-action-menu .role-action-item:hover,
+:root[data-theme] .role-action-menu .role-action-item:focus-visible {
+  background: var(--hover);
+  color: var(--text);
+  outline: none;
+}
+
+:root[data-theme] .role-action-menu .role-delete {
+  margin-top: 4px;
+  border-top: 1px solid var(--line);
+  border-radius: 0 0 8px 8px;
+  padding-top: 9px;
+  color: #d93025;
+}
+
+:root[data-theme] .role-action-menu .role-delete:hover,
+:root[data-theme] .role-action-menu .role-delete:focus-visible {
+  background: rgba(217, 48, 37, 0.1);
+  color: #d93025;
+}
+
+:root[data-theme="dark"] .role-action-menu .role-delete,
+:root[data-theme="dark"] .role-action-menu .role-delete:hover {
+  color: #ff8a82;
+}
+
+/* Wide windows: the member panel takes its place beside the chat. */
+@media (min-width: 1280px) {
+  :root[data-theme] .workspace {
+    transition: margin-right 0.18s ease;
+  }
+
+  :root[data-theme] .app-shell:has(> .role-panel.open) > .workspace {
+    margin-right: 380px;
+  }
+
+  :root[data-theme] .role-panel.open {
+    box-shadow: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-theme] .workspace {
+    transition: none;
+  }
+}
+
+/* The member list fills the panel, so a card's menu has room to open below the last card. */
+:root[data-theme] .role-scroll {
+  flex: 1 1 auto;
+}
+
+:root[data-theme] .role-panel-actions .btn {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+:root[data-theme] .role-panel-heading #role-summary {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

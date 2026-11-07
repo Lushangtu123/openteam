@@ -64,7 +64,7 @@ export function createChatListView(deps: ChatListViewDependencies): ChatListView
     if (deps.chatListSearchEl) deps.chatListSearchEl.placeholder = ui('搜索群聊')
 
     if (allChats.length === 0) {
-      deps.chatListEl.append(deps.emptyCard(ui('还没有群聊'), ui('在上方创建一个群聊，然后从人员库添加人员。')))
+      deps.chatListEl.append(deps.emptyCard(ui('还没有群聊'), ui('点上方的加号新建：按任务组队、从模板创建，或建一个空白群聊。')))
       return
     }
 

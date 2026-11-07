@@ -1,5 +1,6 @@
 import { checkUploadFile, MAX_UPLOADS_PER_MESSAGE, UPLOAD_ACCEPT, type MessageUpload, type UploadKind } from '../group/messageUploads'
 import { readDocumentText, type DocumentTextLabels } from './documentText'
+import { createIcon } from './icons'
 
 export interface ComposerAttachmentsDependencies {
   trayEl: HTMLElement
@@ -169,7 +170,7 @@ export function createComposerAttachments(deps: ComposerAttachmentsDependencies)
     removeButton.type = 'button'
     removeButton.className = 'attachment-chip-remove'
     removeButton.setAttribute('aria-label', deps.ui('移除附件'))
-    removeButton.textContent = '×'
+    removeButton.append(createIcon('close'))
     removeButton.addEventListener('click', () => remove(item.key))
     element.append(meta, removeButton)
     return element

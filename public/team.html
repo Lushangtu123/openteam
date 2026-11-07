@@ -24,23 +24,16 @@
           </button>
           <button id="open-all-notes" class="rail-btn" type="button" aria-label="查看全部笔记" data-tooltip="全部笔记">
             <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
-              <rect x="5" y="5" width="5" height="5" rx="1" />
-              <rect x="14" y="5" width="5" height="5" rx="1" />
-              <rect x="5" y="14" width="5" height="5" rx="1" />
-              <rect x="14" y="14" width="5" height="5" rx="1" />
+              <rect x="5.5" y="3.5" width="13" height="17" rx="2" />
+              <path d="M9 8h6" />
+              <path d="M9 12h6" />
+              <path d="M9 16h3.5" />
             </svg>
           </button>
           <button id="open-people-library" class="rail-btn" type="button" aria-label="打开人员库" data-tooltip="人员库">
             <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
               <path d="M12 12.2a3.4 3.4 0 1 0 0-6.8 3.4 3.4 0 0 0 0 6.8Z" />
               <path d="M5.7 19.2c.65-3.3 2.82-5.15 6.3-5.15s5.65 1.85 6.3 5.15" />
-            </svg>
-          </button>
-          <button id="open-external-models" class="rail-btn" type="button" aria-label="添加大模型" data-tooltip="添加大模型">
-            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
-              <path d="m12 4.5 6.2 3.55v7.1L12 18.7l-6.2-3.55v-7.1L12 4.5Z" />
-              <path d="m5.95 8.25 6.05 3.45 6.05-3.45" />
-              <path d="M12 11.7v6.8" />
             </svg>
           </button>
         </div>
@@ -79,36 +72,70 @@
           <div id="chat-create-popover">
             <h3>新建群聊</h3>
           </div>
-          <div class="field">
-            <label for="new-chat-name">群聊名称</label>
-            <input id="new-chat-name" type="text" placeholder="例如：产品方案讨论" autocomplete="off" />
+          <div id="chat-create-choices" class="chat-create-choices">
+            <button id="open-team-formation" class="chat-create-choice" type="button">
+              <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
+                <circle cx="9" cy="8.5" r="3" />
+                <path d="M3.8 18.5c.5-2.9 2.4-4.5 5.2-4.5s4.7 1.6 5.2 4.5" />
+                <path d="M15.5 5.9a3 3 0 0 1 0 5.2" />
+                <path d="M17.2 13.8c1.6.6 2.6 2 3 4.2" />
+              </svg>
+              <span class="chat-create-choice-text">
+                <span class="chat-create-choice-label">按任务组队</span>
+                <span class="chat-create-choice-hint">写下要做的事，AI 们自己认领职位</span>
+              </span>
+            </button>
+            <button id="open-group-template-create" class="chat-create-choice" type="button">
+              <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
+                <rect x="4.5" y="4.5" width="15" height="15" rx="2.5" />
+                <path d="M4.5 9.5h15" />
+                <path d="M9.5 9.5v10" />
+              </svg>
+              <span class="chat-create-choice-text">
+                <span class="chat-create-choice-label">从模板创建</span>
+                <span class="chat-create-choice-hint">用现成的角色组合，马上开始</span>
+              </span>
+            </button>
+            <button id="open-blank-chat" class="chat-create-choice" type="button">
+              <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
+                <path d="M6.5 7.2A6.4 6.4 0 0 1 12 4.8c4 0 7.2 2.6 7.2 5.8s-3.2 5.8-7.2 5.8c-.7 0-1.4-.08-2.1-.25L5.2 18.7l1.15-4.05A5.3 5.3 0 0 1 4.8 10.6c0-1.25.62-2.42 1.7-3.4Z" />
+                <path d="M12 8.2v4.8" />
+                <path d="M9.6 10.6h4.8" />
+              </svg>
+              <span class="chat-create-choice-text">
+                <span class="chat-create-choice-label">空白群聊</span>
+                <span class="chat-create-choice-hint">先建群，再自己添加成员</span>
+              </span>
+            </button>
           </div>
-          <div class="field">
-            <label>群聊模式</label>
-            <div class="mode-options">
-              <label class="mode-option" for="new-chat-mode-collaborative">
-                <input id="new-chat-mode-collaborative" type="radio" name="new-chat-mode" value="collaborative" checked />
-                <span>
-                  <span class="mode-name">协作群聊</span>
-                  <span class="mode-help">人员参考群聊上下文，适合接力讨论。</span>
-                </span>
-              </label>
-              <label class="mode-option" for="new-chat-mode-independent">
-                <input id="new-chat-mode-independent" type="radio" name="new-chat-mode" value="independent" />
-                <span>
-                  <span class="mode-name">独立专家</span>
-                  <span class="mode-help">人员独立回答，适合并行评审。</span>
-                </span>
-              </label>
+          <div id="chat-create-blank" class="chat-create-blank" hidden>
+            <div class="field">
+              <label for="new-chat-name">群聊名称</label>
+              <input id="new-chat-name" type="text" placeholder="例如：产品方案讨论" autocomplete="off" />
             </div>
-          </div>
-          <div class="two-col">
-            <button id="cancel-create-chat" class="btn" type="button">取消</button>
-            <button class="btn btn-primary" type="submit">创建</button>
-          </div>
-          <div class="chat-create-template-row">
-            <button id="open-group-template-create" class="btn btn-ghost chat-create-template-btn" type="button">从模板中创建</button>
-            <button id="open-team-formation" class="btn btn-ghost chat-create-template-btn" type="button">按任务组队</button>
+            <div class="field">
+              <label>群聊模式</label>
+              <div class="mode-options">
+                <label class="mode-option" for="new-chat-mode-collaborative">
+                  <input id="new-chat-mode-collaborative" type="radio" name="new-chat-mode" value="collaborative" checked />
+                  <span>
+                    <span class="mode-name">协作群聊</span>
+                    <span class="mode-help">人员参考群聊上下文，适合接力讨论。</span>
+                  </span>
+                </label>
+                <label class="mode-option" for="new-chat-mode-independent">
+                  <input id="new-chat-mode-independent" type="radio" name="new-chat-mode" value="independent" />
+                  <span>
+                    <span class="mode-name">独立专家</span>
+                    <span class="mode-help">人员独立回答，适合并行评审。</span>
+                  </span>
+                </label>
+              </div>
+            </div>
+            <div class="two-col">
+              <button id="cancel-create-chat" class="btn" type="button">取消</button>
+              <button class="btn btn-primary" type="submit">创建</button>
+            </div>
           </div>
         </form>
 
@@ -263,27 +290,28 @@
       </main>
 
       <aside class="panel role-panel">
-        <div class="panel-header">
-          <div>
-            <h2>群聊成员与人员</h2>
-            <p id="role-summary" class="tiny">0 个人员</p>
+        <div class="panel-header role-panel-header">
+          <div class="role-panel-heading">
+            <h2>成员</h2>
+            <p id="role-summary" class="tiny">0 位成员</p>
           </div>
-          <button id="open-gemini-login" class="icon-btn" type="button" aria-label="AI 站点登录">◇</button>
+          <div class="role-panel-actions">
+            <form id="add-role-form" class="role-add-form">
+              <select id="role-template-select" hidden></select>
+              <button class="btn btn-primary btn-small" type="submit">
+                <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
+                  <path d="M12 5.5v13" />
+                  <path d="M5.5 12h13" />
+                </svg>
+                <span>添加成员</span>
+              </button>
+            </form>
+            <button id="open-gemini-login" class="btn btn-ghost btn-small" type="button" title="在新标签页打开 AI 网站登录">登录网站</button>
+            <button id="close-people-drawer" class="icon-btn" type="button" aria-label="收起成员面板"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none"><path d="M6.5 6.5l11 11" /><path d="M17.5 6.5l-11 11" /></svg></button>
+          </div>
         </div>
         <div class="role-scroll">
-          <div class="section-title">
-            <h3>当前群聊人员</h3>
-            <button id="close-people-drawer" class="btn" type="button">收起</button>
-          </div>
           <div id="role-list" class="role-list"></div>
-
-          <form id="add-role-form" class="editor-card role-form">
-            <h3>添加人员</h3>
-            <p class="tiny">从人员库批量选择，或临时添加只属于当前群聊的人员。</p>
-            <select id="role-template-select" hidden></select>
-            <button class="btn btn-primary" type="submit">添加人员</button>
-          </form>
-
         </div>
       </aside>
 
@@ -294,7 +322,7 @@
           <h2>笔记</h2>
           <p class="tiny">手动记录或收集 Mark 内容。</p>
         </div>
-        <button id="close-notes-panel" class="icon-btn" type="button" aria-label="关闭笔记">×</button>
+        <button id="close-notes-panel" class="icon-btn" type="button" aria-label="关闭笔记"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none"><path d="M6.5 6.5l11 11" /><path d="M17.5 6.5l-11 11" /></svg></button>
       </div>
       <div class="note-scope-tabs" role="tablist" aria-label="笔记范围">
         <button id="chat-note-tab" class="note-scope-tab active" type="button" data-note-scope="chat">当前群聊</button>
@@ -304,11 +332,11 @@
         <button id="note-bold" class="note-tool-btn" type="button" aria-label="加粗">B</button>
         <button id="note-italic" class="note-tool-btn" type="button" aria-label="斜体"><em>I</em></button>
         <button id="note-strike" class="note-tool-btn" type="button" aria-label="删除线"><s>S</s></button>
-        <button id="note-bullet-list" class="note-tool-btn" type="button" aria-label="项目列表">•</button>
-        <button id="note-ordered-list" class="note-tool-btn" type="button" aria-label="编号列表">1.</button>
+        <button id="note-bullet-list" class="note-tool-btn" type="button" aria-label="项目列表"><svg class="icon-dots" aria-hidden="true" viewBox="0 0 24 24" fill="none"><path d="M10 7h9" /><path d="M10 12h9" /><path d="M10 17h9" /><circle cx="5.5" cy="7" r="1" /><circle cx="5.5" cy="12" r="1" /><circle cx="5.5" cy="17" r="1" /></svg></button>
+        <button id="note-ordered-list" class="note-tool-btn" type="button" aria-label="编号列表"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none"><path d="M10 7h9" /><path d="M10 12h9" /><path d="M10 17h9" /><path d="M4.5 5.5 5.5 5v4" /><path d="M4.3 14.2h2.4L4.3 17.5h2.4" /></svg></button>
         <span class="note-toolbar-spacer"></span>
-        <button id="note-undo" class="note-tool-btn" type="button" aria-label="撤销">↶</button>
-        <button id="note-redo" class="note-tool-btn" type="button" aria-label="重做">↷</button>
+        <button id="note-undo" class="note-tool-btn" type="button" aria-label="撤销"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none"><path d="M9 7 5 11l4 4" /><path d="M5 11h9a5 5 0 0 1 0 10h-2" /></svg></button>
+        <button id="note-redo" class="note-tool-btn" type="button" aria-label="重做"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none"><path d="m15 7 4 4-4 4" /><path d="M19 11h-9a5 5 0 0 0 0 10h2" /></svg></button>
       </div>
       <div id="notes-editor" class="notes-editor" aria-label="富文本笔记编辑器"></div>
       <button id="notes-resize-handle" class="notes-resize-handle" type="button" aria-label="调整笔记大小" title="调整笔记大小"></button>
@@ -324,11 +352,12 @@
       <section class="modal settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
         <div class="modal-header settings-modal-header">
           <h2 id="settings-title">设置</h2>
-          <button id="close-settings" class="icon-btn modal-close" type="button" aria-label="关闭设置">×</button>
+          <button id="close-settings" class="icon-btn modal-close" type="button" aria-label="关闭设置"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none"><path d="M6.5 6.5l11 11" /><path d="M17.5 6.5l-11 11" /></svg></button>
         </div>
         <div class="settings-body">
           <nav class="settings-nav" role="tablist" aria-label="设置分类" aria-orientation="vertical">
             <button class="settings-nav-item" type="button" role="tab" data-settings-tab="general" aria-selected="true">通用</button>
+            <button class="settings-nav-item" type="button" role="tab" data-settings-tab="models" aria-selected="false">大模型</button>
             <button class="settings-nav-item" type="button" role="tab" data-settings-tab="replies" aria-selected="false">群聊回复</button>
             <button class="settings-nav-item" type="button" role="tab" data-settings-tab="pages" aria-selected="false">AI 网页</button>
             <button class="settings-nav-item" type="button" role="tab" data-settings-tab="agent" aria-selected="false">本机智能体</button>
@@ -356,6 +385,15 @@
                   <button id="settings-theme-light" class="settings-segment-option" type="button" aria-pressed="false">浅色</button>
                   <button id="settings-theme-dark" class="settings-segment-option" type="button" aria-pressed="true">深色</button>
                 </div>
+              </div>
+            </section>
+            <section class="settings-panel" role="tabpanel" data-settings-panel="models" aria-label="大模型" hidden>
+              <div class="settings-row">
+                <div class="settings-row-text">
+                  <div class="settings-row-title">API 模型和本机智能体</div>
+                  <p class="settings-row-hint">添加或修改成员能用的 API 模型（OpenAI 或 Anthropic 格式）和本机智能体（Claude Code、Codex 等）。</p>
+                </div>
+                <button id="open-external-models" class="btn settings-action" type="button">管理大模型</button>
               </div>
             </section>
             <section class="settings-panel" role="tabpanel" data-settings-panel="replies" aria-label="群聊回复" hidden>
@@ -430,7 +468,7 @@
             <h2 id="all-notes-title">全部笔记</h2>
             <p class="tiny">全局、群聊、已删除群聊</p>
           </div>
-          <button id="close-all-notes" class="icon-btn modal-close" type="button" aria-label="关闭全部笔记">×</button>
+          <button id="close-all-notes" class="icon-btn modal-close" type="button" aria-label="关闭全部笔记"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none"><path d="M6.5 6.5l11 11" /><path d="M17.5 6.5l-11 11" /></svg></button>
         </div>
         <div class="all-notes-workspace">
           <div id="all-notes-list" class="all-notes-list" aria-label="笔记范围"></div>
@@ -445,11 +483,11 @@
               <button id="all-note-bold" class="note-tool-btn" type="button" aria-label="加粗"><b>B</b></button>
               <button id="all-note-italic" class="note-tool-btn" type="button" aria-label="斜体"><i>I</i></button>
               <button id="all-note-strike" class="note-tool-btn" type="button" aria-label="删除线"><s>S</s></button>
-              <button id="all-note-bullet-list" class="note-tool-btn" type="button" aria-label="项目列表">•</button>
-              <button id="all-note-ordered-list" class="note-tool-btn" type="button" aria-label="编号列表">1.</button>
+              <button id="all-note-bullet-list" class="note-tool-btn" type="button" aria-label="项目列表"><svg class="icon-dots" aria-hidden="true" viewBox="0 0 24 24" fill="none"><path d="M10 7h9" /><path d="M10 12h9" /><path d="M10 17h9" /><circle cx="5.5" cy="7" r="1" /><circle cx="5.5" cy="12" r="1" /><circle cx="5.5" cy="17" r="1" /></svg></button>
+              <button id="all-note-ordered-list" class="note-tool-btn" type="button" aria-label="编号列表"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none"><path d="M10 7h9" /><path d="M10 12h9" /><path d="M10 17h9" /><path d="M4.5 5.5 5.5 5v4" /><path d="M4.3 14.2h2.4L4.3 17.5h2.4" /></svg></button>
               <span class="note-toolbar-spacer"></span>
-              <button id="all-note-undo" class="note-tool-btn" type="button" aria-label="撤销">↶</button>
-              <button id="all-note-redo" class="note-tool-btn" type="button" aria-label="重做">↷</button>
+              <button id="all-note-undo" class="note-tool-btn" type="button" aria-label="撤销"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none"><path d="M9 7 5 11l4 4" /><path d="M5 11h9a5 5 0 0 1 0 10h-2" /></svg></button>
+              <button id="all-note-redo" class="note-tool-btn" type="button" aria-label="重做"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none"><path d="m15 7 4 4-4 4" /><path d="M19 11h-9a5 5 0 0 0 0 10h2" /></svg></button>
             </div>
             <div id="all-notes-editor" class="notes-editor all-notes-editor" aria-label="当前笔记富文本编辑器"></div>
           </section>
@@ -464,7 +502,7 @@
             <h2 id="group-template-title">从模板中创建</h2>
             <p class="tiny">选择一个现成小组，创建后会自动加入模板人员。</p>
           </div>
-          <button id="close-group-template-modal" class="icon-btn modal-close" type="button" aria-label="关闭群聊模板">×</button>
+          <button id="close-group-template-modal" class="icon-btn modal-close" type="button" aria-label="关闭群聊模板"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none"><path d="M6.5 6.5l11 11" /><path d="M17.5 6.5l-11 11" /></svg></button>
         </div>
         <div class="group-template-toolbar">
           <label class="group-template-search-field" for="group-template-search">
@@ -489,7 +527,7 @@
           </div>
           <div class="chat-row">
             <button id="new-template" class="btn btn-primary" type="button">新建</button>
-            <button id="close-people-library" class="icon-btn modal-close" type="button" aria-label="关闭人员库">×</button>
+            <button id="close-people-library" class="icon-btn modal-close" type="button" aria-label="关闭人员库"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none"><path d="M6.5 6.5l11 11" /><path d="M17.5 6.5l-11 11" /></svg></button>
           </div>
         </div>
         <div class="people-library-content">
@@ -520,7 +558,7 @@
             <h2 id="external-models-title">外部模型</h2>
             <p class="tiny">配置 OpenAI 或 Anthropic 兼容 API，或本机的智能体（Claude Code、Codex 等，经 ACP 连接），人员可直接选择这些模型。</p>
           </div>
-          <button id="close-external-models" class="icon-btn modal-close" type="button" aria-label="关闭外部模型">×</button>
+          <button id="close-external-models" class="icon-btn modal-close" type="button" aria-label="关闭外部模型"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none"><path d="M6.5 6.5l11 11" /><path d="M17.5 6.5l-11 11" /></svg></button>
         </div>
         <div id="external-models-list" class="template-list"></div>
         <form id="external-model-form" class="modal-form">
@@ -575,7 +613,7 @@
             <h2 id="template-form-title">新建人员</h2>
             <p class="tiny">维护人员名称、人设和默认站点。</p>
           </div>
-          <button id="close-person-template" class="icon-btn modal-close" type="button" aria-label="关闭人员编辑">×</button>
+          <button id="close-person-template" class="icon-btn modal-close" type="button" aria-label="关闭人员编辑"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none"><path d="M6.5 6.5l11 11" /><path d="M17.5 6.5l-11 11" /></svg></button>
         </div>
         <form id="people-library-form" class="modal-form">
           <div class="ai-persona-panel">
@@ -665,7 +703,7 @@
             <h2 id="builtin-template-detail-title">内置人员</h2>
             <p id="builtin-template-detail-meta" class="tiny">系统内置人员</p>
           </div>
-          <button id="close-builtin-template-detail" class="icon-btn modal-close" type="button" aria-label="关闭内置人员详情">×</button>
+          <button id="close-builtin-template-detail" class="icon-btn modal-close" type="button" aria-label="关闭内置人员详情"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none"><path d="M6.5 6.5l11 11" /><path d="M17.5 6.5l-11 11" /></svg></button>
         </div>
         <pre id="builtin-template-detail-prompt" class="template-prompt-preview"></pre>
       </section>
@@ -680,7 +718,7 @@
           </div>
           <div class="modal-header-actions">
             <button id="open-temporary-person" class="btn btn-ghost" type="button">临时添加</button>
-          <button id="close-add-person" class="icon-btn modal-close" type="button" aria-label="关闭添加人员">×</button>
+          <button id="close-add-person" class="icon-btn modal-close" type="button" aria-label="关闭添加人员"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none"><path d="M6.5 6.5l11 11" /><path d="M17.5 6.5l-11 11" /></svg></button>
           </div>
         </div>
         <div class="modal-grid single-column">
@@ -708,7 +746,7 @@
             <h2 id="temporary-person-title">临时添加</h2>
             <p class="tiny">临时人员会先进入待选列表，确认后才加入当前群聊。</p>
           </div>
-          <button id="close-temporary-person" class="icon-btn modal-close" type="button" aria-label="关闭临时添加">×</button>
+          <button id="close-temporary-person" class="icon-btn modal-close" type="button" aria-label="关闭临时添加"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none"><path d="M6.5 6.5l11 11" /><path d="M17.5 6.5l-11 11" /></svg></button>
         </div>
           <form id="add-temporary-person-form" class="modal-form">
             <div class="field">
@@ -735,7 +773,7 @@
             <h2 id="orchestration-title">编排任务</h2>
             <p class="tiny">画布节点按连线顺序执行；同一个节点内的多个人员会并行工作。</p>
           </div>
-          <button id="close-orchestration" class="icon-btn modal-close" type="button" aria-label="关闭编排任务">×</button>
+          <button id="close-orchestration" class="icon-btn modal-close" type="button" aria-label="关闭编排任务"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none"><path d="M6.5 6.5l11 11" /><path d="M17.5 6.5l-11 11" /></svg></button>
         </div>
         <div class="orchestration-task-strip">
           <label class="field" for="orchestration-task">任务</label>
@@ -788,7 +826,7 @@
             <h2 id="orchestration-auto-title">自动编排</h2>
             <p class="tiny">根据任务和你的补充描述生成或修改流程。</p>
           </div>
-          <button id="close-auto-orchestration" class="icon-btn modal-close" type="button" aria-label="关闭自动编排">×</button>
+          <button id="close-auto-orchestration" class="icon-btn modal-close" type="button" aria-label="关闭自动编排"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none"><path d="M6.5 6.5l11 11" /><path d="M17.5 6.5l-11 11" /></svg></button>
         </div>
         <div id="orchestration-auto-content" class="orchestration-auto-content"></div>
       </section>
@@ -801,7 +839,7 @@
             <h2 id="orchestration-template-title">选择编排模板</h2>
             <p class="tiny">先套用一套结构，再按当前任务微调人员和节点。</p>
           </div>
-          <button id="close-orchestration-template" class="icon-btn modal-close" type="button" aria-label="关闭模板选择">×</button>
+          <button id="close-orchestration-template" class="icon-btn modal-close" type="button" aria-label="关闭模板选择"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none"><path d="M6.5 6.5l11 11" /><path d="M17.5 6.5l-11 11" /></svg></button>
         </div>
         <div id="orchestration-template-content" class="orchestration-template-content"></div>
       </section>

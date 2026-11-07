@@ -6,6 +6,7 @@ import type { ComposerAttachments } from './composerAttachments'
 import { PROBLEM_HEALTH_STATUSES, rolePageHealthLabel, type RolePageHealth } from './roleHealth'
 import { getVisibleThinkingRoles, shouldAutoReconnectRole, shouldConfirmMentionWithEnter, shouldSendMessageWithEnter } from './chatExperience'
 import { runCommandWithReconnect } from './sendWithReconnect'
+import { createIcon } from './icons'
 
 export interface ComposerViewDependencies {
   state: TeamPageState
@@ -152,7 +153,7 @@ export function createComposerView(deps: ComposerViewDependencies): ComposerView
     cancel.type = 'button'
     cancel.className = 'btn btn-ghost'
     cancel.setAttribute('aria-label', '取消引用')
-    cancel.textContent = '×'
+    cancel.append(createIcon('close'))
     cancel.addEventListener('click', () => {
       deps.state.selectedReference = undefined
       renderComposerState()

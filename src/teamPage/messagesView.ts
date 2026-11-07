@@ -33,6 +33,8 @@ export interface MessagesViewDependencies {
   getCurrentMessages(): GroupMessage[]
   emptyCard(title: string, body: string): HTMLElement
   openAddPersonDialog(): void
+  // Starts a group: forming a team around a task, from a template, or blank.
+  startNewChat?(kind: 'team' | 'template' | 'blank'): void
   roleToneClass(seed: string | undefined): string
   roleAvatarLabel(name: string | undefined): string
   messageTitle(message: GroupMessage): string
@@ -135,7 +137,7 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     const shouldFollowNewReplies = isScrolledNearBottom(deps.messagesEl)
 
     if (!chat) {
-      reconcileChildren(deps.messagesEl, [deps.emptyCard('选择一个群聊', '左侧群聊列表会显示最近摘要、状态和更新时间。')])
+      reconcileChildren(deps.messagesEl, [noChatCard()])
       return
     }
 
@@ -460,6 +462,34 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
       text += node.textContent ?? ''
     }
     return text
+  }
+
+  // No group open: say what a group is for and offer the three ways to start one.
+  let noChatCardCache: { key: string; node: HTMLElement } | undefined
+  function noChatCard(): HTMLElement {
+    const hasChats = deps.getStore().chatOrder.length > 0
+    const key = `${hasChats}`
+    if (noChatCardCache?.key === key) return noChatCardCache.node
+    const card = deps.emptyCard(hasChats ? '选一个群聊，或者新建一个' : '建一个群，让几个 AI 一起干活', hasChats ? '左边是你的群聊。新建的话，可以按任务组队、从模板创建，或先建一个空白群聊。' : '按任务组队最省事：写下要做的事，AI 们自己认领职位。')
+    card.classList.add('no-chat-card')
+    if (deps.startNewChat) {
+      const actions = document.createElement('div')
+      actions.className = 'no-chat-actions'
+      for (const [kind, label, primary] of [['team', '按任务组队', true], ['template', '从模板创建', false], ['blank', '空白群聊', false]] as const) {
+        const button = document.createElement('button')
+        button.type = 'button'
+        button.className = `btn${primary ? ' btn-primary' : ''}`
+        button.dataset.newChat = kind
+        button.textContent = label
+        button.addEventListener('click', () => deps.startNewChat?.(kind))
+        actions.append(button)
+      }
+      // Inside the card box, under its text (emptyCard wraps the box in a centering container).
+      const box = card.querySelector('.empty-card') ?? card
+      box.append(actions)
+    }
+    noChatCardCache = { key, node: card }
+    return card
   }
 
   // The group's discussion while it runs (turn, speaker, stop), and once it ends (one more round,

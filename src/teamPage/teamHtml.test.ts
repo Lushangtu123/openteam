@@ -130,16 +130,19 @@ describe('team.html chat creation UI', () => {
     expect(modeOptions).not.toMatch(/id="new-chat-mode-independent"[^>]*checked/)
   })
 
-  it('offers group template creation below the normal new chat form', () => {
+  it('starts a new group from three equal choices, the blank form opening from the last', () => {
     const html = readTeamDocument()
     const createForm = html.match(/<form id="create-chat-form"[\s\S]*?<\/form>/)?.[0] ?? ''
+    const choices = createForm.match(/<div id="chat-create-choices"[\s\S]*?<div id="chat-create-blank"/)?.[0] ?? ''
 
-    expect(createForm).toContain('id="open-group-template-create"')
-    expect(createForm.indexOf('class="two-col"')).toBeLessThan(createForm.indexOf('id="open-group-template-create"'))
+    expect(['open-team-formation', 'open-group-template-create', 'open-blank-chat'].map(id => choices.indexOf(`id="${id}"`))).toEqual(expect.arrayContaining([expect.any(Number)]))
+    expect(choices.indexOf('id="open-team-formation"')).toBeLessThan(choices.indexOf('id="open-group-template-create"'))
+    expect(choices.indexOf('id="open-group-template-create"')).toBeLessThan(choices.indexOf('id="open-blank-chat"'))
+    expect(createForm).toMatch(/<div id="chat-create-blank" class="chat-create-blank" hidden>[\s\S]*id="new-chat-name"[\s\S]*class="two-col"/)
     expect(html).toContain('id="group-template-modal"')
     expect(html).toContain('id="group-template-list"')
     expect(html).toContain('id="confirm-group-template-create"')
-    expect(html).toContain('从模板中创建')
+    expect(html).toContain('从模板创建')
     expect(html).toMatch(/\.group-template-option\s*{/s)
     expect(html).toMatch(/\.group-template-option\.active\s*{/s)
   })
@@ -311,7 +314,7 @@ describe('team.html chat creation UI', () => {
     expect(html).toMatch(/\.message-row\.user \.orchestration-message-label\s*{[^}]*color:/s)
   })
 
-  it('promotes people library and external models from settings into the left rail', () => {
+  it('keeps the people library in the left rail and the models in the settings window', () => {
     const html = readTeamDocument()
     const railActions = html.match(/<div class="rail-actions">(?<body>[\s\S]*?)<\/div>/)?.groups?.body ?? ''
     const settingsMenu = html.match(/<div id="settings-menu"[\s\S]*?<div id="all-notes-modal"/)?.[0] ?? ''
@@ -322,15 +325,14 @@ describe('team.html chat creation UI', () => {
     expect(railActions).toContain('data-tooltip="群聊"')
     expect(railActions).toContain('aria-label="打开人员库"')
     expect(railActions).toContain('data-tooltip="人员库"')
-    expect(railActions).toContain('id="open-external-models"')
-    expect(railActions).toContain('aria-label="添加大模型"')
-    expect(railActions).toContain('data-tooltip="添加大模型"')
+    // Adding models is setup, not something to reach every day: it is a tab of the settings window.
+    expect(railActions).not.toContain('id="open-external-models"')
+    expect(settingsMenu).toMatch(/data-settings-panel="models"[\s\S]*id="open-external-models"/)
     expect(railActions).toContain('<svg aria-hidden="true"')
     expect(railActions).not.toContain('>⌁</button>')
     expect(railActions).not.toContain('>人</button>')
     expect(railActions).not.toContain('>模</button>')
     expect(settingsMenu).not.toContain('id="open-people-library"')
-    expect(settingsMenu).not.toContain('id="open-external-models"')
     expect(html).toMatch(/\.rail\s*{[^}]*grid-template-rows:\s*74px 1fr auto;/s)
     expect(html).toMatch(/\.rail-actions\s*{[^}]*padding-top:\s*0;/s)
     expect(html).toMatch(/\.rail-btn\[data-tooltip\]::after\s*{[^}]*content:\s*attr\(data-tooltip\);/s)
@@ -487,7 +489,7 @@ describe('team.html chat creation UI', () => {
     const html = readTeamDocument()
 
     expect(html).not.toContain('name="add-person-chat-site"')
-    expect(html).toContain('<button class="btn btn-primary" type="submit">添加人员</button>')
+    expect(html).toMatch(/<form id="add-role-form" class="role-add-form">[\s\S]*?<button class="btn btn-primary btn-small" type="submit">[\s\S]*?<span>添加成员<\/span>/)
     expect(html).not.toContain('打开添加人员')
     expect(html).not.toContain('为这次加入群聊的人员统一指定 Gemini。')
     expect(html).not.toContain('为这次加入群聊的人员统一指定 ChatGPT。')
@@ -756,7 +758,7 @@ describe('team.html chat creation UI', () => {
     expect(source).toContain("togglePeopleDrawerEl.textContent = ui('成员 0')")
     expect(source).toContain('deps.togglePeopleDrawerEl.textContent = ui(`成员 ${roles.length}`)')
     expect(source).toContain("deps.togglePeopleDrawerEl.setAttribute('aria-label', ui(deps.state.peopleDrawerOpen ? '收起成员面板' : '打开成员面板'))")
-    expect(uiSource).toContain('deps.state.peopleDrawerOpen && target && !deps.rolePanelEl.contains(target) && !deps.togglePeopleDrawerEl.contains(target)')
+    expect(uiSource).toContain('deps.state.peopleDrawerOpen && target && !memberPanelDocked() && !deps.rolePanelEl.contains(target) && !deps.togglePeopleDrawerEl.contains(target)')
     expect(uiSource).toContain('deps.state.peopleDrawerOpen = false')
     expect(source).not.toContain('人回复中')
   })

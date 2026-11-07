@@ -20,7 +20,7 @@ const UI_TRANSLATIONS: Record<string, string> = {
   '语言': 'Language',
   '加载群聊中': 'Loading chats',
   '还没有群聊': 'No chats yet',
-  '在上方创建一个群聊，然后从人员库添加人员。': 'Create a chat above, then add people from the library.',
+  '点上方的加号新建：按任务组队、从模板创建，或建一个空白群聊。': 'Use the plus button above: team up for a task, start from a template, or create a blank group.',
   '新建群聊': 'New chat',
   '编辑名称': 'Edit name',
   '复制群聊': 'Duplicate chat',
@@ -65,6 +65,28 @@ const UI_TRANSLATIONS: Record<string, string> = {
   '深色': 'Dark',
   '编排': 'Orchestration',
   '不@也回复': 'Reply without @',
+  '成员': 'Members',
+  '添加成员': 'Add members',
+  '登录网站': 'Sign in to sites',
+  '在新标签页打开 AI 网站登录': 'Opens an AI site in a new tab to sign in',
+  '大模型': 'Models',
+  'API 模型和本机智能体': 'API models and local agents',
+  '添加或修改成员能用的 API 模型（OpenAI 或 Anthropic 格式）和本机智能体（Claude Code、Codex 等）。': 'Add or change the API models (OpenAI or Anthropic format) and the local agents (Claude Code, Codex and others) members can use.',
+  '管理大模型': 'Manage models',
+  '写下要做的事，AI 们自己认领职位': 'Describe the task; the AIs pick their own positions',
+  '从模板创建': 'From a template',
+  '用现成的角色组合，马上开始': 'Start right away with a ready-made set of roles',
+  '空白群聊': 'Blank group',
+  '先建群，再自己添加成员': 'Create the group, then add members yourself',
+  '选一个群聊，或者新建一个': 'Pick a group, or start a new one',
+  '左边是你的群聊。新建的话，可以按任务组队、从模板创建，或先建一个空白群聊。': 'Your groups are on the left. To start one, team up for a task, use a template, or create a blank group.',
+  '建一个群，让几个 AI 一起干活': 'Start a group and let several AIs work together',
+  '按任务组队最省事：写下要做的事，AI 们自己认领职位。': 'Teaming up for a task is the quickest: describe the task, and the AIs pick their own positions.',
+  '点「添加成员」，从人员库批量加入或临时添加。': 'Click "Add members" to add people from the library, or temporary ones.',
+  '刷新网页': 'Reload page',
+  '移出群聊': 'Remove from group',
+  '还没读过群消息': 'Has not read the group yet',
+  '通过 API 回复': 'Replies through the API',
   '开启后，不 @ 的消息也会让所有成员回复；@ 了谁就只问谁': 'When on, a message without @ asks every member; @ someone to ask only them',
   '回复方式': 'How members reply',
   '工作流': 'Workflows',
@@ -983,6 +1005,10 @@ function translateUiPattern(source: string): string | undefined {
   if (currentPerson) return `${currentPerson[1]} people · Current: ${currentPerson[2]}`
   const memberCount = source.match(/^成员 (\d+)$/)
   if (memberCount) return `Members ${memberCount[1]}`
+  const memberSummary = source.match(/^(\d+) 位成员(?: · 当前：(.+))?$/)
+  if (memberSummary) return memberSummary[2] ? `${memberSummary[1]} members · Current: ${memberSummary[2]}` : `${memberSummary[1]} members`
+  const memberMenu = source.match(/^(.+) 的更多操作$/)
+  if (memberMenu) return `More for ${memberMenu[1]}`
   const roleSummaryCount = source.match(/^(\d+) 人员$/)
   if (roleSummaryCount) return `${roleSummaryCount[1]} people`
   const peopleCount = source.match(/^(\d+) 个人员$/)

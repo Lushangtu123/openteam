@@ -133,6 +133,25 @@ describe('team page messages view boundary', () => {
     expect(sameNodeCount([...messagesEl.querySelectorAll('.message-time-divider')], firstDividers)).toBe(firstDividers.length)
   })
 
+  it('offers the three ways to start a group when none is open', () => {
+    const { messagesEl, deps } = createLongChatView(0)
+    const startNewChat = vi.fn()
+    const view = createMessagesView({ ...deps, getCurrentChat: () => undefined, getCurrentMessages: () => [], startNewChat, emptyCard: (title, body) => {
+      const card = document.createElement('div')
+      card.textContent = `${title}|${body}`
+      return card
+    } })
+    view.renderMessages()
+    const card = messagesEl.querySelector('.no-chat-card')!
+    expect(card.textContent).toContain('选一个群聊，或者新建一个')
+    const buttons = [...card.querySelectorAll<HTMLButtonElement>('.no-chat-actions button')]
+    expect(buttons.map(button => [button.textContent, button.classList.contains('btn-primary')])).toEqual([['按任务组队', true], ['从模板创建', false], ['空白群聊', false]])
+    buttons[2].click()
+    expect(startNewChat).toHaveBeenCalledWith('blank')
+    view.renderMessages()
+    expect(messagesEl.querySelector('.no-chat-card')).toBe(card)
+  })
+
   it('shows attached text files as chips that download the file', () => {
     const { messagesEl, messages, view } = createLongChatView(1)
     messages[0] = { ...messages[0], attachments: [{ id: 'f1', type: 'file', status: 'ready', fileName: 'notes.md', mimeType: 'text/markdown', size: 2048, text: '# 目标' }] }

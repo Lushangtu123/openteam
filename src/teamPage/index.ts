@@ -486,6 +486,8 @@ const messagesView = createMessagesView({
   getCurrentMessages,
   emptyCard,
   openAddPersonDialog,
+  // teamUiController is created further down; this runs only on a click.
+  startNewChat: kind => teamUiController.startNewChat(kind),
   roleToneClass,
   roleAvatarLabel,
   messageTitle,

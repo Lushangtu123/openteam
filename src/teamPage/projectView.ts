@@ -7,6 +7,7 @@ import { isOpenTeamRequest } from '../group/roundSummary'
 import type { GroupChat, GroupMessage, GroupRole, OpenTeamStore, ProjectRun, ProjectTask } from '../group/types'
 import { normalizeLanguage, translateUi, type TeamLanguage } from '../shared/i18n'
 import { createComposerAttachments } from './composerAttachments'
+import { createIcon } from './icons'
 
 export interface ProjectViewDependencies {
   getStore(): OpenTeamStore
@@ -53,7 +54,8 @@ export function createProjectView(deps: ProjectViewDependencies) {
     const title = element('h2', '', t('开始一个项目', 'Start a project'))
     title.id = 'project-setup-title'
     heading.append(title, element('p', 'tiny', t('协调员把目标拆成任务分给成员，成员各自完成，协调员检查结果、安排返工，最后整理出完整交付。', 'The coordinator breaks the goal into tasks for the members, checks what they deliver, asks for rework, and finally puts the deliverable together.')))
-    const close = element('button', 'icon-btn modal-close', '×')
+    const close = element('button', 'icon-btn modal-close')
+    close.append(createIcon('close'))
     close.type = 'button'
     close.setAttribute('aria-label', t('关闭', 'Close'))
     close.addEventListener('click', () => closeSetup())

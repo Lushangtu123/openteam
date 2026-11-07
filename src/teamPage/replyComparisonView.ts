@@ -3,6 +3,7 @@ import { collectReplies, comparisonDiscussionRequest, comparisonSummaryRequest, 
 import type { GroupRole, OpenTeamLanguage, OpenTeamStore } from '../group/types'
 import { normalizeLanguage, translateUi } from '../shared/i18n'
 import { renderMarkdownInto } from './markdownRender'
+import { createIcon } from './icons'
 
 export interface ReplyComparisonViewDependencies {
   getStore(): OpenTeamStore
@@ -58,7 +59,7 @@ export function createReplyComparisonView(deps: ReplyComparisonViewDependencies)
     closeButton.type = 'button'
     closeButton.className = 'icon-btn modal-close'
     closeButton.setAttribute('aria-label', ui('关闭'))
-    closeButton.textContent = '×'
+    closeButton.append(createIcon('close'))
     closeButton.addEventListener('click', () => close())
     header.append(heading, closeButton)
 

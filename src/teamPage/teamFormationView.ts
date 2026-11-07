@@ -27,6 +27,7 @@ import { createApprovalCards } from './approvalCard'
 import { createTeamHandbookField } from './teamHandbookField'
 import { createComposerAttachments } from './composerAttachments'
 import { PROBLEM_HEALTH_STATUSES, rolePageHealthLabel, type RolePageHealth } from './roleHealth'
+import { createIcon } from './icons'
 
 export interface TeamFormationViewDependencies {
   getStore(): OpenTeamStore
@@ -933,7 +934,8 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
   }
 
   function closeButton(onClick: () => void): HTMLButtonElement {
-    const close = button('×', 'icon-btn modal-close')
+    const close = button('', 'icon-btn modal-close')
+    close.append(createIcon('close'))
     close.setAttribute('aria-label', t('关闭', 'Close'))
     close.addEventListener('click', onClick)
     return close

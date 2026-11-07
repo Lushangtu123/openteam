@@ -50,8 +50,20 @@ export interface TeamUiControllerDependencies {
   }
 }
 
+export type NewChatKind = 'team' | 'template' | 'blank'
+
 export interface TeamUiController {
   registerUi(): void
+  // The three ways to start a group, also offered by the empty chat area.
+  startNewChat(kind: NewChatKind): void
+}
+
+// From this width the member panel sits beside the chat instead of over it, so a click in the chat
+// leaves it open.
+export const DOCKED_MEMBER_PANEL_QUERY = '(min-width: 1280px)'
+
+function memberPanelDocked(): boolean {
+  return typeof window.matchMedia === 'function' && window.matchMedia(DOCKED_MEMBER_PANEL_QUERY).matches
 }
 
 const GROUP_TEMPLATE_INLINE_SUMMARY_LIMIT = 72
@@ -73,6 +85,19 @@ export function createTeamUiController(deps: TeamUiControllerDependencies): Team
     deps.quickCreateChatEl.addEventListener('click', () => {
       setChatCreatePopoverVisible(deps.createChatFormEl.hidden)
     })
+    document.querySelector<HTMLButtonElement>('#open-blank-chat')?.addEventListener('click', showBlankChatForm)
+    startNewChatImpl = kind => {
+      if (kind === 'team') {
+        setChatCreatePopoverVisible(false)
+        deps.openTeamFormation?.()
+      } else if (kind === 'template') {
+        setChatCreatePopoverVisible(false)
+        openGroupTemplateModal(groupTemplateModalEl, groupTemplateSearchEl, groupTemplateCategoriesEl, groupTemplateListEl, confirmGroupTemplateCreateEl)
+      } else {
+        setChatCreatePopoverVisible(true)
+        showBlankChatForm()
+      }
+    }
 
     deps.settingsButtonEl.addEventListener('click', event => {
       event.stopPropagation()
@@ -103,13 +128,17 @@ export function createTeamUiController(deps: TeamUiControllerDependencies): Team
         deps.settingsMenuEl.hidden = true
         deps.settingsButtonEl.setAttribute('aria-expanded', 'false')
       }
-      if (deps.state.peopleDrawerOpen && target && !deps.rolePanelEl.contains(target) && !deps.togglePeopleDrawerEl.contains(target)) {
+      if (deps.state.peopleDrawerOpen && target && !memberPanelDocked() && !deps.rolePanelEl.contains(target) && !deps.togglePeopleDrawerEl.contains(target)) {
         deps.state.peopleDrawerOpen = false
         deps.render()
       }
       if (deps.state.chatMenuChatId && !target?.closest('.chat-action-menu, .chat-menu-btn')) {
         deps.state.chatMenuChatId = undefined
         deps.renderChatList()
+      }
+      if (deps.state.roleActionMenuRoleId && !target?.closest('.role-action-menu, .role-more-btn')) {
+        deps.state.roleActionMenuRoleId = undefined
+        deps.renderRolePanel()
       }
       if (deps.state.roleSiteMenuRoleId && !target?.closest('.role-site-menu, .site-pill')) {
         deps.state.roleSiteMenuRoleId = undefined
@@ -145,6 +174,7 @@ export function createTeamUiController(deps: TeamUiControllerDependencies): Team
     })
 
     openGroupTemplateCreateEl.addEventListener('click', () => {
+      setChatCreatePopoverVisible(false)
       openGroupTemplateModal(groupTemplateModalEl, groupTemplateSearchEl, groupTemplateCategoriesEl, groupTemplateListEl, confirmGroupTemplateCreateEl)
     })
 
@@ -441,11 +471,26 @@ export function createTeamUiController(deps: TeamUiControllerDependencies): Team
     return selected?.value === 'collaborative' ? 'collaborative' : 'independent'
   }
 
+  // The popover opens on its three choices; 空白群聊 shows the name and mode form in their place.
   function setChatCreatePopoverVisible(visible: boolean): void {
     deps.createChatFormEl.hidden = !visible
     deps.quickCreateChatEl.setAttribute('aria-expanded', String(visible))
-    if (visible) deps.newChatNameEl.focus()
+    const choices = deps.createChatFormEl.querySelector<HTMLElement>('#chat-create-choices')
+    const blank = deps.createChatFormEl.querySelector<HTMLElement>('#chat-create-blank')
+    if (choices) choices.hidden = false
+    if (blank) blank.hidden = Boolean(choices)
+    if (visible) (choices?.querySelector<HTMLButtonElement>('button') ?? deps.newChatNameEl).focus()
   }
 
-  return { registerUi }
+  function showBlankChatForm(): void {
+    const choices = deps.createChatFormEl.querySelector<HTMLElement>('#chat-create-choices')
+    const blank = deps.createChatFormEl.querySelector<HTMLElement>('#chat-create-blank')
+    if (choices) choices.hidden = true
+    if (blank) blank.hidden = false
+    deps.newChatNameEl.focus()
+  }
+
+  let startNewChatImpl: (kind: NewChatKind) => void = () => undefined
+
+  return { registerUi, startNewChat: kind => startNewChatImpl(kind) }
 }

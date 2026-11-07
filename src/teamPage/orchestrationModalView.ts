@@ -4,6 +4,7 @@ import type { ChatSite, ExternalModelConfig, GroupChat, GroupRole, OpenTeamStore
 import { DEFAULT_ORCHESTRATION_MAX_NODE_EXECUTIONS, DEFAULT_ORCHESTRATION_REVIEW_MAX_ATTEMPTS, MAX_ORCHESTRATION_MAX_NODE_EXECUTIONS } from '../group/types'
 import { arrangeOrchestrationGraph, createOrchestrationCanvas, type LoadX6, type OrchestrationCanvas } from './orchestrationCanvas'
 import { runCommandWithReconnect } from './sendWithReconnect'
+import { createIcon } from './icons'
 
 export interface OrchestrationModalDependencies {
   openOrchestrationEl: HTMLButtonElement
@@ -299,7 +300,7 @@ export function createOrchestrationModalView(deps: OrchestrationModalDependencie
     closeButton.className = 'icon-btn orchestration-node-editor-close'
     closeButton.type = 'button'
     closeButton.ariaLabel = '关闭节点设置'
-    closeButton.textContent = '×'
+    closeButton.append(createIcon('close'))
     closeButton.addEventListener('click', clearSelectedStage)
     header.append(title, closeButton)
     const kindField = document.createElement('label')

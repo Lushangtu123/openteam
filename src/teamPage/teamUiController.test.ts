@@ -338,6 +338,101 @@ describe('createTeamUiController', () => {
   })
 })
 
+describe('new groups and the member panel', () => {
+  beforeEach(() => {
+    document.body.innerHTML = teamUiBody().replace(
+      '<button id="open-group-template-create" type="button"></button>',
+      `<div id="chat-create-choices">
+        <button id="open-team-formation" type="button"></button>
+        <button id="open-group-template-create" type="button"></button>
+        <button id="open-blank-chat" type="button"></button>
+      </div>
+      <div id="chat-create-blank" hidden></div>`,
+    )
+  })
+
+  function controller(overrides: Partial<Parameters<typeof createTeamUiController>[0]> = {}) {
+    const state = createTeamPageState()
+    const openTeamFormation = vi.fn()
+    const ui = createTeamUiController({
+      state,
+      settingsButtonEl: document.querySelector<HTMLButtonElement>('#settings-button')!,
+      settingsMenuEl: document.querySelector<HTMLElement>('#settings-menu')!,
+      quickCreateChatEl: document.querySelector<HTMLButtonElement>('#quick-create-chat')!,
+      createChatFormEl: document.querySelector<HTMLFormElement>('#create-chat-form')!,
+      newChatNameEl: document.querySelector<HTMLInputElement>('#new-chat-name')!,
+      togglePeopleDrawerEl: document.querySelector<HTMLButtonElement>('#toggle-people-drawer')!,
+      rolePanelEl: document.querySelector<HTMLElement>('#role-panel')!,
+      iframeHost: { restoreChat: vi.fn(() => []) },
+      getLanguage: () => 'zh-CN',
+      getCurrentChat: () => makeChat('chat-1', []),
+      getCurrentRoles: () => [],
+      getSelectedLoginSite: () => 'gemini',
+      render: vi.fn(),
+      renderChatList: vi.fn(),
+      renderRolePanel: vi.fn(),
+      renderAddPersonDialog: vi.fn(),
+      closePeopleModals: vi.fn(),
+      closeExternalModels: vi.fn(),
+      registerComposerEvents: vi.fn(),
+      registerPeopleLibraryEvents: vi.fn(),
+      registerExternalModelsEvents: vi.fn(),
+      runCommand: vi.fn(async () => undefined),
+      showError: vi.fn(),
+      openTeamFormation,
+      log: { debug: vi.fn(), info: vi.fn() },
+      ...overrides,
+    })
+    ui.registerUi()
+    return { ui, state, openTeamFormation }
+  }
+  const $ = <T extends HTMLElement>(selector: string) => document.querySelector<T>(selector)!
+
+  it('opens on the three choices; 空白群聊 shows the name form, and reopening starts over', () => {
+    controller()
+    $('#quick-create-chat').click()
+    expect([$('#create-chat-form').hidden, $('#chat-create-choices').hidden, $('#chat-create-blank').hidden]).toEqual([false, false, true])
+    expect(document.activeElement).toBe($('#open-team-formation'))
+
+    $('#open-blank-chat').click()
+    expect([$('#chat-create-choices').hidden, $('#chat-create-blank').hidden]).toEqual([true, false])
+    expect(document.activeElement).toBe($('#new-chat-name'))
+
+    $('#quick-create-chat').click()
+    $('#quick-create-chat').click()
+    expect([$('#chat-create-choices').hidden, $('#chat-create-blank').hidden]).toEqual([false, true])
+  })
+
+  it('starts a group the same three ways from elsewhere (the empty chat area)', () => {
+    const { ui, openTeamFormation } = controller()
+    ui.startNewChat('team')
+    expect(openTeamFormation).toHaveBeenCalledTimes(1)
+    expect($('#create-chat-form').hidden).toBe(true)
+
+    ui.startNewChat('blank')
+    expect([$('#create-chat-form').hidden, $('#chat-create-blank').hidden]).toEqual([false, false])
+
+    ui.startNewChat('template')
+    expect([$('#create-chat-form').hidden, $('#group-template-modal').hidden]).toEqual([true, false])
+  })
+
+  it('keeps the member panel open on a click in the chat when it sits beside the chat', () => {
+    const matchMedia = vi.fn((query: string) => ({ matches: query === '(min-width: 1280px)' }))
+    vi.stubGlobal('matchMedia', matchMedia)
+    try {
+      const { state } = controller()
+      state.peopleDrawerOpen = true
+      document.body.click()
+      expect(state.peopleDrawerOpen).toBe(true)
+      matchMedia.mockImplementation(() => ({ matches: false }))
+      document.body.click()
+      expect(state.peopleDrawerOpen).toBe(false)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+})
+
 function makeChat(id: string, roleIds: string[]): GroupChat {
   return {
     id,
