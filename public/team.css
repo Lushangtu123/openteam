@@ -9649,3 +9649,133 @@ select.reply-compare-select {
   justify-self: start;
   margin-top: 4px;
 }
+
+/*
+ * Readability: no text under 12px where it carries meaning (model labels, member status, round and
+ * discussion labels, times, file sizes, template tags), at a normal weight; and no tap target under
+ * 28px. Initials inside small avatars and keyboard hints keep their size.
+ */
+:root[data-theme] .role-site-badge,
+:root[data-theme] .mention-site-badge,
+:root[data-theme] .site-pill,
+:root[data-theme] .orchestration-person-site,
+:root[data-theme] #iframe-host .role-frame-site {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+:root[data-theme] .role-site-badge,
+:root[data-theme] .mention-site-badge {
+  min-height: 20px;
+  padding: 0 7px;
+}
+
+:root[data-theme] .role-meta-item,
+:root[data-theme] .round-summary-label,
+:root[data-theme] .discussion-message-label,
+:root[data-theme] .project-board-chip,
+:root[data-theme] .project-task-status,
+:root[data-theme] .chat-time,
+:root[data-theme] .message-time-divider,
+:root[data-theme] .message-file-size,
+:root[data-theme] .attachment-tray-hint,
+:root[data-theme] .mode-help,
+:root[data-theme] .template-category-chip,
+:root[data-theme] .group-template-role-count,
+:root[data-theme] .group-template-category,
+:root[data-theme] .group-template-meta,
+:root[data-theme] .group-template-roles span,
+:root[data-theme] .orchestration-template-tags,
+:root[data-theme] .orchestration-template-summary,
+:root[data-theme] .orchestration-template-structure,
+:root[data-theme] .orchestration-json-preview pre,
+:root[data-theme] .message-search-meta,
+:root[data-theme] .message-usage,
+:root[data-theme] .add-person-site-note,
+:root[data-theme] .all-note-target-meta {
+  font-size: 12px;
+}
+
+:root[data-theme] .role-meta-item {
+  font-weight: 500;
+}
+
+:root[data-theme] .round-summary-label {
+  font-weight: 600;
+  line-height: 20px;
+}
+
+:root[data-theme] .site-pill {
+  min-height: 28px;
+}
+
+:root[data-theme] .chat-item .chat-menu-btn,
+:root[data-ui-style="grok"] .chat-item .chat-menu-btn {
+  width: 30px;
+  height: 30px;
+}
+
+:root[data-theme] .message-compare-btn {
+  min-height: 30px;
+  padding-inline: 10px;
+}
+
+/* Small arrows drawn as line icons (a CSS mask), not as characters: the model pill's ⌄ and the
+   key-points toggle's ↓ / ↑. */
+:root[data-theme] .site-pill::after,
+:root[data-theme] .key-points-toggle::after {
+  content: "";
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  background: currentColor;
+  opacity: 0.75;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+:root[data-theme] .add-person-site-option::after,
+:root[data-theme] .orchestration-person-site::after {
+  content: none;
+}
+
+:root[data-theme] .key-points-toggle::after {
+  margin-left: 4px;
+  vertical-align: -1px;
+}
+
+:root[data-theme] .key-points-toggle[aria-expanded="true"]::after {
+  content: "";
+  transform: rotate(180deg);
+}
+
+/* The approval card's warning mark: a drawn triangle instead of the ⚠ character. */
+:root[data-theme] .approval-card-title::before {
+  content: "";
+  display: inline-block;
+  width: 15px;
+  height: 15px;
+  margin-right: 6px;
+  vertical-align: -2px;
+  background: #d97706;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 4 2.8 19.5h18.4Z'/%3E%3Cpath d='M12 10v4'/%3E%3Cpath d='M12 17h.01'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 4 2.8 19.5h18.4Z'/%3E%3Cpath d='M12 10v4'/%3E%3Cpath d='M12 17h.01'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+/* Key points: the 要点 heading inside the same box as the points, one block instead of a label
+   floating above a box. */
+:root[data-theme] .message-body.has-key-points > .key-points-heading {
+  margin: 0;
+  border-radius: 12px 12px 0 0;
+  padding: 10px 14px 2px;
+  background: var(--chip-bg);
+}
+
+:root[data-theme] .message-body.has-key-points > .key-points-heading + .key-points-list {
+  border-radius: 0 0 12px 12px;
+  padding-top: 4px;
+}
+
+:root[data-ui-style="grok"] .message-body.has-key-points > .key-points-heading {
+  background: var(--gb-accent-soft);
+}
