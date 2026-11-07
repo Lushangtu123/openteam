@@ -523,7 +523,11 @@ function normalizeCommand(raw) {
   }
 }
 
-function normalizeAcpAgents(raw) {
+// Claude Code entries saved before `mode` existed start in `default` (it asks before each edit and
+// command) rather than the adapter's own `auto`; `"mode": "auto"` in the entry keeps auto.
+const CLAUDE_ADAPTER = '@agentclientprotocol/claude-agent-acp'
+
+export function normalizeAcpAgents(raw) {
   if (!Array.isArray(raw)) return []
   return raw
     .filter(item => item && typeof item === 'object' && !Array.isArray(item))
@@ -537,6 +541,7 @@ function normalizeAcpAgents(raw) {
         url: readString(item.url),
         command: readString(item.command),
         args: Array.isArray(item.args) ? item.args.filter(arg => typeof arg === 'string') : [],
+        mode: readString(item.mode) ?? (Array.isArray(item.args) && item.args.some(arg => typeof arg === 'string' && arg.startsWith(CLAUDE_ADAPTER)) ? 'default' : undefined),
         env: item.env && typeof item.env === 'object' && !Array.isArray(item.env)
           ? Object.fromEntries(Object.entries(item.env).filter(([, value]) => typeof value === 'string'))
           : undefined,

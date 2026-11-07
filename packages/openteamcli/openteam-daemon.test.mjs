@@ -174,7 +174,7 @@ describe('openteam local daemon', () => {
       token: 'test-token',
       logToConsole: false,
       acpAgents: [
-        { id: 'mock', name: 'Mock agent', type: 'stdio', command: process.execPath, args: [resolve(import.meta.dirname, 'test-fixtures/mock-acp-agent.mjs')], cwdAllowlist: [workspace] },
+        { id: 'mock', name: 'Mock agent', type: 'stdio', command: process.execPath, args: [resolve(import.meta.dirname, 'test-fixtures/mock-acp-agent.mjs')], mode: 'default', cwdAllowlist: [workspace] },
         { id: 'remote', name: 'Remote', type: 'websocket', url: 'ws://127.0.0.1:1', cwdAllowlist: [workspace] },
       ],
     })
@@ -210,9 +210,20 @@ describe('openteam local daemon', () => {
     expect(events.map(event => event.kind)).toEqual(expect.arrayContaining(['started', 'text', 'tool', 'permission', 'file', 'done']))
     expect(events.find(event => event.kind === 'permission')).toMatchObject({ title: '写入 hello.txt', toolKind: 'edit', options: [{ optionId: 'allow' }, { optionId: 'reject' }] })
     expect(events.find(event => event.kind === 'done').output).toContain('已写入 hello.txt。')
+    expect(events.find(event => event.kind === 'done').output).toContain('（default）')
     expect(readFileSync(join(workspace, 'hello.txt'), 'utf8')).toContain('写个文件')
     expect(existsSync(join(workspace, 'hello.txt'))).toBe(true)
     extension.close()
+  })
+
+  it('starts Claude Code entries without a mode in the mode that asks', async () => {
+    const { normalizeAcpAgents } = await import('./openteam-daemon.mjs')
+    const [old, auto, other] = normalizeAcpAgents([
+      { id: 'claude-code', type: 'stdio', command: 'npx', args: ['-y', '@agentclientprotocol/claude-agent-acp'] },
+      { id: 'claude-auto', type: 'stdio', command: 'npx', args: ['-y', '@agentclientprotocol/claude-agent-acp@0.101.0'], mode: 'auto' },
+      { id: 'codex', type: 'stdio', command: 'npx', args: ['-y', '@agentclientprotocol/codex-acp'] },
+    ])
+    expect([old.mode, auto.mode, other.mode]).toEqual(['default', 'auto', undefined])
   })
 
   it('lists configured ACP agents without requiring an extension connection', async () => {

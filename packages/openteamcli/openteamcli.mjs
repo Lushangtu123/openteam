@@ -330,7 +330,9 @@ function writeJson(value) {
 // Well-known ACP adapters. npx downloads the adapter the first time it runs.
 export const AGENT_PRESETS = {
   // Formerly @zed-industries/claude-code-acp and @zed-industries/codex-acp, which are deprecated.
-  'claude-code': { id: 'claude-code', name: 'Claude Code', command: 'npx', args: ['-y', '@agentclientprotocol/claude-agent-acp'] },
+  // `default` mode: Claude Code asks before each edit and command (its adapter otherwise starts in
+  // `auto`, where Claude Code approves what it judges safe by itself).
+  'claude-code': { id: 'claude-code', name: 'Claude Code', command: 'npx', args: ['-y', '@agentclientprotocol/claude-agent-acp'], mode: 'default' },
   codex: { id: 'codex', name: 'Codex', command: 'npx', args: ['-y', '@agentclientprotocol/codex-acp'] },
   gemini: { id: 'gemini-cli', name: 'Gemini CLI', command: 'gemini', args: ['--experimental-acp'] },
 }
@@ -386,6 +388,7 @@ export function agentFromOptions(options) {
     command,
     args: commandLine ? commandLine.slice(1) : preset?.args ?? [],
     ...(Object.keys(env).length ? { env } : {}),
+    ...((typeof options.mode === 'string' ? options.mode.trim() : preset?.mode) ? { mode: typeof options.mode === 'string' ? options.mode.trim() : preset.mode } : {}),
     enabled: true,
     cwdAllowlist,
   }
@@ -441,7 +444,7 @@ export function help() {
       'openteamcli task post|wait|read',
       'openteamcli run create-and-post --file task.json --wait',
       'openteamcli agent list|run --agent <id> --content <prompt> --cwd <path>',
-      'openteamcli agent add --preset claude-code|codex|gemini --cwd <folder>[,<folder>] [--id <id>] [--name <name>] [--env KEY=VALUE,...]',
+      'openteamcli agent add --preset claude-code|codex|gemini --cwd <folder>[,<folder>] [--id <id>] [--name <name>] [--env KEY=VALUE,...] [--mode <session mode>]',
       'openteamcli agent add --id <id> --name <name> --command "<command and arguments>" --cwd <folder>[,<folder>]',
       'openteamcli agent remove <id>',
     ],

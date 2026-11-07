@@ -60,6 +60,15 @@ describe('ACP over stdio', () => {
     await expect(run).rejects.toThrow('本地智能体运行已取消。')
   })
 
+  it('starts in the mode the agent entry names, and refuses to run when it cannot', async () => {
+    const cwd = workspace()
+    const asked = await runStdioAcpAgent({ ...agent, mode: 'default' }, { prompt: '写', cwd, timeoutMs: 10_000, requestPermission: async () => 'reject' })
+    expect(asked.output).toContain('好的，我来写文件（default）。')
+    const untouched = await runStdioAcpAgent(agent, { prompt: '写', cwd, timeoutMs: 10_000, requestPermission: async () => 'reject' })
+    expect(untouched.output).toContain('（auto）')
+    await expect(runStdioAcpAgent({ ...agent, mode: 'nope' }, { prompt: '写', cwd, timeoutMs: 10_000 })).rejects.toThrow('没能让本地智能体进入「nope」模式，所以没有开始执行')
+  })
+
   it('says how to log in when the agent is not logged in', async () => {
     await expect(runStdioAcpAgent({ ...agent, env: { MOCK_ACP_AUTH: '1' } }, { prompt: 'x', cwd: workspace(), timeoutMs: 10_000 }))
       .rejects.toThrow('本机智能体不能用你的账号：可能还没有登录，或者账号/订阅暂时不能用。在终端里直接用一次这个智能体就能看到具体原因（例如 Claude Code：运行 claude -p "hi"）。登录方式：Log in with Claude Code：Run `claude /login` in the terminal。')

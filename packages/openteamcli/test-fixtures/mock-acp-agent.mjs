@@ -10,6 +10,7 @@ let nextId = 1000
 const waiting = new Map()
 let cwd = process.cwd()
 let cancelled = false
+let mode = 'auto'
 let releaseSlow
 
 function send(message) {
@@ -34,7 +35,7 @@ async function prompt(id, params) {
   const sessionId = params.sessionId
   const text = params.prompt?.map(part => part.text ?? '').join('') ?? ''
   cancelled = false
-  say(sessionId, '好的，我来写文件。\n')
+  say(sessionId, `好的，我来写文件（${mode}）。\n`)
   if (text.includes('SLOW')) {
     await new Promise(resolve => { releaseSlow = resolve })
     send({ id, result: { stopReason: 'cancelled' } })
@@ -84,7 +85,15 @@ function handle(message) {
         return
       }
       cwd = message.params.cwd
-      send({ id: message.id, result: { sessionId: 'session-1' } })
+      send({ id: message.id, result: { sessionId: 'session-1', modes: { currentModeId: 'auto', availableModes: [{ id: 'auto', name: 'Auto' }, { id: 'default', name: 'Default' }] } } })
+      return
+    case 'session/set_mode':
+      if (message.params.modeId === 'default' || message.params.modeId === 'auto') {
+        mode = message.params.modeId
+        send({ id: message.id, result: {} })
+      } else {
+        send({ id: message.id, error: { code: -32602, message: `unknown mode ${message.params.modeId}` } })
+      }
       return
     case 'session/prompt':
       void prompt(message.id, message.params)

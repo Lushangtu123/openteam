@@ -37,7 +37,10 @@ export function loginHint(authMethods) {
 }
 
 /**
- * @param {{ command: string, args?: string[], env?: Record<string, string> }} agent
+ * `agent.mode`: the session mode to start in (ACP `session/set_mode`), e.g. `default` for Claude
+ * Code, where it asks before every edit and command instead of deciding by itself.
+ *
+ * @param {{ command: string, args?: string[], env?: Record<string, string>, mode?: string }} agent
  * @param {{
  *   prompt: string,
  *   cwd: string,
@@ -241,6 +244,14 @@ export async function runStdioAcpAgent(agent, input) {
     const session = await request('session/new', { cwd: workspace, mcpServers: [] })
     sessionId = typeof session?.sessionId === 'string' ? session.sessionId : undefined
     if (!sessionId) throw new AcpError('本地智能体没有开始会话。')
+    if (agent.mode && session?.modes?.currentModeId !== agent.mode) {
+      // The run does not start in a mode the user did not choose (one that acts without asking).
+      try {
+        await request('session/set_mode', { sessionId, modeId: agent.mode })
+      } catch (error) {
+        throw new AcpError(`没能让本地智能体进入「${agent.mode}」模式，所以没有开始执行：${error instanceof Error ? error.message : String(error)}`)
+      }
+    }
     onEvent({ kind: 'started' })
     const result = await request('session/prompt', { sessionId, prompt: [{ type: 'text', text: input.prompt }] })
     if (input.signal?.aborted) throw new AcpError('本地智能体运行已取消。')

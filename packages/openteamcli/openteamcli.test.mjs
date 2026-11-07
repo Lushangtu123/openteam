@@ -68,7 +68,7 @@ describe('openteamcli command builder', () => {
         'openteamcli task post|wait|read',
         'openteamcli run create-and-post --file task.json --wait',
         'openteamcli agent list|run --agent <id> --content <prompt> --cwd <path>',
-        'openteamcli agent add --preset claude-code|codex|gemini --cwd <folder>[,<folder>] [--id <id>] [--name <name>] [--env KEY=VALUE,...]',
+        'openteamcli agent add --preset claude-code|codex|gemini --cwd <folder>[,<folder>] [--id <id>] [--name <name>] [--env KEY=VALUE,...] [--mode <session mode>]',
         'openteamcli agent add --id <id> --name <name> --command "<command and arguments>" --cwd <folder>[,<folder>]',
         'openteamcli agent remove <id>',
       ],
@@ -101,7 +101,9 @@ describe('openteamcli command builder', () => {
       const savedPath = process.env.PATH
       process.env.PATH = join(folder, 'no-bin')
       const preset = agentFromOptions({ preset: 'claude-code', cwd: folder })
-      expect(preset).toEqual({ id: 'claude-code', name: 'Claude Code', type: 'stdio', command: 'npx', args: ['-y', '@agentclientprotocol/claude-agent-acp'], enabled: true, cwdAllowlist: [folder] })
+      expect(preset).toEqual({ id: 'claude-code', name: 'Claude Code', type: 'stdio', command: 'npx', args: ['-y', '@agentclientprotocol/claude-agent-acp'], mode: 'default', enabled: true, cwdAllowlist: [folder] })
+      expect(agentFromOptions({ preset: 'claude-code', cwd: folder, mode: 'plan' }).mode).toBe('plan')
+      expect(agentFromOptions({ preset: 'codex', cwd: folder }).mode).toBeUndefined()
       // With Claude Code installed, the adapter is pointed at it, so it uses that login.
       const { mkdirSync, writeFileSync, chmodSync } = await import('node:fs')
       mkdirSync(join(folder, 'bin'))

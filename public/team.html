@@ -471,7 +471,7 @@
             <label for="external-model-workspace">工作目录</label>
             <input id="external-model-workspace" type="text" autocomplete="off" list="external-model-workspaces" placeholder="/Users/me/projects/app" />
             <datalist id="external-model-workspaces"></datalist>
-            <p class="tiny">智能体只能读写这个目录里的文件。每次执行前都会先问你，执行中要改文件或运行命令时也会再问你。</p>
+            <p class="tiny">每次执行前都会先问你。执行中它要改文件或运行命令时，会不会再来问你，取决于它的权限模式：Claude Code 预设每次都问。OpenTeam 替它读写文件时只限这个目录；它自己的工具按它自己的权限规则。</p>
           </div>
           <div class="field api-model-field">
             <label for="external-model-base-url">模型地址</label>
