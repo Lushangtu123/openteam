@@ -49,7 +49,7 @@ describe('role template utilities', () => {
     expect(role).toMatchObject({ name: '架构师', systemPrompt: '关注架构', templateId: 'template-1' })
     expect(store.chatsById['chat-1'].roleIds).toEqual(['role-1'])
 
-    expect(() => deleteRoleTemplate(store, 'template-1')).toThrow('该人员库人员已被群聊使用，不能删除')
+    expect(() => deleteRoleTemplate(store, 'template-1')).toThrow('这个角色已被群聊使用，不能删除')
     expect(store.roleTemplateOrder).toEqual([...defaultCustomTemplateIds, 'template-1'])
     expect(store.rolesById['role-1']).toBe(role)
   })
@@ -180,8 +180,8 @@ describe('role template utilities', () => {
   it('prevents direct built-in template edits and deletes', () => {
     const store = createDefaultStore()
 
-    expect(() => updateRoleTemplate(store, 'builtin-frankl', { name: '意义顾问', systemPrompt: '改写' }, 1)).toThrow('系统内置人员不能编辑')
-    expect(() => deleteRoleTemplate(store, 'builtin-frankl')).toThrow('系统内置人员不能删除')
+    expect(() => updateRoleTemplate(store, 'builtin-frankl', { name: '意义顾问', systemPrompt: '改写' }, 1)).toThrow('系统内置角色不能编辑')
+    expect(() => deleteRoleTemplate(store, 'builtin-frankl')).toThrow('系统内置角色不能删除')
   })
 
   it('allows default custom templates to be edited like ordinary custom people', () => {

@@ -210,7 +210,7 @@ export function createMessageHandlers(baseDeps: MessageHandlersDependencies): Ba
             binding: isExternalModelRole(role) ? undefined : deps.runtimeFrames.getByRole(chat.id, role.id),
           })),
         })
-        throw new Error(`以下人员不可用，请等待或恢复：${unavailable.map(role => role.name).join('、')}`)
+        throw new Error(`以下成员不可用，请等待或恢复：${unavailable.map(role => role.name).join('、')}`)
       }
       if (unavailable.length > 0) {
         deps.log.warn('message-send:partial-unavailable-targets', {
@@ -673,7 +673,7 @@ export function createMessageHandlers(baseDeps: MessageHandlersDependencies): Ba
 
   const handleRoleRetryReply = async (message: RuntimeMessage) => {
     const chatId = requireString(message.chatId, '缺少群聊 ID')
-    const roleId = requireString(message.roleId, '缺少人员 ID')
+    const roleId = requireString(message.roleId, '缺少成员 ID')
     const timestamp = deps.now()
     let discardedAttachmentIds: string[] = []
 
@@ -683,7 +683,7 @@ export function createMessageHandlers(baseDeps: MessageHandlersDependencies): Ba
       const requestedMessageId = readOptionalString(message.messageId)
       const retryTarget = resolveRetryTarget(store, chat, role, requestedMessageId, deps.log)
       const userMessage = retryTarget?.userMessage
-      if (!userMessage) throw new Error(requestedMessageId ? '该消息没有发送给这个人员' : '找不到可重试的用户消息')
+      if (!userMessage) throw new Error(requestedMessageId ? '该消息没有发送给这位成员' : '找不到可重试的用户消息')
       if (retryTarget?.discardMessageId) {
         discardedAttachmentIds = readyAttachmentIds(store.messagesById[retryTarget.discardMessageId]?.attachments)
         discardMessage(store, chat, retryTarget.discardMessageId)
@@ -737,7 +737,7 @@ export function createMessageHandlers(baseDeps: MessageHandlersDependencies): Ba
 
   const handleRoleStopReply = async (message: RuntimeMessage) => {
     const chatId = requireString(message.chatId, '缺少群聊 ID')
-    const roleId = requireString(message.roleId, '缺少人员 ID')
+    const roleId = requireString(message.roleId, '缺少成员 ID')
 
     const { result: active } = await mutateStore(store => {
       const chat = requireChat(store, chatId)
@@ -754,7 +754,7 @@ export function createMessageHandlers(baseDeps: MessageHandlersDependencies): Ba
       externalModelRuns.abort(chatId, roleId, active.replyAttemptId)
     } else {
       const binding = deps.runtimeFrames.getByRole(chatId, roleId)
-      if (!binding?.ready) throw new Error('人员 iframe 尚未就绪，无法停止回复')
+      if (!binding?.ready) throw new Error('成员 iframe 尚未就绪，无法停止回复')
       try {
         const response = await deps.sendRoleMessage(binding.tabId, binding.frameId, {
           type: 'TEAM_STOP_GENERATION',
@@ -851,16 +851,16 @@ export function createMessageHandlers(baseDeps: MessageHandlersDependencies): Ba
 
   const handleMessageResyncReply = async (message: RuntimeMessage) => {
     const chatId = requireString(message.chatId, '缺少群聊 ID')
-    const roleId = requireString(message.roleId, '缺少人员 ID')
+    const roleId = requireString(message.roleId, '缺少成员 ID')
     const messageId = requireString(message.messageId, '缺少消息 ID')
     const binding = deps.runtimeFrames.getByRole(chatId, roleId)
-    if (!binding?.ready) throw new Error('人员 iframe 尚未就绪，请先恢复人员')
+    if (!binding?.ready) throw new Error('成员 iframe 尚未就绪，请先恢复成员')
 
     const { store, result } = await mutateStore(store => {
       const chat = requireChat(store, chatId)
       const role = requireRole(store, chat.id, roleId)
       const assistantMessage = store.messagesById[messageId]
-      if (!isAssistantMessageForRole(assistantMessage, chat, role)) throw new Error('该回复不属于这个人员')
+      if (!isAssistantMessageForRole(assistantMessage, chat, role)) throw new Error('该回复不属于这位成员')
       return { currentContent: assistantMessage.content }
     })
 
@@ -892,7 +892,7 @@ export function createMessageHandlers(baseDeps: MessageHandlersDependencies): Ba
     if (tabId === undefined) throw new Error('缺少 sender tab')
 
     const chatId = requireString(message.chatId, '缺少群聊 ID')
-    const roleId = requireString(message.roleId, '缺少人员 ID')
+    const roleId = requireString(message.roleId, '缺少成员 ID')
     const frameId = senderFrameId(sender)
     const timestamp = deps.now()
     deps.log.info('frame-ready:received', {
@@ -964,7 +964,7 @@ export function createMessageHandlers(baseDeps: MessageHandlersDependencies): Ba
 
   const handleRoleStatus = async (message: RuntimeMessage, sender: chrome.runtime.MessageSender) => {
     const mappedStatus = mapRuntimeRoleStatus(message.status)
-    if (!mappedStatus) return { ok: false, error: '未知人员状态' }
+    if (!mappedStatus) return { ok: false, error: '未知成员状态' }
 
     const identity = readIdentityOptional(deps, message, sender)
     if (!identity) {
@@ -1191,7 +1191,7 @@ export function createMessageHandlers(baseDeps: MessageHandlersDependencies): Ba
         const chat = requireChat(store, identity.chatId)
         const role = requireRole(store, chat.id, identity.roleId)
         const assistantMessage = store.messagesById[messageId]
-        if (!isAssistantMessageForRole(assistantMessage, chat, role)) throw new Error('该回复不属于这个人员')
+        if (!isAssistantMessageForRole(assistantMessage, chat, role)) throw new Error('该回复不属于这位成员')
 
         const previousAttachmentIds = readyAttachmentIds(assistantMessage.attachments)
         updateConversation(role, readOptionalString(message.conversationUrl), readOptionalString(message.conversationId))
@@ -1289,7 +1289,7 @@ export function createMessageHandlers(baseDeps: MessageHandlersDependencies): Ba
     { type: 'GROUP_PROJECT_START', handler: handleProjectStart },
     { type: 'GROUP_PROJECT_APPROVE', handler: projectRoute(chatId => projectRunner.approve(chatId)) },
     { type: 'GROUP_PROJECT_REPLAN', handler: projectRoute(chatId => projectRunner.replan(chatId)) },
-    { type: 'GROUP_PROJECT_SET_OWNER', handler: projectRoute((chatId, message) => projectRunner.setTaskOwner(chatId, requireString(message.taskId, '缺少任务 ID'), requireString(message.roleId, '缺少人员 ID'))) },
+    { type: 'GROUP_PROJECT_SET_OWNER', handler: projectRoute((chatId, message) => projectRunner.setTaskOwner(chatId, requireString(message.taskId, '缺少任务 ID'), requireString(message.roleId, '缺少成员 ID'))) },
     { type: 'GROUP_PROJECT_STOP', handler: projectRoute(chatId => projectRunner.stop(chatId)) },
     { type: 'GROUP_PROJECT_CONTINUE', handler: projectRoute(chatId => projectRunner.resume(chatId)) },
     {
@@ -1631,7 +1631,7 @@ async function sendExternalModelDelivery(deps: MessageHandlersDependencies, clie
           await deps.broadcastStoreUpdated(update.store)
         }
         throwIfAborted(controller.signal)
-        if (!content.trim()) throw new Error('外部模型返回格式无效')
+        if (!content.trim()) throw new Error('模型没有返回内容')
         break
       } catch (error) {
         if (isAbortError(error) || controller.signal.aborted) throw error
@@ -1641,6 +1641,9 @@ async function sendExternalModelDelivery(deps: MessageHandlersDependencies, clie
         if (!canRetry) throw error
 
         const delayMs = retryDelays[attemptIndex] ?? 0
+        // The reply says it is retrying and why, instead of looking like a slow answer.
+        const marked = await markExternalAssistantRetrying(deps, delivery, replyMessageId, { attempt: attemptIndex + 1, total: retryDelays.length, reason })
+        if (!marked.ignored) await deps.broadcastStoreUpdated(marked.store)
         deps.log.warn('external-model:retry-scheduled', {
           chatId: delivery.chatId,
           roleId: delivery.roleId,
@@ -1745,8 +1748,28 @@ async function updateExternalAssistantContent(
     if (!isAssistantMessageForRole(reply, chat, role)) return { ignored: true as const, reason: 'reply-message-not-found' }
     reply.content = content
     reply.status = 'pending'
+    delete reply.retry
     role.updatedAt = timestamp
     chat.updatedAt = timestamp
+    return { ignored: false as const }
+  })
+  return result.ignored ? { ...result, store } : { ...result, store }
+}
+
+async function markExternalAssistantRetrying(
+  _deps: MessageHandlersDependencies,
+  delivery: ExternalPromptDelivery,
+  replyMessageId: string,
+  retry: NonNullable<GroupMessage['retry']>,
+): Promise<{ ignored: true; reason: string; store: OpenTeamStore } | { ignored: false; store: OpenTeamStore }> {
+  const { store, result } = await mutateStore(store => {
+    const chat = requireChat(store, delivery.chatId)
+    const role = requireRole(store, chat.id, delivery.roleId)
+    const staleReason = staleReplyReason(store, chat, role, delivery.messageId, delivery.replyAttemptId)
+    if (staleReason) return { ignored: true as const, reason: staleReason }
+    const reply = store.messagesById[replyMessageId]
+    if (!isAssistantMessageForRole(reply, chat, role)) return { ignored: true as const, reason: 'reply-message-not-found' }
+    reply.retry = { ...retry, reason: retry.reason.slice(0, 160) }
     return { ignored: false as const }
   })
   return result.ignored ? { ...result, store } : { ...result, store }
@@ -1769,6 +1792,7 @@ async function finishExternalAssistantReply(
       if (!isAssistantMessageForRole(reply, chat, role)) return { ignored: true as const, reason: 'reply-message-not-found' }
       reply.content = content
       reply.status = 'received'
+      delete reply.retry
       if (usage) reply.usage = usage
       markChatHasNewMessage(store, chat)
 
@@ -1847,6 +1871,7 @@ function finalizeActiveExternalAssistantReply(store: OpenTeamStore, chat: GroupC
 
   if (!reply.content.trim()) reply.content = '已停止回复'
   reply.status = 'received'
+  delete reply.retry
 
   const userMessage = store.messagesById[promptMessageId]
   if (userMessage?.deliveryStatus?.[role.id]) {
@@ -1971,6 +1996,7 @@ function upsertFailedAssistantAfterPrompt(
     existingReply.content = content
     existingReply.contentFormat = 'markdown'
     existingReply.status = 'error'
+    delete existingReply.retry
     return existingReply
   }
 

@@ -129,7 +129,7 @@ async function initializeChat(payload: unknown, deps: ControlActionExecutorDepen
 }
 
 async function batchAddRoles(payload: unknown, deps: ControlActionExecutorDependencies): Promise<unknown> {
-  const input = requireRecord(payload, '缺少人员参数')
+  const input = requireRecord(payload, '缺少成员参数')
   return routeOk(deps, {
     type: 'GROUP_ROLES_CREATE_BATCH',
     chatId: requireString(input.chatId, '缺少群聊 ID'),
@@ -267,7 +267,7 @@ export function readTaskResult(store: OpenTeamStore, chatId: string, messageId: 
       return {
         messageId: reply.id,
         roleId: reply.roleId ?? '',
-        roleName: reply.roleName ?? role?.name ?? '未知人员',
+        roleName: reply.roleName ?? role?.name ?? '未知成员',
         content: reply.content,
         status: reply.status,
         conversationUrl: role?.geminiConversationUrl,

@@ -468,11 +468,11 @@ export function buildTeamFlowInstruction(members: Array<{ name: string; modelLab
   return [
     english
       ? `Use only the ${members.length} existing people in this chat. They have already divided the work by position:`
-      : `只使用群聊里现有的 ${members.length} 位人员，他们已经按职位分好工：`,
+      : `只使用群聊里现有的 ${members.length} 位成员，他们已经按职位分好工：`,
     ...members.map(member => `- ${member.name}${english ? ` (${member.modelLabel})` : `（${member.modelLabel}）`}${member.description && member.description !== member.name ? `${english ? ': ' : '：'}${member.description}` : ''}`),
     english
       ? 'Do not create new people and do not change their personas. Give each node to the person whose position fits it, let work that depends on other work wait for it, and end with a review by the person best placed to judge the result.'
-      : '不要新建人员，也不要改他们的人设。每个节点交给职位最合适的人；依赖别人产出的工作排在后面；最后由最适合把关的人审核结果。',
+      : '不要新建成员，也不要改他们的人设。每个节点交给职位最合适的人；依赖别人产出的工作排在后面；最后由最适合把关的人审核结果。',
   ].join('\n')
 }
 

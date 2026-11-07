@@ -152,9 +152,9 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
       const roles = deps.getCurrentRoles()
       const startupNotice = getChatStartupNotice(chat, roles)
       if (roles.length === 0) {
-        nodes.push(emptyChatPeopleCard('暂无人员', '先添加人员，再开始群聊协作。'))
+        nodes.push(emptyChatPeopleCard('暂无成员', '先添加成员，再开始群聊协作。'))
       } else {
-        nodes.push(startupNotice ? deps.emptyCard(startupNotice.title, startupNotice.body) : deps.emptyCard('等待第一条消息', '直接发送会记录消息；@ 人员或 @所有人 后触发回复。'))
+        nodes.push(startupNotice ? deps.emptyCard(startupNotice.title, startupNotice.body) : deps.emptyCard('等待第一条消息', '直接发送会记录消息；@ 成员或 @所有人 后触发回复。'))
       }
     }
 
@@ -321,7 +321,7 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
       if (mentions) appendMentionsToBody(body, mentions)
     }
     if (message.type === 'assistant' && message.status === 'pending' && !message.content.trim()) {
-      body.textContent = '正在回复中 '
+      setPendingText(body, message)
     } else if (message.type === 'assistant' && message.status === 'error' && isStructuredFailureReason(message.content)) {
       renderPlainMessageBody(body, getDiagnosticText(message.content))
     } else if (message.type === 'assistant' && message.status !== 'pending' && renderTeamClaimInto(body, message)) {
@@ -359,7 +359,7 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
       tools.className = 'message-tools'
       const role = roleForMessage(message)
       if (message.roleId && message.status === 'pending' && role) {
-        tools.append(createMessageIconButton('停止回复', 'stop', () => deps.stopRoleReply(role).catch(error => deps.showError(error instanceof Error ? error.message : String(error))), { activateOnPointerDown: true }))
+        tools.append(createMessageIconButton('停止回复', 'stop', () => deps.stopRoleReply(role).catch(error => deps.showError(error instanceof Error ? error.message : String(error))), { activateOnPointerDown: true, text: '停止' }))
       } else if (message.roleId && message.status === 'error' && role) {
         tools.append(createMessageIconButton('重新回复', 'retry', () => deps.retryRoleReply(role, message.id).catch(error => deps.showError(error instanceof Error ? error.message : String(error)))))
       } else if (message.roleId && role?.modelSource === 'external') {
@@ -663,11 +663,48 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     body.className = 'message-body thinking-dots'
     if (!message.content.trim()) {
       body.replaceChildren()
-      body.textContent = '正在回复中 '
+      setPendingText(body, message)
     } else {
+      delete body.dataset.pendingText
+      delete body.dataset.pendingSince
       reveal.show(streamingRevealKey(message), body, message.content)
     }
     return true
+  }
+
+  // The waiting text, marked so the clock below can add how long it has been.
+  function setPendingText(body: HTMLElement, message: GroupMessage): void {
+    const text = pendingReplyText(message)
+    body.textContent = text
+    body.dataset.pendingText = text
+    body.dataset.pendingSince = String(message.createdAt)
+  }
+
+  // Once a second, replies still waiting for their first words say how long they have waited (from
+  // 5 seconds on), without re-rendering the chat.
+  window.setInterval(() => {
+    const bodies = deps.messagesEl.querySelectorAll<HTMLElement>('.message-body[data-pending-since]')
+    if (bodies.length === 0) return
+    const en = normalizeLanguage(deps.getStore().settings.language) === 'en'
+    for (const body of bodies) {
+      const base = body.dataset.pendingText?.trimEnd()
+      // Only while the body still holds the waiting text (never over a reply's words).
+      if (!base || body.firstElementChild || !body.textContent?.startsWith(base)) continue
+      const seconds = Math.floor((Date.now() - Number(body.dataset.pendingSince)) / 1000)
+      if (!Number.isFinite(seconds) || seconds < 5 || seconds > 3600) continue
+      const next = `${base} · ${seconds}${en ? 's' : ' 秒'} `
+      if (body.textContent !== next) body.textContent = next
+    }
+  }, 1000)
+
+  // A reply not started yet: 正在回复中, or, while its request is sent again, which retry and why.
+  // Message bodies are left alone by the page's language pass, so this picks its language itself.
+  function pendingReplyText(message: GroupMessage): string {
+    const en = normalizeLanguage(deps.getStore().settings.language) === 'en'
+    const retry = message.retry
+    if (!retry) return en ? 'Replying ' : '正在回复中 '
+    const reason = retry.reason.length > 60 ? `${retry.reason.slice(0, 60)}…` : retry.reason
+    return en ? `Retrying (${retry.attempt} of ${retry.total}): ${reason} ` : `正在重试（第 ${retry.attempt}/${retry.total} 次）：${reason} `
   }
 
   function renderTeamClaimInto(body: HTMLElement, message: GroupMessage): boolean {
@@ -874,11 +911,18 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     return message.contentFormat === 'markdown' || message.type === 'assistant'
   }
 
-  function createMessageIconButton(label: string, icon: MessageActionIcon, onClick: (button: HTMLButtonElement) => void, options: { activateOnPointerDown?: boolean } = {}): HTMLButtonElement {
+  // options.text: a word shown beside the icon, for a button whose icon alone is not clear enough.
+  function createMessageIconButton(label: string, icon: MessageActionIcon, onClick: (button: HTMLButtonElement) => void, options: { activateOnPointerDown?: boolean; text?: string } = {}): HTMLButtonElement {
     const button = document.createElement('button')
     button.type = 'button'
-    button.className = 'message-tool-btn'
+    button.className = `message-tool-btn${options.text ? ' message-tool-btn-labeled' : ''}`
     button.setAttribute('aria-label', label)
+    if (options.text) {
+      const text = document.createElement('span')
+      text.className = 'message-tool-label'
+      text.textContent = options.text
+      button.append(text)
+    }
     setMessageButtonIcon(button, icon)
     let activatedOnPointerDown = false
     if (options.activateOnPointerDown) {
@@ -902,7 +946,8 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
   }
 
   function setMessageButtonIcon(button: HTMLButtonElement, icon: MessageActionIcon): void {
-    button.replaceChildren(messageActionIcon(icon))
+    const text = button.querySelector('.message-tool-label')
+    button.replaceChildren(messageActionIcon(icon), ...(text ? [text] : []))
   }
 
   // The page's line icons ('jump' is the external-window one).
@@ -982,7 +1027,7 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
 
   function orchestrationKindLabel(kind: GroupMessage['orchestrationKind']): string {
     if (kind === 'task') return '任务'
-    if (kind === 'role') return '人员'
+    if (kind === 'role') return '成员'
     if (kind === 'review') return '复核'
     return '状态'
   }
@@ -1039,6 +1084,7 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
       createdAt: message.createdAt,
       status: message.status,
       usage: message.usage,
+      retry: message.retry,
       choicesOpen: choicesOpen(message),
       references: message.references,
       orchestrationRunId: message.orchestrationRunId,
@@ -1168,7 +1214,7 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     tools.append(
       stopped
         ? createMessageIconButton('重新发送', 'retry', () => deps.retryRoleReply(role).catch(error => deps.showError(error instanceof Error ? error.message : String(error))))
-        : createMessageIconButton('停止回复', 'stop', () => deps.stopRoleReply(role).catch(error => deps.showError(error instanceof Error ? error.message : String(error))), { activateOnPointerDown: true }),
+        : createMessageIconButton('停止回复', 'stop', () => deps.stopRoleReply(role).catch(error => deps.showError(error instanceof Error ? error.message : String(error))), { activateOnPointerDown: true, text: '停止' }),
     )
     bubble.append(tools)
     stack.append(bubble)
@@ -1196,7 +1242,7 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
   function referenceBox(reference: MessageReference): HTMLElement {
     const box = document.createElement('div')
     box.className = 'reference-box'
-    box.textContent = `引用 ${reference.roleName || '人员'}：${truncate(reference.contentSnapshot, 160)}`
+    box.textContent = `引用 ${reference.roleName || '成员'}：${truncate(reference.contentSnapshot, 160)}`
     return box
   }
 
@@ -1206,7 +1252,7 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     const button = document.createElement('button')
     button.type = 'button'
     button.className = 'btn btn-primary'
-    button.textContent = '添加人员'
+    button.textContent = '添加成员'
     button.addEventListener('click', deps.openAddPersonDialog)
     card?.append(button)
     return wrapper

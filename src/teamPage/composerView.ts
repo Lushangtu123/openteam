@@ -76,18 +76,18 @@ export function createComposerView(deps: ComposerViewDependencies): ComposerView
       deps.targetPreviewEl.textContent = '选择群聊后可发送'
       deps.sendButtonEl.disabled = true
     } else if (roles.length === 0) {
-      deps.targetPreviewEl.textContent = '当前群聊还没有人员'
+      deps.targetPreviewEl.textContent = '当前群聊还没有成员'
       deps.sendButtonEl.disabled = true
     } else if (!raw) {
       deps.targetPreviewEl.textContent = defaultMentionTargetForMessage('', chat) === 'all'
         ? '输入消息；不 @ 会让所有成员回复，也可 @ 指定成员'
-        : '输入消息；不 @ 仅记录，@ 人员触发回复'
+        : '输入消息；不 @ 仅记录，@ 成员触发回复'
       deps.sendButtonEl.disabled = true
     } else if (!parsed.ok) {
       deps.targetPreviewEl.textContent = parsed.error
       deps.sendButtonEl.disabled = true
     } else if (targets.length === 0) {
-      deps.targetPreviewEl.textContent = '将作为群消息记录，不触发 AI；@ 人员可触发回复'
+      deps.targetPreviewEl.textContent = '将作为群消息记录，不触发 AI；@ 成员可触发回复'
       deps.sendButtonEl.disabled = false
     } else if (reconnecting.length > 0) {
       const readyTargets = targets.filter(role => !reconnecting.includes(role) && role.status === 'ready')
@@ -147,7 +147,7 @@ export function createComposerView(deps: ComposerViewDependencies): ComposerView
     deps.referenceDraftEl.hidden = false
     const preview = document.createElement('div')
     preview.className = 'reference-draft-preview'
-    preview.textContent = `引用 ${deps.state.selectedReference.roleName || '人员'}：${deps.state.selectedReference.contentSnapshot}`
+    preview.textContent = `引用 ${deps.state.selectedReference.roleName || '成员'}：${deps.state.selectedReference.contentSnapshot}`
 
     const cancel = document.createElement('button')
     cancel.type = 'button'
@@ -260,7 +260,7 @@ export function createComposerView(deps: ComposerViewDependencies): ComposerView
     // During a discussion the message is a note for the next speakers, so busy members do not matter.
     // During a project the message is a note for the coordinator.
     if (waitingRoles.length > 0 && readyRoles.length === 0 && chat.discussion?.status !== 'running' && !isProjectActive(chat.project)) {
-      deps.showError(`请等待人员回复完成：${waitingRoles.map(roleDisplayName).join('、')}`)
+      deps.showError(`请等待成员回复完成：${waitingRoles.map(roleDisplayName).join('、')}`)
       return
     }
 

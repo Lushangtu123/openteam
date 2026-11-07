@@ -84,7 +84,7 @@ export function createRoleRecoveryController(deps: RoleRecoveryDependencies): Ro
       }
       const rejectTimeout = () => {
         cleanup()
-        reject(new Error(`等待人员恢复超时：${roleLabels(chatId, uniqueRoleIds).join('、')}`))
+        reject(new Error(`等待成员恢复超时：${roleLabels(chatId, uniqueRoleIds).join('、')}`))
       }
       const schedulePoll = () => {
         waiter.pollTimeoutId = window.setTimeout(() => {
@@ -232,5 +232,5 @@ function teamRoleKey(chatId: string, roleId: string): string {
 
 function isIframeNotReadyError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error)
-  return message.includes('人员 iframe 尚未就绪')
+  return message.includes('成员 iframe 尚未就绪')
 }

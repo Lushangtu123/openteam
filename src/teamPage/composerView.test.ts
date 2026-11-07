@@ -168,7 +168,7 @@ describe('team page composer targeting', () => {
 
     view.renderComposerState()
 
-    expect(deps.targetPreviewEl.textContent).toBe('将作为群消息记录，不触发 AI；@ 人员可触发回复')
+    expect(deps.targetPreviewEl.textContent).toBe('将作为群消息记录，不触发 AI；@ 成员可触发回复')
     expect(deps.sendButtonEl.disabled).toBe(false)
   })
 
@@ -178,7 +178,7 @@ describe('team page composer targeting', () => {
 
     view.renderComposerState()
 
-    expect(deps.targetPreviewEl.textContent).toBe('将作为群消息记录，不触发 AI；@ 人员可触发回复')
+    expect(deps.targetPreviewEl.textContent).toBe('将作为群消息记录，不触发 AI；@ 成员可触发回复')
     expect(deps.sendButtonEl.disabled).toBe(false)
   })
 

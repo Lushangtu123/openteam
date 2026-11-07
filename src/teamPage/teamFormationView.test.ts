@@ -359,7 +359,7 @@ describe('team formation view', () => {
 
     view.openCard('c1')
     footerButton('按分工生成流程').click()
-    expect(openAutoPlan).toHaveBeenCalledWith('做一个记账小程序', '只使用群聊里现有的 2 位人员，他们已经按职位分好工：\n- 产品负责人（Claude）：需求和验收\n- 前端工程师（ChatGPT）\n不要新建人员，也不要改他们的人设。每个节点交给职位最合适的人；依赖别人产出的工作排在后面；最后由最适合把关的人审核结果。')
+    expect(openAutoPlan).toHaveBeenCalledWith('做一个记账小程序', '只使用群聊里现有的 2 位成员，他们已经按职位分好工：\n- 产品负责人（Claude）：需求和验收\n- 前端工程师（ChatGPT）\n不要新建成员，也不要改他们的人设。每个节点交给职位最合适的人；依赖别人产出的工作排在后面；最后由最适合把关的人审核结果。')
     expect(document.querySelector('.team-card-dialog')).toBeNull()
 
     view.openCard('c1')

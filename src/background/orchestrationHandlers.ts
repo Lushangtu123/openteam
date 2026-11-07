@@ -247,7 +247,7 @@ function buildFlowFromAutoPlan(
   const stageIdByNodeId = new Map(plan.nodes.map(node => [node.id, `stage-${node.id}`]))
   const stages: OrchestrationStage[] = plan.nodes.map(node => {
     const roleId = roleIdsByKey.get(node.roleKey)
-    if (!roleId) throw new Error(`自动编排节点缺少人员：${node.roleKey}`)
+    if (!roleId) throw new Error(`自动编排节点缺少成员：${node.roleKey}`)
     const base = {
       id: stageIdByNodeId.get(node.id) ?? `stage-${node.id}`,
       kind: node.kind === 'review' ? 'review' as const : 'roles' as const,
@@ -362,7 +362,7 @@ function appendAutoPlanHistory(
 }
 
 function summarizeAutoPlanResult(plan: AutoOrchestrationPlan): string {
-  return `已生成「${plan.flowName || '自动编排流程'}」：${plan.nodes.length} 个节点，${plan.roles.length} 个人员，最大节点执行数 ${plan.maxNodeExecutions}。`
+  return `已生成「${plan.flowName || '自动编排流程'}」：${plan.nodes.length} 个节点，${plan.roles.length} 位成员，最大节点执行数 ${plan.maxNodeExecutions}。`
 }
 
 async function streamAutoPlanCompletion(
@@ -377,7 +377,7 @@ async function streamAutoPlanCompletion(
     content += chunk
     await onChunk?.(chunk, content)
   }
-  if (!content.trim()) throw new Error('外部模型返回格式无效')
+  if (!content.trim()) throw new Error('模型没有返回内容')
   return { content }
 }
 

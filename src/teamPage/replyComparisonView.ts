@@ -143,7 +143,7 @@ export function createReplyComparisonView(deps: ReplyComparisonViewDependencies)
     body.className = 'reply-compare-body'
     const content = reply.message?.content.trim()
     if (content) renderMarkdownInto(body, content)
-    else body.textContent = ui(reply.status === 'failed' ? '这位人员没有给出回复。' : '回复到了会显示在这里。')
+    else body.textContent = ui(reply.status === 'failed' ? '这位成员没有给出回复。' : '回复到了会显示在这里。')
     element.append(header, body)
     return element
   }
@@ -164,10 +164,10 @@ export function createReplyComparisonView(deps: ReplyComparisonViewDependencies)
     discuss.type = 'button'
     discuss.className = 'btn reply-compare-discuss'
     discuss.textContent = ui('讨论分歧')
-    discuss.title = ui('把所有回答发给回答过的人员，请 TA 们只针对不同意的地方回应')
+    discuss.title = ui('把所有回答发给回答过的成员，请 TA 们只针对不同意的地方回应')
     discuss.disabled = sending || !enough
     discuss.addEventListener('click', () => {
-      void send(comparison, answerers, comparisonDiscussionRequest, ui(`已请 ${answerers.length} 位人员针对分歧讨论`))
+      void send(comparison, answerers, comparisonDiscussionRequest, ui(`已请 ${answerers.length} 位成员针对分歧讨论`))
     })
 
     const label = document.createElement('label')
@@ -193,7 +193,7 @@ export function createReplyComparisonView(deps: ReplyComparisonViewDependencies)
     summarize.type = 'button'
     summarize.className = 'btn btn-primary reply-compare-summarize'
     summarize.textContent = ui(sending ? '正在发送…' : '汇总异同')
-    summarize.title = ui('由你选的人员整理共识、分歧和需要核实的地方')
+    summarize.title = ui('由你选的成员整理共识、分歧和需要核实的地方')
     summarize.disabled = sending || !enough || !summarizer
     summarize.addEventListener('click', () => {
       if (summarizer) void send(comparison, [summarizer], comparisonSummaryRequest, ui(`已请 ${summarizer.name} 汇总异同`))
@@ -222,7 +222,7 @@ export function createReplyComparisonView(deps: ReplyComparisonViewDependencies)
     if (!enough) {
       hint('至少要有两份回复才能讨论或汇总。')
     } else if (summarizer && hasAnswered(comparison, summarizerRoleId)) {
-      hint(`「${summarizer.name}」也回答了这个问题，汇总可能偏向自己的观点。换一位没参与回答、或用不同模型的人员会更客观。`, 'reply-compare-warning')
+      hint(`「${summarizer.name}」也回答了这个问题，汇总可能偏向自己的观点。换一位没参与回答、或用不同模型的成员会更客观。`, 'reply-compare-warning')
     }
     hint('几位都同意，不代表一定正确：数据、引语和日期请到原始出处核实。', 'reply-compare-factcheck')
 

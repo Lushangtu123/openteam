@@ -728,7 +728,7 @@ describe('background message handlers', () => {
     const binding: RuntimeFrameBinding = { chatId: 'chat-1', roleId: 'role-1', tabId: 101, frameId: 7, ready: true, lastSeenAt: 0 }
     const sendPrompt = vi
       .fn()
-      .mockRejectedValueOnce(new Error('人员 iframe 尚未就绪，请先恢复人员'))
+      .mockRejectedValueOnce(new Error('成员 iframe 尚未就绪，请先恢复成员'))
       .mockResolvedValueOnce(undefined)
     const requestRoleRecovery = vi.fn(async () => true)
     const routes = createMessageHandlers({
@@ -755,7 +755,7 @@ describe('background message handlers', () => {
 
     expect(response.ok).toBe(true)
     expect(sendPrompt).toHaveBeenCalledTimes(2)
-    expect(requestRoleRecovery).toHaveBeenCalledWith('chat-1', 'role-1', '人员 iframe 尚未就绪，请先恢复人员')
+    expect(requestRoleRecovery).toHaveBeenCalledWith('chat-1', 'role-1', '成员 iframe 尚未就绪，请先恢复成员')
   })
 
   it('skips the OpenTeam persona when sending a first prompt to a ChatGPT GPTs role', async () => {
@@ -1800,8 +1800,10 @@ describe('background message handlers', () => {
       }),
     }
     let messageIdSeq = 0
+    // What the page was shown while the request was sent again.
+    const shown: Array<OpenTeamStore['messagesById'][string] | undefined> = []
     const routes = createMessageHandlers({
-      broadcastStoreUpdated: vi.fn(),
+      broadcastStoreUpdated: vi.fn((store: OpenTeamStore) => { shown.push(structuredClone(store.messagesById['msg-2'])) }),
       externalModelClient,
       externalModelRetryDelaysMs: [0],
       getChatStatusFromRoles: () => 'ready',
@@ -1823,6 +1825,8 @@ describe('background message handlers', () => {
     const response = await sendRoute?.handler({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@all 用 API 回答' }, {}) as { store: OpenTeamStore }
 
     expect(externalModelClient.complete).toHaveBeenCalledTimes(2)
+    expect(shown.some(reply => reply?.status === 'pending' && reply.retry?.attempt === 1 && reply.retry.total === 1 && reply.retry.reason === '网络暂时不可用')).toBe(true)
+    expect(response.store.messagesById['msg-2'].retry).toBeUndefined()
     expect(response.store.chatsById['chat-1'].messageIds).toEqual(['msg-1', 'msg-2'])
     expect(response.store.messagesById['msg-2']).toMatchObject({
       type: 'assistant',

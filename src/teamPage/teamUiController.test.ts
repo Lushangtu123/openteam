@@ -143,9 +143,11 @@ describe('createTeamUiController', () => {
 
     document.querySelector<HTMLButtonElement>('#quick-create-chat')!.click()
     document.querySelector<HTMLButtonElement>('#open-group-template-create')!.click()
-    const firstTemplateButton = document.querySelector<HTMLButtonElement>('.group-template-option')!
-    firstTemplateButton.click()
-    document.querySelector<HTMLButtonElement>('#confirm-group-template-create')!.click()
+    document.querySelector<HTMLButtonElement>('.group-template-option')!.click()
+    // The chosen card says a second click creates the group; it does, like 确认创建.
+    const chosen = document.querySelector<HTMLButtonElement>('.group-template-option.active')!
+    expect(chosen.querySelector('.group-template-create-hint')?.textContent).toBe('再点一次，用这个模板创建')
+    chosen.click()
 
     const template = BUILTIN_GROUP_TEMPLATES[0]
     expect(runCommand).toHaveBeenCalledWith('GROUP_CHAT_CREATE', {

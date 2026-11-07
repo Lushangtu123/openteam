@@ -210,9 +210,9 @@ describe('team.html chat creation UI', () => {
     expect(html).toMatch(/\.template-prompt-preview\s*{[^}]*white-space:\s*pre-wrap;/s)
     expect(html).toMatch(/\.template-category-filter\s*{[^}]*flex-wrap:\s*wrap;/s)
     expect(html).toMatch(/\.template-category-chip\.active\s*{[^}]*background:/s)
-    expect(html).toContain('人员库')
+    expect(html).toContain('角色库')
     expect(html).toContain('人设')
-    expect(html).toContain('站点')
+    expect(html).toContain('默认模型')
     expect(html).not.toContain('System Prompt')
   })
 
@@ -289,7 +289,7 @@ describe('team.html chat creation UI', () => {
     expect(html).not.toContain('添加为阶段')
     expect(html).not.toContain('阶段设置')
     expect(html).not.toContain('审核阶段')
-    expect(html).toContain('不需要 @ 人员')
+    expect(html).toContain('不需要 @ 成员')
     expect(html).toContain('class="orchestration-task-strip"')
     expect(html).toContain('class="orchestration-task-input-row"')
     expect(html).toContain('class="orchestration-footer"')
@@ -323,8 +323,8 @@ describe('team.html chat creation UI', () => {
     expect(railActions).toContain('id="open-people-library"')
     expect(railActions).toContain('aria-label="群聊"')
     expect(railActions).toContain('data-tooltip="群聊"')
-    expect(railActions).toContain('aria-label="打开人员库"')
-    expect(railActions).toContain('data-tooltip="人员库"')
+    expect(railActions).toContain('aria-label="打开角色库"')
+    expect(railActions).toContain('data-tooltip="角色库"')
     // Adding models is setup, not something to reach every day: it is a tab of the settings window.
     expect(railActions).not.toContain('id="open-external-models"')
     expect(settingsMenu).toMatch(/data-settings-panel="models"[\s\S]*id="open-external-models"/)
@@ -441,7 +441,7 @@ describe('team.html chat creation UI', () => {
     expect(source).toContain("edit.textContent = ui('编辑')")
     expect(source).toContain("remove.className = 'btn btn-ghost template-delete'")
     expect(source).toContain("remove.textContent = ui('删除')")
-    expect(source).toContain('window.confirm(`确定删除「${template.name}」吗？删除后这个人员会从人员库移除。`)')
+    expect(source).toContain('window.confirm(`确定删除「${template.name}」吗？删除后这个角色会从角色库移除。`)')
     expect(source).toContain('if (!isTemplateUsed(template.id)) actions.append(remove)')
     expect(domRefsSource).toContain("'#new-template'")
     expect(domRefsSource).toContain("'#close-person-template'")
@@ -491,7 +491,7 @@ describe('team.html chat creation UI', () => {
 
     expect(html).not.toContain('name="add-person-chat-site"')
     expect(html).toMatch(/<form id="add-role-form" class="role-add-form">[\s\S]*?<button class="btn btn-primary btn-small" type="submit">[\s\S]*?<span>添加成员<\/span>/)
-    expect(html).not.toContain('打开添加人员')
+    expect(html).not.toContain('打开添加成员')
     expect(html).not.toContain('为这次加入群聊的人员统一指定 Gemini。')
     expect(html).not.toContain('为这次加入群聊的人员统一指定 ChatGPT。')
     expect(html).not.toContain('为这次加入群聊的人员统一指定 Claude。')
@@ -506,7 +506,7 @@ describe('team.html chat creation UI', () => {
     expect(html).toContain('id="add-person-search"')
     expect(html).toContain('id="add-person-tab-builtin"')
     expect(html).toContain('id="add-person-tab-custom"')
-    expect(html).toContain('搜索人员名称、描述或提示词')
+    expect(html).toContain('搜索角色名称、描述或提示词')
     expect(source).toContain('function filteredAddPersonItems(): AddPersonItem[]')
     expect(source).toContain("deps.state.addPersonTemplateType === 'builtin'")
     expect(source).toContain('matchesAddPersonSearch')
@@ -679,8 +679,8 @@ describe('team.html chat creation UI', () => {
   it('shows an add-person call to action when the selected chat has no people', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/teamPage/messagesView.ts'), 'utf8')
 
-    expect(source).toContain("emptyChatPeopleCard('暂无人员'")
-    expect(source).toContain("button.textContent = '添加人员'")
+    expect(source).toContain("emptyChatPeopleCard('暂无成员'")
+    expect(source).toContain("button.textContent = '添加成员'")
     expect(source).toContain('deps.openAddPersonDialog')
   })
 
@@ -702,7 +702,7 @@ describe('team.html chat creation UI', () => {
     expect(html).toMatch(/\.reference-draft-preview\s*{[^}]*white-space:\s*nowrap;/s)
     expect(html).toMatch(/\.reference-draft-preview\s*{[^}]*text-overflow:\s*ellipsis;/s)
     expect(source).toContain("preview.className = 'reference-draft-preview'")
-    expect(source).not.toContain("title.textContent = `引用 ${selectedReference.roleName || '人员'} 的观点`")
+    expect(source).not.toContain("title.textContent = `引用 ${selectedReference.roleName || '成员'} 的观点`")
   })
 
   it('positions the mention panel next to the composer input instead of the right action area', () => {
@@ -882,7 +882,7 @@ describe('team.html chat creation UI', () => {
     expect(source).toContain("side.className = 'chat-item-side'")
     expect(source).toContain("time.className = 'chat-time'")
     expect(source).toContain("time.textContent = formatChatListTime(chat.updatedAt)")
-    expect(source).not.toContain("textNode(`${chat.roleIds.length} 人员 · ${formatTime(chat.updatedAt)}`)")
+    expect(source).not.toContain("textNode(`${chat.roleIds.length} 位成员 · ${formatTime(chat.updatedAt)}`)")
     expect(html).toMatch(/\.chat-list\s*{[^}]*--chat-list-row-height:\s*70px;/s)
     expect(html).toMatch(/\.chat-list\s*{[^}]*gap:\s*5px;/s)
     expect(html).toMatch(/\.chat-item\s*{[^}]*grid-template-columns:\s*40px minmax\(0, 1fr\) auto;/s)

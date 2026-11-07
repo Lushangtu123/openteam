@@ -238,7 +238,7 @@ export function createMessageSearchView(deps: MessageSearchViewDependencies): Me
 
   function speakerName(message: GroupMessage): string {
     if (message.type === 'user') return ui('我')
-    if (message.type === 'assistant') return message.roleName || ui('AI 人员')
+    if (message.type === 'assistant') return message.roleName || ui('AI 成员')
     return ui('系统')
   }
 

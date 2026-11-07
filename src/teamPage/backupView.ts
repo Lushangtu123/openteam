@@ -191,7 +191,7 @@ export function createBackupView(deps: BackupViewDependencies): BackupView {
 
       const counts = document.createElement('dl')
       counts.className = 'backup-restore-counts'
-      for (const [label, value] of [['群聊', summary.chats], ['消息', summary.messages], ['自定义人员', summary.people], ['图片', summary.images]] as const) {
+      for (const [label, value] of [['群聊', summary.chats], ['消息', summary.messages], ['自定义角色', summary.people], ['图片', summary.images]] as const) {
         const term = document.createElement('dt')
         term.textContent = ui(label)
         const detail = document.createElement('dd')
@@ -201,7 +201,7 @@ export function createBackupView(deps: BackupViewDependencies): BackupView {
 
       const notes = document.createElement('div')
       notes.className = 'backup-restore-notes'
-      notes.append(paragraph(ui('合并：保留当前数据，只加入当前没有的群聊和人员，设置保持不变。')))
+      notes.append(paragraph(ui('合并：保留当前数据，只加入当前没有的群聊和成员，设置保持不变。')))
       if (existing > 0) notes.append(paragraph(ui(`备份里有 ${existing} 个群聊当前已经存在，合并时会保留当前的版本。`)))
       notes.append(paragraph(ui('替换：用备份覆盖当前全部数据，替换前会先下载一份当前数据的备份。已配置的 API 模型会保留。')))
       if (modelsToReAdd.length > 0) {

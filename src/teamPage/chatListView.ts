@@ -57,7 +57,7 @@ export function createChatListView(deps: ChatListViewDependencies): ChatListView
   function renderChatList() {
     const store = deps.getStore()
     const allChats = store.chatOrder.map(chatId => store.chatsById[chatId]).filter((chat): chat is GroupChat => Boolean(chat))
-    deps.storeSummaryEl.textContent = ui(`${allChats.length} 个群聊 · ${deps.getTemplates().length} 个人员库人员`)
+    deps.storeSummaryEl.textContent = ui(`${allChats.length} 个群聊 · ${deps.getTemplates().length} 个角色`)
     deps.chatListEl.replaceChildren()
     const query = deps.state.chatListQuery
     if (deps.chatListSearchBoxEl) deps.chatListSearchBoxEl.hidden = !shouldShowChatSearch(allChats.length, query)
@@ -218,7 +218,7 @@ export function createChatListView(deps: ChatListViewDependencies): ChatListView
     clearMessages.addEventListener('click', () => {
       deps.state.chatMenuChatId = undefined
       renderChatList()
-      if (!window.confirm(`确定清空「${chat.name}」的聊天消息吗？人员会保留，但所有 iframe 会重新创建。`)) return
+      if (!window.confirm(`确定清空「${chat.name}」的聊天消息吗？成员会保留，但所有 iframe 会重新创建。`)) return
       clearChatMessages(chat.id).catch(error => deps.showError(error.message))
     })
     const closeFrames = document.createElement('button')

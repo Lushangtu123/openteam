@@ -23,7 +23,7 @@ describe('runCommandWithReconnect', () => {
     const roles = [role('role-1', 'ready'), role('role-2', 'ready')]
     const reconnectRolesForSend = vi.fn(async () => undefined)
     const runCommand = vi.fn()
-      .mockRejectedValueOnce(new Error('以下人员不可用，请等待或恢复：role-1'))
+      .mockRejectedValueOnce(new Error('以下成员不可用，请等待或恢复：role-1'))
       .mockResolvedValueOnce(undefined)
 
     await runCommandWithReconnect({ reconnectRolesForSend, runCommand }, { chat, roles, type: 'GROUP_MESSAGE_SEND', payload: { chatId: chat.id, raw: '@role-1 hi' } })
@@ -36,7 +36,7 @@ describe('runCommandWithReconnect', () => {
     const roles = [role('role-1', 'ready')]
     const reconnectRolesForSend = vi.fn(async () => undefined)
     const runCommand = vi.fn()
-      .mockRejectedValueOnce(new Error('人员 iframe 尚未就绪，请先恢复人员'))
+      .mockRejectedValueOnce(new Error('成员 iframe 尚未就绪，请先恢复成员'))
       .mockResolvedValueOnce(undefined)
 
     await runCommandWithReconnect({ reconnectRolesForSend, runCommand }, { chat, roles, type: 'GROUP_ROLE_RETRY_REPLY', payload: { chatId: chat.id, roleId: 'role-1' } })
@@ -65,7 +65,7 @@ describe('runCommandWithReconnect', () => {
   it('does not run preconnected commands when reconnecting target roles fails', async () => {
     const roles = [role('role-1', 'ready')]
     const reconnectRolesForSend = vi.fn(async () => {
-      throw new Error('等待人员恢复超时：role-1')
+      throw new Error('等待成员恢复超时：role-1')
     })
     const runCommand = vi.fn(async () => undefined)
 
@@ -75,7 +75,7 @@ describe('runCommandWithReconnect', () => {
       type: 'GROUP_ORCHESTRATION_RESUME',
       payload: { chatId: chat.id, runId: 'run-1' },
       preconnectAll: true,
-    })).rejects.toThrow('等待人员恢复超时：role-1')
+    })).rejects.toThrow('等待成员恢复超时：role-1')
 
     expect(runCommand).not.toHaveBeenCalled()
   })

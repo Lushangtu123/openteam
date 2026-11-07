@@ -13,8 +13,8 @@ const UI_TRANSLATIONS: Record<string, string> = {
   '群聊': 'Chats',
   '查看全部笔记': 'View all notes',
   '全部笔记': 'All notes',
-  '打开人员库': 'Open people library',
-  '人员库': 'People library',
+  '打开角色库': 'Open people library',
+  '角色库': 'People library',
   '设置': 'Settings',
   '语言': 'Language',
   '加载群聊中': 'Loading chats',
@@ -33,9 +33,9 @@ const UI_TRANSLATIONS: Record<string, string> = {
   '协作群聊': 'Collaborative chat',
   '协作群聊模式': 'Collaborative mode',
   '独立专家模式': 'Independent expert mode',
-  '人员参考群聊上下文，适合接力讨论。': 'Members share chat context; good for sequential discussion.',
+  '成员参考群聊上下文，适合接力讨论。': 'Members share chat context; good for sequential discussion.',
   '独立专家': 'Independent experts',
-  '人员独立回答，适合并行评审。': 'Members answer independently; good for parallel review.',
+  '成员独立回答，适合并行评审。': 'Members answer independently; good for parallel review.',
   '取消': 'Cancel',
   '创建': 'Create',
   '从模板中创建': 'Create from template',
@@ -43,8 +43,8 @@ const UI_TRANSLATIONS: Record<string, string> = {
   '创建或选择一个群聊开始协作': 'Create or select a chat to start collaborating',
   '选择一个群聊': 'Select a chat',
   '左侧群聊列表会显示最近摘要、状态和更新时间。': 'The chat list on the left shows recent summaries, status, and update time.',
-  '选择群聊后可添加、查看、恢复和唤醒人员。': 'Select a chat to add, view, restore, and wake people.',
-  '点击添加人员，可从人员库批量加入或临时添加。': 'Click Add people to add from the library or add a temporary person.',
+  '选择群聊后可添加、查看、恢复和唤醒成员。': 'Select a chat to add, view, restore, and wake people.',
+  '点击添加成员，可从角色库批量加入或临时添加。': 'Click Add people to add from the library or add a temporary person.',
   '界面模式': 'Theme',
   '界面风格': 'Interface style',
   '搜索群聊': 'Search groups',
@@ -64,8 +64,15 @@ const UI_TRANSLATIONS: Record<string, string> = {
   '深色': 'Dark',
   '编排': 'Orchestration',
   '不@也回复': 'Reply without @',
+  '模型没有返回内容': 'The model returned no text',
+  '再点一次，用这个模板创建': 'Click again to create a group from this template',
+  '默认模型': 'Default model',
+  '停止': 'Stop',
+  '登录 AI 网站': 'Sign in to AI sites',
+  '在新标签页打开 AI 网站登录。登录后，成员的网页就能用你的账号回复。': 'Opens an AI site in a new tab to sign in. Once signed in, members on that site reply with your account.',
+  '登录': 'Sign in',
   '防止流程无限循环': 'Keeps a looping flow from running forever',
-  '由你选的人员整理共识、分歧和需要核实的地方': 'The member you choose writes up the agreements, the disagreements and what to check',
+  '由你选的成员整理共识、分歧和需要核实的地方': 'The member you choose writes up the agreements, the disagreements and what to check',
   '添加模型': 'Add model',
   '选择模型': 'Choose models',
   '选择用哪个模型；选几个就加几位成员': 'Choose which models to use; each one chosen adds a member',
@@ -76,8 +83,6 @@ const UI_TRANSLATIONS: Record<string, string> = {
   '这个模型正在被成员使用，不能删除': 'Members are using this model, so it cannot be deleted',
   '成员': 'Members',
   '添加成员': 'Add members',
-  '登录网站': 'Sign in to sites',
-  '在新标签页打开 AI 网站登录': 'Opens an AI site in a new tab to sign in',
   '模型': 'Models',
   'API 模型和本机智能体': 'API models and local agents',
   '添加或修改成员能用的 API 模型（OpenAI 或 Anthropic 格式）和本机智能体（Claude Code、Codex 等）。': 'Add or change the API models (OpenAI or Anthropic format) and the local agents (Claude Code, Codex and others) members can use.',
@@ -91,7 +96,7 @@ const UI_TRANSLATIONS: Record<string, string> = {
   '左边是你的群聊。新建的话，可以按任务组队、从模板创建，或先建一个空白群聊。': 'Your groups are on the left. To start one, team up for a task, use a template, or create a blank group.',
   '建一个群，让几个 AI 一起干活': 'Start a group and let several AIs work together',
   '按任务组队最省事：写下要做的事，AI 们自己认领职位。': 'Teaming up for a task is the quickest: describe the task, and the AIs pick their own positions.',
-  '点「添加成员」，从人员库批量加入或临时添加。': 'Click "Add members" to add people from the library, or temporary ones.',
+  '点「添加成员」，从角色库批量加入或临时添加。': 'Click "Add members" to add people from the library, or temporary ones.',
   '刷新网页': 'Reload page',
   '移出群聊': 'Remove from group',
   '还没读过群消息': 'Has not read the group yet',
@@ -117,8 +122,7 @@ const UI_TRANSLATIONS: Record<string, string> = {
   '收起成员面板': 'Collapse people panel',
   '打开成员面板': 'Open people panel',
   '收起': 'Collapse',
-  '添加人员': 'Add people',
-  '从人员库批量选择，或临时添加只属于当前群聊的人员。': 'Choose from the people library, or add temporary people for this chat only.',
+  '从角色库批量选择，或临时添加只属于当前群聊的人员。': 'Choose from the people library, or add temporary people for this chat only.',
   '笔记面板': 'Notes panel',
   '拖动笔记': 'Drag notes',
   '手动记录或收集 Mark 内容。': 'Write notes manually or collect marked content.',
@@ -143,7 +147,7 @@ const UI_TRANSLATIONS: Record<string, string> = {
   '已删除群聊的笔记': 'Deleted-chat note',
   '手动记录': 'Manual note',
   '当前笔记富文本编辑器': 'Active note rich-text editor',
-  '选择一个现成小组，创建后会自动加入模板人员。': 'Choose a ready-made group; template people will be added automatically.',
+  '选择一个现成小组，创建后会自动加入模板里的成员。': 'Choose a ready-made group; template people will be added automatically.',
   '关闭群聊模板': 'Close chat templates',
   '搜索模板': 'Search templates',
   '搜索任务、行业、角色或模板名称，例如：写论文、合同、面试、AI Agent': 'Search tasks, industries, roles, or template names, e.g. paper, contract, interview, AI Agent',
@@ -158,28 +162,28 @@ const UI_TRANSLATIONS: Record<string, string> = {
   '专业边界': 'Professional boundary',
   '需谨慎': 'Use with care',
   '新群聊': 'New chat',
-  '维护可复用人员人设；加入群聊后会复制为独立人员。': 'Manage reusable personas; adding them to a chat creates independent copies.',
+  '维护可复用的角色人设；加入群聊后会复制为独立的成员。': 'Manage reusable personas; adding them to a chat creates independent copies.',
   '新建': 'New',
-  '关闭人员库': 'Close people library',
-  '人员列表': 'People list',
-  '搜索人员名称、描述或提示词': 'Search people names, descriptions, or prompts',
-  '人员库类型': 'People library type',
-  '自定义人员': 'Custom people',
-  '内置人员': 'Built-in people',
-  '人员分类': 'People categories',
-  '不使用人员库，手动创建': 'Do not use the library; create manually',
+  '关闭角色库': 'Close people library',
+  '角色列表': 'People list',
+  '搜索角色名称、描述或提示词': 'Search people names, descriptions, or prompts',
+  '角色库类型': 'People library type',
+  '自定义角色': 'Custom people',
+  '内置角色': 'Built-in people',
+  '角色分类': 'People categories',
+  '不使用角色库，手动创建': 'Do not use the library; create manually',
   '内置': 'Built-in',
   '自定义': 'Custom',
   '详情': 'Details',
   '上一页': 'Previous',
   '下一页': 'Next',
-  '未填写人员库描述': 'No people-library description',
+  '未填写角色库描述': 'No people-library description',
   '未填写描述': 'No description',
   '所有可用站点已添加': 'All available sites have already been added',
-  '临时人员': 'Temporary person',
-  '可以切换到自定义人员，或调整搜索词。': 'Switch to custom people, or adjust the search terms.',
-  '点击右上角新建人员，保存后会出现在这里。': 'Click New in the top right; saved people will appear here.',
-  '先在人员库中新建人员，或点击右上角临时添加。': 'Create a person in the people library first, or use Add temporary in the top right.',
+  '临时角色': 'Temporary person',
+  '可以切换到自定义角色，或调整搜索词。': 'Switch to custom people, or adjust the search terms.',
+  '点击右上角新建角色，保存后会出现在这里。': 'Click New in the top right; saved people will appear here.',
+  '先在角色库中新建角色，或点击右上角临时添加。': 'Create a person in the people library first, or use Add temporary in the top right.',
   'API 模型': 'API model',
   '关闭模型': 'Close models',
   '显示名称': 'Display name',
@@ -191,9 +195,9 @@ const UI_TRANSLATIONS: Record<string, string> = {
   '模型 Key': 'Model key',
   '模型名称': 'Model name',
   '保存模型': 'Save model',
-  '新建人员': 'New person',
-  '维护人员名称、人设和默认站点。': 'Manage the person name, persona, and default site.',
-  '关闭人员编辑': 'Close person editor',
+  '新建角色': 'New person',
+  '维护角色名称、人设和默认模型。': "Manage the role's name, persona and default model.",
+  '关闭角色编辑': 'Close person editor',
   '描述想要的人设': 'Describe the persona you want',
   '例如：一个擅长小红书增长的内容顾问': 'Example: a content growth advisor for Xiaohongshu',
   'AI 生成': 'Generate with AI',
@@ -201,25 +205,25 @@ const UI_TRANSLATIONS: Record<string, string> = {
   '生成中...': 'Generating...',
   '已生成，可继续修改后保存': 'Generated. You can edit it before saving.',
   '请先描述想要生成的人设': 'Describe the persona you want to generate first',
-  '人员名称': 'Person name',
+  '角色名称': 'Person name',
   '描述': 'Description',
   '人设': 'Persona',
   '默认站点': 'Default site',
   'GPTs 链接前缀': 'GPTs link prefix',
-  '选填。保存后，该人员使用 ChatGPT 时会优先打开这个 GPTs。': 'Optional. After saving, this person opens this GPT first when using ChatGPT.',
+  '选填。保存后，该角色使用 ChatGPT 时会优先打开这个 GPTs。': 'Optional. After saving, this person opens this GPT first when using ChatGPT.',
   'Grok 项目链接': 'Grok project URL',
-  '选填。保存后，该人员使用 Grok 时会优先打开这个项目。': 'Optional. After saving, this person opens this project first when using Grok.',
-  '保存人员': 'Save person',
-  '系统内置人员': 'System built-in person',
-  '关闭内置人员详情': 'Close built-in person details',
-  '从人员库或临时草稿中选择人员，并为每个人指定站点。': 'Choose people from the library or temporary drafts, and assign a site to each.',
+  '选填。保存后，该角色使用 Grok 时会优先打开这个项目。': 'Optional. After saving, this person opens this project first when using Grok.',
+  '保存角色': 'Save person',
+  '系统内置角色': 'System built-in person',
+  '关闭内置角色详情': 'Close built-in person details',
+  '从角色库或临时草稿中选择角色，并为每个角色选择模型。': 'Choose people from the library or temporary drafts, and assign a site to each.',
   '临时添加': 'Add temporary',
-  '关闭添加人员': 'Close add people',
-  '选择人员': 'Choose people',
-  '当前群聊还没有人员': 'This chat has no people yet',
+  '关闭添加成员': 'Close add people',
+  '选择角色': 'Choose people',
+  '当前群聊还没有成员': 'This chat has no people yet',
   '输入消息；不 @ 会让所有成员回复，也可 @ 指定成员': 'Type a message; without @ all members reply, or @ specific members',
-  '输入消息；不 @ 仅记录，@ 人员触发回复': 'Type a message; without @ it is recorded only, while @people triggers replies',
-  '将作为群消息记录，不触发 AI；@ 人员可触发回复': 'This will be recorded as a chat message and will not trigger AI; @people can trigger replies',
+  '输入消息；不 @ 仅记录，@ 成员触发回复': 'Type a message; without @ it is recorded only, while @people triggers replies',
+  '将作为群消息记录，不触发 AI；@ 成员可触发回复': 'This will be recorded as a chat message and will not trigger AI; @people can trigger replies',
   '取消引用': 'Cancel quote',
   '所有人': 'Everyone',
   '全员': 'All people',
@@ -238,7 +242,7 @@ const UI_TRANSLATIONS: Record<string, string> = {
   '正在汇总本轮回复': 'Summarizing this round',
   '通用': 'General',
   '看看要执行的任务': 'Read the task first',
-  '配置 OpenAI 或 Anthropic 兼容 API，或本机的智能体（Claude Code、Codex 等，经 ACP 连接），人员可直接选择这些模型。': 'Set up OpenAI- or Anthropic-compatible APIs, or agents on this computer (Claude Code, Codex and others, through ACP); people can use these models directly.',
+  '配置 OpenAI 或 Anthropic 兼容 API，或本机的智能体（Claude Code、Codex 等，经 ACP 连接），成员可直接选择这些模型。': 'Set up OpenAI- or Anthropic-compatible APIs, or agents on this computer (Claude Code, Codex and others, through ACP); people can use these models directly.',
   '本机智能体（ACP）': 'Local agent (ACP)',
   '工作目录': 'Working folder',
   '智能体在本机运行，只能访问它允许的目录。': 'The agent runs on this computer and can reach only the folders it is allowed.',
@@ -279,7 +283,7 @@ const UI_TRANSLATIONS: Record<string, string> = {
   '同时问两位以上成员时，每条回复先列 1–3 条要点，长回复折叠起来。': 'When a message goes to two or more members, each reply starts with 1–3 key points and long replies fold.',
   '大家都回复后，由一位成员写本轮汇总：共识、分歧、待定问题和下一步（优先用 API 成员）。': 'Once everyone has answered, one member summarizes the round: agreements, disagreements, open questions and next steps (an API member when there is one).',
   '让本机的智能体（openteamcli）创建群聊、添加成员、发布任务并等待回复。': 'Lets local agents (openteamcli) create groups, add members, post tasks and wait for replies.',
-  '备份包含群聊、人员、笔记和图片。': 'The backup includes groups, people, notes and images.',
+  '备份包含群聊、成员、角色、笔记和图片。': 'The backup includes groups, people, notes and images.',
   '同时导出 API Key（导出后请妥善保管备份文件）': 'Include API keys (keep the backup file safe)',
   '可以把备份合并进来，或用它替换全部数据。': 'Merge a backup into your data, or replace all data with it.',
   '轮流讨论': 'Take turns',
@@ -304,7 +308,7 @@ const UI_TRANSLATIONS: Record<string, string> = {
   '等待连接': 'Waiting to connect',
   '网页已连接': 'Web connected',
   '讨论分歧': 'Discuss differences',
-  '把所有回答发给回答过的人员，请 TA 们只针对不同意的地方回应': 'Send all answers to the people who answered and ask them to respond only where they disagree',
+  '把所有回答发给回答过的成员，请 TA 们只针对不同意的地方回应': 'Send all answers to the people who answered and ask them to respond only where they disagree',
   '至少要有两份回复才能讨论或汇总。': 'At least two replies are needed to discuss or summarize.',
   '几位都同意，不代表一定正确：数据、引语和日期请到原始出处核实。': 'Agreement is not proof: check figures, quotes and dates against the original sources.',
   '对比回复': 'Compare replies',
@@ -314,7 +318,7 @@ const UI_TRANSLATIONS: Record<string, string> = {
   '按任务组队': 'Team up for a task',
   '查看分工': 'View positions',
   '还没有回复': 'No reply yet',
-  '这位人员没有给出回复。': 'This person did not reply.',
+  '这位成员没有给出回复。': 'This person did not reply.',
   '回复到了会显示在这里。': 'The reply will show up here.',
   '请': 'Ask',
   '正在发送…': 'Sending…',
@@ -328,7 +332,7 @@ const UI_TRANSLATIONS: Record<string, string> = {
   '没有找到消息': 'No messages found',
   '输入关键词，多个词用空格分开': 'Type keywords; separate several words with spaces',
   '我': 'Me',
-  'AI 人员': 'AI person',
+  'AI 成员': 'AI person',
   '系统': 'System',
   '添加图片或文件': 'Add image or file',
   '附件只在发送时上传给对应的 AI 网站或模型。': 'Attachments are uploaded to the AI site or model only when you send them.',
@@ -339,12 +343,12 @@ const UI_TRANSLATIONS: Record<string, string> = {
   '导出全部数据': 'Export all data',
   '从备份恢复…': 'Restore from backup…',
   '同时导出 API Key': 'Also export API keys',
-  '备份包含群聊、人员、笔记和图片。导出 API Key 后，请妥善保管备份文件。': 'Backups include chats, people, notes and images. If you export API keys, keep the backup file safe.',
+  '备份包含群聊、成员、角色、笔记和图片。导出 API Key 后，请妥善保管备份文件。': 'Backups include chats, people, notes and images. If you export API keys, keep the backup file safe.',
   '从备份恢复': 'Restore from backup',
   '备份时间': 'Backed up',
   '消息': 'Messages',
   '图片': 'Images',
-  '合并：保留当前数据，只加入当前没有的群聊和人员，设置保持不变。': 'Merge keeps your current data and only adds chats and people you do not have yet. Settings stay as they are.',
+  '合并：保留当前数据，只加入当前没有的群聊和成员，设置保持不变。': 'Merge keeps your current data and only adds chats and people you do not have yet. Settings stay as they are.',
   '替换：用备份覆盖当前全部数据，替换前会先下载一份当前数据的备份。已配置的 API 模型会保留。': 'Replace swaps all current data for the backup. A backup of the current data is downloaded first. API models configured here are kept.',
   '这些 API 模型在备份里没有 API Key，需要在「设置 → 模型」里重新添加：': 'These API models were saved without their API key and need to be added again under Settings → Models: ',
   '合并到当前数据': 'Merge into current data',
@@ -406,7 +410,7 @@ const UI_TRANSLATIONS: Record<string, string> = {
   '正在初始化角色': 'Initializing roles',
   '正在创建角色窗口，准备好后就可以继续对话。': 'Creating role windows. You can continue once they are ready.',
   '等待第一条消息': 'Waiting for the first message',
-  '直接发送会记录消息；@ 人员或 @所有人 后触发回复。': 'Send directly to record a message; mention @people or @all to trigger replies.',
+  '直接发送会记录消息；@ 成员或 @所有人 后触发回复。': 'Send directly to record a message; mention @people or @all to trigger replies.',
   '正在回复中': 'Replying',
   '已停止回复': 'Reply stopped',
   '停止回复': 'Stop reply',
@@ -431,8 +435,7 @@ const UI_TRANSLATIONS: Record<string, string> = {
   '重试说明': 'Retry note',
   '通过': 'Pass',
   '不通过': 'Fail',
-  '未填写人员描述': 'No person description',
-  '人员异常。若目标站点未登录，请打开登录页后点击恢复人员。': 'Person error. If the target site is not signed in, open the login page and then click restore.',
+  '成员异常。若目标站点未登录，请打开登录页后点击恢复成员。': 'Person error. If the target site is not signed in, open the login page and then click restore.',
   '查看提示词': 'View prompt',
   '关闭提示词详情': 'Close prompt details',
   '未填写提示词': 'No prompt provided',
@@ -996,7 +999,7 @@ export function localizeRoleTemplate(template: RoleTemplate, language: TeamLangu
 }
 
 function translateUiPattern(source: string): string | undefined {
-  const storeSummary = source.match(/^(\d+) 个群聊 · (\d+) 个人员库人员$/)
+  const storeSummary = source.match(/^(\d+) 个群聊 · (\d+) 个角色$/)
   if (storeSummary) return `${storeSummary[1]} chats · ${storeSummary[2]} people`
   const agentControlPort = source.match(/^端口 (\d+)，仅允许本机连接。(?:开启后本机工具可创建群聊并发送任务。)?$/)
   if (agentControlPort) {
@@ -1008,11 +1011,11 @@ function translateUiPattern(source: string): string | undefined {
   if (agentControlConnecting) return `Connecting to OpenTeam CLI daemon (port ${agentControlConnecting[1]}).`
   const agentControlDisconnected = source.match(/^未连接 OpenTeam CLI daemon（端口 (\d+)）。请安装 OpenTeam CLI，或运行 openteamcli daemon start 启动守护进程。$/)
   if (agentControlDisconnected) return `Not connected to OpenTeam CLI daemon (port ${agentControlDisconnected[1]}). Install OpenTeam CLI, or run openteamcli daemon start to start the daemon.`
-  const currentPerson = source.match(/^(\d+) 人员 · 当前：(.+)$/)
-  if (currentPerson) return `${currentPerson[1]} people · Current: ${currentPerson[2]}`
+  const currentPerson = source.match(/^(\d+) 位成员 · 当前：(.+)$/)
+  if (currentPerson) return `${currentPerson[1]} members · Current: ${currentPerson[2]}`
   const memberCount = source.match(/^成员 (\d+)$/)
   if (memberCount) return `Members ${memberCount[1]}`
-  const summarizerAnswered = source.match(/^「(.+)」也回答了这个问题，汇总可能偏向自己的观点。换一位没参与回答、或用不同模型的人员会更客观。$/)
+  const summarizerAnswered = source.match(/^「(.+)」也回答了这个问题，汇总可能偏向自己的观点。换一位没参与回答、或用不同模型的成员会更客观。$/)
   if (summarizerAnswered) return `${summarizerAnswered[1]} answered this question too, so the summary may lean toward its own view. Someone who did not answer, or on another model, would be more neutral.`
   const editModel = source.match(/^修改「(.+)」$/)
   if (editModel) return `Edit "${editModel[1]}"`
@@ -1022,7 +1025,7 @@ function translateUiPattern(source: string): string | undefined {
   if (memberMenu) return `More for ${memberMenu[1]}`
   const roleSummaryCount = source.match(/^(\d+) 人员$/)
   if (roleSummaryCount) return `${roleSummaryCount[1]} people`
-  const peopleCount = source.match(/^(\d+) 个人员$/)
+  const peopleCount = source.match(/^(\d+) 位成员$/)
   if (peopleCount) return `${peopleCount[1]} people`
   const peopleSummary = source.match(/^(\d+) 人$/)
   if (peopleSummary) return `${peopleSummary[1]} people`
@@ -1034,7 +1037,7 @@ function translateUiPattern(source: string): string | undefined {
   if (defaultModel) return `Default model: ${translateUi(defaultModel[1], 'en')}`
   const appliesTo = source.match(/^适用：(.+)$/)
   if (appliesTo) return `For: ${appliesTo[1]}`
-  const editPerson = source.match(/^编辑人员：(.+)$/)
+  const editPerson = source.match(/^编辑角色：(.+)$/)
   if (editPerson) return `Edit person: ${editPerson[1]}`
   const deletedChat = source.match(/^已删除群聊 (.+)$/)
   if (deletedChat) return `Deleted chat ${deletedChat[1]}`
@@ -1059,7 +1062,7 @@ function translateUiPattern(source: string): string | undefined {
   if (sendWithConnecting) return `Will send to: ${sendWithConnecting[1]}; connecting: ${sendWithConnecting[2]}`
   const compareReplies = source.match(/^对比 (\d+) 个回复$/)
   if (compareReplies) return `Compare ${compareReplies[1]} replies`
-  const discussionRequested = source.match(/^已请 (\d+) 位人员针对分歧讨论$/)
+  const discussionRequested = source.match(/^已请 (\d+) 位成员针对分歧讨论$/)
   if (discussionRequested) return `Asked ${discussionRequested[1]} people to discuss their differences`
   const summaryRequested = source.match(/^已请 (.+) 汇总异同$/)
   if (summaryRequested) return `Asked ${summaryRequested[1]} to summarize the differences`

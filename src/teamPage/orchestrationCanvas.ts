@@ -329,8 +329,8 @@ function buildEdge(edge: OrchestrationGraphSnapshot['edges'][number], stages: Or
 }
 
 function parallelRoleLabel(roleNames: string[]): string {
-  if (roleNames.length === 0) return '未选择人员'
-  if (roleNames.length === 1) return roleNames[0] ?? '未选择人员'
+  if (roleNames.length === 0) return '未选择角色'
+  if (roleNames.length === 1) return roleNames[0] ?? '未选择角色'
   if (roleNames.length === 2) return roleNames.join(' + ')
   return `${roleNames[0]} +${roleNames.length - 1}`
 }
@@ -489,7 +489,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export function stageRoleLabel(stage: OrchestrationStage, rolesById: Record<string, GroupRole>): string {
-  return stage.roleIds.map(roleId => rolesById[roleId]?.name ?? '未知人员').join(' + ')
+  return stage.roleIds.map(roleId => rolesById[roleId]?.name ?? '未知成员').join(' + ')
 }
 
 export function arrangeOrchestrationGraph(stages: OrchestrationStage[], edges: OrchestrationGraphSnapshot['edges']): { stages: OrchestrationStage[]; edges: OrchestrationGraphSnapshot['edges'] } {

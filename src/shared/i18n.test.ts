@@ -17,7 +17,7 @@ describe('shared i18n configuration', () => {
   it('translates UI strings from one shared table', () => {
     expect(translateUi('进行中', 'en')).toBe('Active')
     expect(translateUi('进行中', 'zh-CN')).toBe('进行中')
-    expect(translateUi('9 个群聊 · 311 个人员库人员', 'en')).toBe('9 chats · 311 people')
+    expect(translateUi('9 个群聊 · 311 个角色', 'en')).toBe('9 chats · 311 people')
   })
 
   it('translates the chat buttons whose icons are drawn, not written', () => {

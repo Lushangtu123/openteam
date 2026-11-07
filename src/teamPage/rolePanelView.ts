@@ -48,9 +48,9 @@ export function createRolePanelView(deps: RolePanelViewDependencies): RolePanelV
     deps.roleListEl.replaceChildren()
 
     if (!deps.getCurrentChat()) {
-      deps.roleListEl.append(deps.emptyCard(ui('未选择群聊'), ui('选择群聊后可添加、查看、恢复和唤醒人员。')))
+      deps.roleListEl.append(deps.emptyCard(ui('未选择群聊'), ui('选择群聊后可添加、查看、恢复和唤醒成员。')))
     } else if (roles.length === 0) {
-      deps.roleListEl.append(deps.emptyCard(ui('暂无人员'), ui('点「添加成员」，从人员库批量加入或临时添加。')))
+      deps.roleListEl.append(deps.emptyCard(ui('暂无成员'), ui('点「添加成员」，从角色库批量加入或临时添加。')))
     } else {
       for (const role of roles) deps.roleListEl.append(roleCard(role))
     }
@@ -84,7 +84,7 @@ export function createRolePanelView(deps: RolePanelViewDependencies): RolePanelV
 
     const description = document.createElement('div')
     description.className = 'role-description'
-    description.textContent = role.description || ui('未填写人员描述')
+    description.textContent = role.description || ui('未填写描述')
 
     const health = role.modelSource === 'external' ? undefined : deps.getRoleHealth?.(role)
     const meta = document.createElement('div')
@@ -106,7 +106,7 @@ export function createRolePanelView(deps: RolePanelViewDependencies): RolePanelV
     } else if (role.status === 'error') {
       const error = document.createElement('div')
       error.className = 'reference-box'
-      error.textContent = ui('人员异常。若目标站点未登录，请打开登录页后点击恢复人员。')
+      error.textContent = ui('成员异常。若目标站点未登录，请打开登录页后点击恢复成员。')
       main.append(error)
     }
     return card
@@ -212,7 +212,7 @@ export function createRolePanelView(deps: RolePanelViewDependencies): RolePanelV
     title.textContent = role.name
     const description = document.createElement('p')
     description.className = 'tiny'
-    description.textContent = role.description || ui('未填写人员描述')
+    description.textContent = role.description || ui('未填写描述')
     copy.append(title, description)
 
     const close = document.createElement('button')

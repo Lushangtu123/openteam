@@ -47,6 +47,10 @@ describe('chat header view', () => {
     expect([harness.chatStatusEl.hidden, harness.togglePeopleDrawerEl.hidden, harness.workflowMenuWrapEl.hidden, harness.moreMenuWrapEl.hidden]).toEqual([false, false, false, false])
     expect(harness.chatStatusEl.textContent).toBe('进行中')
 
+    harness.chat.status = 'draft'
+    harness.view.renderChatHeader()
+    expect(harness.chatStatusEl.hidden).toBe(true)
+
     harness.setChat(undefined)
     harness.view.renderChatHeader()
     expect(harness.chatTitleEl.textContent).toBe('未选择群聊')

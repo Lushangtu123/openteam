@@ -317,6 +317,11 @@ export function createTeamUiController(deps: TeamUiControllerDependencies): Team
     button.dataset.templateId = template.id
     button.setAttribute('aria-pressed', String(selectedGroupTemplateId === template.id))
     button.addEventListener('click', () => {
+      // A second click on the chosen template creates the group, without the trip to 确认创建.
+      if (selectedGroupTemplateId === template.id) {
+        confirmButton.click()
+        return
+      }
       selectedGroupTemplateId = template.id
       updateGroupTemplateConfirmButton(confirmButton)
       renderGroupTemplateList(listEl, confirmButton)
@@ -361,6 +366,12 @@ export function createTeamUiController(deps: TeamUiControllerDependencies): Team
     }
 
     button.append(top, summary, meta, roles)
+    if (selectedGroupTemplateId === template.id) {
+      const hint = document.createElement('span')
+      hint.className = 'group-template-create-hint'
+      hint.textContent = ui('再点一次，用这个模板创建')
+      button.append(hint)
+    }
     return button
   }
 

@@ -30,7 +30,7 @@ export function roleAvatarLabel(name: string | undefined): string {
 export function getChatRecentSummary(chat: GroupChat, store: OpenTeamStore): string {
   const lastMessageId = chat.messageIds[chat.messageIds.length - 1]
   const message = lastMessageId ? store.messagesById[lastMessageId] : undefined
-  if (!message) return '暂无消息。可恢复聊天、添加人员或发送第一条任务。'
+  if (!message) return '暂无消息。可恢复聊天、添加成员或发送第一条任务。'
   return `${messageTitle(message)}：${truncate(plainPreview(message.content), 72)}`
 }
 
@@ -45,7 +45,7 @@ export function plainPreview(content: string): string {
 
 export function messageTitle(message: GroupMessage): string {
   if (message.type === 'user') return '我'
-  if (message.type === 'assistant') return message.roleName || 'AI 人员'
+  if (message.type === 'assistant') return message.roleName || 'AI 成员'
   return '系统'
 }
 

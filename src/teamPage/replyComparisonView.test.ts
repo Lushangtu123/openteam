@@ -83,7 +83,7 @@ describe('reply comparison view', () => {
     const [type, payload] = runCommand.mock.calls[0] as unknown as [string, { chatId: string; raw: string; uploads: Array<{ fileName: string; text: string }> }]
     expect(type).toBe('GROUP_MESSAGE_SEND')
     expect(payload.chatId).toBe('c1')
-    expect(payload.raw).toMatch(/^@设计师（Gemini） 附件 回复对比\.md 是几位人员对同一个问题的回答/)
+    expect(payload.raw).toMatch(/^@设计师（Gemini） 附件 回复对比\.md 是几位成员对同一个问题的回答/)
     expect(payload.uploads).toEqual([{ kind: 'text', fileName: '回复对比.md', mimeType: 'text/markdown', size: expect.any(Number), text: '# 问题\n\n这个方案能上线吗？\n\n## 工程师（ChatGPT）\n\n**可以**，注意缓存\n\n## 产品经理（Claude）\n\n先灰度' }])
     await vi.waitFor(() => expect(showSuccess).toHaveBeenCalledWith('已请 设计师 汇总异同'))
     expect(document.querySelector('.reply-compare-dialog')).toBeNull()
@@ -113,7 +113,7 @@ describe('reply comparison view', () => {
     const [, payload] = runCommand.mock.calls[0] as unknown as [string, { raw: string; uploads: Array<{ fileName: string; text: string }> }]
     expect(payload.raw).toMatch(/^@工程师（ChatGPT） @产品经理（Claude） 附件 回复对比\.md 是大家对同一个问题的回答，也包括你自己的。请只针对和别人观点不同的地方回应/)
     expect(payload.uploads[0].text).toContain('## 产品经理（Claude）\n\n先灰度')
-    await vi.waitFor(() => expect(showSuccess).toHaveBeenCalledWith('已请 2 位人员针对分歧讨论'))
+    await vi.waitFor(() => expect(showSuccess).toHaveBeenCalledWith('已请 2 位成员针对分歧讨论'))
   })
 
   it('needs two answers to summarize, copies what is there and closes with Escape', async () => {

@@ -48,8 +48,8 @@ function messageSenderLabel(store: OpenTeamStore, message: GroupMessage): string
   if (message.type === 'user') return '我'
   if (message.type === 'system') return '系统'
   if (message.roleName) return message.roleName
-  if (message.roleId) return store.rolesById[message.roleId]?.name ?? 'AI 人员'
-  return 'AI 人员'
+  if (message.roleId) return store.rolesById[message.roleId]?.name ?? 'AI 成员'
+  return 'AI 成员'
 }
 
 function modeLabel(mode: RoomMode): string {

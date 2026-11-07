@@ -767,7 +767,7 @@ function findResumableRun(store: OpenTeamStore, chat: GroupChat, runId: string |
 function validateExecutableFlow(store: OpenTeamStore, chat: GroupChat, flow: OrchestrationFlow): void {
   if (!Array.isArray(flow.stages) || flow.stages.length === 0) throw new Error('编排流程没有可执行节点')
   for (const stage of flow.stages) {
-    if (stage.kind === 'roles' && stage.roleIds.length === 0) throw new Error(`执行节点缺少人员：${stage.name}`)
+    if (stage.kind === 'roles' && stage.roleIds.length === 0) throw new Error(`执行节点缺少成员：${stage.name}`)
     if (stage.kind === 'review' && stage.review?.reviewerRoleIds?.length !== 1) throw new Error(`复核节点必须绑定一个复核人员：${stage.name}`)
     const roleIds = stage.kind === 'review' ? stage.review?.reviewerRoleIds ?? [] : stage.roleIds
     for (const roleId of roleIds) requireRole(store, chat.id, roleId)
@@ -789,7 +789,7 @@ function findLocalRoleFrameBlocker(
     if (isExternalModelRole(role)) continue
     const binding = deps.runtimeFrames.getByRole(chat.id, role.id)
     if (!binding?.ready) {
-      return { roleId: role.id, roleName: role.name, reason: '人员 iframe 尚未就绪，请先恢复人员' }
+      return { roleId: role.id, roleName: role.name, reason: '成员 iframe 尚未就绪，请先恢复成员' }
     }
   }
   return undefined
@@ -1036,7 +1036,7 @@ export function generateTestTrace(store: OpenTeamStore, runId: string): TestRunT
       ) : undefined
       return {
         roleId,
-        roleName: role?.name ?? '未知人员',
+        roleName: role?.name ?? '未知成员',
         input: promptMsg?.content ?? '无输入',
         output: reply?.content ?? roleRun.error ?? '无输出',
         status: roleRun.status,

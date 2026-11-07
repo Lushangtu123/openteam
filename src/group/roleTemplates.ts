@@ -144,7 +144,7 @@ export function updateRoleTemplate(
   patch: RoleTemplateInput,
   now: number,
 ): RoleTemplate {
-  if (isBuiltinRoleTemplateId(templateId)) throw new Error('系统内置人员不能编辑')
+  if (isBuiltinRoleTemplateId(templateId)) throw new Error('系统内置角色不能编辑')
   const template = store.roleTemplatesById[templateId]
   if (!template) throw new Error(`找不到人员库人员：${templateId}`)
 
@@ -183,10 +183,10 @@ export function updateRoleTemplate(
 }
 
 export function deleteRoleTemplate(store: OpenTeamStore, templateId: string): void {
-  if (isBuiltinRoleTemplateId(templateId)) throw new Error('系统内置人员不能删除')
+  if (isBuiltinRoleTemplateId(templateId)) throw new Error('系统内置角色不能删除')
   const usage = getRoleTemplateUsage(store, templateId)
   if (usage.usedByChatIds.length > 0) {
-    throw new Error('该人员库人员已被群聊使用，不能删除')
+    throw new Error('这个角色已被群聊使用，不能删除')
   }
 
   delete store.roleTemplatesById[templateId]

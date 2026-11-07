@@ -29,7 +29,7 @@ export function requireChat(store: OpenTeamStore, chatId: unknown): GroupChat {
 }
 
 export function requireRole(store: OpenTeamStore, chatId: string, roleId: unknown): GroupRole {
-  if (typeof roleId !== 'string') throw new Error('缺少人员 ID')
+  if (typeof roleId !== 'string') throw new Error('缺少成员 ID')
   const role = store.rolesById[roleId]
   if (!role || role.chatId !== chatId) throw new Error(`找不到人员：${roleId}`)
   return role

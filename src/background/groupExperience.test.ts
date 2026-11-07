@@ -225,7 +225,7 @@ describe('background group chat experience handlers', () => {
     }) as { ok: boolean; error: string }
 
     expect(rejected.ok).toBe(false)
-    expect(rejected.error).toBe('人员名称不能为空')
+    expect(rejected.error).toBe('角色名称不能为空')
     const rejectedStore = await harness.getStore()
     expect(rejectedStore.chatsById['chat-1'].roleIds).toEqual([])
     expect(rejectedStore.rolesById).toEqual({})
@@ -260,7 +260,7 @@ describe('background group chat experience handlers', () => {
 
     const denied = await harness.invoke({ type: 'ROLE_TEMPLATE_DELETE', templateId: 'template-used' }) as { ok: boolean; error: string }
     expect(denied.ok).toBe(false)
-    expect(denied.error).toBe('该人员库人员已被群聊使用，不能删除')
+    expect(denied.error).toBe('这个角色已被群聊使用，不能删除')
     const deniedStore = await harness.getStore()
     expect(deniedStore.roleTemplatesById['template-used']).toBeDefined()
 
@@ -283,9 +283,9 @@ describe('background group chat experience handlers', () => {
     const deleteDenied = await harness.invoke({ type: 'ROLE_TEMPLATE_DELETE', templateId: 'builtin-frankl' }) as { ok: boolean; error: string }
 
     expect(updateDenied.ok).toBe(false)
-    expect(updateDenied.error).toBe('系统内置人员不能编辑')
+    expect(updateDenied.error).toBe('系统内置角色不能编辑')
     expect(deleteDenied.ok).toBe(false)
-    expect(deleteDenied.error).toBe('系统内置人员不能删除')
+    expect(deleteDenied.error).toBe('系统内置角色不能删除')
   })
 
   it('creates chat roles from built-in templates through the background batch command', async () => {

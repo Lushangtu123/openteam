@@ -474,6 +474,9 @@ export interface GroupMessage {
   refreshPersona?: boolean
   // Tokens an API member's reply used, as its model reported them.
   usage?: MessageTokenUsage
+  // On an API member's reply while its request failed and is about to be sent again: which retry
+  // this is, of how many, and why the last attempt failed. Gone once text arrives or it ends.
+  retry?: { attempt: number; total: number; reason: string }
   // On a request OpenTeam sends to one member to summarize a round: the message that started the
   // round. That member's answer is the round's summary.
   roundSummaryOf?: string

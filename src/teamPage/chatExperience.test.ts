@@ -106,7 +106,7 @@ describe('chat experience helpers', () => {
   })
 
   it('detects unavailable-role delivery errors for automatic reconnect', () => {
-    expect(isUnavailableRolesError('以下人员不可用，请等待或恢复：程序员')).toBe(true)
+    expect(isUnavailableRolesError('以下成员不可用，请等待或恢复：程序员')).toBe(true)
     expect(isUnavailableRolesError('Gemini 发送按钮暂不可用，请稍后重试')).toBe(false)
   })
 

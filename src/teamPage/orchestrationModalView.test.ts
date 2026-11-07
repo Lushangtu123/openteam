@@ -483,7 +483,7 @@ describe('orchestration modal view', () => {
     expect(harness.refs.orchestrationStageSettingsEl.textContent).toContain('节点名称')
     expect(harness.refs.orchestrationStageSettingsEl.textContent).toContain('任务描述')
     expect(harness.refs.orchestrationStageSettingsEl.textContent).not.toContain('阶段')
-    expect(harness.refs.orchestrationStageSettingsEl.textContent).toContain('执行人员')
+    expect(harness.refs.orchestrationStageSettingsEl.textContent).toContain('执行成员')
     expect(harness.refs.orchestrationStageSettingsEl.querySelector('.stage-role-chip button')).toBeNull()
     expect(harness.refs.orchestrationStageSettingsEl.closest<HTMLElement>('.orchestration-settings')?.hidden).toBe(false)
   })
@@ -658,7 +658,7 @@ describe('orchestration modal view', () => {
     typeSelect.value = 'review'
     typeSelect.dispatchEvent(new Event('change', { bubbles: true }))
     expect(harness.refs.orchestrationStageSettingsEl.querySelector('.stage-role-chip button')).toBeNull()
-    expect(harness.refs.orchestrationReviewSettingsEl.textContent).not.toContain('审核人员')
+    expect(harness.refs.orchestrationReviewSettingsEl.textContent).not.toContain('审核成员')
     expect(harness.refs.orchestrationReviewSettingsEl.textContent).toContain('最大审核次数')
     expect(harness.refs.orchestrationReviewSettingsEl.textContent).toContain('达到上限后')
     const attempts = harness.refs.orchestrationReviewSettingsEl.querySelector('input[type="number"]') as HTMLInputElement
@@ -673,7 +673,7 @@ describe('orchestration modal view', () => {
     harness.refs.orchestrationTaskEl.value = '完成方案评审'
     harness.refs.runOrchestrationEl.click()
     await Promise.resolve()
-    expect(harness.errors).toContain('审核节点需要审核人员和审核标准')
+    expect(harness.errors).toContain('审核节点需要审核成员和审核标准')
 
     const criteria = harness.refs.orchestrationReviewSettingsEl.querySelector('textarea') as HTMLTextAreaElement
     criteria.value = '必须包含结论'
@@ -779,7 +779,7 @@ describe('orchestration modal view', () => {
     expect(harness.refs.orchestrationAutoContentEl.querySelector('.orchestration-auto-chat')).not.toBeNull()
     expect(harness.refs.orchestrationAutoContentEl.textContent).toContain('已生成自动流程')
     expect((MockGraph.latest().nodes.find(node => node.id === 'stage-write') as { label?: string } | undefined)?.label).toContain('ChatGPT')
-    expect(harness.successes[harness.successes.length - 1]).toContain('新增 1 个人员')
+    expect(harness.successes[harness.successes.length - 1]).toContain('新增 1 位成员')
     MockGraph.latest().selectNode('stage-plan')
     expect(harness.refs.orchestrationStageSettingsEl.querySelector('.orchestration-auto-role-site-row')).toBeNull()
     MockGraph.latest().selectNode('stage-write')

@@ -80,7 +80,7 @@ export function formatComparisonDocument(comparison: ReplyComparison, language: 
 export function comparisonSummaryRequest(fileName: string, language: OpenTeamLanguage): string {
   return language === 'en'
     ? `The attached ${fileName} has several people's answers to the same question. Compare them: 1. what they agree on; 2. where they disagree, and who holds which view; 3. points only one of them makes; 4. facts or figures that should be checked, including claims they all agree on but none backs with a source. Do not repeat the answers.`
-    : `附件 ${fileName} 是几位人员对同一个问题的回答。请对比它们：1. 共识；2. 分歧，以及各自持什么观点；3. 只有某一位提到的观点；4. 需要进一步核实的事实或数据，包括大家都同意、但没有人给出来源的说法。不要复述原文。`
+    : `附件 ${fileName} 是几位成员对同一个问题的回答。请对比它们：1. 共识；2. 分歧，以及各自持什么观点；3. 只有某一位提到的观点；4. 需要进一步核实的事实或数据，包括大家都同意、但没有人给出来源的说法。不要复述原文。`
 }
 
 // Asks the people who answered to take on each other's answers, but only where they disagree, so a

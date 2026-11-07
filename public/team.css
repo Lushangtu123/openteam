@@ -9779,3 +9779,53 @@ select.reply-compare-select {
 :root[data-ui-style="grok"] .message-body.has-key-points > .key-points-heading {
   background: var(--gb-accent-soft);
 }
+
+/* Member panel header: the heading keeps its room in every language. */
+:root[data-theme] .role-panel-heading {
+  flex: 1 1 auto;
+}
+
+:root[data-theme] .role-panel-heading h2 {
+  white-space: nowrap;
+}
+
+/* The stop button under a reply being written: the icon and the word. */
+:root[data-theme] .message-tool-btn.message-tool-btn-labeled {
+  width: auto;
+  gap: 4px;
+  padding: 0 10px 0 8px;
+  opacity: 1;
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+:root[data-theme] .message-tool-btn-labeled .ui-icon {
+  width: 15px;
+  height: 15px;
+}
+
+/* The role editor: AI 生成 is a real button, and 保存角色 sits at the right like other windows. */
+:root[data-theme] .template-save-actions {
+  justify-content: flex-end;
+}
+
+:root[data-theme] #generate-template-persona {
+  gap: 6px;
+}
+
+:root[data-theme] #generate-template-persona svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linejoin: round;
+}
+
+:root[data-theme] .group-template-create-hint {
+  display: block;
+  margin-top: 10px;
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 600;
+}

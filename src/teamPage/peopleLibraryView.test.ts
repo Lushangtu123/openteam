@@ -75,7 +75,7 @@ function setupPeopleLibraryView(options: { store: OpenTeamStore; templates: Role
   const closeBuiltinTemplateDetailEl = document.createElement('button')
   const runCommand = vi.fn(async () => undefined)
   const generatePersona = vi.fn(async () => ({
-    name: 'AI 人员',
+    name: 'AI 成员',
     description: 'AI 生成的描述',
     systemPrompt: 'AI 生成的人设',
   }))
@@ -614,7 +614,7 @@ describe('team page people library view boundary', () => {
 
     peopleLibrarySearchEl.value = '没有这个人'
     peopleLibrarySearchEl.dispatchEvent(new Event('input', { bubbles: true }))
-    expect(peopleLibraryListEl.textContent).toContain('没有匹配的内置人员')
+    expect(peopleLibraryListEl.textContent).toContain('没有匹配的内置角色')
   })
 
   it('filters people library entries by built-in category and source group metadata', () => {
@@ -659,7 +659,7 @@ describe('team page people library view boundary', () => {
     peopleLibrarySearchEl.value = '学霸学习'
     peopleLibrarySearchEl.dispatchEvent(new Event('input', { bubbles: true }))
 
-    expect(peopleLibraryListEl.textContent).toContain('当前分类暂无内置人员')
+    expect(peopleLibraryListEl.textContent).toContain('当前分类暂无内置角色')
   })
 
   it('opens a read-only prompt detail modal for built-in people', () => {
@@ -690,7 +690,7 @@ describe('team page people library view boundary', () => {
 
     expect(builtinTemplateDetailModalEl.hidden).toBe(false)
     expect(builtinTemplateDetailTitleEl.textContent).toBe('弗兰克尔')
-    expect(builtinTemplateDetailMetaEl.textContent).toContain('内置人员')
+    expect(builtinTemplateDetailMetaEl.textContent).toContain('内置角色')
     expect(builtinTemplateDetailPromptEl.textContent).toContain('弗兰克尔式意义顾问')
     expect(builtinTemplateDetailPromptEl.textContent).toContain('必须区分事实、判断和行动建议')
 
@@ -793,7 +793,7 @@ describe('team page people library view boundary', () => {
 
     addPersonSearchEl.value = '没有这个人'
     addPersonSearchEl.dispatchEvent(new Event('input', { bubbles: true }))
-    expect(addLibraryPeopleListEl.textContent).toContain('没有匹配的内置人员')
+    expect(addLibraryPeopleListEl.textContent).toContain('没有匹配的内置角色')
   })
 
   it('filters add-person choices by built-in category while keeping selected people checked', () => {
@@ -845,7 +845,7 @@ describe('team page people library view boundary', () => {
 
     addPersonSearchEl.value = '学习'
     addPersonSearchEl.dispatchEvent(new Event('input', { bubbles: true }))
-    expect(addLibraryPeopleListEl.textContent).toContain('当前分类暂无内置人员')
+    expect(addLibraryPeopleListEl.textContent).toContain('当前分类暂无内置角色')
 
     addPersonSearchEl.value = ''
     addPersonSearchEl.dispatchEvent(new Event('input', { bubbles: true }))

@@ -82,7 +82,7 @@ describe('createRoleRecoveryController', () => {
     }
     const runCommand = vi
       .fn()
-      .mockRejectedValueOnce(new Error('人员 iframe 尚未就绪，请先恢复人员'))
+      .mockRejectedValueOnce(new Error('成员 iframe 尚未就绪，请先恢复成员'))
       .mockResolvedValue(undefined)
     const refreshStore = vi.fn(async () => {
       store.rolesById[role.id] = { ...store.rolesById[role.id], status: 'ready' }
@@ -137,7 +137,7 @@ describe('createRoleRecoveryController', () => {
     }
     const runCommand = vi
       .fn()
-      .mockRejectedValueOnce(new Error('人员 iframe 尚未就绪，请先恢复人员'))
+      .mockRejectedValueOnce(new Error('成员 iframe 尚未就绪，请先恢复成员'))
       .mockResolvedValue(undefined)
     const refreshStore = vi.fn(async () => {
       store.rolesById[role.id] = { ...store.rolesById[role.id], status: 'ready' }

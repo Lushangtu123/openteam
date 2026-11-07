@@ -62,6 +62,8 @@ export function createChatHeaderView(deps: ChatHeaderViewDependencies): ChatHead
     deps.chatSubtitleEl.textContent = roles.length ? ui(`${modeLabel(chat.mode)} · ${roles.length} 位成员 · ${messages.length} 条消息`) : ui('暂无成员')
     deps.chatStatusEl.className = `status-pill status-${chat.status}`
     deps.chatStatusEl.textContent = ui(chatStatusLabel(chat.status))
+    // A group that has not started (no message yet) shows no state, rather than 草稿.
+    deps.chatStatusEl.hidden = chat.status === 'draft'
     // Narrow windows show only the dot; the state stays readable on hover and to screen readers.
     deps.chatStatusEl.title = deps.chatStatusEl.textContent
     deps.togglePeopleDrawerEl.disabled = false

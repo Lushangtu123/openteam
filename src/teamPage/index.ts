@@ -753,7 +753,7 @@ function handleRoleRecoveryRequest(message: Extract<StorePushMessage, { type: 'G
       hasRole: Boolean(role),
       roleChatId: role?.chatId,
     })
-    sendResponse({ ok: false, error: '找不到要恢复的人员' })
+    sendResponse({ ok: false, error: '找不到要恢复的成员' })
     return
   }
   log.warn('orchestration-diagnostic:role-recovery:start', {
