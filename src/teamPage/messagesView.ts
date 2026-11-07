@@ -1176,6 +1176,25 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     }
   }
 
+  // A member that has no reply yet: stopped, waiting for its turn (the message has not been sent to it
+  // yet: API members answer one after another, web pages a few at a time), or answering. Message
+  // bodies are left alone by the page's language pass, so this picks its language itself.
+  function waitingBubbleText(role: GroupRole, stopped: boolean): string {
+    const en = normalizeLanguage(deps.getStore().settings.language) === 'en'
+    if (stopped) return en ? 'Stopped' : '已停止回复'
+    if (isWaitingForTurn(role)) return en ? 'Waiting for its turn ' : '排队中 '
+    return en ? 'Replying ' : '正在回复中 '
+  }
+
+  function isWaitingForTurn(role: GroupRole): boolean {
+    const messages = deps.getCurrentMessages()
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const status = messages[index].type === 'user' ? messages[index].deliveryStatus?.[role.id] : undefined
+      if (status) return status === 'pending'
+    }
+    return false
+  }
+
   function replyControlBubble(role: GroupRole, showName = true, showAvatar = true): HTMLElement {
     const stopped = role.status === 'stopped'
     const liveText = stopped ? undefined : liveReplyText(role)
@@ -1207,7 +1226,7 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     const body = document.createElement('div')
     body.className = `message-body${stopped ? '' : ' thinking-dots'}`
     if (liveText) reveal.show(liveRevealKey(role), body, liveText)
-    else body.textContent = stopped ? '已停止回复' : '正在回复中 '
+    else body.textContent = waitingBubbleText(role, stopped)
     bubble.append(body)
     const tools = document.createElement('div')
     tools.className = 'message-tools'

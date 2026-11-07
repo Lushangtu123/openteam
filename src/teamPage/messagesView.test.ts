@@ -125,6 +125,23 @@ describe('team page messages view boundary', () => {
     expect(sameNodeCount([...messagesEl.querySelectorAll('.message-time-divider')], firstDividers)).toBe(firstDividers.length)
   })
 
+  it('says 排队中 for a member whose turn has not come, and 正在回复中 once it has', () => {
+    const { messagesEl, messages, view, role, deps } = createLongChatView(1)
+    deps.getStore().settings.language = 'zh-CN'
+    role.status = 'thinking'
+    role.updatedAt = Date.now()
+    messages[0] = { ...messages[0], type: 'user', roleId: undefined, deliveryStatus: { [role.id]: 'pending' } }
+    const bubbleText = () => messagesEl.querySelector<HTMLElement>('.message-row.thinking .message-body')?.textContent?.trim()
+    view.renderMessages()
+    expect(bubbleText()).toBe('排队中')
+    messages[0] = { ...messages[0], deliveryStatus: { [role.id]: 'sent' } }
+    view.renderMessages()
+    expect(bubbleText()).toBe('正在回复中')
+    deps.getStore().settings.language = 'en'
+    view.renderMessages()
+    expect(bubbleText()).toBe('Replying')
+  })
+
   it('says when an API reply is being retried, and why', () => {
     const { messagesEl, messages, view, deps } = createLongChatView(1)
     deps.getStore().settings.language = 'en'
@@ -1357,6 +1374,7 @@ describe('team page messages view boundary', () => {
     }
     const store: OpenTeamStore = {
       ...createDefaultStore(),
+      settings: { ...createDefaultStore().settings, language: 'zh-CN' },
       currentChatId: chat.id,
       chatOrder: [chat.id],
       chatsById: { [chat.id]: chat },
