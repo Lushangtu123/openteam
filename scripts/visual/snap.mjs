@@ -86,15 +86,20 @@ try {
   await new Promise(resolve => ws.addEventListener('open', resolve, { once: true }))
   let nextId = 0
   const pending = new Map()
+  // Errors the page reports while the screens are opened: listed at the end and in errors.txt.
+  const pageErrors = []
   ws.addEventListener('message', event => {
     const m = JSON.parse(String(event.data))
     if (m.id && pending.has(m.id)) { pending.get(m.id)(m); pending.delete(m.id); return }
+    if (m.method === 'Runtime.exceptionThrown') pageErrors.push(`exception: ${(m.params.exceptionDetails.exception?.description ?? m.params.exceptionDetails.text).split('\n')[0]}`)
+    if (m.method === 'Runtime.consoleAPICalled' && m.params.type === 'error') pageErrors.push(`console: ${m.params.args.map(arg => arg.value ?? arg.description ?? '').join(' ').slice(0, 200)}`)
     if (m.method === 'Target.attachedToTarget') void send('Runtime.runIfWaitingForDebugger', {}, m.params.sessionId)
   })
   const send = (method, params = {}, sessionId) => new Promise(resolve => { nextId += 1; pending.set(nextId, resolve); ws.send(JSON.stringify({ id: nextId, method, params, ...(sessionId ? { sessionId } : {}) })) })
   const { result: { targetId } } = await send('Target.createTarget', { url: 'about:blank' })
   const { result: { sessionId } } = await send('Target.attachToTarget', { targetId, flatten: true })
   await send('Target.setAutoAttach', { autoAttach: true, waitForDebuggerOnStart: true, flatten: true }, sessionId)
+  await send('Runtime.enable', {}, sessionId)
   const evaluate = async expression => {
     const { result } = await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true }, sessionId)
     return result.exceptionDetails ? `EXCEPTION ${result.exceptionDetails.exception?.description}` : result.result.value
@@ -183,6 +188,9 @@ try {
   }
   ws.close()
   console.log(`${readdirSync(out).filter(name => name.endsWith('.png')).length} screenshots`)
+  const uniqueErrors = [...new Set(pageErrors)]
+  writeFileSync(join(out, 'errors.txt'), uniqueErrors.join('\n') + (uniqueErrors.length ? '\n' : ''))
+  console.log(`${uniqueErrors.length} distinct page errors${uniqueErrors.length ? ':\n  ' + uniqueErrors.join('\n  ') : ''}`)
 } finally {
   chrome.kill()
   server.close()
