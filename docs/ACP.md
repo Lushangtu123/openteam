@@ -72,9 +72,10 @@ A local agent (Claude Code, Codex, Gemini CLI, or anything that speaks ACP over 
    openteamcli agent add --id mine --name "My agent" --command "node /path/agent.mjs --acp" --cwd ~/projects/app
    ```
    Presets: `claude-code` (`npx -y @agentclientprotocol/claude-agent-acp`, needs Node 22+), `codex` (`npx -y @agentclientprotocol/codex-acp`), `gemini` (`gemini --experimental-acp`). The older `@zed-industries/*-acp` packages are deprecated. `--cwd` takes one or more folders (comma-separated); they must exist. `openteamcli agent remove <id>` removes one.
-2. Start the daemon (`openteamcli daemon start`) and turn on 本机智能体控制 in OpenTeam's settings.
-3. In 添加大模型, choose 接口格式 → 本机智能体（ACP）: the agent list comes from the daemon, and 工作目录 offers its allowed folders (a subfolder is fine). 测试 checks that the agent is listed and the folder allowed.
-4. Add a member with that model, like any API model.
+2. Log the agent in once, in a terminal, as you would to use it there: for Claude Code run `claude` and type `/login`; for Codex run `codex login`. The adapters use that login (or an API key in the agent's `env`). An agent that is not logged in answers ACP's "Authentication required"; OpenTeam shows that as 本机智能体还没有登录, with the login steps the agent lists.
+3. Start the daemon (`openteamcli daemon start`, or `daemon restart` after updating OpenTeam) and turn on 本机智能体控制 in OpenTeam's settings.
+4. In 添加大模型, choose 接口格式 → 本机智能体（ACP）: the agent list comes from the daemon, and 工作目录 offers its allowed folders (a subfolder is fine). 测试 checks that the agent is listed and the folder allowed.
+5. Add a member with that model, like any API model.
 
 ### What happens on a run
 
@@ -94,5 +95,5 @@ A local agent (Claude Code, Codex, Gemini CLI, or anything that speaks ACP over 
 
 ## Follow-Up Tasks
 
-- Try the presets with signed-in Claude Code, Codex and Gemini CLI, including agents that ask to authenticate (`authenticate`), and long runs.
+- Try the presets with signed-in Claude Code, Codex and Gemini CLI, and long runs. Tried so far (November 2026): Claude Code through the user's daemon got as far as starting the adapter (about 40 s, the first `npx` download included) and answered "Authentication required" because its command-line login was not set up.
 - Offer "allow for this project" so a project's tasks for a local agent do not each need a click.

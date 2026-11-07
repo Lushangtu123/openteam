@@ -12,7 +12,25 @@ const STDERR_TAIL_CHARS = 2000
 const CANCEL_GRACE_MS = 2000
 const MAX_READ_BYTES = 2 * 1024 * 1024
 
-export class AcpError extends Error {}
+export class AcpError extends Error {
+  constructor(message, code) {
+    super(message)
+    this.code = code
+  }
+}
+
+// ACP's error for an agent that is not logged in.
+const AUTH_REQUIRED_CODE = -32000
+
+// What to tell the user when the agent needs a login: how the agent itself says to log in.
+export function loginHint(authMethods) {
+  const ways = (Array.isArray(authMethods) ? authMethods : [])
+    .map(method => [method?.name, method?.description].filter(text => typeof text === 'string' && text.trim()).join('：'))
+    .filter(Boolean)
+  return ways.length
+    ? `本机智能体还没有登录，请先登录后再试（${ways.join('；')}）。`
+    : '本机智能体还没有登录，请先在终端里登录它后再试（例如 Claude Code：运行 claude，再输入 /login）。'
+}
 
 /**
  * @param {{ command: string, args?: string[], env?: Record<string, string> }} agent
@@ -108,7 +126,7 @@ export async function runStdioAcpAgent(agent, input) {
     const entry = pending.get(message.id)
     if (!entry) return
     pending.delete(message.id)
-    if (message.error) entry.reject(new AcpError(readMessage(message.error) ?? '本地智能体返回了错误。'))
+    if (message.error) entry.reject(new AcpError(readMessage(message.error) ?? '本地智能体返回了错误。', message.error?.code))
     else entry.resolve(message.result)
   }
 
@@ -208,12 +226,14 @@ export async function runStdioAcpAgent(agent, input) {
     if (!exited) child.kill()
   }
 
+  let authMethods = []
   try {
-    await request('initialize', {
+    const initialized = await request('initialize', {
       protocolVersion: ACP_PROTOCOL_VERSION,
       clientCapabilities: { fs: { readTextFile: true, writeTextFile: true }, terminal: false },
       clientInfo: { name: 'OpenTeam', version: '0.1.0' },
     })
+    authMethods = Array.isArray(initialized?.authMethods) ? initialized.authMethods : []
     const session = await request('session/new', { cwd: workspace, mcpServers: [] })
     sessionId = typeof session?.sessionId === 'string' ? session.sessionId : undefined
     if (!sessionId) throw new AcpError('本地智能体没有开始会话。')
@@ -224,6 +244,9 @@ export async function runStdioAcpAgent(agent, input) {
   } catch (error) {
     if (timedOut) throw new AcpError('本地智能体运行超时。')
     if (input.signal?.aborted) throw new AcpError('本地智能体运行已取消。')
+    if (error instanceof AcpError && ((error.code === AUTH_REQUIRED_CODE && /auth/i.test(error.message)) || /authentication required|not logged in|please run \/login/i.test(error.message))) {
+      throw new AcpError(loginHint(authMethods), AUTH_REQUIRED_CODE)
+    }
     throw error
   } finally {
     clearTimeout(timeout)

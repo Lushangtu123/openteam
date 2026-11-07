@@ -60,6 +60,11 @@ describe('ACP over stdio', () => {
     await expect(run).rejects.toThrow('本地智能体运行已取消。')
   })
 
+  it('says how to log in when the agent is not logged in', async () => {
+    await expect(runStdioAcpAgent({ ...agent, env: { MOCK_ACP_AUTH: '1' } }, { prompt: 'x', cwd: workspace(), timeoutMs: 10_000 }))
+      .rejects.toThrow('本机智能体还没有登录，请先登录后再试（Log in with Claude Code：Run `claude /login` in the terminal）。')
+  })
+
   it('explains an agent that cannot start', async () => {
     await expect(runStdioAcpAgent({ command: '/nonexistent/agent' }, { prompt: 'x', cwd: workspace(), timeoutMs: 5_000 })).rejects.toThrow('无法启动本地智能体')
   })

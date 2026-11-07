@@ -75,9 +75,14 @@ function handle(message) {
   }
   switch (message.method) {
     case 'initialize':
-      send({ id: message.id, result: { protocolVersion: 1, agentCapabilities: { loadSession: false }, authMethods: [] } })
+      send({ id: message.id, result: { protocolVersion: 1, agentCapabilities: { loadSession: false }, authMethods: process.env.MOCK_ACP_AUTH ? [{ id: 'claude-login', name: 'Log in with Claude Code', description: 'Run `claude /login` in the terminal' }] : [] } })
       return
     case 'session/new':
+      // MOCK_ACP_AUTH: an agent that is not logged in, as Claude Code's adapter answers then.
+      if (process.env.MOCK_ACP_AUTH) {
+        send({ id: message.id, error: { code: -32000, message: 'Authentication required' } })
+        return
+      }
       cwd = message.params.cwd
       send({ id: message.id, result: { sessionId: 'session-1' } })
       return
