@@ -1184,6 +1184,73 @@ describe('background message handlers', () => {
     expect(complete).toHaveBeenCalledTimes(3)
   })
 
+  it('lets API members reply at the same time, at most two at once on one model', async () => {
+    vi.resetModules()
+    const startingStore = createStoreWithTwoApiRoles()
+    startingStore.settings.roundSummary = false
+    startingStore.settings.externalModelOrder = ['model-1', 'model-2']
+    startingStore.settings.externalModelsById['model-2'] = { ...startingStore.settings.externalModelsById['model-1'], id: 'model-2', name: '另一个模型' }
+    const base = startingStore.rolesById['role-1']
+    startingStore.rolesById['role-3'] = { ...structuredClone(base), id: 'role-3', name: '测试', systemPrompt: '从测试角度分析问题' }
+    startingStore.rolesById['role-4'] = { ...structuredClone(base), id: 'role-4', name: '运维', systemPrompt: '从运维角度分析问题', externalModelId: 'model-2' }
+    startingStore.chatsById['chat-1'].roleIds = ['role-1', 'role-2', 'role-3', 'role-4']
+    let currentStore = structuredClone(startingStore)
+    vi.doMock('./storeAccess', async importOriginal => {
+      const actual = await importOriginal<typeof import('./storeAccess')>()
+      return {
+        ...actual,
+        mutateStore: vi.fn(async (mutator: (store: OpenTeamStore) => unknown) => {
+          const result = await mutator(currentStore)
+          currentStore = structuredClone(currentStore)
+          return { store: currentStore, result }
+        }),
+      }
+    })
+
+    const { createMessageHandlers } = await import('./messageHandlers')
+    // Each reply waits until the test lets it finish; the test watches how many run at once.
+    const running = new Map<string, number>()
+    const most = new Map<string, number>()
+    const releases: Array<() => void> = []
+    const complete = vi.fn(async (input: { model: { id: string } }) => {
+      const model = input.model.id
+      running.set(model, (running.get(model) ?? 0) + 1)
+      most.set(model, Math.max(most.get(model) ?? 0, running.get(model)!))
+      await new Promise<void>(resolve => releases.push(resolve))
+      running.set(model, running.get(model)! - 1)
+      return { content: '回复' }
+    })
+    let messageIdSeq = 0
+    const routes = createMessageHandlers({
+      broadcastStoreUpdated: vi.fn(),
+      externalModelClient: { complete },
+      getChatStatusFromRoles: () => 'ready',
+      log: { debug: vi.fn(), info: vi.fn(), warn: vi.fn() },
+      newId: vi.fn((prefix: string) => prefix === 'msg' ? `${prefix}-${++messageIdSeq}` : `${prefix}-${messageIdSeq}`),
+      now: vi.fn(() => 100),
+      runtimeFrames: { bind: vi.fn(), getByAddress: vi.fn(), getByRole: vi.fn(() => undefined) },
+      sendRoleMessage: vi.fn(),
+      sendError: vi.fn(),
+      sendPrompt: vi.fn(),
+      waitForRetry: vi.fn(async () => {}),
+    })
+
+    const sent = routes.find(route => route.type === 'GROUP_MESSAGE_SEND')?.handler({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@all 选哪个方案？' }, {}) as Promise<{ store: OpenTeamStore }>
+    await vi.waitFor(() => expect(complete).toHaveBeenCalledTimes(3))
+    // Two of the three on model-1 and the one on model-2 started together; the third waits its turn.
+    expect([running.get('model-1'), running.get('model-2')]).toEqual([2, 1])
+    const user = Object.values(currentStore.messagesById).find(message => message.type === 'user')!
+    expect(Object.values(user.deliveryStatus ?? {}).filter(status => status === 'pending')).toHaveLength(1)
+
+    while (complete.mock.calls.length < 4 || releases.length > 0) {
+      releases.shift()?.()
+      await new Promise(resolve => setTimeout(resolve, 0))
+    }
+    const response = await sent
+    expect([most.get('model-1'), most.get('model-2')]).toEqual([2, 1])
+    expect(Object.values(response.store.messagesById).filter(message => message.type === 'assistant' && message.status === 'received')).toHaveLength(4)
+  })
+
   it('leaves rounds alone when summaries are turned off, and explains a round that cannot be summarized yet', async () => {
     vi.resetModules()
     const startingStore = createStoreWithTwoApiRoles()
@@ -1758,6 +1825,61 @@ describe('background message handlers', () => {
     expect(response?.store.rolesById['role-1']).toMatchObject({ status: 'ready' })
     // Every member answered: the background is told, to notify the user.
     expect(onPromptSettled).toHaveBeenCalledWith(expect.objectContaining({ messagesById: expect.any(Object) }), 'chat-1', 'msg-1')
+  })
+
+  it('saves a reply being written a few times a second, not on every piece, and all of it at the end', async () => {
+    vi.resetModules()
+    let currentStore = createStoreWithTwoApiRoles()
+    currentStore.settings.roundSummary = false
+    currentStore.chatsById['chat-1'].roleIds = ['role-1']
+    vi.doMock('./storeAccess', async importOriginal => {
+      const actual = await importOriginal<typeof import('./storeAccess')>()
+      return {
+        ...actual,
+        mutateStore: vi.fn(async (mutator: (store: OpenTeamStore) => unknown) => {
+          const result = await mutator(currentStore)
+          currentStore = structuredClone(currentStore)
+          return { store: currentStore, result }
+        }),
+      }
+    })
+
+    const { createMessageHandlers } = await import('./messageHandlers')
+    let clock = 1_000
+    const externalModelClient = {
+      stream: vi.fn(async function* () {
+        // Five pieces 40 ms apart, then one 200 ms later.
+        for (const piece of ['一', '二', '三', '四', '五']) {
+          yield piece
+          clock += 40
+        }
+        clock += 200
+        yield '六'
+      }),
+    }
+    const contents: string[] = []
+    let messageIdSeq = 0
+    const routes = createMessageHandlers({
+      broadcastStoreUpdated: vi.fn(async (store: OpenTeamStore) => {
+        const reply = store.messagesById['msg-2']
+        if (reply?.status === 'pending' && reply.content) contents.push(reply.content)
+      }),
+      externalModelClient: externalModelClient as never,
+      getChatStatusFromRoles: () => 'ready',
+      log: { debug: vi.fn(), info: vi.fn(), warn: vi.fn() },
+      newId: vi.fn((prefix: string) => prefix === 'msg' ? `${prefix}-${++messageIdSeq}` : `${prefix}-1`),
+      now: vi.fn(() => clock),
+      runtimeFrames: { bind: vi.fn(), getByAddress: vi.fn(), getByRole: vi.fn(() => undefined) },
+      sendRoleMessage: vi.fn(),
+      sendError: vi.fn(),
+      sendPrompt: vi.fn(),
+    })
+
+    const response = await routes.find(route => route.type === 'GROUP_MESSAGE_SEND')?.handler({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@all 流式回答' }, {}) as { store: OpenTeamStore }
+
+    // The first piece at once, the fifth (160 ms on), the sixth; the second to fourth wait.
+    expect(contents).toEqual(['一', '一二三四五', '一二三四五六'])
+    expect(response.store.messagesById['msg-2']).toMatchObject({ content: '一二三四五六', status: 'received' })
   })
 
   it('retries external model failures before content starts and keeps one assistant placeholder', async () => {

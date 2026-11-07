@@ -24,6 +24,12 @@ import { markOrchestrationRoleError, maybeAdvanceOrchestrationRun, startOrchestr
 
 const STALE_THINKING_MS = 120_000
 const DEFAULT_EXTERNAL_MODEL_RETRY_DELAYS_MS = [2_000, 2_000, 4_000, 8_000, 15_000] as const
+// API members of one model replying at the same time.
+const EXTERNAL_MODEL_CONCURRENCY = 2
+// How often a reply being written is saved and sent to the page. Each time writes the store and sends
+// all of it, so a few times a second is enough (the page reveals the text smoothly in between), even
+// with several replies streaming at once into a long chat.
+const STREAM_UPDATE_INTERVAL_MS = 150
 const DEFAULT_ROLE_ERROR_RETRY_DELAYS_MS = [2_000, 8_000] as const
 
 interface ExternalModelRunRegistry {
@@ -126,6 +132,27 @@ export function createMessageHandlers(baseDeps: MessageHandlersDependencies): Ba
     if (delivery.model.format !== 'local-agent') return run
     void run.catch(error => deps.log.warn('local-agent:delivery-failed', { chatId: delivery.chatId, roleId: delivery.roleId, error: error instanceof Error ? error.message : String(error) }))
     return undefined
+  }
+
+  // API members answer at the same time, at most EXTERNAL_MODEL_CONCURRENCY at once on one model (its
+  // rate limits); the rest of a model's members wait their turn (排队中). Resolves to the store as the
+  // last of them left it, so the page never gets one older than what was broadcast.
+  async function deliverExternalTogether(deliveries: ExternalPromptDelivery[]): Promise<OpenTeamStore | undefined> {
+    const queues = new Map<string, ExternalPromptDelivery[]>()
+    for (const delivery of deliveries) queues.set(delivery.model.id, [...(queues.get(delivery.model.id) ?? []), delivery])
+    let latest: OpenTeamStore | undefined
+    await Promise.all([...queues.values()].map(queue => Promise.all(
+      Array.from({ length: Math.min(EXTERNAL_MODEL_CONCURRENCY, queue.length) }, async () => {
+        for (let next = queue.shift(); next; next = queue.shift()) {
+          try {
+            latest = await deliverExternal(next) ?? latest
+          } catch (error) {
+            deps.log.warn('external-model:delivery-failed', { chatId: next.chatId, roleId: next.roleId, error: error instanceof Error ? error.message : String(error) })
+          }
+        }
+      }),
+    )))
+    return latest
   }
 
   const handleMessageSend = async (message: RuntimeMessage) => {
@@ -328,10 +355,7 @@ export function createMessageHandlers(baseDeps: MessageHandlersDependencies): Ba
     await deps.broadcastStoreUpdated(store)
 
     await sendPromptDeliveries(deps, chatId, messageResult.deliveryMessageId ?? messageResult.message.id, messageResult.deliveries)
-    let responseStore = store
-    for (const delivery of messageResult.externalDeliveries) {
-      responseStore = await deliverExternal(delivery) ?? responseStore
-    }
+    const responseStore = await deliverExternalTogether(messageResult.externalDeliveries) ?? store
 
     return {
       ok: true,
@@ -1616,6 +1640,7 @@ async function sendExternalModelDelivery(deps: MessageHandlersDependencies, clie
       try {
         content = ''
         usage = undefined
+        let updatedAt = Number.NEGATIVE_INFINITY
         const stream = typeof client.stream === 'function'
           ? client.stream({ model: delivery.model, prompt: delivery.prompt, images, abortSignal: controller.signal, onUsage, context })
           : streamCompleteFallback(client, { model: delivery.model, prompt: delivery.prompt, images, abortSignal: controller.signal, onUsage, context })
@@ -1623,6 +1648,9 @@ async function sendExternalModelDelivery(deps: MessageHandlersDependencies, clie
           throwIfAborted(controller.signal)
           if (!chunk) continue
           content += chunk
+          // The rest arrives with the next update, or with the finished reply (or the stopped one).
+          if (deps.now() - updatedAt < STREAM_UPDATE_INTERVAL_MS) continue
+          updatedAt = deps.now()
           const update = await updateExternalAssistantContent(deps, delivery, replyMessageId, content)
           if (update.ignored) {
             deps.log.warn('external-model:stream:ignored-stale', { chatId: delivery.chatId, roleId: delivery.roleId, messageId: delivery.messageId, reason: update.reason })
