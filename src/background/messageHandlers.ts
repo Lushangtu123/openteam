@@ -1,5 +1,5 @@
-import { isChatSite } from '../group/chatSites'
-import { extractSupportedConversationId, normalizeSupportedChatConversationUrl } from '../group/conversationUrl'
+import { CHAT_SITE_INFO, chatSiteForUrl, isChatSite } from '../group/chatSites'
+import { extractSupportedConversationId, getDefaultChatSiteUrlForRole, normalizeSupportedChatConversationUrl } from '../group/conversationUrl'
 import { readMessageUploads, type MessageUpload } from '../group/messageUploads'
 import { hasRoundSummary, pickSummarizer, readSummarizableRound, roundSummaryRequestText } from '../group/roundSummary'
 import { isProjectActive } from '../group/project'
@@ -957,13 +957,24 @@ export function createMessageHandlers(baseDeps: MessageHandlersDependencies): Ba
     const { store, result } = await mutateStore(store => {
       const chat = requireChat(store, identity.chatId)
       const role = requireRole(store, chat.id, identity.roleId)
-      updateConversation(role, readOptionalString(message.conversationUrl), readOptionalString(message.conversationId))
+      const conversationUrl = readOptionalString(message.conversationUrl)
+      const lostConversationUrl = conversationLeftFor(role, conversationUrl, store.settings.defaultChatSite)
+      if (lostConversationUrl) {
+        // The site could not open the member's conversation (or a new chat was started in its
+        // window): it is in a new chat now. Its next prompt carries the chat so far again.
+        delete role.geminiConversationUrl
+        delete role.geminiConversationId
+        role.contextCursor = 0
+      } else {
+        updateConversation(role, conversationUrl, readOptionalString(message.conversationId))
+      }
       role.updatedAt = deps.now()
       chat.updatedAt = role.updatedAt
-      return role
+      return { role, lostConversationUrl }
     })
+    if (result.lostConversationUrl) deps.log.warn('conversation:lost', { ...identity, lostConversationUrl: result.lostConversationUrl, pageUrl: readOptionalString(message.conversationUrl) })
     await deps.broadcastStoreUpdated(store)
-    return { ok: true, role: result, store }
+    return { ok: true, role: result.role, store }
   }
 
   const handleSendAck = async (message: RuntimeMessage, sender: chrome.runtime.MessageSender) => {
@@ -1389,6 +1400,22 @@ function updateConversation(role: GroupRole, conversationUrl: string | undefined
   }
 
   if (isMeaningfulConversationId(conversationId)) role.geminiConversationId = conversationId
+}
+
+// The member's window shows its site's start page (a new chat) although it had a conversation, and
+// it is not waiting on a reply (just after a prompt the site is still on its start page). Returns the
+// conversation it had. A login page or any other page is not a start page.
+function conversationLeftFor(role: GroupRole, pageUrl: string | undefined, defaultChatSite: GroupRole['chatSite']): string | undefined {
+  const savedUrl = role.geminiConversationUrl
+  if (!savedUrl || !extractSupportedConversationId(savedUrl) || role.status === 'thinking') return undefined
+  const safeUrl = normalizeSupportedChatConversationUrl(pageUrl)
+  const site = chatSiteForUrl(safeUrl)
+  if (!safeUrl || !site || site !== chatSiteForUrl(savedUrl) || extractSupportedConversationId(safeUrl)) return undefined
+  const path = (url: string) => new URL(url).pathname.replace(/\/+$/, '')
+  const startPaths = new Set(['', path(CHAT_SITE_INFO[site].homeUrl), path(getDefaultChatSiteUrlForRole(role, defaultChatSite))])
+  // Gemini's start page is /app.
+  if (site === 'gemini') startPaths.add('/app')
+  return startPaths.has(path(safeUrl)) ? savedUrl : undefined
 }
 
 function isMeaningfulConversationId(value: string | undefined): value is string {

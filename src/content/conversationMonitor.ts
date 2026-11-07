@@ -8,6 +8,9 @@ export interface ConversationMonitor {
   start(): void
 }
 
+const CONVERSATION_POLL_MS = 1_000
+const CONVERSATION_SETTLE_MS = 500
+
 export function createConversationMonitor(options: {
   siteAdapter: ChatSiteAdapter
   roleSession: RoleSession
@@ -40,26 +43,27 @@ export function createConversationMonitor(options: {
       .catch(error => options.log.warn('conversation-update:failed', { error: error instanceof Error ? error.message : String(error) }))
   }
 
+  // A content script cannot see the page's own history.pushState calls: they run in the page's
+  // world, with its own copy of the History object. So the page's address is watched instead: the
+  // Navigation API reports same-document navigations to every world, and a check each second covers
+  // browsers without it. Changes are reported once the address has settled for a moment.
   function start(): void {
     if (conversationMonitorStarted) return
     conversationMonitorStarted = true
 
-    const notify = () => window.setTimeout(() => reportConversationUpdate(), 0)
-    const originalPushState = history.pushState
-    const originalReplaceState = history.replaceState
-
-    history.pushState = function pushState(...args) {
-      const result = originalPushState.apply(this, args)
-      notify()
-      return result
+    let settleTimer: number | undefined
+    let lastHref = location.href
+    const notify = () => {
+      lastHref = location.href
+      window.clearTimeout(settleTimer)
+      settleTimer = window.setTimeout(() => reportConversationUpdate(), CONVERSATION_SETTLE_MS)
     }
 
-    history.replaceState = function replaceState(...args) {
-      const result = originalReplaceState.apply(this, args)
-      notify()
-      return result
-    }
-
+    const navigation = (window as Window & { navigation?: EventTarget }).navigation
+    navigation?.addEventListener('currententrychange', notify)
+    window.setInterval(() => {
+      if (location.href !== lastHref) notify()
+    }, CONVERSATION_POLL_MS)
     window.addEventListener('popstate', notify)
     window.addEventListener('hashchange', notify)
     notify()

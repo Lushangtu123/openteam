@@ -106,6 +106,58 @@ describe('background message handlers', () => {
     expect(role).toMatchObject({ status: 'thinking', lastPromptMessageId: 'msg-1', replyAttemptId: 'attempt-1' })
   })
 
+  it('forgets a conversation its site sent the member away from, and gives it the chat again', async () => {
+    vi.resetModules()
+    const store = createStoreWithReadyRole()
+    const role = store.rolesById['role-1']
+    const saved = 'https://chatgpt.com/c/6aec2ed9-a14c-83e8-98bb-cff4d37e0c07'
+    Object.assign(role, { chatSite: 'chatgpt', geminiConversationUrl: saved, geminiConversationId: '6aec2ed9-a14c-83e8-98bb-cff4d37e0c07', contextCursor: 12 })
+    vi.doMock('./storeAccess', async importOriginal => {
+      const actual = await importOriginal<typeof import('./storeAccess')>()
+      return {
+        ...actual,
+        mutateStore: async (mutator: (store: OpenTeamStore) => unknown) => ({ store, result: await mutator(store) }),
+      }
+    })
+
+    const { createMessageHandlers } = await import('./messageHandlers')
+    const warn = vi.fn()
+    const routes = createMessageHandlers({
+      broadcastStoreUpdated: vi.fn(),
+      getChatStatusFromRoles: () => 'ready',
+      log: { debug: vi.fn(), info: vi.fn(), warn },
+      newId: vi.fn(),
+      now: () => 100,
+      runtimeFrames: { bind: vi.fn(), getByAddress: vi.fn(), getByRole: vi.fn() },
+      sendRoleMessage: vi.fn(),
+      sendError: vi.fn(),
+      sendPrompt: vi.fn(),
+    })
+    const route = routes.find(route => route.type === 'TEAM_ROLE_CONVERSATION_UPDATED')!
+    const report = (conversationUrl: string) => route.handler({ type: route.type, chatId: 'chat-1', roleId: 'role-1', conversationUrl }, {})
+
+    // Just after a prompt the site is still on its start page: the conversation is not lost.
+    role.status = 'thinking'
+    await report('https://chatgpt.com/')
+    expect(role).toMatchObject({ geminiConversationUrl: saved, contextCursor: 12 })
+
+    // A login page is not a new chat either.
+    role.status = 'ready'
+    await report('https://chatgpt.com/auth/login')
+    expect(role).toMatchObject({ geminiConversationUrl: saved, contextCursor: 12 })
+
+    // The site opened its start page instead of the conversation.
+    await report('https://chatgpt.com/')
+    expect(role.geminiConversationUrl).toBeUndefined()
+    expect(role.geminiConversationId).toBeUndefined()
+    expect(role.contextCursor).toBe(0)
+    expect(warn).toHaveBeenCalledWith('conversation:lost', expect.objectContaining({ lostConversationUrl: saved }))
+
+    // The new chat's address is kept as soon as the site gives it one.
+    await report('https://chatgpt.com/c/6aee516c-ed04-83e8-9f3f-3838e219d32f')
+    expect(role.geminiConversationUrl).toBe('https://chatgpt.com/c/6aee516c-ed04-83e8-9f3f-3838e219d32f')
+  })
+
   it('exposes group message route and sends prompts through injected delivery', async () => {
     vi.resetModules()
     let draftStore: OpenTeamStore | undefined
