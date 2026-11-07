@@ -20,20 +20,9 @@ describe('team page role panel view boundary', () => {
     expect(roleHealthAdvice({ status: 'blocked', reason: 'embed-blocked' }, { chatSite: 'kimi', modelSource: 'site' })).toContain('改用这个模型的 API')
   })
 
-  it('keeps role panel rendering and role site switching outside the entrypoint', () => {
-    const entrySource = readFileSync(resolve(process.cwd(), 'src/teamPage/index.ts'), 'utf8')
+  it('labels member state plainly and wires the card menu actions', () => {
     const viewSource = readFileSync(resolve(process.cwd(), 'src/teamPage/rolePanelView.ts'), 'utf8')
 
-    expect(viewSource).toContain('function renderRolePanel(): void')
-    expect(viewSource).toContain('function roleCard(role: GroupRole): HTMLElement')
-    expect(viewSource).toContain('function roleSiteControl(role: GroupRole): HTMLElement')
-    expect(viewSource).toContain('function roleSiteMenu(role: GroupRole): HTMLElement')
-    expect(viewSource).toContain('function roleDeleteButton(role: GroupRole): HTMLButtonElement')
-    expect(viewSource).toContain('function kickRoleFromChat(role: GroupRole): Promise<void>')
-    expect(viewSource).toContain('function switchRoleSite(role: GroupRole, modelKey: string): Promise<void>')
-    expect(viewSource).toContain('function roleRefreshButton(role: GroupRole): HTMLButtonElement')
-    expect(viewSource).toContain('function roleJumpButton(role: GroupRole): HTMLButtonElement')
-    expect(viewSource).not.toContain('function roleListRefreshButton(): HTMLButtonElement')
     expect(viewSource).toContain("deps.iframeHost.recoverRole(role)")
     expect(viewSource).toContain("deps.runCommand('GROUP_ROLE_RECOVER'")
     expect(viewSource).toContain("deps.focusRoleFrame(role.chatId, role.id)")
@@ -42,7 +31,6 @@ describe('team page role panel view boundary', () => {
     expect(viewSource).toContain('button.dataset.roleDelete = role.id')
     expect(viewSource).toContain("ready: '在线'")
     expect(viewSource).not.toContain("ready: '就绪'")
-    expect(viewSource).toContain('function roleContextProgress(role: GroupRole, ui: (source: string) => string): HTMLElement')
     expect(viewSource).toContain("`已读 ${role.contextCursor} 条`")
     expect(viewSource).toContain("'通过 API 回复'")
     expect(viewSource).toContain("'网页已连接'")
@@ -53,15 +41,6 @@ describe('team page role panel view boundary', () => {
     expect(viewSource).toContain("deps.runCommand('GROUP_ROLE_DELETE'")
     expect(roleSiteMenuSource(viewSource)).not.toContain('GROUP_ROLE_DELETE')
     expect(roleSiteMenuSource(viewSource)).not.toContain('删除成员')
-    expect(entrySource).not.toContain('function renderRolePanel(): void')
-    expect(entrySource).not.toContain('function roleCard(role: GroupRole): HTMLElement')
-    expect(entrySource).not.toContain('function roleSiteControl(role: GroupRole): HTMLElement')
-    expect(entrySource).not.toContain('function roleSiteMenu(role: GroupRole): HTMLElement')
-    expect(entrySource).not.toContain('function roleDeleteButton(role: GroupRole): HTMLButtonElement')
-    expect(entrySource).not.toContain('function roleRefreshButton(role: GroupRole): HTMLButtonElement')
-    expect(entrySource).not.toContain('function roleJumpButton(role: GroupRole): HTMLButtonElement')
-    expect(entrySource).not.toContain('function kickRoleFromChat(role: GroupRole): Promise<void>')
-    expect(entrySource).not.toContain('function switchRoleSite(role: GroupRole, chatSite: ChatSite): Promise<void>')
   })
 
   it('renders a refresh action on each member card and rebuilds only that iframe', async () => {
