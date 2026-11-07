@@ -2,13 +2,14 @@ import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { CHAT_SITES } from '../group/chatSites'
+import { TEAM_STYLESHEETS } from './teamStylesheets'
 
 function readTeamHtml(): string {
   return readFileSync(resolve(process.cwd(), 'public/team.html'), 'utf8')
 }
 
 function readTeamCss(): string {
-  return readFileSync(resolve(process.cwd(), 'public/team.css'), 'utf8')
+  return TEAM_STYLESHEETS.map(name => readFileSync(resolve(process.cwd(), 'public/styles', name), 'utf8')).join('\n')
 }
 
 function readTeamDocument(): string {
@@ -32,7 +33,9 @@ describe('team.html chat creation UI', () => {
     const html = readTeamHtml()
     const css = readTeamCss()
 
-    expect(html).toContain('<link rel="stylesheet" href="team.css" />')
+    // The styles load in layers, each file overriding the ones before it.
+    for (const name of TEAM_STYLESHEETS) expect(html).toContain(`<link rel="stylesheet" href="styles/${name}" />`)
+    expect(html.indexOf('styles/base.css')).toBeLessThan(html.indexOf('styles/refinements.css'))
     expect(html).not.toContain('<style>')
     expect(html).not.toContain('</style>')
     expect(css).toContain(':root')
@@ -51,8 +54,7 @@ describe('team.html chat creation UI', () => {
     expect(html).toContain('data-theme="dark"')
     expect(html).toMatch(/:root\[data-theme="light"\]\s*{/)
     expect(html).toMatch(/:root\[data-theme="dark"\]\s*{/)
-    expect(html).toMatch(/\.theme-switch\s*{[^}]*position:\s*relative;/s)
-    expect(html).toMatch(/\.theme-option\[aria-pressed="true"\]\s*{[^}]*background:/s)
+    expect(html).toMatch(/\.settings-segment-option\[aria-pressed="true"\]\s*{[^}]*background:/s)
   })
 
   it('light theme restyles dense dark surfaces instead of leaving dark component islands', () => {
@@ -768,7 +770,7 @@ describe('team.html chat creation UI', () => {
     const css = readTeamCss()
     const roleActionsRule = css.match(/(?:^|\n)\.role-delete,\s*\.role-prompt-detail,\s*\.role-refresh,\s*\.role-jump\s*{(?<body>[^}]*)}/)?.groups?.body ?? ''
     const detailRule = css.match(/(?:^|\n)\.role-prompt-detail\s*{(?<body>[^}]*)}/)?.groups?.body ?? ''
-    const statusRule = css.match(/(?:^|\n)\.status-pill,\s*\.mention-chip\s*{(?<body>[^}]*)}/)?.groups?.body ?? ''
+    const statusRule = css.match(/(?:^|\n)\.status-pill\s*{(?<body>[^}]*)}/)?.groups?.body ?? ''
     const roleStatusRule = css.match(/(?:^|\n)\.role-card \.status-pill\s*{(?<body>[^}]*)}/)?.groups?.body ?? ''
 
     expect(roleActionsRule).toContain('appearance: none;')

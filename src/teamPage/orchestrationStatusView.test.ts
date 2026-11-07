@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createDefaultStore } from '../group/store'
 import type { GroupChat, GroupRole, OpenTeamStore, OrchestrationFlow, OrchestrationRun } from '../group/types'
 import { createOrchestrationStatusView } from './orchestrationStatusView'
+import { TEAM_STYLESHEETS } from './teamStylesheets'
 
 afterEach(() => {
   document.body.replaceChildren()
@@ -445,7 +446,7 @@ describe('orchestration status view', () => {
   })
 
   it('keeps the collapsed launcher aligned above the composer right edge', () => {
-    const source = readFileSync(resolve(process.cwd(), 'public/team.css'), 'utf8')
+    const source = TEAM_STYLESHEETS.map(name => readFileSync(resolve(process.cwd(), 'public/styles', name), 'utf8')).join('\n')
 
     expect(source).toMatch(/\.orchestration-status-collapsed\s*{[^}]*right:\s*22px;/s)
     expect(source).toMatch(/\.orchestration-status-collapsed\s*{[^}]*bottom:\s*206px;/s)

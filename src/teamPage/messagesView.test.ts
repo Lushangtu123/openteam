@@ -8,6 +8,7 @@ import { createDefaultStore } from '../group/store'
 import { createTeamPageState } from './appState'
 import { THINKING_TIMEOUT_MS } from './chatExperience'
 import { createMessagesView } from './messagesView'
+import { TEAM_STYLESHEETS } from './teamStylesheets'
 
 afterEach(() => {
   window.getSelection()?.removeAllRanges()
@@ -39,7 +40,7 @@ describe('team page messages view boundary', () => {
   })
 
   it('keeps the image download action pinned inside the image tile', () => {
-    const css = readFileSync(resolve(process.cwd(), 'public/team.css'), 'utf8')
+    const css = TEAM_STYLESHEETS.map(name => readFileSync(resolve(process.cwd(), 'public/styles', name), 'utf8')).join('\n')
     const selectorIndex = css.indexOf('.message-image-download.message-tool-btn')
     expect(selectorIndex).toBeGreaterThan(-1)
 

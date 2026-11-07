@@ -1,0 +1,456 @@
+/* OpenTeam styles, grok.css: loaded in this order by team.html: base, theme, chatgpt, grok, refinements.
+   The Grok style (html[data-ui-style="grok"]) on top of the ChatGPT-like layout. */
+
+/* ==========================================================================
+   Grok style (html[data-ui-style="grok"]): a soft, friendly chat-app feel on
+   top of the ChatGPT-like layer, in OpenTeam's own design. Soft gray panels,
+   replies in rounded gray bubbles under the member's name, big rounded
+   avatars in the group list with each group's last message, round buttons,
+   one rounded input bar, and an indigo accent. Light and dark both defined.
+   ========================================================================== */
+
+:root[data-ui-style="grok"][data-theme="light"] {
+  --accent-rgb: 17, 17, 17;
+  --accent-soft: rgba(17, 17, 17, 0.05);
+  --accent-ring: rgba(17, 17, 17, 0.07);
+  --brand: #111111;
+  --bg: #ececec;
+  --page-bg: #ececec;
+  --line: rgba(17, 17, 17, 0.08);
+  --line-hover: rgba(17, 17, 17, 0.16);
+  --text: #111111;
+  --muted: #6f6f73;
+  --subtle: #9a9a9f;
+  --shell-bg: #ffffff;
+  --rail-bg: #f4f4f5;
+  --sidebar-bg: #f4f4f5;
+  --workspace-bg: #ffffff;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --hover: rgba(17, 17, 17, 0.045);
+  --chip-bg: #f1f1f2;
+  --popover: #ffffff;
+  --pre-bg: #ffffff;
+  --gpt-user-bg: #e8e8ea;
+  --gpt-user-text: #111111;
+  --gpt-selected-bg: #e7e7e9;
+  --gpt-composer-bg: #ffffff;
+  --gpt-composer-shadow: 0 0 0 1px rgba(17, 17, 17, 0.09), 0 6px 22px -12px rgba(17, 17, 17, 0.25);
+  --gpt-composer-focus-shadow: 0 0 0 1px rgba(17, 17, 17, 0.2), 0 6px 22px -12px rgba(17, 17, 17, 0.3);
+  --gpt-on-brand: #ffffff;
+  --gpt-send-disabled-bg: #e4e4e7;
+  --gpt-send-disabled-text: #a1a1aa;
+  --gpt-logo-bg: #111111;
+  --gb-bubble: #f2f2f3;
+  --gb-bubble-line: rgba(17, 17, 17, 0.05);
+  --gb-tile: #e7e7e9;
+  --gb-pill: #ffffff;
+  --gb-pill-shadow: 0 0 0 1px rgba(17, 17, 17, 0.05), 0 4px 16px -6px rgba(17, 17, 17, 0.18);
+  --gb-accent: #5b5bd6;
+  --gb-accent-soft: rgba(91, 91, 214, 0.1);
+  --gpt-link: #4f4fcf;
+}
+
+:root[data-ui-style="grok"][data-theme="dark"] {
+  --accent-rgb: 240, 240, 240;
+  --accent-soft: rgba(255, 255, 255, 0.07);
+  --accent-ring: rgba(255, 255, 255, 0.08);
+  --brand: #f2f2f2;
+  --bg: #000000;
+  --page-bg: #000000;
+  --line: rgba(255, 255, 255, 0.08);
+  --line-hover: rgba(255, 255, 255, 0.18);
+  --text: #f2f2f2;
+  --muted: #9b9ba1;
+  --subtle: #6e6e73;
+  --shell-bg: #161618;
+  --rail-bg: #0f0f11;
+  --sidebar-bg: #0f0f11;
+  --workspace-bg: #161618;
+  --surface: #1f1f22;
+  --surface-raised: #26262a;
+  --hover: rgba(255, 255, 255, 0.06);
+  --chip-bg: #26262a;
+  --popover: #1f1f22;
+  --popover-shadow: 0 16px 40px -12px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  --code-bg: rgba(255, 255, 255, 0.08);
+  --pre-bg: #121214;
+  --gpt-user-bg: #2c2c30;
+  --gpt-user-text: #f2f2f2;
+  --gpt-selected-bg: #232326;
+  --gpt-composer-bg: #1f1f22;
+  --gpt-composer-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 10px 28px -16px rgba(0, 0, 0, 0.9);
+  --gpt-composer-focus-shadow: 0 0 0 1px rgba(255, 255, 255, 0.2), 0 10px 28px -16px rgba(0, 0, 0, 0.9);
+  --gpt-on-brand: #111111;
+  --gpt-send-disabled-bg: #2c2c30;
+  --gpt-send-disabled-text: #6e6e73;
+  --gpt-link: #8ab4ff;
+  --gpt-logo-bg: #2c2c30;
+  --gb-bubble: #232326;
+  --gb-bubble-line: rgba(255, 255, 255, 0.05);
+  --gb-tile: #232326;
+  --gb-pill: #232326;
+  --gb-pill-shadow: 0 0 0 1px rgba(255, 255, 255, 0.07), 0 6px 18px -8px rgba(0, 0, 0, 0.8);
+  --gb-accent: #8f8fff;
+  --gb-accent-soft: rgba(143, 143, 255, 0.14);
+  --gpt-link: #a5a5ff;
+}
+
+:root[data-ui-style="grok"] body {
+  font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+}
+
+/* Avatars: rounded squares in each member's color. */
+:root[data-ui-style="grok"] .chat-avatar,
+:root[data-ui-style="grok"] .message-avatar,
+:root[data-ui-style="grok"] .role-avatar {
+  border-radius: 32%;
+  font-weight: 700;
+}
+
+:root[data-ui-style="grok"] .chat-avatar.role-tone-0, :root[data-ui-style="grok"] .message-avatar.role-tone-0, :root[data-ui-style="grok"] .role-avatar.role-tone-0 { background: #18b48b; }
+:root[data-ui-style="grok"] .chat-avatar.role-tone-1, :root[data-ui-style="grok"] .message-avatar.role-tone-1, :root[data-ui-style="grok"] .role-avatar.role-tone-1 { background: #3d7ff5; }
+:root[data-ui-style="grok"] .chat-avatar.role-tone-2, :root[data-ui-style="grok"] .message-avatar.role-tone-2, :root[data-ui-style="grok"] .role-avatar.role-tone-2 { background: #f7941d; }
+:root[data-ui-style="grok"] .chat-avatar.role-tone-3, :root[data-ui-style="grok"] .message-avatar.role-tone-3, :root[data-ui-style="grok"] .role-avatar.role-tone-3 { background: #8b5cf6; }
+:root[data-ui-style="grok"] .chat-avatar.role-tone-4, :root[data-ui-style="grok"] .message-avatar.role-tone-4, :root[data-ui-style="grok"] .role-avatar.role-tone-4 { background: #ef3a4f; }
+:root[data-ui-style="grok"] .chat-avatar.role-tone-5, :root[data-ui-style="grok"] .message-avatar.role-tone-5, :root[data-ui-style="grok"] .role-avatar.role-tone-5 { background: #14a99a; }
+
+/* Sidebar: one soft gray panel; round buttons. */
+:root[data-ui-style="grok"] .rail,
+:root[data-ui-style="grok"] .sidebar {
+  border-right: 0;
+  background: var(--sidebar-bg);
+}
+
+:root[data-ui-style="grok"] .rail-btn {
+  border-radius: 999px;
+}
+
+:root[data-ui-style="grok"] .rail-btn.active {
+  background: var(--gb-pill);
+  box-shadow: var(--gb-pill-shadow);
+}
+
+:root[data-ui-style="grok"] #quick-create-chat {
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  background: var(--gb-pill);
+  box-shadow: var(--gb-pill-shadow);
+  font-size: 20px;
+}
+
+/* Group list: rows with a big avatar, the name and the last message. */
+:root[data-ui-style="grok"] .chat-list {
+  --chat-list-row-height: 74px;
+  gap: 4px;
+  padding: 0 10px 18px;
+}
+
+:root[data-ui-style="grok"] .chat-item {
+  grid-template-columns: 54px minmax(0, 1fr) auto;
+  gap: 12px;
+  padding: 8px 8px 8px 10px;
+  border-radius: 18px;
+}
+
+:root[data-ui-style="grok"] .chat-item .chat-avatar {
+  display: grid;
+  width: 54px;
+  height: 54px;
+  font-size: 18px;
+}
+
+:root[data-ui-style="grok"] .chat-item .summary-line {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 13.5px;
+}
+
+:root[data-ui-style="grok"] .chat-item .chat-name,
+:root[data-ui-style="grok"] .chat-item.active .chat-name {
+  font-size: 15.5px;
+  font-weight: 600;
+}
+
+/* The group on screen: the same row, on a soft accent card. */
+:root[data-ui-style="grok"] .chat-item.active {
+  background: var(--gb-accent-soft);
+}
+
+:root[data-ui-style="grok"] .chat-item.active .chat-name {
+  color: var(--text);
+}
+
+/* Header: the group's avatar beside its title and subtitle. */
+:root[data-ui-style="grok"] .chat-header {
+  min-height: 68px;
+  padding: 18px 18px 8px 22px;
+}
+
+:root[data-ui-style="grok"] .chat-title-block {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: 12px;
+  min-width: 0;
+}
+
+:root[data-ui-style="grok"] .chat-title-avatar:not([hidden]) {
+  display: grid;
+  grid-row: 1 / span 2;
+  width: 38px;
+  height: 38px;
+  font-size: 15px;
+}
+
+:root[data-ui-style="grok"] .chat-title {
+  overflow: hidden;
+  font-size: 16px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:root[data-ui-style="grok"] .chat-subtitle {
+  margin-top: 1px;
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:root[data-ui-style="grok"] .chat-header .btn,
+:root[data-ui-style="grok"] .chat-header .drawer-summary {
+  border-radius: 999px;
+}
+/* Conversation: replies in soft gray bubbles under the member's name. */
+:root[data-ui-style="grok"] .messages {
+  gap: 20px;
+  padding: 16px max(24px, calc((100% - 860px) / 2)) 28px;
+}
+
+:root[data-ui-style="grok"] .message-body {
+  font-size: 16px;
+  line-height: 1.7;
+}
+
+:root[data-ui-style="grok"] .message-row.assistant .message-inner {
+  position: relative;
+  gap: 0;
+}
+
+/* The member's avatar sits in the name line, so the bubble lines up with the column. */
+:root[data-ui-style="grok"] .message-row.assistant .message-avatar {
+  position: absolute;
+  top: 0;
+  left: 4px;
+  width: 22px;
+  height: 22px;
+  font-size: 10px;
+}
+
+:root[data-ui-style="grok"] .message-row.assistant .message-name {
+  min-height: 22px;
+  margin: 0 0 6px 32px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+:root[data-ui-style="grok"] .message-row.assistant.compact .message-avatar {
+  display: none;
+}
+
+/* Room on the right for the reply's tools, which sit beside the bubble (four buttons). */
+:root[data-ui-style="grok"] .message-row.assistant .message-stack {
+  max-width: calc(100% - 156px);
+}
+
+:root[data-ui-style="grok"] .messages {
+  overflow-x: hidden;
+}
+
+:root[data-ui-style="grok"] .message-row.assistant .message-bubble,
+:root[data-ui-style="grok"] .message-row.thinking .message-bubble {
+  width: auto;
+  max-width: 100%;
+  border: 1px solid var(--gb-bubble-line);
+  border-radius: 26px;
+  background: var(--gb-bubble);
+}
+
+:root[data-ui-style="grok"] .message-row.assistant .message-body {
+  padding: 14px 22px;
+}
+
+:root[data-ui-style="grok"] .message-row.user .message-bubble {
+  border-radius: 24px;
+}
+
+:root[data-ui-style="grok"] .message-row.user .message-body {
+  padding: 11px 20px;
+}
+
+:root[data-ui-style="grok"] .markdown-body pre {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+}
+
+/* A finished reply's tools sit beside its bubble, shown on hover (always on the last reply). */
+:root[data-ui-style="grok"] .message-row.assistant:not(.thinking):not(.stopped) .message-tools {
+  position: absolute;
+  top: 50%;
+  left: calc(100% + 10px);
+  margin: 0;
+  transform: translateY(-50%);
+}
+
+:root[data-ui-style="grok"] .message-row.thinking .message-tools,
+:root[data-ui-style="grok"] .message-row.stopped .message-tools {
+  margin: 0 0 10px 14px;
+}
+
+:root[data-ui-style="grok"] .message-tool-btn,
+:root[data-ui-style="grok"] .message-compare-btn {
+  border-radius: 999px;
+}
+
+/* Notes and times: centered gray text. */
+:root[data-ui-style="grok"] .message-time-divider,
+:root[data-ui-style="grok"] .message-system-pill {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13.5px;
+  font-weight: 400;
+}
+
+/* Input bar: one rounded bar with a round attach button and a round black send button. */
+:root[data-ui-style="grok"] .composer {
+  margin: 0 max(16px, calc((100% - 900px) / 2)) 18px;
+  padding: 8px;
+  border-radius: 32px;
+}
+
+:root[data-ui-style="grok"] #message-input {
+  height: 48px;
+  min-height: 48px;
+  max-height: 160px;
+  padding: 13px 62px 13px 58px;
+  font-size: 16px;
+  line-height: 22px;
+  overflow-y: auto;
+}
+
+:root[data-ui-style="grok"] .composer-actions {
+  left: 10px;
+  right: 10px;
+  bottom: 10px;
+}
+
+:root[data-ui-style="grok"] .composer-attach {
+  width: 44px;
+  height: 44px;
+  background: var(--chip-bg);
+}
+
+:root[data-ui-style="grok"] #send-message {
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  background: var(--gb-accent);
+  color: #ffffff;
+}
+
+:root[data-ui-style="grok"] #send-message:disabled {
+  background: var(--gpt-send-disabled-bg);
+  color: var(--gpt-send-disabled-text);
+}
+
+:root[data-ui-style="grok"] .composer:focus-within {
+  box-shadow: 0 0 0 1px var(--gb-accent), 0 0 0 4px var(--gb-accent-soft);
+}
+
+:root[data-ui-style="grok"] .btn-primary,
+:root[data-ui-style="grok"] .btn-primary:hover:not(:disabled) {
+  background: var(--gb-accent);
+  color: #ffffff;
+}
+
+/* Buttons, cards and menus: rounder. */
+:root[data-ui-style="grok"] .btn {
+  border-radius: 999px;
+}
+
+:root[data-ui-style="grok"] .role-card,
+:root[data-ui-style="grok"] .mode-option {
+  border-radius: 18px;
+}
+
+:root[data-ui-style="grok"] .chat-create,
+:root[data-ui-style="grok"] .mention-panel,
+:root[data-ui-style="grok"] .chat-action-menu {
+  border: 1px solid var(--line);
+  border-radius: 20px;
+}
+
+/* Group rounds in the Grok style: key points and summaries in the accent tint, and the fold
+   button inside the bubble's padding. */
+:root[data-ui-style="grok"] .message-body.has-key-points > .key-points-list {
+  background: var(--gb-accent-soft);
+}
+
+:root[data-ui-style="grok"] .key-points-toggle {
+  margin: -8px 22px 12px;
+}
+
+:root[data-ui-style="grok"] .message-row.round-summary .message-bubble {
+  border-color: transparent;
+  border-radius: 26px;
+  padding: 0;
+  background: var(--gb-accent-soft);
+}
+
+:root[data-ui-style="grok"] .round-summary-label {
+  background: var(--gb-accent);
+  color: #ffffff;
+}
+
+:root[data-ui-style="grok"] .discussion-bar {
+  margin-inline: max(24px, calc((100% - 860px) / 2));
+  border-color: transparent;
+  border-radius: 20px;
+  background: var(--gb-accent-soft);
+}
+
+:root[data-ui-style="grok"] .settings-nav-item[aria-selected="true"] {
+  background: var(--gb-accent-soft);
+  color: var(--text);
+}
+
+:root[data-ui-style="grok"] .settings-switch[aria-checked="true"] {
+  background: var(--gb-accent);
+}
+
+:root[data-ui-style="grok"] .settings-switch[aria-checked="true"]::after {
+  background: #ffffff;
+}
+
+:root[data-ui-style="grok"] .project-board {
+  margin-inline: max(24px, calc((100% - 860px) / 2));
+  border-color: transparent;
+  border-radius: 22px;
+  background: var(--gb-accent-soft);
+}
+
+:root[data-ui-style="grok"] .project-board-chip {
+  background: var(--gb-accent);
+  color: #ffffff;
+}
+
+:root[data-ui-style="grok"] .approval-card {
+  margin-inline: max(24px, calc((100% - 860px) / 2));
+  border-radius: 22px;
+}

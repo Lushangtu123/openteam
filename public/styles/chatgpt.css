@@ -1,0 +1,1456 @@
+/* OpenTeam styles, chatgpt.css: loaded in this order by team.html: base, theme, chatgpt, grok, refinements.
+   The ChatGPT-like layout every page uses: one quiet sidebar, the conversation in a centered column,
+   a rounded input box. */
+
+/* ==========================================================================
+   Final layer: a ChatGPT-like layout. One quiet sidebar; the conversation in
+   a centered column; the user's messages in soft gray bubbles; replies as
+   plain text under the member's name; a rounded input box with a round send
+   button. Monochrome: color only marks people, links and status. Light is
+   the default theme. Both themes share the structure and set their own
+   colors in the tokens at the top of this block.
+   ========================================================================== */
+
+:root[data-theme="light"] {
+  --accent-rgb: 13, 13, 13;
+  --accent-from: #0d0d0d;
+  --accent-to: #3a3a3a;
+  --accent-soft: rgba(13, 13, 13, 0.06);
+  --accent-ring: rgba(13, 13, 13, 0.08);
+  --line-strong: rgba(13, 13, 13, 0.3);
+  --brand: #0d0d0d;
+  --bg: #f4f4f4;
+  --page-bg: #f4f4f4;
+  --line: rgba(13, 13, 13, 0.1);
+  --line-hover: rgba(13, 13, 13, 0.16);
+  --text: #0d0d0d;
+  --muted: #5d5d5d;
+  --subtle: #8f8f8f;
+  --shell-bg: #ffffff;
+  --rail-bg: #f9f9f9;
+  --sidebar-bg: #f9f9f9;
+  --workspace-bg: #ffffff;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --hover: rgba(13, 13, 13, 0.05);
+  --chip-bg: #f4f4f4;
+  --popover: #ffffff;
+  --popover-shadow: 0 12px 32px -12px rgba(13, 13, 13, 0.25), 0 0 0 1px rgba(13, 13, 13, 0.08);
+  --code-bg: rgba(13, 13, 13, 0.06);
+  --pre-bg: #f9f9f9;
+  --gpt-user-bg: #f4f4f4;
+  --gpt-user-text: #0d0d0d;
+  --gpt-selected-bg: #ececec;
+  --gpt-composer-bg: #ffffff;
+  --gpt-composer-shadow: 0 0 0 1px rgba(13, 13, 13, 0.1), 0 6px 20px -10px rgba(13, 13, 13, 0.18);
+  --gpt-composer-focus-shadow: 0 0 0 1px rgba(13, 13, 13, 0.16), 0 8px 24px -10px rgba(13, 13, 13, 0.24);
+  --gpt-on-brand: #ffffff;
+  --gpt-send-disabled-bg: #d7d7d7;
+  --gpt-send-disabled-text: #f4f4f4;
+  --gpt-link: #0b66d6;
+  --gpt-logo-bg: #0d0d0d;
+}
+
+:root[data-theme="dark"] {
+  --accent-rgb: 236, 236, 236;
+  --accent-from: #ececec;
+  --accent-to: #b4b4b4;
+  --accent-soft: rgba(255, 255, 255, 0.08);
+  --accent-ring: rgba(255, 255, 255, 0.1);
+  --line-strong: rgba(255, 255, 255, 0.3);
+  --brand: #ececec;
+  --bg: #0f0f0f;
+  --page-bg: #0f0f0f;
+  --line: rgba(255, 255, 255, 0.1);
+  --line-hover: rgba(255, 255, 255, 0.16);
+  --text: #ececec;
+  --muted: #b4b4b4;
+  --subtle: #8f8f8f;
+  --shell-bg: #212121;
+  --rail-bg: #181818;
+  --sidebar-bg: #181818;
+  --workspace-bg: #212121;
+  --surface: #2a2a2a;
+  --surface-raised: #303030;
+  --hover: rgba(255, 255, 255, 0.06);
+  --chip-bg: #2a2a2a;
+  --popover: #2f2f2f;
+  --popover-shadow: 0 16px 40px -12px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  --code-bg: rgba(255, 255, 255, 0.08);
+  --pre-bg: #171717;
+  --gpt-user-bg: #303030;
+  --gpt-user-text: #ececec;
+  --gpt-selected-bg: #2a2a2a;
+  --gpt-composer-bg: #303030;
+  --gpt-composer-shadow: 0 0 0 1px rgba(255, 255, 255, 0.05), 0 8px 24px -12px rgba(0, 0, 0, 0.7);
+  --gpt-composer-focus-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1), 0 8px 24px -12px rgba(0, 0, 0, 0.7);
+  --gpt-on-brand: #0d0d0d;
+  --gpt-send-disabled-bg: #676767;
+  --gpt-send-disabled-text: #2f2f2f;
+  --gpt-link: #7ab7ff;
+  --gpt-logo-bg: #424242;
+}
+
+:root[data-theme] body {
+  font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* The page itself: flat and opaque over the AI pages. */
+:root[data-theme] .app-shell {
+  background: var(--workspace-bg);
+}
+
+:root[data-theme] #iframe-host .chat-frame-group,
+:root[data-theme] #iframe-host .chat-frame-group.active {
+  border-color: var(--line);
+  outline: none;
+  box-shadow: none;
+}
+
+:root[data-theme] .return-to-team {
+  background: var(--brand);
+  color: var(--gpt-on-brand);
+  box-shadow: 0 12px 28px -12px rgba(0, 0, 0, 0.45);
+}
+
+/* The rail and the group list read as one sidebar. */
+:root[data-theme] .rail,
+:root[data-theme] .sidebar {
+  border-right: 0;
+  background: var(--sidebar-bg);
+}
+
+:root[data-theme] .rail-btn {
+  border-radius: 10px;
+  color: var(--muted);
+}
+
+:root[data-theme] .rail-btn.active {
+  border-color: transparent;
+  background: var(--gpt-selected-bg);
+  color: var(--text);
+  box-shadow: none;
+}
+
+:root[data-theme] .workspace {
+  border-right-color: var(--line);
+  background: var(--workspace-bg);
+}
+
+:root[data-theme] .logo-dot {
+  background:
+    radial-gradient(circle at 32% 32%, #ffffff 0 11%, transparent 12%),
+    radial-gradient(circle at 68% 32%, rgba(255, 255, 255, 0.7) 0 11%, transparent 12%),
+    radial-gradient(circle at 32% 68%, rgba(255, 255, 255, 0.7) 0 11%, transparent 12%),
+    radial-gradient(circle at 68% 68%, #ffffff 0 11%, transparent 12%),
+    var(--gpt-logo-bg);
+  box-shadow: none;
+}
+
+:root[data-theme] .sidebar h1 {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+:root[data-theme] .sidebar-section-label {
+  font-weight: 500;
+}
+
+:root[data-theme] #quick-create-chat {
+  background: transparent;
+  color: var(--text);
+  font-size: 18px;
+}
+
+:root[data-theme] #quick-create-chat:hover {
+  background: var(--hover);
+}
+
+/* Group list: one line per group, like a chat history. */
+:root[data-theme] .chat-list {
+  --chat-list-row-height: 38px;
+}
+
+:root[data-theme] .chat-item {
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+  border: 0;
+  border-radius: 10px;
+  padding: 0 6px 0 10px;
+  background: transparent;
+  box-shadow: none;
+}
+
+:root[data-theme] .chat-item:hover {
+  background: var(--hover);
+}
+
+:root[data-theme] .chat-item.active {
+  background: var(--gpt-selected-bg);
+  box-shadow: none;
+}
+
+:root[data-theme] .chat-item.active::before,
+:root[data-theme] .chat-item .chat-avatar,
+:root[data-theme] .chat-item .summary-line,
+:root[data-theme] .chat-item .chat-time {
+  display: none;
+}
+
+:root[data-theme] .chat-item .chat-name,
+:root[data-theme] .chat-item.active .chat-name {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* New messages in another group: a dot after its name. */
+:root[data-theme] .chat-item.has-activity .chat-item-title::after {
+  content: "";
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  margin-left: 6px;
+  border-radius: 999px;
+  background: var(--gpt-link);
+}
+
+:root[data-theme] .chat-item .chat-menu-btn {
+  width: 26px;
+  height: 26px;
+  font-size: 15px;
+}
+
+/* Header: a slim bar with no line under it. */
+:root[data-theme] .chat-header {
+  /* Clear of the window buttons in the top-right corner. */
+  min-height: 62px;
+  padding: 22px 18px 8px 20px;
+  border-bottom-color: transparent;
+  background: var(--workspace-bg);
+  backdrop-filter: none;
+}
+
+:root[data-theme] .chat-title {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+:root[data-theme] .chat-subtitle {
+  margin-top: 1px;
+  font-size: 12px;
+}
+
+:root[data-theme] .chat-header .btn,
+:root[data-theme] .chat-header .drawer-summary,
+:root[data-theme] .chat-header .icon-btn,
+:root[data-theme] .chat-header .status-pill,
+:root[data-theme] #chat-status {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+:root[data-theme] .chat-header .btn,
+:root[data-theme] .chat-header .drawer-summary {
+  border-radius: 10px;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+:root[data-theme] .chat-header .btn:hover,
+:root[data-theme] .chat-header .drawer-summary:hover,
+:root[data-theme] .chat-header .icon-btn:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+:root[data-theme] #chat-status {
+  padding: 0 6px;
+}
+
+:root[data-theme] .status-pill::before {
+  box-shadow: none;
+}
+/* The conversation in a centered column. The padding centers it, so the scrollbar stays at the
+   window's edge. */
+:root[data-theme] .messages {
+  gap: 18px;
+  padding: 18px max(24px, calc((100% - 768px) / 2)) 28px;
+}
+
+:root[data-theme] .message-inner {
+  max-width: 100%;
+  gap: 12px;
+}
+
+:root[data-theme] .message-row.user .message-inner {
+  max-width: min(78%, 600px);
+}
+
+:root[data-theme] .message-row.assistant .message-inner {
+  width: 100%;
+}
+
+:root[data-theme] .message-row.assistant .message-stack {
+  flex: 1 1 auto;
+}
+
+:root[data-theme] .message-body {
+  font-size: 16px;
+  line-height: 1.75;
+}
+
+/* The user's messages: a soft gray bubble, no avatar. */
+:root[data-theme] .message-row.user .message-avatar,
+:root[data-theme] .message-row.user .message-name {
+  display: none;
+}
+
+:root[data-theme] .message-row.user .message-bubble {
+  border: 0;
+  border-radius: 22px;
+  background: var(--gpt-user-bg);
+  color: var(--gpt-user-text);
+  box-shadow: none;
+}
+
+:root[data-theme] .message-row.user .message-body {
+  padding: 10px 18px;
+}
+
+:root[data-theme] .message-row.user .message-bubble a,
+:root[data-theme] .message-row.user .markdown-body a,
+:root[data-theme] .message-row.user .message-bubble .message-mention {
+  color: var(--gpt-link);
+}
+
+:root[data-theme] .message-row.user .message-bubble .message-mention {
+  border-color: transparent;
+  background: transparent;
+  padding: 0;
+}
+
+:root[data-theme] .message-row.user .markdown-body code {
+  background: var(--code-bg);
+}
+
+:root[data-theme] .message-row.user .reference-box {
+  border-left-color: var(--line-hover);
+  background: var(--hover);
+  color: var(--muted);
+}
+
+/* Replies: plain text under the member's name. */
+:root[data-theme] .message-avatar {
+  width: 28px;
+  height: 28px;
+  flex-basis: 28px;
+  border-radius: 999px;
+  font-size: 12px;
+}
+
+:root[data-theme] .message-row.assistant .message-name {
+  min-height: 28px;
+  margin-bottom: 0;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+:root[data-theme] .message-row.assistant .message-bubble,
+:root[data-theme] .message-row.system .message-bubble,
+:root[data-theme] .message-row.thinking .message-bubble {
+  width: 100%;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+:root[data-theme] .message-row.assistant .message-body {
+  padding: 2px 0 0;
+}
+
+:root[data-theme] .message-row.thinking .message-body {
+  color: var(--muted);
+}
+
+/* A web member's reply as it is being written reads like any reply. */
+:root[data-theme] .message-row.thinking.live .message-body {
+  color: var(--text);
+}
+
+:root[data-theme] .message-time-divider {
+  border: 0;
+  background: transparent;
+  color: var(--subtle);
+  font-size: 12px;
+}
+
+:root[data-theme] .message-system-pill {
+  border: 0;
+  background: var(--chip-bg);
+}
+
+:root[data-theme] .markdown-body pre {
+  border: 0;
+  border-radius: 14px;
+  padding: 14px 16px;
+}
+
+:root[data-theme] .markdown-body blockquote {
+  border-left-color: var(--line-hover);
+}
+
+/* A finished reply's tools sit under it, shown on hover or keyboard focus. Replies still coming,
+   or stopped, keep their tools (stop, retry) in view. */
+:root[data-theme] .message-tools {
+  position: static;
+  margin: 2px 0 0 -6px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  transform: none;
+}
+
+/* A reply still coming always shows its stop button; a stopped one its retry button. */
+:root[data-theme] .message-row.thinking .message-tools,
+:root[data-theme] .message-row.stopped .message-tools {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+:root[data-theme] .message-row:not(.thinking):not(.stopped) .message-tools {
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+:root[data-theme] .message-row:not(.thinking):not(.stopped):hover .message-tools,
+:root[data-theme] .message-row:not(.thinking):not(.stopped):focus-within .message-tools,
+:root[data-theme] .message-row:not(.thinking):not(.stopped):last-child .message-tools {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  :root[data-theme] .message-row:not(.thinking):not(.stopped) .message-tools {
+    opacity: 1;
+  }
+}
+
+:root[data-theme] .message-tool-btn {
+  border-radius: 8px;
+  color: var(--muted);
+  opacity: 1;
+}
+
+:root[data-theme] .message-compare-btn {
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+}
+
+:root[data-theme] .message-compare-btn:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+/* Avatars: one soft color each, round, no gradient or shadow. */
+:root[data-theme] .message-avatar,
+:root[data-theme] .chat-avatar,
+:root[data-theme] .role-avatar,
+:root[data-theme] .mention-avatar,
+:root[data-theme] .orchestration-person-avatar {
+  border: 0;
+  box-shadow: none;
+  color: #ffffff;
+}
+
+:root[data-theme] .message-avatar.role-tone-0, :root[data-theme] .chat-avatar.role-tone-0, :root[data-theme] .role-avatar.role-tone-0, :root[data-theme] .mention-avatar.role-tone-0, :root[data-theme] .orchestration-person-avatar.role-tone-0 { background: #19a974; }
+:root[data-theme] .message-avatar.role-tone-1, :root[data-theme] .chat-avatar.role-tone-1, :root[data-theme] .role-avatar.role-tone-1, :root[data-theme] .mention-avatar.role-tone-1, :root[data-theme] .orchestration-person-avatar.role-tone-1 { background: #3b82f6; }
+:root[data-theme] .message-avatar.role-tone-2, :root[data-theme] .chat-avatar.role-tone-2, :root[data-theme] .role-avatar.role-tone-2, :root[data-theme] .mention-avatar.role-tone-2, :root[data-theme] .orchestration-person-avatar.role-tone-2 { background: #e8912d; }
+:root[data-theme] .message-avatar.role-tone-3, :root[data-theme] .chat-avatar.role-tone-3, :root[data-theme] .role-avatar.role-tone-3, :root[data-theme] .mention-avatar.role-tone-3, :root[data-theme] .orchestration-person-avatar.role-tone-3 { background: #8b6be8; }
+:root[data-theme] .message-avatar.role-tone-4, :root[data-theme] .chat-avatar.role-tone-4, :root[data-theme] .role-avatar.role-tone-4, :root[data-theme] .mention-avatar.role-tone-4, :root[data-theme] .orchestration-person-avatar.role-tone-4 { background: #e2557d; }
+:root[data-theme] .message-avatar.role-tone-5, :root[data-theme] .chat-avatar.role-tone-5, :root[data-theme] .role-avatar.role-tone-5, :root[data-theme] .mention-avatar.role-tone-5, :root[data-theme] .orchestration-person-avatar.role-tone-5 { background: #13a3a0; }
+
+/* Input box: a rounded panel in the same column, the attach button at its left and a round send
+   button at its right, both under the text. */
+:root[data-theme] .composer {
+  margin: 0 max(16px, calc((100% - 800px) / 2)) 18px;
+  padding: 12px 12px 10px;
+  border: 0;
+  border-radius: 26px;
+  background: var(--gpt-composer-bg);
+  box-shadow: var(--gpt-composer-shadow);
+}
+
+:root[data-theme] .composer:focus-within {
+  border: 0;
+  box-shadow: var(--gpt-composer-focus-shadow);
+}
+
+:root[data-theme] .composer.drop-active {
+  box-shadow: 0 0 0 2px var(--gpt-link);
+}
+
+:root[data-theme] #message-input {
+  height: 84px;
+  min-height: 84px;
+  max-height: 200px;
+  padding: 4px 8px 44px;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+:root[data-theme] .composer-actions {
+  left: 10px;
+  right: 10px;
+  bottom: 10px;
+  justify-content: space-between;
+  pointer-events: none;
+}
+
+:root[data-theme] .composer-actions > * {
+  pointer-events: auto;
+}
+
+:root[data-theme] .composer-attach {
+  border: 0;
+  border-radius: 999px;
+  color: var(--text);
+}
+
+:root[data-theme] .composer-attach:hover {
+  background: var(--hover);
+}
+
+:root[data-theme] #send-message {
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  background: var(--brand);
+  color: var(--gpt-on-brand);
+  box-shadow: none;
+}
+
+:root[data-theme] #send-message:hover:not(:disabled) {
+  filter: none;
+  opacity: 0.85;
+  transform: none;
+}
+
+:root[data-theme] #send-message:disabled {
+  background: var(--gpt-send-disabled-bg);
+  color: var(--gpt-send-disabled-text);
+  box-shadow: none;
+}
+
+/* Primary buttons: solid black (white in the dark theme). */
+:root[data-theme] .btn-primary,
+:root[data-theme] .btn-primary:hover:not(:disabled) {
+  border-color: transparent;
+  background: var(--brand);
+  color: var(--gpt-on-brand);
+  box-shadow: none;
+}
+
+:root[data-theme] .btn-primary:hover:not(:disabled) {
+  filter: none;
+  opacity: 0.86;
+}
+
+:root[data-theme] .btn,
+:root[data-theme] input,
+:root[data-theme] select,
+:root[data-theme] textarea {
+  border-radius: 10px;
+}
+
+/* Text fields: a darker edge on focus, no heavy ring. */
+:root[data-theme] input:not([type="radio"]):not([type="checkbox"]):focus,
+:root[data-theme] textarea:focus,
+:root[data-theme] select:focus {
+  border-color: rgba(var(--accent-rgb), 0.45);
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.06);
+  /* The edge shows focus; the page-wide focus outline would draw a second ring. */
+  outline: none;
+}
+
+/* Member drawer: flat cards. */
+:root[data-theme] .role-card {
+  border-color: var(--line);
+  box-shadow: none;
+}
+
+:root[data-theme] .role-card.selected,
+:root[data-theme] .role-card.active {
+  border-color: var(--line-hover);
+  background: var(--gpt-selected-bg);
+  box-shadow: none;
+}
+
+/* Narrow windows: the sidebar header keeps one line and its ＋ button. */
+:root[data-theme] .sidebar .panel-header {
+  min-width: 0;
+  gap: 8px;
+}
+
+:root[data-theme] .sidebar .brand-mark,
+:root[data-theme] .sidebar .sidebar-brand-copy {
+  min-width: 0;
+}
+
+:root[data-theme] .sidebar #store-summary {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:root[data-theme] .sidebar-header-actions {
+  flex-shrink: 0;
+}
+
+/* The group avatar next to the header title is part of the Grok style only. */
+:root[data-theme] .chat-title-avatar {
+  display: none;
+}
+
+/* The style switch (GPT | Grok) next to the light/dark switch: short text labels, so its
+   options are as wide as their words, unlike the icon-only light/dark options. */
+/* The edit-and-resend button of the user's own messages sits to the left of the bubble, shown on
+   hover (or keyboard focus), so it adds no height to the message. */
+:root[data-theme] .message-row.user .message-tools {
+  position: absolute;
+  top: 50%;
+  right: calc(100% + 6px);
+  left: auto;
+  margin: 0;
+  transform: translateY(-50%);
+  opacity: 0;
+}
+
+:root[data-theme] .message-row.user:hover .message-tools,
+:root[data-theme] .message-row.user:focus-within .message-tools {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  :root[data-theme] .message-row.user .message-tools {
+    opacity: 1;
+  }
+}
+
+/* Tokens an API reply used, after the member's name. */
+:root[data-theme] .message-usage {
+  color: var(--subtle);
+  font-size: 11.5px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* The mic button sits next to the attach button; while listening it turns red and pulses. */
+:root[data-theme] .composer-mic {
+  margin-left: auto;
+}
+
+:root[data-theme] .composer-mic[hidden] {
+  display: none;
+}
+
+:root[data-ui-style="grok"] .composer:has(.composer-mic:not([hidden])) #message-input {
+  padding-right: 112px;
+}
+
+:root[data-theme] .composer-mic.listening {
+  border-color: transparent;
+  background: #ef4444;
+  color: #ffffff;
+  animation: composer-mic-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes composer-mic-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.45); }
+  50% { box-shadow: 0 0 0 7px rgba(239, 68, 68, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-theme] .composer-mic.listening {
+    animation: none;
+  }
+}
+
+/* Choices a reply ends with: a card of buttons under it that answer that member. */
+:root[data-theme] .reply-choices {
+  display: grid;
+  gap: 2px;
+  width: min(100%, 520px);
+  margin-top: 8px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 6px;
+  background: var(--surface);
+  box-shadow: 0 6px 18px -14px rgba(0, 0, 0, 0.35);
+}
+
+:root[data-theme] .reply-choice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  border: 0;
+  border-radius: 12px;
+  padding: 9px 10px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 14.5px;
+  text-align: left;
+}
+
+:root[data-theme] .reply-choice:hover,
+:root[data-theme] .reply-choice:focus-visible {
+  background: var(--hover);
+}
+
+:root[data-theme] .reply-choice-label {
+  display: inline-grid;
+  flex: 0 0 26px;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+:root[data-theme] .reply-choice:hover .reply-choice-label {
+  border-color: var(--line-hover);
+  color: var(--text);
+}
+
+:root[data-ui-style="grok"] .reply-choice-label {
+  border-radius: 999px;
+}
+
+:root[data-ui-style="grok"] .reply-choice:hover .reply-choice-label {
+  border-color: var(--gb-accent);
+  color: var(--gb-accent);
+}
+
+/* Scrollbars here are styled, so they take room: a list or window that starts to scroll would
+   suddenly narrow and shift its content sideways. Their room is kept from the start. The chat
+   keeps it on both sides so its column stays centred. */
+:root[data-theme] .messages {
+  scrollbar-gutter: stable both-edges;
+}
+
+:root[data-theme] .modal,
+:root[data-theme] .role-scroll,
+:root[data-theme] .team-card-body,
+:root[data-theme] .reply-compare-body,
+:root[data-theme] .message-search-results,
+:root[data-theme] #people-library-list,
+:root[data-theme] #add-library-people-list,
+:root[data-theme] .all-notes-list,
+:root[data-theme] .notes-editor,
+:root[data-theme] .select-list,
+:root[data-theme] .group-template-list,
+:root[data-theme] .orchestration-people-list,
+:root[data-theme] .orchestration-settings,
+:root[data-theme] .orchestration-status-body,
+:root[data-theme] .orchestration-auto-messages,
+:root[data-theme] .orchestration-template-content {
+  scrollbar-gutter: stable;
+}
+
+/* Symbols drawn a little low in their font (×) are lifted to the middle. */
+:root[data-theme] .modal-close,
+:root[data-theme] #close-notes-panel {
+  padding-bottom: 2px;
+}
+
+/* Cards in the orchestration window no longer rise a pixel on hover. */
+:root[data-theme] .orchestration-template-card:hover:not(:disabled),
+:root[data-theme] .orchestration-template-card:focus-visible {
+  transform: none;
+}
+
+/* Switching groups keeps the header's buttons still: labels whose text changes keep a steady width. */
+:root[data-theme] #toggle-people-drawer {
+  min-width: 64px;
+  justify-content: center;
+}
+
+/* The closed people drawer waits just past the page's right edge. Once it has slid away it is
+   hidden, so its shadow does not show along that edge. */
+:root[data-theme] .role-panel:not(.open) {
+  visibility: hidden;
+  transition: transform 0.18s ease, visibility 0s linear 0.18s;
+}
+
+/* Group rounds. A round's buttons sit side by side under the question; replies open with their key
+   points in a tinted box and long ones fold to them; the round's summary is a card. */
+:root[data-theme] .message-round-actions {
+  display: flex;
+  align-self: flex-end;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+:root[data-theme] .message-round-actions .message-compare-btn {
+  margin-top: 0;
+}
+
+:root[data-theme] .message-body.has-key-points > .key-points-heading {
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+}
+
+:root[data-theme] .message-body.has-key-points > .key-points-list {
+  margin: 0 0 14px;
+  border-radius: 12px;
+  padding: 10px 14px 10px 32px;
+  background: var(--chip-bg);
+}
+
+/* Key points written as lines (no list): the box without a bullet indent, its heading line muted. */
+:root[data-theme] .message-body.has-key-points > p.key-points-list {
+  padding: 10px 14px;
+}
+
+:root[data-theme] .key-points-block > strong:first-child {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+:root[data-theme] .message-body.folded > :not(.key-points-heading):not(.key-points-list) {
+  display: none;
+}
+
+:root[data-theme] .message-body.folded > .key-points-list {
+  margin-bottom: 0;
+}
+
+:root[data-theme] .key-points-toggle {
+  align-self: flex-start;
+  margin-top: 6px;
+  border: 0;
+  padding: 2px 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+:root[data-theme] .key-points-toggle::after {
+  content: " ↓";
+}
+
+:root[data-theme] .key-points-toggle[aria-expanded="true"]::after {
+  content: " ↑";
+}
+
+:root[data-theme] .key-points-toggle:hover {
+  color: var(--text);
+}
+
+:root[data-theme] .message-row.round-summary .message-bubble {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 12px 16px;
+}
+
+:root[data-theme] .round-summary-label {
+  flex: none;
+  border-radius: 999px;
+  padding: 1px 8px;
+  background: var(--chip-bg);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+}
+
+:root[data-theme] .round-summary-request .message-system-pill {
+  font-size: 12px;
+}
+
+/* Turn-by-turn discussions: the topic and notes say what they are, each turn is announced, and a bar
+   at the end of the chat shows the turn and who speaks, with stop / one more round / summarize. */
+:root[data-theme] .discussion-turn-request .message-system-pill {
+  font-size: 12px;
+}
+
+:root[data-theme] .discussion-message-label {
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+/* In the user's bubble the label sits inside its padding, above the text. */
+:root[data-theme] .message-row.user .discussion-message-label {
+  margin-bottom: -6px;
+  padding: 9px 18px 0;
+}
+
+:root[data-theme] .discussion-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 6px max(24px, calc((100% - 768px) / 2)) 4px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 10px 12px 10px 16px;
+  background: var(--chip-bg);
+}
+
+:root[data-theme] .discussion-bar-text {
+  display: grid;
+  flex: 1;
+  gap: 2px;
+  min-width: 0;
+  font-size: 13px;
+}
+
+:root[data-theme] .discussion-bar-text strong {
+  color: var(--text);
+  font-weight: 650;
+}
+
+:root[data-theme] .discussion-bar-text span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+:root[data-theme] .discussion-bar.running .discussion-bar-text strong::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin: 0 7px 1px 0;
+  border-radius: 50%;
+  background: var(--success, #10a37f);
+  animation: discussion-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes discussion-pulse {
+  50% { opacity: 0.35; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-theme] .discussion-bar.running .discussion-bar-text strong::before {
+    animation: none;
+  }
+}
+
+:root[data-theme] .discussion-bar-actions {
+  display: flex;
+  flex: none;
+  gap: 6px;
+}
+
+/* The settings window: categories on the left, one row per setting on the right (title and hint,
+   with its control at the end). A fixed size, so switching categories does not resize it. */
+:root[data-theme] .settings-modal {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  width: min(760px, calc(100vw - 48px));
+  height: min(560px, calc(100vh - 48px));
+  padding: 0;
+  overflow: hidden;
+  /* Only the settings list scrolls, so the window keeps no room for a scrollbar of its own. */
+  scrollbar-gutter: auto;
+}
+
+:root[data-theme] .settings-modal-header {
+  align-items: center;
+  margin: 0;
+  border-bottom: 1px solid var(--line);
+  padding: 12px 14px 12px 24px;
+}
+
+/* The close button sits in the header row, level with the title. */
+:root[data-theme] .settings-modal-header .modal-close {
+  position: static;
+}
+
+:root[data-theme] .settings-modal-header h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+:root[data-theme] .settings-body {
+  display: grid;
+  grid-template-columns: 184px minmax(0, 1fr);
+  min-height: 0;
+}
+
+:root[data-theme] .settings-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-right: 1px solid var(--line);
+  padding: 12px;
+}
+
+:root[data-theme] .settings-nav-item {
+  display: flex;
+  align-items: center;
+  height: 36px;
+  border: 0;
+  border-radius: 10px;
+  padding: 0 12px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+:root[data-theme] .settings-nav-item:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+:root[data-theme] .settings-nav-item[aria-selected="true"] {
+  background: var(--chip-bg);
+  color: var(--text);
+}
+
+:root[data-theme] .settings-content {
+  overflow-y: auto;
+  padding: 4px 24px 20px;
+  scrollbar-gutter: stable;
+}
+
+:root[data-theme] .settings-panel[hidden] {
+  display: none;
+}
+
+:root[data-theme] .settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  border-bottom: 1px solid var(--line);
+  padding: 16px 0;
+}
+
+:root[data-theme] .settings-row:last-child {
+  border-bottom: 0;
+}
+
+:root[data-theme] .settings-row-text {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+:root[data-theme] .settings-row-title {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+:root[data-theme] .settings-row-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+:root[data-theme] .settings-row .settings-checkbox {
+  margin-top: 6px;
+}
+
+:root[data-theme] .settings-modal .settings-segment {
+  flex: none;
+  width: 216px;
+}
+
+:root[data-theme] .settings-action {
+  flex: none;
+  justify-content: center;
+  min-width: 96px;
+}
+
+/* An on/off switch. */
+:root[data-theme] .settings-switch {
+  position: relative;
+  flex: none;
+  width: 44px;
+  height: 26px;
+  border: 0;
+  border-radius: 999px;
+  padding: 0;
+  background: var(--line-strong);
+  cursor: pointer;
+  transition: background 0.16s ease;
+}
+
+:root[data-theme] .settings-switch::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  transition: transform 0.16s ease;
+}
+
+:root[data-theme] .settings-switch[aria-checked="true"] {
+  background: var(--brand);
+}
+
+:root[data-theme] .settings-switch[aria-checked="true"]::after {
+  background: var(--gpt-on-brand, #ffffff);
+  transform: translateX(18px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-theme] .settings-switch,
+  :root[data-theme] .settings-switch::after {
+    transition: none;
+  }
+}
+
+/* 项目模式: the task board at the end of the chat, the notices for each step, and the coordinator's
+   plans and checks folded under a title. */
+:root[data-theme] .project-request .message-system-pill {
+  font-size: 12px;
+}
+
+:root[data-theme] .project-board {
+  display: grid;
+  gap: 10px;
+  margin: 6px max(24px, calc((100% - 768px) / 2)) 4px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 14px 16px;
+  background: var(--chip-bg);
+}
+
+:root[data-theme] .project-board-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+:root[data-theme] .project-board-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--text);
+  font-size: 14px;
+}
+
+:root[data-theme] .project-board-chip {
+  flex: none;
+  border-radius: 999px;
+  padding: 1px 8px;
+  background: var(--brand);
+  color: var(--gpt-on-brand, #ffffff);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+}
+
+:root[data-theme] .project-board-steps {
+  flex: none;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+:root[data-theme] .project-board-goal {
+  margin: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:root[data-theme] .project-board-detail {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+  white-space: pre-line;
+}
+
+:root[data-theme] .project-board-detail.question {
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: var(--workspace-bg);
+  color: var(--text);
+}
+
+:root[data-theme] .project-task-list {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+:root[data-theme] .project-task {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 10px;
+  border-top: 1px solid var(--line);
+  padding: 8px 0;
+}
+
+:root[data-theme] .project-task-status {
+  justify-self: start;
+  border-radius: 999px;
+  padding: 1px 8px;
+  background: var(--workspace-bg);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+:root[data-theme] .project-task-doing .project-task-status {
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+}
+
+:root[data-theme] .project-task-done .project-task-status {
+  background: rgba(16, 163, 127, 0.14);
+  color: var(--success);
+}
+
+:root[data-theme] .project-task-redo .project-task-status,
+:root[data-theme] .project-task-blocked .project-task-status {
+  background: rgba(245, 158, 11, 0.16);
+  color: #c27803;
+}
+
+:root[data-theme] .project-task-failed .project-task-status {
+  background: rgba(239, 68, 68, 0.14);
+  color: #dc2626;
+}
+
+:root[data-theme] .project-task-main {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+:root[data-theme] .project-task-title {
+  display: flex;
+  gap: 6px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+:root[data-theme] .project-task-id {
+  flex: none;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+:root[data-theme] .project-task-note {
+  margin: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:root[data-theme] .project-task-owner {
+  max-width: 140px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:root[data-theme] select.project-task-owner {
+  height: 26px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 6px;
+  background: var(--workspace-bg);
+  color: var(--text);
+}
+
+:root[data-theme] .project-board-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+:root[data-theme] .project-coordinator-reply > summary {
+  color: var(--muted);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+:root[data-theme] .project-coordinator-reply[open] > summary {
+  margin-bottom: 8px;
+}
+
+/* A local agent waiting for the user: allow the run (the task can be read first), or one of its
+   actions. */
+:root[data-theme] .approval-card {
+  display: grid;
+  gap: 10px;
+  margin: 6px max(24px, calc((100% - 768px) / 2)) 4px;
+  border: 1px solid var(--line-strong);
+  border-radius: 16px;
+  padding: 14px 16px;
+  background: var(--workspace-bg);
+  box-shadow: 0 8px 24px -16px rgba(0, 0, 0, 0.35);
+}
+
+:root[data-theme] .approval-card-title {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+:root[data-theme] .approval-card-title::before {
+  content: "⚠ ";
+  color: #d97706;
+}
+
+:root[data-theme] .approval-card-detail > summary {
+  color: var(--muted);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+:root[data-theme] .approval-card-detail pre {
+  max-height: 260px;
+  margin: 8px 0 0;
+  overflow: auto;
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: var(--chip-bg);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+:root[data-theme] .approval-card-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+:root[data-theme] .approval-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* On a member's row in the team-formation card, which covers the chat. */
+:root[data-theme] .team-card-row .approval-card {
+  margin: 0;
+  box-shadow: none;
+}
+
+/* Narrow windows: the categories become a row of tabs above the settings. */
+@media (max-width: 640px) {
+  :root[data-theme] .settings-body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  :root[data-theme] .settings-nav {
+    flex-direction: row;
+    overflow-x: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  :root[data-theme] .settings-nav-item {
+    flex: none;
+  }
+}
+
+/* Group list search (shown for long lists) and the pin mark on pinned groups. The sidebar gets a
+   row for the search box only while it shows. */
+:root[data-theme] .sidebar:has(.chat-list-search:not([hidden])) {
+  grid-template-rows: 66px auto minmax(0, 1fr);
+}
+
+:root[data-theme] .chat-list-search {
+  padding: 0 12px 8px;
+}
+
+:root[data-theme] .chat-list-search[hidden] {
+  display: none;
+}
+
+:root[data-theme] .chat-list-search input {
+  width: 100%;
+  height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0 12px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13.5px;
+}
+
+:root[data-theme] .chat-pin-mark {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  margin-left: 6px;
+  color: var(--subtle);
+}
+
+:root[data-theme] .chat-pin-mark svg {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+:root[data-ui-style="grok"] .chat-list-search input {
+  height: 38px;
+  border-radius: 999px;
+  padding: 0 16px;
+  background: var(--gb-pill);
+}

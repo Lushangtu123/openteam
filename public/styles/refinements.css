@@ -1,0 +1,1016 @@
+/* OpenTeam styles, refinements.css: loaded in this order by team.html: base, theme, chatgpt, grok, refinements.
+   Layout and readability passes on top of both styles: the header, the input box and narrow
+   windows; the sidebar and member panel; the dialogs; text sizes, tap targets and icons. */
+
+/*
+ * Header, input box and narrow windows.
+ * The header is about the open group: its name and state, then 工作流 (编排, 项目), 成员, 笔记 and a
+ * 更多 menu. How the next message is answered (不@也回复, 轮流讨论) is chosen in the input box. Below
+ * 860px the group list slides in over the chat; below 640px 工作流 and 笔记 move into 更多.
+ */
+:root[data-theme] .chat-header [hidden],
+:root[data-theme] .composer-actions > .composer-modes[hidden] {
+  display: none;
+}
+
+:root[data-theme] .chat-header {
+  gap: 10px;
+}
+
+:root[data-theme] .chat-header .chat-row {
+  flex-wrap: nowrap;
+  gap: 4px;
+}
+
+:root[data-theme] .chat-title-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+:root[data-theme] .chat-title-line .chat-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:root[data-theme] .chat-header #chat-status {
+  flex: 0 0 auto;
+  min-height: 20px;
+  padding: 0 4px;
+  font-size: 12px;
+}
+
+:root[data-theme] .chat-header .chat-list-toggle {
+  display: none;
+}
+
+:root[data-theme] .composer.no-chat {
+  display: none;
+}
+
+:root[data-theme] .header-icon-btn {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-color: transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+}
+
+:root[data-theme] .header-icon-btn:hover,
+:root[data-theme] .header-icon-btn[aria-expanded="true"] {
+  background: var(--hover);
+  color: var(--text);
+}
+
+:root[data-theme] .header-icon-btn svg,
+:root[data-theme] #quick-create-chat svg,
+:root[data-theme] .chat-menu-btn svg,
+:root[data-theme] .header-menu-item svg,
+:root[data-theme] .composer-chip svg {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+:root[data-theme] .header-icon-btn circle,
+:root[data-theme] .chat-menu-btn circle {
+  fill: currentColor;
+}
+
+:root[data-theme] .chat-menu-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+:root[data-theme] .header-menu {
+  position: relative;
+  display: flex;
+}
+
+:root[data-theme] .header-menu-trigger[aria-expanded="true"] {
+  background: var(--hover);
+  color: var(--text);
+}
+
+:root[data-theme] .chat-header .header-menu-chevron {
+  width: 14px;
+  height: 14px;
+  margin-left: -2px;
+}
+
+:root[data-theme] .header-menu-list {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  display: grid;
+  gap: 2px;
+  width: max-content;
+  min-width: 220px;
+  max-width: min(320px, calc(100vw - 24px));
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface-raised);
+  box-shadow: 0 18px 44px -14px rgba(0, 0, 0, 0.38);
+}
+
+:root[data-theme] .header-menu-item {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+:root[data-theme] .header-menu-item:not(:has(svg)) {
+  grid-template-columns: minmax(0, 1fr);
+  padding-left: 38px;
+}
+
+:root[data-theme] .header-menu-item:hover,
+:root[data-theme] .header-menu-item:focus-visible {
+  background: var(--hover);
+  outline: none;
+}
+
+:root[data-theme] .header-menu-item svg {
+  margin-top: 1px;
+}
+
+:root[data-theme] .header-menu-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+:root[data-theme] .header-menu-label {
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+:root[data-theme] .header-menu-hint {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: normal;
+}
+
+:root[data-theme] .header-menu-item.narrow-only {
+  display: none;
+}
+
+/* The input box: the reply switches sit after the attach button, the mic and send at the right. */
+:root[data-theme] .composer-actions > .composer-modes {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  margin-right: auto;
+}
+
+:root[data-theme] .composer-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 11px 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+:root[data-theme] .composer-chip:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+:root[data-theme] .composer-chip[aria-checked="true"] {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--gpt-link, #0b66d6) 14%, transparent);
+  color: var(--gpt-link, #0b66d6);
+}
+
+:root[data-theme] .composer-chip svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Grok's title area has a column for the group's avatar; without the avatar, one column. */
+:root[data-ui-style="grok"] .chat-title-block:has(> .chat-title-avatar[hidden]) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* Grok's one-line input bar becomes two lines while the switches show, so they do not cover the text. */
+:root[data-ui-style="grok"] .composer:has(.composer-modes:not([hidden])) #message-input {
+  height: 96px;
+  min-height: 96px;
+  padding: 12px 14px 56px;
+}
+
+@media (max-width: 860px) {
+  :root[data-theme] .app-shell {
+    grid-template-columns: 48px minmax(0, 1fr);
+  }
+
+  :root[data-theme] .app-shell > .sidebar {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 48px;
+    z-index: 30;
+    width: min(300px, calc(100vw - 48px));
+    box-shadow: 0 24px 60px -18px rgba(0, 0, 0, 0.45);
+    transform: translateX(calc(-100% - 48px));
+    visibility: hidden;
+    transition: transform 0.18s ease, visibility 0s linear 0.18s;
+  }
+
+  :root[data-theme] .app-shell.chat-list-open > .sidebar {
+    transform: none;
+    visibility: visible;
+    transition: transform 0.18s ease;
+  }
+
+  :root[data-theme] .chat-header .chat-list-toggle {
+    display: grid;
+    flex: 0 0 auto;
+  }
+
+  /* The chat dims behind the open list; a click on it closes the list. */
+  :root[data-theme] .app-shell.chat-list-open::after {
+    content: "";
+    position: fixed;
+    inset: 0 0 0 48px;
+    z-index: 29;
+    background: rgba(0, 0, 0, 0.22);
+  }
+
+  :root[data-theme] .chat-header {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+}
+
+@media (max-width: 640px) {
+  :root[data-theme] .chat-header .wide-only {
+    display: none;
+  }
+
+  :root[data-theme] .header-menu-item.narrow-only:not([hidden]) {
+    display: grid;
+  }
+
+  :root[data-theme] .messages {
+    padding-inline: 14px;
+  }
+
+  :root[data-theme] .composer {
+    margin-inline: 10px;
+  }
+
+  /* The group's name gets the room: its state shows as the dot alone, and Grok's avatar goes. */
+  :root[data-theme] .chat-header #chat-status {
+    padding: 0;
+    font-size: 0;
+  }
+
+  :root[data-ui-style="grok"] .chat-title-avatar:not([hidden]) {
+    display: none;
+  }
+
+  :root[data-ui-style="grok"] .chat-title-block {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* Grok's reply tools move under the bubble, so the bubble can use the whole width. */
+  :root[data-ui-style="grok"] .message-row.assistant .message-stack {
+    max-width: 100%;
+  }
+
+  :root[data-ui-style="grok"] .message-row.assistant:not(.thinking):not(.stopped) .message-tools {
+    position: static;
+    margin: 6px 0 0 14px;
+    transform: none;
+  }
+}
+
+@media (max-width: 560px) {
+  :root[data-theme] .composer-chip {
+    width: 32px;
+    justify-content: center;
+    padding: 0;
+  }
+
+  :root[data-theme] .composer-chip span {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-theme] .app-shell > .sidebar,
+  :root[data-theme] .app-shell.chat-list-open > .sidebar {
+    transition: none;
+  }
+}
+
+/*
+ * Sidebar, empty chat area and member panel.
+ * New groups start from three equal choices; the empty chat area offers the same three. Each member
+ * card has one ⋯ menu (prompt, the web page's actions, then removing). From 1280px the member
+ * panel sits beside the chat instead of covering it.
+ */
+:root[data-theme] .icon-btn > svg,
+:root[data-theme] .note-tool-btn > svg,
+:root[data-theme] .ui-icon {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+:root[data-theme] .note-tool-btn > svg {
+  width: 16px;
+  height: 16px;
+}
+
+:root[data-theme] .icon-dots circle,
+:root[data-theme] .ui-icon-more circle {
+  fill: currentColor;
+}
+
+:root[data-theme] .attachment-chip-remove .ui-icon {
+  width: 12px;
+  height: 12px;
+}
+
+/* The group and people counts under the name were noise; the list itself shows the groups. */
+:root[data-theme] .sidebar #store-summary {
+  display: none;
+}
+
+:root[data-theme] .chat-create-choices {
+  display: grid;
+  gap: 4px;
+}
+
+:root[data-theme] .chat-create-choices[hidden],
+:root[data-theme] .chat-create-blank[hidden] {
+  display: none;
+}
+
+:root[data-theme] .chat-create-blank {
+  display: grid;
+  gap: 12px;
+}
+
+:root[data-theme] .chat-create-choice {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  width: 100%;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+:root[data-theme] .chat-create-choice:hover,
+:root[data-theme] .chat-create-choice:focus-visible {
+  border-color: var(--line-hover);
+  background: var(--hover);
+  outline: none;
+}
+
+:root[data-theme] .chat-create-choice svg {
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+:root[data-theme] .chat-create-choice-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+:root[data-theme] .chat-create-choice-label {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+:root[data-theme] .chat-create-choice-hint {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+:root[data-theme] .no-chat-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+/* Member panel: one heading, and its actions in the header. */
+:root[data-theme] .role-panel-header {
+  gap: 10px;
+}
+
+:root[data-theme] .role-panel-heading {
+  min-width: 0;
+}
+
+:root[data-theme] .role-panel-actions {
+  flex-wrap: nowrap;
+  gap: 4px;
+}
+
+:root[data-theme] .role-add-form {
+  display: flex;
+  margin: 0;
+}
+
+:root[data-theme] .role-add-form .btn svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+:root[data-theme] .role-add-form .btn {
+  gap: 4px;
+}
+
+:root[data-theme] .role-card-actions {
+  position: relative;
+  align-self: end;
+}
+
+:root[data-theme] .role-more-btn {
+  width: 30px;
+  height: 30px;
+  color: var(--muted);
+}
+
+:root[data-theme] .role-more-btn:hover,
+:root[data-theme] .role-more-btn[aria-expanded="true"] {
+  background: var(--hover);
+  color: var(--text);
+}
+
+:root[data-theme] .role-action-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 6;
+  display: grid;
+  gap: 2px;
+  min-width: 168px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-raised);
+  box-shadow: 0 16px 36px -12px rgba(0, 0, 0, 0.36);
+}
+
+:root[data-theme] .role-action-menu .role-action-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: auto;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 1.3;
+  text-align: left;
+  opacity: 1;
+  cursor: pointer;
+}
+
+:root[data-theme] .role-action-menu .role-action-item svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+}
+
+:root[data-theme] .role-action-menu .role-action-item:hover,
+:root[data-theme] .role-action-menu .role-action-item:focus-visible {
+  background: var(--hover);
+  color: var(--text);
+  outline: none;
+}
+
+:root[data-theme] .role-action-menu .role-delete {
+  margin-top: 4px;
+  border-top: 1px solid var(--line);
+  border-radius: 0 0 8px 8px;
+  padding-top: 9px;
+  color: #d93025;
+}
+
+:root[data-theme] .role-action-menu .role-delete:hover,
+:root[data-theme] .role-action-menu .role-delete:focus-visible {
+  background: rgba(217, 48, 37, 0.1);
+  color: #d93025;
+}
+
+:root[data-theme="dark"] .role-action-menu .role-delete,
+:root[data-theme="dark"] .role-action-menu .role-delete:hover {
+  color: #ff8a82;
+}
+
+/* Wide windows: the member panel takes its place beside the chat. */
+@media (min-width: 1280px) {
+  :root[data-theme] .workspace {
+    transition: margin-right 0.18s ease;
+  }
+
+  :root[data-theme] .app-shell:has(> .role-panel.open) > .workspace {
+    margin-right: 380px;
+  }
+
+  :root[data-theme] .role-panel.open {
+    box-shadow: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-theme] .workspace {
+    transition: none;
+  }
+}
+
+/* The member list fills the panel, so a card's menu has room to open below the last card. */
+:root[data-theme] .role-scroll {
+  flex: 1 1 auto;
+}
+
+:root[data-theme] .role-panel-actions .btn {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+:root[data-theme] .role-panel-heading #role-summary {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The note editor is a text area, not a control: no focus frame (the page-wide focus outline drew a
+   thick dark box around it); the caret shows where typing goes, and the area tints slightly. */
+:root[data-theme] .notes-editor .ProseMirror:focus,
+:root[data-theme] .notes-editor .ProseMirror:focus-visible {
+  outline: none;
+}
+
+:root[data-theme] .notes-editor:focus-within {
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+/* Search excerpts: matches in a highlighter yellow, readable in both themes. */
+:root[data-theme] .message-search-snippet mark {
+  padding: 0 2px;
+  background: rgba(250, 204, 21, 0.42);
+  color: inherit;
+  font-weight: 600;
+}
+
+/* Icons inside text buttons: the compare and positions buttons, menu checks, steppers. */
+:root[data-theme] .message-compare-btn {
+  gap: 5px;
+}
+
+:root[data-theme] .message-compare-btn .ui-icon {
+  width: 14px;
+  height: 14px;
+}
+
+:root[data-theme] .role-site-option {
+  gap: 6px;
+}
+
+:root[data-theme] .role-site-option .ui-icon {
+  width: 14px;
+  height: 14px;
+}
+
+:root[data-theme] .team-setup-step .ui-icon {
+  width: 16px;
+  height: 16px;
+}
+
+/* Adding members: the person's text takes the row; the models are one button with a checklist. */
+:root[data-theme] .add-person-site-control {
+  flex-wrap: nowrap;
+}
+
+:root[data-theme] .add-person-model-btn {
+  max-width: 220px;
+  min-height: 30px;
+  overflow: hidden;
+  padding: 0 12px;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 1;
+}
+
+:root[data-theme] .select-row > .add-person-model-menu {
+  position: static;
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 2px;
+  min-width: 0;
+  padding: 6px;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+:root[data-theme] .add-person-model-menu .add-person-model-hint {
+  grid-column: 1 / -1;
+}
+
+:root[data-theme] .add-person-model-menu .add-person-site-option input[type="checkbox"] {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+}
+
+:root[data-theme] .add-person-model-menu .add-person-site-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  border: 0;
+  border-radius: 8px;
+  padding: 0 10px;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  opacity: 1;
+}
+
+:root[data-theme] .add-person-model-menu .add-person-site-option input {
+  position: static;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+:root[data-theme] .add-person-model-menu .add-person-site-option.disabled {
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+:root[data-theme] .add-person-site-note {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 400;
+}
+
+:root[data-theme] .role-site-option:disabled {
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+:root[data-theme] .add-person-model-hint {
+  margin: 4px 10px 2px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* Models window: the list, then 添加模型; the form opens only to add or change a model. */
+:root[data-theme] .external-models-toolbar {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: 10px;
+}
+
+:root[data-theme] .external-models-toolbar [hidden],
+:root[data-theme] .external-model-form[hidden],
+:root[data-theme] .template-category-filter[hidden] {
+  display: none;
+}
+
+:root[data-theme] .external-models-toolbar .btn {
+  gap: 6px;
+}
+
+:root[data-theme] .external-models-toolbar .btn svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+:root[data-theme] .external-model-form {
+  margin-top: 12px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+:root[data-theme] .external-model-form-title {
+  margin: 0 0 4px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+/* Delete in lists of models and people: a quiet text button in red, not a filled pink one. */
+:root[data-theme] .model-delete,
+:root[data-theme] .template-delete {
+  border-color: transparent;
+  background: transparent;
+  color: #d93025;
+}
+
+:root[data-theme] .model-delete:hover,
+:root[data-theme] .template-delete:hover {
+  background: rgba(217, 48, 37, 0.1);
+  color: #d93025;
+}
+
+:root[data-theme="dark"] .model-delete,
+:root[data-theme="dark"] .template-delete,
+:root[data-theme="dark"] .model-delete:hover,
+:root[data-theme="dark"] .template-delete:hover {
+  color: #ff8a82;
+}
+
+/* People lists: rows as tall as their text (the list stretched them to fill its height). */
+:root[data-theme] #people-library-list,
+:root[data-theme] #add-library-people-list {
+  align-content: start;
+}
+
+/* Compare replies: copy at the left, discuss and summarize at the right, notes below. */
+:root[data-theme] .reply-compare-footer .reply-compare-copy {
+  margin-right: auto;
+}
+
+:root[data-theme] .reply-compare-hints {
+  margin-top: 2px;
+}
+
+/* Orchestration people: the name on its own line, the model and description under it. */
+:root[data-theme] .orchestration-person-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:root[data-theme] .orchestration-person-title {
+  gap: 6px;
+}
+
+:root[data-theme] .orchestration-person-title .tiny {
+  min-width: 0;
+}
+
+:root[data-theme] .orchestration-person-site {
+  font-size: 11px;
+}
+
+/* Team-up: the AIs in use first; 更多 AI shows the rest. */
+:root[data-theme] .team-setup-member[hidden] {
+  display: none;
+}
+
+:root[data-theme] .team-setup-more {
+  justify-self: start;
+  margin-top: 4px;
+}
+
+/*
+ * Readability: no text under 12px where it carries meaning (model labels, member status, round and
+ * discussion labels, times, file sizes, template tags), at a normal weight; and no tap target under
+ * 28px. Initials inside small avatars and keyboard hints keep their size.
+ */
+:root[data-theme] .role-site-badge,
+:root[data-theme] .mention-site-badge,
+:root[data-theme] .site-pill,
+:root[data-theme] .orchestration-person-site,
+:root[data-theme] #iframe-host .role-frame-site {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+:root[data-theme] .role-site-badge,
+:root[data-theme] .mention-site-badge {
+  min-height: 20px;
+  padding: 0 7px;
+}
+
+:root[data-theme] .role-meta-item,
+:root[data-theme] .round-summary-label,
+:root[data-theme] .discussion-message-label,
+:root[data-theme] .project-board-chip,
+:root[data-theme] .project-task-status,
+:root[data-theme] .chat-time,
+:root[data-theme] .message-time-divider,
+:root[data-theme] .message-file-size,
+:root[data-theme] .attachment-tray-hint,
+:root[data-theme] .mode-help,
+:root[data-theme] .template-category-chip,
+:root[data-theme] .group-template-role-count,
+:root[data-theme] .group-template-category,
+:root[data-theme] .group-template-meta,
+:root[data-theme] .group-template-roles span,
+:root[data-theme] .orchestration-template-tags,
+:root[data-theme] .orchestration-template-summary,
+:root[data-theme] .orchestration-template-structure,
+:root[data-theme] .orchestration-json-preview pre,
+:root[data-theme] .message-search-meta,
+:root[data-theme] .message-usage,
+:root[data-theme] .add-person-site-note,
+:root[data-theme] .all-note-target-meta {
+  font-size: 12px;
+}
+
+:root[data-theme] .role-meta-item {
+  font-weight: 500;
+}
+
+:root[data-theme] .round-summary-label {
+  font-weight: 600;
+  line-height: 20px;
+}
+
+:root[data-theme] .site-pill {
+  min-height: 28px;
+}
+
+:root[data-theme] .chat-item .chat-menu-btn,
+:root[data-ui-style="grok"] .chat-item .chat-menu-btn {
+  width: 30px;
+  height: 30px;
+}
+
+:root[data-theme] .message-compare-btn {
+  min-height: 30px;
+  padding-inline: 10px;
+}
+
+/* Small arrows drawn as line icons (a CSS mask), not as characters: the model pill's ⌄ and the
+   key-points toggle's ↓ / ↑. */
+:root[data-theme] .site-pill::after,
+:root[data-theme] .key-points-toggle::after {
+  content: "";
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  background: currentColor;
+  opacity: 0.75;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+:root[data-theme] .add-person-site-option::after,
+:root[data-theme] .orchestration-person-site::after {
+  content: none;
+}
+
+:root[data-theme] .key-points-toggle::after {
+  margin-left: 4px;
+  vertical-align: -1px;
+}
+
+:root[data-theme] .key-points-toggle[aria-expanded="true"]::after {
+  content: "";
+  transform: rotate(180deg);
+}
+
+/* The approval card's warning mark: a drawn triangle instead of the ⚠ character. */
+:root[data-theme] .approval-card-title::before {
+  content: "";
+  display: inline-block;
+  width: 15px;
+  height: 15px;
+  margin-right: 6px;
+  vertical-align: -2px;
+  background: #d97706;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 4 2.8 19.5h18.4Z'/%3E%3Cpath d='M12 10v4'/%3E%3Cpath d='M12 17h.01'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 4 2.8 19.5h18.4Z'/%3E%3Cpath d='M12 10v4'/%3E%3Cpath d='M12 17h.01'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+/* Key points: the 要点 heading inside the same box as the points, one block instead of a label
+   floating above a box. */
+:root[data-theme] .message-body.has-key-points > .key-points-heading {
+  margin: 0;
+  border-radius: 12px 12px 0 0;
+  padding: 10px 14px 2px;
+  background: var(--chip-bg);
+}
+
+:root[data-theme] .message-body.has-key-points > .key-points-heading + .key-points-list {
+  border-radius: 0 0 12px 12px;
+  padding-top: 4px;
+}
+
+:root[data-ui-style="grok"] .message-body.has-key-points > .key-points-heading {
+  background: var(--gb-accent-soft);
+}
+
+/* Member panel header: the heading keeps its room in every language. */
+:root[data-theme] .role-panel-heading {
+  flex: 1 1 auto;
+}
+
+:root[data-theme] .role-panel-heading h2 {
+  white-space: nowrap;
+}
+
+/* The stop button under a reply being written: the icon and the word. */
+:root[data-theme] .message-tool-btn.message-tool-btn-labeled {
+  width: auto;
+  gap: 4px;
+  padding: 0 10px 0 8px;
+  opacity: 1;
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+:root[data-theme] .message-tool-btn-labeled .ui-icon {
+  width: 15px;
+  height: 15px;
+}
+
+/* The role editor: AI 生成 is a real button, and 保存角色 sits at the right like other windows. */
+:root[data-theme] .template-save-actions {
+  justify-content: flex-end;
+}
+
+:root[data-theme] #generate-template-persona {
+  gap: 6px;
+}
+
+:root[data-theme] #generate-template-persona svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linejoin: round;
+}
+
+:root[data-theme] .group-template-create-hint {
+  display: block;
+  margin-top: 10px;
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 600;
+}
