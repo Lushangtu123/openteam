@@ -58,10 +58,11 @@ export function createVoiceInput(deps: VoiceInputDependencies): VoiceInput {
   deps.button.addEventListener('click', () => toggle())
 
   function render(listening: boolean): void {
-    const en = deps.language() === 'en'
     deps.button.setAttribute('aria-pressed', String(listening))
     deps.button.classList.toggle('listening', listening)
-    const label = listening ? (en ? 'Stop voice input' : '停止语音输入') : (en ? 'Voice input' : '语音输入')
+    // Chinese source text: the page's language pass translates it, so the label follows the language
+    // even though the button is drawn before the settings load.
+    const label = listening ? '停止语音输入' : '语音输入'
     deps.button.setAttribute('aria-label', label)
     deps.button.dataset.tooltip = label
   }

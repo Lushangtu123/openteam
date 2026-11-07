@@ -105,7 +105,7 @@ export function createChatListView(deps: ChatListViewDependencies): ChatListView
       menuButton.type = 'button'
       menuButton.className = 'icon-btn chat-menu-btn'
       menuButton.setAttribute('aria-label', language() === 'en' ? `Open chat menu for ${chat.name}` : `打开 ${chat.name} 的群聊菜单`)
-      menuButton.textContent = '⋯'
+      menuButton.append(moreIcon())
       menuButton.addEventListener('click', event => {
         event.stopPropagation()
         deps.state.chatMenuChatId = deps.state.chatMenuChatId === chat.id ? undefined : chat.id
@@ -318,4 +318,20 @@ export function createChatListView(deps: ChatListViewDependencies): ChatListView
   }
 
   return { renderChatList, switchChat }
+}
+
+// Three dots, drawn like the page's other icons.
+function moreIcon(): SVGSVGElement {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+  svg.setAttribute('viewBox', '0 0 24 24')
+  svg.setAttribute('fill', 'none')
+  svg.setAttribute('aria-hidden', 'true')
+  for (const cx of [6, 12, 18]) {
+    const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle')
+    dot.setAttribute('cx', String(cx))
+    dot.setAttribute('cy', '12')
+    dot.setAttribute('r', '1.2')
+    svg.append(dot)
+  }
+  return svg
 }

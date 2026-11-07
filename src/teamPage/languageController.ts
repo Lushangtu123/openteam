@@ -14,7 +14,9 @@ export interface LanguageSettingsController {
 }
 
 const TEXT_SOURCES = new WeakMap<Text, string>()
-const ATTRIBUTE_SOURCES = new WeakMap<Element, Map<string, string>>()
+// Per attribute: the Chinese source and what this pass last wrote, so a value the page's code sets
+// later (a placeholder that follows a setting) becomes the new source instead of being undone.
+const ATTRIBUTE_SOURCES = new WeakMap<Element, Map<string, { source: string; output: string }>>()
 const TRANSLATED_ATTRIBUTES = ['aria-label', 'title', 'placeholder', 'data-tooltip']
 const FORM_FIELD_SELECTOR = 'input, textarea'
 const SKIP_SELECTOR = [
@@ -120,9 +122,10 @@ function translateAttributes(root: ParentNode, language: TeamLanguage, doc: Docu
       const value = element.getAttribute(attribute)
       if (!value) continue
       const sources = attributeSourcesFor(element)
-      const source = sources.get(attribute) ?? value
-      sources.set(attribute, source)
+      const known = sources.get(attribute)
+      const source = known && (value === known.output || value === known.source) ? known.source : value
       const translated = translateUi(source, language)
+      sources.set(attribute, { source, output: translated })
       if (value !== translated) element.setAttribute(attribute, translated)
     }
   }
@@ -149,10 +152,10 @@ function elementsWithTranslatedAttributes(root: ParentNode, doc: Document): Elem
   return elements
 }
 
-function attributeSourcesFor(element: Element): Map<string, string> {
+function attributeSourcesFor(element: Element): Map<string, { source: string; output: string }> {
   const existing = ATTRIBUTE_SOURCES.get(element)
   if (existing) return existing
-  const next = new Map<string, string>()
+  const next = new Map<string, { source: string; output: string }>()
   ATTRIBUTE_SOURCES.set(element, next)
   return next
 }

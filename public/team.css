@@ -1061,18 +1061,6 @@ select:focus {
   white-space: nowrap;
 }
 
-#restore-chat {
-  width: 36px;
-  min-width: 36px;
-  padding: 0;
-  font-size: 0;
-}
-
-#restore-chat::before {
-  content: "↺";
-  font-size: 16px;
-}
-
 #open-orchestration[hidden] {
   display: none;
 }
@@ -7526,19 +7514,6 @@ select.reply-compare-select {
   grid-template-columns: repeat(2, auto);
 }
 
-/* In narrow windows the group title needs the room; the choice is also in the settings window. */
-@media (max-width: 1520px) {
-  :root[data-theme] .ui-style-switch {
-    display: none;
-  }
-}
-
-@media (max-width: 1360px) {
-  :root[data-theme] .theme-switch {
-    display: none;
-  }
-}
-
 :root[data-theme] .ui-style-option {
   width: auto;
   min-width: 44px;
@@ -7698,16 +7673,10 @@ select.reply-compare-select {
   scrollbar-gutter: stable;
 }
 
-/* Symbols drawn a little low in their font (×, ⚙) are lifted to the middle,
-   and the restore button's hidden label no longer pushes its ↺ to the left. */
+/* Symbols drawn a little low in their font (×) are lifted to the middle. */
 :root[data-theme] .modal-close,
-:root[data-theme] #close-notes-panel,
-:root[data-theme] #settings-button {
+:root[data-theme] #close-notes-panel {
   padding-bottom: 2px;
-}
-
-:root[data-theme] #restore-chat {
-  gap: 0;
 }
 
 /* Cards in the orchestration window no longer rise a pixel on hover. */
@@ -7716,19 +7685,7 @@ select.reply-compare-select {
   transform: none;
 }
 
-/* Switching groups keeps the header's buttons still. The row is pinned to the right, so the
-   buttons only some groups have (编排, 免@) go first, at its left end, where showing or hiding
-   them moves nothing else; labels whose text changes keep a steady width. */
-:root[data-theme] .chat-header #open-orchestration,
-:root[data-theme] .chat-header .manual-mention-toggle {
-  order: -1;
-}
-
-:root[data-theme] #chat-status {
-  min-width: 68px;
-  justify-content: center;
-}
-
+/* Switching groups keeps the header's buttons still: labels whose text changes keep a steady width. */
 :root[data-theme] #toggle-people-drawer {
   min-width: 64px;
   justify-content: center;
@@ -8858,4 +8815,340 @@ select.reply-compare-select {
 :root[data-ui-style="grok"] .approval-card {
   margin-inline: max(24px, calc((100% - 860px) / 2));
   border-radius: 22px;
+}
+
+/*
+ * Header, input box and narrow windows.
+ * The header is about the open group: its name and state, then 工作流 (编排, 项目), 成员, 笔记 and a
+ * 更多 menu. How the next message is answered (不@也回复, 轮流讨论) is chosen in the input box. Below
+ * 860px the group list slides in over the chat; below 640px 工作流 and 笔记 move into 更多.
+ */
+:root[data-theme] .chat-header [hidden],
+:root[data-theme] .composer-actions > .composer-modes[hidden] {
+  display: none;
+}
+
+:root[data-theme] .chat-header {
+  gap: 10px;
+}
+
+:root[data-theme] .chat-header .chat-row {
+  flex-wrap: nowrap;
+  gap: 4px;
+}
+
+:root[data-theme] .chat-title-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+:root[data-theme] .chat-title-line .chat-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:root[data-theme] .chat-header #chat-status {
+  flex: 0 0 auto;
+  min-height: 20px;
+  padding: 0 4px;
+  font-size: 12px;
+}
+
+:root[data-theme] .chat-header .chat-list-toggle {
+  display: none;
+}
+
+:root[data-theme] .composer.no-chat {
+  display: none;
+}
+
+:root[data-theme] .header-icon-btn {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-color: transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+}
+
+:root[data-theme] .header-icon-btn:hover,
+:root[data-theme] .header-icon-btn[aria-expanded="true"] {
+  background: var(--hover);
+  color: var(--text);
+}
+
+:root[data-theme] .header-icon-btn svg,
+:root[data-theme] #quick-create-chat svg,
+:root[data-theme] .chat-menu-btn svg,
+:root[data-theme] .header-menu-item svg,
+:root[data-theme] .composer-chip svg {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+:root[data-theme] .header-icon-btn circle,
+:root[data-theme] .chat-menu-btn circle {
+  fill: currentColor;
+}
+
+:root[data-theme] .chat-menu-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+:root[data-theme] .header-menu {
+  position: relative;
+  display: flex;
+}
+
+:root[data-theme] .header-menu-trigger[aria-expanded="true"] {
+  background: var(--hover);
+  color: var(--text);
+}
+
+:root[data-theme] .chat-header .header-menu-chevron {
+  width: 14px;
+  height: 14px;
+  margin-left: -2px;
+}
+
+:root[data-theme] .header-menu-list {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  display: grid;
+  gap: 2px;
+  width: max-content;
+  min-width: 220px;
+  max-width: min(320px, calc(100vw - 24px));
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface-raised);
+  box-shadow: 0 18px 44px -14px rgba(0, 0, 0, 0.38);
+}
+
+:root[data-theme] .header-menu-item {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+:root[data-theme] .header-menu-item:not(:has(svg)) {
+  grid-template-columns: minmax(0, 1fr);
+  padding-left: 38px;
+}
+
+:root[data-theme] .header-menu-item:hover,
+:root[data-theme] .header-menu-item:focus-visible {
+  background: var(--hover);
+  outline: none;
+}
+
+:root[data-theme] .header-menu-item svg {
+  margin-top: 1px;
+}
+
+:root[data-theme] .header-menu-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+:root[data-theme] .header-menu-label {
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+:root[data-theme] .header-menu-hint {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: normal;
+}
+
+:root[data-theme] .header-menu-item.narrow-only {
+  display: none;
+}
+
+/* The input box: the reply switches sit after the attach button, the mic and send at the right. */
+:root[data-theme] .composer-actions > .composer-modes {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  margin-right: auto;
+}
+
+:root[data-theme] .composer-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 11px 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+:root[data-theme] .composer-chip:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+:root[data-theme] .composer-chip[aria-checked="true"] {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--gpt-link, #0b66d6) 14%, transparent);
+  color: var(--gpt-link, #0b66d6);
+}
+
+:root[data-theme] .composer-chip svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Grok's title area has a column for the group's avatar; without the avatar, one column. */
+:root[data-ui-style="grok"] .chat-title-block:has(> .chat-title-avatar[hidden]) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* Grok's one-line input bar becomes two lines while the switches show, so they do not cover the text. */
+:root[data-ui-style="grok"] .composer:has(.composer-modes:not([hidden])) #message-input {
+  height: 96px;
+  min-height: 96px;
+  padding: 12px 14px 56px;
+}
+
+@media (max-width: 860px) {
+  :root[data-theme] .app-shell {
+    grid-template-columns: 48px minmax(0, 1fr);
+  }
+
+  :root[data-theme] .app-shell > .sidebar {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 48px;
+    z-index: 30;
+    width: min(300px, calc(100vw - 48px));
+    box-shadow: 0 24px 60px -18px rgba(0, 0, 0, 0.45);
+    transform: translateX(calc(-100% - 48px));
+    visibility: hidden;
+    transition: transform 0.18s ease, visibility 0s linear 0.18s;
+  }
+
+  :root[data-theme] .app-shell.chat-list-open > .sidebar {
+    transform: none;
+    visibility: visible;
+    transition: transform 0.18s ease;
+  }
+
+  :root[data-theme] .chat-header .chat-list-toggle {
+    display: grid;
+    flex: 0 0 auto;
+  }
+
+  /* The chat dims behind the open list; a click on it closes the list. */
+  :root[data-theme] .app-shell.chat-list-open::after {
+    content: "";
+    position: fixed;
+    inset: 0 0 0 48px;
+    z-index: 29;
+    background: rgba(0, 0, 0, 0.22);
+  }
+
+  :root[data-theme] .chat-header {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+}
+
+@media (max-width: 640px) {
+  :root[data-theme] .chat-header .wide-only {
+    display: none;
+  }
+
+  :root[data-theme] .header-menu-item.narrow-only:not([hidden]) {
+    display: grid;
+  }
+
+  :root[data-theme] .messages {
+    padding-inline: 14px;
+  }
+
+  :root[data-theme] .composer {
+    margin-inline: 10px;
+  }
+
+  /* The group's name gets the room: its state shows as the dot alone, and Grok's avatar goes. */
+  :root[data-theme] .chat-header #chat-status {
+    padding: 0;
+    font-size: 0;
+  }
+
+  :root[data-ui-style="grok"] .chat-title-avatar:not([hidden]) {
+    display: none;
+  }
+
+  :root[data-ui-style="grok"] .chat-title-block {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* Grok's reply tools move under the bubble, so the bubble can use the whole width. */
+  :root[data-ui-style="grok"] .message-row.assistant .message-stack {
+    max-width: 100%;
+  }
+
+  :root[data-ui-style="grok"] .message-row.assistant:not(.thinking):not(.stopped) .message-tools {
+    position: static;
+    margin: 6px 0 0 14px;
+    transform: none;
+  }
+}
+
+@media (max-width: 560px) {
+  :root[data-theme] .composer-chip {
+    width: 32px;
+    justify-content: center;
+    padding: 0;
+  }
+
+  :root[data-theme] .composer-chip span {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-theme] .app-shell > .sidebar,
+  :root[data-theme] .app-shell.chat-list-open > .sidebar {
+    transition: none;
+  }
 }

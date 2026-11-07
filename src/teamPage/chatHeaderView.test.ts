@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import type { GroupChat, GroupMessage, GroupRole, RoomMode } from '../group/types'
 import { createTeamPageState } from './appState'
 import { createChatHeaderView } from './chatHeaderView'
@@ -41,56 +41,16 @@ describe('chat header view', () => {
     expect(harness.chatTitleAvatarEl.className).toMatch(/^chat-avatar chat-title-avatar role-tone-\d$/)
   })
 
-  it('switches turn-by-turn discussions on and off for collaborative chats', async () => {
+  it('shows the controls for a group only while one is open', () => {
     const harness = createHarness('collaborative')
     harness.view.renderChatHeader()
+    expect([harness.chatStatusEl.hidden, harness.togglePeopleDrawerEl.hidden, harness.workflowMenuWrapEl.hidden, harness.moreMenuWrapEl.hidden]).toEqual([false, false, false, false])
+    expect(harness.chatStatusEl.textContent).toBe('进行中')
 
-    const toggle = harness.headerActionsEl.querySelector<HTMLButtonElement>('.discussion-toggle')
-    expect(toggle?.hidden).toBe(false)
-    expect(toggle?.textContent).toBe('轮流讨论')
-    expect(toggle?.getAttribute('aria-pressed')).toBe('false')
-    toggle?.click()
-    await Promise.resolve()
-    expect(harness.runCommand).toHaveBeenCalledWith('GROUP_CHAT_UPDATE', { chatId: 'chat-1', discussionMode: true })
-
-    harness.chat.discussionMode = true
+    harness.setChat(undefined)
     harness.view.renderChatHeader()
-    expect(toggle?.getAttribute('aria-pressed')).toBe('true')
-    harness.chat.mode = 'independent'
-    harness.view.renderChatHeader()
-    expect(toggle?.hidden).toBe(true)
-  })
-
-  it('toggles manual mention routing for collaborative chats', async () => {
-    const harness = createHarness('collaborative')
-
-    harness.view.renderChatHeader()
-
-    const toggle = harness.headerActionsEl.querySelector<HTMLButtonElement>('.manual-mention-toggle:not(.discussion-toggle)')
-    expect(toggle).not.toBeNull()
-    expect(toggle?.hidden).toBe(false)
-    expect(toggle?.textContent).toBe('免@')
-    expect(toggle?.title).toBe('开启后，普通消息也会触发所有成员回复；关闭后，只有 @ 成员或 @所有人才触发回复')
-    expect(toggle?.getAttribute('aria-pressed')).toBe('false')
-    expect(toggle?.getAttribute('aria-checked')).toBe('false')
-
-    toggle?.click()
-    await Promise.resolve()
-
-    expect(harness.runCommand).toHaveBeenCalledWith('GROUP_CHAT_UPDATE', { chatId: 'chat-1', requireManualMention: false })
-
-    harness.chat.requireManualMention = false
-    harness.view.renderChatHeader()
-
-    expect(toggle?.textContent).toBe('免@')
-    expect(toggle?.title).toBe('开启后，普通消息也会触发所有成员回复；关闭后，只有 @ 成员或 @所有人才触发回复')
-    expect(toggle?.getAttribute('aria-pressed')).toBe('true')
-    expect(toggle?.getAttribute('aria-checked')).toBe('true')
-
-    harness.chat.mode = 'independent'
-    harness.view.renderChatHeader()
-
-    expect(toggle?.hidden).toBe(true)
+    expect(harness.chatTitleEl.textContent).toBe('未选择群聊')
+    expect([harness.chatStatusEl.hidden, harness.togglePeopleDrawerEl.hidden, harness.workflowMenuWrapEl.hidden, harness.moreMenuWrapEl.hidden, harness.openOrchestrationEl.hidden]).toEqual([true, true, true, true, true])
   })
 })
 
@@ -112,11 +72,11 @@ function createHarness(mode: RoomMode, language: 'zh-CN' | 'en' = 'zh-CN') {
   const chatStatusEl = document.createElement('span')
   const togglePeopleDrawerEl = document.createElement('button')
   const openOrchestrationEl = document.createElement('button')
-  const headerActionsEl = document.createElement('div')
-  headerActionsEl.append(togglePeopleDrawerEl)
+  const workflowMenuWrapEl = document.createElement('div')
+  const moreMenuWrapEl = document.createElement('div')
   const roles: GroupRole[] = []
   const messages: GroupMessage[] = []
-  const runCommand = vi.fn(async () => undefined)
+  let current: GroupChat | undefined = chat
   const view = createChatHeaderView({
     state: createTeamPageState(),
     chatTitleEl,
@@ -125,11 +85,13 @@ function createHarness(mode: RoomMode, language: 'zh-CN' | 'en' = 'zh-CN') {
     chatStatusEl,
     togglePeopleDrawerEl,
     openOrchestrationEl,
+    workflowMenuWrapEl,
+    moreMenuWrapEl,
     getLanguage: () => language,
-    getCurrentChat: () => chat,
+    getCurrentChat: () => current,
     getCurrentRoles: () => roles,
     getCurrentMessages: () => messages,
-    runCommand,
   })
-  return { chat, roles, messages, chatTitleAvatarEl, chatStatusEl, chatSubtitleEl, togglePeopleDrawerEl, openOrchestrationEl, headerActionsEl, runCommand, view }
+  const setChat = (next: GroupChat | undefined) => { current = next }
+  return { chat, roles, messages, chatTitleEl, chatTitleAvatarEl, chatStatusEl, chatSubtitleEl, togglePeopleDrawerEl, openOrchestrationEl, workflowMenuWrapEl, moreMenuWrapEl, setChat, view }
 }

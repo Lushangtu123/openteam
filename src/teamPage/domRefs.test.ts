@@ -49,8 +49,10 @@ describe('team page dom refs', () => {
       <input id="attach-file-input" type="file" />
       <button id="voice-input"></button>
       <button id="open-message-search"></button>
-      <button id="theme-light"></button>
-      <button id="theme-dark"></button>
+      <div id="composer-modes"><button id="reply-all-toggle"></button><button id="discussion-toggle"></button></div>
+      <header class="chat-header"><div id="workflow-menu-wrap"></div><div id="more-menu-wrap"></div><button id="open-chat-list"></button></header>
+      <aside id="chat-sidebar"></aside>
+      <button id="rail-chats"></button>
       <span id="chat-title-avatar"></span>
       <button id="reply-notifications-toggle"></button>
       <button id="reply-key-points-toggle"></button>
@@ -58,8 +60,6 @@ describe('team page dom refs', () => {
       <button id="settings-theme-dark"></button>
       <button id="round-summary-toggle"></button>
       <div id="chat-list-search-box"><input id="chat-list-search" /></div>
-      <button id="ui-style-chatgpt"></button>
-      <button id="ui-style-grok"></button>
       <button id="settings-ui-style-chatgpt"></button>
       <button id="settings-ui-style-grok"></button>
       <button id="open-all-notes"></button>
@@ -183,10 +183,10 @@ describe('team page dom refs', () => {
     const refs = createTeamPageDomRefs()
 
     expect(refs.appShellEl.id).toBe('app')
-    expect(refs.themeLightEl.id).toBe('theme-light')
-    expect(refs.themeDarkEl.id).toBe('theme-dark')
-    expect(refs.uiStyleChatGptEl.id).toBe('ui-style-chatgpt')
-    expect(refs.uiStyleGrokEl.id).toBe('ui-style-grok')
+    expect(refs.replyAllToggleEl.id).toBe('reply-all-toggle')
+    expect(refs.discussionToggleEl.id).toBe('discussion-toggle')
+    expect(refs.openChatListEl.id).toBe('open-chat-list')
+    expect(refs.chatSidebarEl.id).toBe('chat-sidebar')
     expect(refs.settingsUiStyleGrokEl.id).toBe('settings-ui-style-grok')
     expect(refs.openOrchestrationEl.id).toBe('open-orchestration')
     expect(refs.autoOrchestrationEl.id).toBe('auto-orchestration')

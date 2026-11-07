@@ -11,7 +11,7 @@
       <nav class="rail" aria-label="OpenTeam 导航">
         <div></div>
         <div class="rail-actions">
-          <button class="rail-btn active" type="button" aria-label="群聊" data-tooltip="群聊">
+          <button id="rail-chats" class="rail-btn active" type="button" aria-label="群聊" data-tooltip="群聊" aria-controls="chat-sidebar">
             <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
               <path d="M6.5 7.2A6.4 6.4 0 0 1 12 4.8c4 0 7.2 2.6 7.2 5.8s-3.2 5.8-7.2 5.8c-.7 0-1.4-.08-2.1-.25L5.2 18.7l1.15-4.05A5.3 5.3 0 0 1 4.8 10.6c0-1.25.62-2.42 1.7-3.4Z" />
             </svg>
@@ -45,10 +45,15 @@
           </button>
         </div>
         <div class="rail-bottom">
-          <button id="settings-button" class="rail-btn" type="button" aria-label="设置" aria-haspopup="dialog" aria-expanded="false" aria-controls="settings-menu">⚙</button>
+          <button id="settings-button" class="rail-btn" type="button" aria-label="设置" data-tooltip="设置" aria-haspopup="dialog" aria-expanded="false" aria-controls="settings-menu">
+            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="2.8" />
+              <path d="M19.2 13.6a7.6 7.6 0 0 0 0-3.2l1.7-1.3-1.8-3.1-2 .8a7.4 7.4 0 0 0-2.8-1.6L14 3h-4l-.3 2.2a7.4 7.4 0 0 0-2.8 1.6l-2-.8-1.8 3.1 1.7 1.3a7.6 7.6 0 0 0 0 3.2l-1.7 1.3 1.8 3.1 2-.8a7.4 7.4 0 0 0 2.8 1.6L10 21h4l.3-2.2a7.4 7.4 0 0 0 2.8-1.6l2 .8 1.8-3.1Z" />
+            </svg>
+          </button>
         </div>
       </nav>
-      <aside class="panel sidebar">
+      <aside id="chat-sidebar" class="panel sidebar">
         <div class="panel-header">
           <div class="brand-mark">
             <div class="logo-dot" aria-hidden="true"></div>
@@ -61,7 +66,12 @@
             </div>
           </div>
           <div class="sidebar-header-actions">
-            <button id="quick-create-chat" class="icon-btn" type="button" aria-label="新建群聊" aria-controls="chat-create-popover" aria-expanded="false">＋</button>
+            <button id="quick-create-chat" class="icon-btn" type="button" aria-label="新建群聊" aria-controls="chat-create-popover" aria-expanded="false">
+              <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
+                <path d="M12 5.5v13" />
+                <path d="M5.5 12h13" />
+              </svg>
+            </button>
           </div>
         </div>
 
@@ -110,50 +120,97 @@
 
       <main class="panel workspace">
         <header class="chat-header">
+          <button id="open-chat-list" class="icon-btn header-icon-btn chat-list-toggle" type="button" aria-label="群聊列表" aria-controls="chat-sidebar" aria-expanded="false">
+            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
+              <path d="M5 7h14" />
+              <path d="M5 12h14" />
+              <path d="M5 17h14" />
+            </svg>
+          </button>
           <div class="chat-title-block">
             <span id="chat-title-avatar" class="chat-avatar chat-title-avatar" aria-hidden="true" hidden></span>
-            <h2 id="chat-title" class="chat-title">未选择群聊</h2>
+            <div class="chat-title-line">
+              <h2 id="chat-title" class="chat-title">未选择群聊</h2>
+              <span id="chat-status" class="status-pill" hidden>空</span>
+            </div>
             <p id="chat-subtitle" class="chat-subtitle">创建或选择一个群聊开始协作</p>
           </div>
           <div class="chat-row">
-            <div id="ui-style-switch" class="theme-switch ui-style-switch" role="group" aria-label="界面风格">
-              <button id="ui-style-chatgpt" class="theme-option ui-style-option" type="button" aria-pressed="true" title="ChatGPT 风格界面">GPT</button>
-              <button id="ui-style-grok" class="theme-option ui-style-option" type="button" aria-pressed="false" title="Grok 风格界面">Grok</button>
-            </div>
-            <div id="theme-switch" class="theme-switch" role="group" aria-label="界面模式">
-              <button id="theme-light" class="theme-option" type="button" aria-pressed="false" title="浅色模式">
-                <span aria-hidden="true">☼</span>
-                <span>浅色</span>
+            <div id="workflow-menu-wrap" class="header-menu wide-only" hidden>
+              <button id="open-workflow-menu" class="btn drawer-summary header-menu-trigger" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="workflow-menu">
+                <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
+                  <path d="M5 7.5h4.5v4H5z" />
+                  <path d="M14.5 4.5H19v4h-4.5z" />
+                  <path d="M14.5 15.5H19v4h-4.5z" />
+                  <path d="M9.5 9.5h2.8c1.2 0 2.2-1 2.2-2.2v-.8" />
+                  <path d="M9.5 9.5h2.8c1.2 0 2.2 1 2.2 2.2v5.8" />
+                </svg>
+                <span>工作流</span>
+                <svg class="header-menu-chevron" aria-hidden="true" viewBox="0 0 24 24" fill="none">
+                  <path d="m7 10 5 5 5-5" />
+                </svg>
               </button>
-              <button id="theme-dark" class="theme-option" type="button" aria-pressed="true" title="深色模式">
-                <span aria-hidden="true">☾</span>
-                <span>深色</span>
-              </button>
+              <div id="workflow-menu" class="header-menu-list" role="menu" aria-label="工作流" hidden>
+                <button id="open-orchestration" class="header-menu-item" type="button" role="menuitem">
+                  <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
+                    <path d="M5 7.5h4.5v4H5z" />
+                    <path d="M14.5 4.5H19v4h-4.5z" />
+                    <path d="M14.5 15.5H19v4h-4.5z" />
+                    <path d="M9.5 9.5h2.8c1.2 0 2.2-1 2.2-2.2v-.8" />
+                    <path d="M9.5 9.5h2.8c1.2 0 2.2 1 2.2 2.2v5.8" />
+                  </svg>
+                  <span class="header-menu-text">
+                    <span class="header-menu-label">编排</span>
+                    <span class="header-menu-hint">按你排好的流程，让成员一步步完成</span>
+                  </span>
+                </button>
+                <button id="open-project" class="header-menu-item" type="button" role="menuitem">
+                  <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
+                    <rect x="4.5" y="4.5" width="15" height="15" rx="3" />
+                    <path d="m8 9.5 1.6 1.6L12.5 8" />
+                    <path d="M14.5 10h2" />
+                    <path d="m8 15 1.6 1.6 2.9-3.1" />
+                    <path d="M14.5 15.5h2" />
+                  </svg>
+                  <span class="header-menu-text">
+                    <span class="header-menu-label">项目</span>
+                    <span class="header-menu-hint">协调员把目标拆成任务，分给成员并检查结果</span>
+                  </span>
+                </button>
+              </div>
             </div>
-            <button id="open-orchestration" class="btn drawer-summary" type="button">
-              <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
-                <path d="M5 7.5h4.5v4H5z" />
-                <path d="M14.5 4.5H19v4h-4.5z" />
-                <path d="M14.5 15.5H19v4h-4.5z" />
-                <path d="M9.5 9.5h2.8c1.2 0 2.2-1 2.2-2.2v-.8" />
-                <path d="M9.5 9.5h2.8c1.2 0 2.2 1 2.2 2.2v5.8" />
-              </svg>
-              <span>编排</span>
-            </button>
-            <button id="open-project" class="btn drawer-summary" type="button" title="让协调员把目标拆成任务，分给成员完成并检查结果">
-              <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
-                <rect x="4.5" y="4.5" width="15" height="15" rx="3" />
-                <path d="m8 9.5 1.6 1.6L12.5 8" />
-                <path d="M14.5 10h2" />
-                <path d="m8 15 1.6 1.6 2.9-3.1" />
-                <path d="M14.5 15.5h2" />
-              </svg>
-              <span>项目</span>
-            </button>
-            <button id="toggle-people-drawer" class="btn drawer-summary" type="button" aria-expanded="false">成员 0</button>
-            <button id="toggle-notes-panel" class="btn drawer-summary" type="button" aria-expanded="false" aria-controls="notes-panel">笔记</button>
-            <span id="chat-status" class="status-pill">空</span>
-            <button id="restore-chat" class="btn" type="button">恢复会话</button>
+            <button id="toggle-people-drawer" class="btn drawer-summary" type="button" aria-expanded="false" hidden>成员 0</button>
+            <button id="toggle-notes-panel" class="btn drawer-summary wide-only" type="button" aria-expanded="false" aria-controls="notes-panel">笔记</button>
+            <div id="more-menu-wrap" class="header-menu">
+              <button id="open-more-menu" class="icon-btn header-icon-btn header-menu-trigger" type="button" aria-label="更多" aria-haspopup="menu" aria-expanded="false" aria-controls="more-menu">
+                <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
+                  <circle cx="6" cy="12" r="1.2" />
+                  <circle cx="12" cy="12" r="1.2" />
+                  <circle cx="18" cy="12" r="1.2" />
+                </svg>
+              </button>
+              <div id="more-menu" class="header-menu-list" role="menu" aria-label="更多" hidden>
+                <button class="header-menu-item narrow-only" type="button" role="menuitem" data-menu-proxy="open-orchestration">
+                  <span class="header-menu-text"><span class="header-menu-label">编排</span></span>
+                </button>
+                <button class="header-menu-item narrow-only" type="button" role="menuitem" data-menu-proxy="open-project">
+                  <span class="header-menu-text"><span class="header-menu-label">项目</span></span>
+                </button>
+                <button class="header-menu-item narrow-only" type="button" role="menuitem" data-menu-proxy="toggle-notes-panel">
+                  <span class="header-menu-text"><span class="header-menu-label">笔记</span></span>
+                </button>
+                <button id="restore-chat" class="header-menu-item" type="button" role="menuitem">
+                  <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
+                    <path d="M5 12a7 7 0 1 0 2.05-4.95" />
+                    <path d="M5 4.5v3.5h3.5" />
+                  </svg>
+                  <span class="header-menu-text">
+                    <span class="header-menu-label">恢复会话</span>
+                    <span class="header-menu-hint">重新连接成员的 AI 网页</span>
+                  </span>
+                </button>
+              </div>
+            </div>
           </div>
         </header>
 
@@ -163,7 +220,7 @@
           <div id="reference-draft" class="reference-draft" hidden></div>
           <div id="mention-panel" class="mention-panel" hidden></div>
           <div id="attachment-tray" class="attachment-tray" hidden></div>
-          <textarea id="message-input" placeholder="输入消息，@成员可指定回复；不 @ 仅记录到群聊。"></textarea>
+          <textarea id="message-input" placeholder="输入消息，@成员 让他回复；不 @ 只记在群里"></textarea>
           <div class="composer-actions">
             <div>
               <div id="target-preview" class="muted tiny">选择群聊后可发送</div>
@@ -175,6 +232,24 @@
               </svg>
             </button>
             <input id="attach-file-input" type="file" multiple hidden>
+            <div id="composer-modes" class="composer-modes" role="group" aria-label="回复方式" hidden>
+              <button id="reply-all-toggle" class="composer-chip" type="button" role="switch" aria-checked="false" title="开启后，不 @ 的消息也会让所有成员回复；@ 了谁就只问谁">
+                <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
+                  <circle cx="9" cy="9" r="3" />
+                  <path d="M3.8 18.5c.5-2.9 2.4-4.5 5.2-4.5s4.7 1.6 5.2 4.5" />
+                  <path d="M15.5 6.4a3 3 0 0 1 0 5.2" />
+                  <path d="M17.2 14.3c1.6.6 2.6 2 3 4.2" />
+                </svg>
+                <span>不@也回复</span>
+              </button>
+              <button id="discussion-toggle" class="composer-chip" type="button" role="switch" aria-checked="false" title="开启后，@ 两位以上成员时，他们会一个接一个发言，每人都能看到前面说了什么，也可以 @ 别人接着说">
+                <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
+                  <path d="M4.5 6.5h9a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H9l-3 2.5v-2.5H4.5" />
+                  <path d="M15.5 9.5h2a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H17v2l-2.5-2h-3" />
+                </svg>
+                <span>轮流讨论</span>
+              </button>
+            </div>
             <button id="voice-input" class="composer-attach composer-mic" type="button" aria-label="语音输入" data-tooltip="语音输入" aria-pressed="false" hidden>
               <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
                 <rect x="9" y="3.5" width="6" height="11" rx="3" />

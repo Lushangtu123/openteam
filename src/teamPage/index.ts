@@ -6,6 +6,9 @@ import { createTeamPageState, pickSelectedChatId } from './appState'
 import { createAllNotesView } from './allNotesView'
 import { createBackupView } from './backupView'
 import { createChatHeaderView } from './chatHeaderView'
+import { NARROW_LAYOUT_QUERY, registerChatListDrawer } from './chatListDrawer'
+import { createComposerModesView } from './composerModesView'
+import { registerHeaderMenus } from './headerMenus'
 import { createChatListView } from './chatListView'
 import { createComposerAttachments } from './composerAttachments'
 import { createComposerView } from './composerView'
@@ -53,7 +56,7 @@ const teamDomRefs = createTeamPageDomRefs()
 const { appShellEl, storeSummaryEl, chatListEl, chatTitleEl, chatTitleAvatarEl, chatSubtitleEl, chatStatusEl, messagesEl } = teamDomRefs
 const { roleSummaryEl, roleListEl, roleTemplateSelectEl, templateListEl, targetPreviewEl, busyPreviewEl, composerFormEl, sendButtonEl } = teamDomRefs
 const { messageInputEl, referenceDraftEl, mentionPanelEl, errorEl, newChatNameEl, createChatFormEl, quickCreateChatEl } = teamDomRefs
-const { templateNameEl, templateDescriptionEl, templatePromptEl, templateAiDescriptionEl, generateTemplatePersonaEl, templatePersonaGenerationStatusEl, templateFormTitleEl, settingsButtonEl, settingsMenuEl, languageEnEl, languageZhEl, agentControlToggleEl, agentControlStatusEl, themeLightEl, themeDarkEl, uiStyleChatGptEl, uiStyleGrokEl, settingsUiStyleChatGptEl, settingsUiStyleGrokEl } = teamDomRefs
+const { templateNameEl, templateDescriptionEl, templatePromptEl, templateAiDescriptionEl, generateTemplatePersonaEl, templatePersonaGenerationStatusEl, templateFormTitleEl, settingsButtonEl, settingsMenuEl, languageEnEl, languageZhEl, agentControlToggleEl, agentControlStatusEl, settingsUiStyleChatGptEl, settingsUiStyleGrokEl } = teamDomRefs
 const { openAllNotesEl, closeAllNotesEl, allNotesModalEl, allNotesListEl, allNotesActiveTitleEl, allNotesActiveMetaEl, allNotesEditorEl } = teamDomRefs
 const { allNoteBoldEl, allNoteItalicEl, allNoteStrikeEl, allNoteBulletListEl, allNoteOrderedListEl, allNoteUndoEl, allNoteRedoEl } = teamDomRefs
 const { openPeopleLibraryEl, openExternalModelsEl, openOrchestrationEl, closeOrchestrationEl, orchestrationModalEl, orchestrationAutoModalEl, orchestrationTaskEl, autoOrchestrationEl, openOrchestrationTemplateEl, orchestrationTemplateModalEl, closeOrchestrationTemplateEl, orchestrationTemplateContentEl, closeAutoOrchestrationEl, orchestrationAutoContentEl, orchestrationPeopleListEl, arrangeOrchestrationEl, orchestrationCanvasEl, orchestrationHintEl, orchestrationStageSettingsEl, orchestrationReviewSettingsEl, orchestrationMaxRoundsEl, saveOrchestrationEl, runOrchestrationEl, closeExternalModelsEl, externalModelsModalEl, externalModelsListEl, externalModelFormEl, externalModelIdEl, externalModelNameEl, externalModelFormatEl, externalModelBaseUrlEl, externalModelApiKeyEl, externalModelModelNameEl, resetExternalModelFormEl, closePeopleLibraryEl, peopleLibraryModalEl, personTemplateModalEl, addPersonModalEl, temporaryPersonModalEl } = teamDomRefs
@@ -69,15 +72,14 @@ const showError = createErrorPresenter(errorEl)
 const showSuccess = createSuccessPresenter(errorEl)
 const themeController = createThemeController({
   root: document.documentElement,
-  lightButton: themeLightEl,
-  darkButton: themeDarkEl,
-  extraButtons: [{ light: teamDomRefs.settingsThemeLightEl, dark: teamDomRefs.settingsThemeDarkEl }],
+  // The choice lives in the settings window.
+  lightButton: teamDomRefs.settingsThemeLightEl,
+  darkButton: teamDomRefs.settingsThemeDarkEl,
 })
 themeController.initializeTheme()
 const uiStyleController = createUiStyleController({
   root: document.documentElement,
-  // The header switch, and the same choice in the settings menu for narrow windows.
-  buttons: { chatgpt: [uiStyleChatGptEl, settingsUiStyleChatGptEl], grok: [uiStyleGrokEl, settingsUiStyleGrokEl] },
+  buttons: { chatgpt: [settingsUiStyleChatGptEl], grok: [settingsUiStyleGrokEl] },
 })
 uiStyleController.initializeStyle()
 createVoiceInput({
@@ -207,13 +209,29 @@ const chatHeaderView = createChatHeaderView({
   chatStatusEl,
   togglePeopleDrawerEl,
   openOrchestrationEl,
+  workflowMenuWrapEl: teamDomRefs.workflowMenuWrapEl,
+  moreMenuWrapEl: teamDomRefs.moreMenuWrapEl,
   getLanguage: () => store.settings.language,
   getCurrentChat,
   getCurrentRoles,
   getCurrentMessages,
-  runCommand,
 })
-const renderChatHeader = chatHeaderView.renderChatHeader
+const composerModesView = createComposerModesView({
+  composerFormEl: teamDomRefs.composerFormEl,
+  modesEl: teamDomRefs.composerModesEl,
+  replyAllToggleEl: teamDomRefs.replyAllToggleEl,
+  discussionToggleEl: teamDomRefs.discussionToggleEl,
+  messageInputEl: teamDomRefs.messageInputEl as HTMLTextAreaElement,
+  getLanguage: () => store.settings.language,
+  getCurrentChat,
+  runCommand,
+  showError: message => showError(message),
+})
+composerModesView.register()
+const renderChatHeader = () => {
+  chatHeaderView.renderChatHeader()
+  composerModesView.render()
+}
 const chatListView = createChatListView({
   state: appState,
   getStore: () => store,
@@ -841,6 +859,13 @@ async function boot(): Promise<void> {
   uiStyleController.registerStyleEvents()
   aiPagesView.registerAiPagesControls()
   registerSettingsWindow({ windowEl: settingsMenuEl, settingsButtonEl })
+  registerHeaderMenus(teamDomRefs.chatHeaderEl)
+  registerChatListDrawer({
+    appShellEl,
+    sidebarEl: teamDomRefs.chatSidebarEl,
+    toggles: [teamDomRefs.openChatListEl, teamDomRefs.railChatsEl],
+    narrowQuery: window.matchMedia(NARROW_LAYOUT_QUERY),
+  })
   document.querySelector<HTMLButtonElement>('#open-project')?.addEventListener('click', () => projectView.openSetup())
   showAiPagesEl.addEventListener('click', () => {
     settingsMenuEl.hidden = true

@@ -52,11 +52,16 @@ export interface TeamPageDomRefs {
   attachFileEl: HTMLButtonElement
   attachFileInputEl: HTMLInputElement
   voiceInputEl: HTMLButtonElement
+  composerModesEl: HTMLElement
+  replyAllToggleEl: HTMLButtonElement
+  discussionToggleEl: HTMLButtonElement
+  workflowMenuWrapEl: HTMLElement
+  moreMenuWrapEl: HTMLElement
+  chatHeaderEl: HTMLElement
+  chatSidebarEl: HTMLElement
+  openChatListEl: HTMLButtonElement
+  railChatsEl: HTMLButtonElement
   openMessageSearchEl: HTMLButtonElement
-  themeLightEl: HTMLButtonElement
-  themeDarkEl: HTMLButtonElement
-  uiStyleChatGptEl: HTMLButtonElement
-  uiStyleGrokEl: HTMLButtonElement
   settingsUiStyleChatGptEl: HTMLButtonElement
   settingsUiStyleGrokEl: HTMLButtonElement
   openAllNotesEl: HTMLButtonElement
@@ -231,11 +236,16 @@ export function createTeamPageDomRefs(): TeamPageDomRefs {
     attachFileEl: requireElement<HTMLButtonElement>('#attach-file'),
     attachFileInputEl: requireElement<HTMLInputElement>('#attach-file-input'),
     voiceInputEl: requireElement<HTMLButtonElement>('#voice-input'),
+    composerModesEl: requireElement<HTMLElement>('#composer-modes'),
+    replyAllToggleEl: requireElement<HTMLButtonElement>('#reply-all-toggle'),
+    discussionToggleEl: requireElement<HTMLButtonElement>('#discussion-toggle'),
+    workflowMenuWrapEl: requireElement<HTMLElement>('#workflow-menu-wrap'),
+    moreMenuWrapEl: requireElement<HTMLElement>('#more-menu-wrap'),
+    chatHeaderEl: requireElement<HTMLElement>('.chat-header'),
+    chatSidebarEl: requireElement<HTMLElement>('#chat-sidebar'),
+    openChatListEl: requireElement<HTMLButtonElement>('#open-chat-list'),
+    railChatsEl: requireElement<HTMLButtonElement>('#rail-chats'),
     openMessageSearchEl: requireElement<HTMLButtonElement>('#open-message-search'),
-    themeLightEl: requireElement<HTMLButtonElement>('#theme-light'),
-    themeDarkEl: requireElement<HTMLButtonElement>('#theme-dark'),
-    uiStyleChatGptEl: requireElement<HTMLButtonElement>('#ui-style-chatgpt'),
-    uiStyleGrokEl: requireElement<HTMLButtonElement>('#ui-style-grok'),
     settingsUiStyleChatGptEl: requireElement<HTMLButtonElement>('#settings-ui-style-chatgpt'),
     settingsUiStyleGrokEl: requireElement<HTMLButtonElement>('#settings-ui-style-grok'),
     openAllNotesEl: requireElement<HTMLButtonElement>('#open-all-notes'),

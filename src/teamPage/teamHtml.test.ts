@@ -39,12 +39,13 @@ describe('team.html chat creation UI', () => {
     expect(css).toContain('body {')
   })
 
-  it('includes a two-option theme switch and both page theme style sets', () => {
+  it('keeps the two-option theme choice in the settings window, and both page theme style sets', () => {
     const html = readTeamDocument()
 
-    expect(html).toContain('id="theme-switch"')
-    expect(html).toContain('id="theme-light"')
-    expect(html).toContain('id="theme-dark"')
+    // The header is for the open group; the theme is chosen in the settings window only.
+    expect(html).not.toContain('id="theme-switch"')
+    expect(html).toContain('id="settings-theme-light"')
+    expect(html).toContain('id="settings-theme-dark"')
     expect(html).toContain('浅色')
     expect(html).toContain('深色')
     expect(html).toContain('data-theme="dark"')
@@ -601,7 +602,7 @@ describe('team.html chat creation UI', () => {
     const chatListSource = readFileSync(resolve(process.cwd(), 'src/teamPage/chatListView.ts'), 'utf8')
 
     expect(chatListSource).toContain("menuButton.className = 'icon-btn chat-menu-btn'")
-    expect(chatListSource).toContain("menuButton.textContent = '⋯'")
+    expect(chatListSource).toContain("menuButton.append(moreIcon())")
     expect(chatListSource).toContain("menu.className = 'chat-action-menu'")
     expect(chatListSource).toContain("rename.textContent = ui('编辑名称')")
     expect(chatListSource).toContain("duplicate.textContent = ui('复制群聊')")
@@ -746,7 +747,7 @@ describe('team.html chat creation UI', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/teamPage/chatHeaderView.ts'), 'utf8')
     const uiSource = readFileSync(resolve(process.cwd(), 'src/teamPage/teamUiController.ts'), 'utf8')
 
-    expect(html).toContain('placeholder="输入消息，@成员可指定回复；不 @ 仅记录到群聊。"')
+    expect(html).toContain('placeholder="输入消息，@成员 让他回复；不 @ 只记在群里"')
     expect(html).toMatch(/\.chat-header\s*{[^}]*min-height:\s*84px;/s)
     expect(html).toMatch(/\.chat-header\s*{[^}]*padding:\s*18px 36px 15px 24px;/s)
     expect(html).toMatch(/\.composer\s*{[^}]*margin:\s*0 22px 18px;/s)
