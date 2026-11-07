@@ -75,7 +75,8 @@ export function createOrchestrationHandlers(deps: OrchestrationHandlersDependenc
     const snapshot = await mutateStore(store => {
       const chat = requireChat(store, chatId)
       const roles = getChatRoles(store, chat)
-      const plannerModelId = readOptionalString(message.plannerModelId) ?? store.settings.externalModelOrder[0]
+      // A local agent works only as a group member, so planning uses an API model.
+      const plannerModelId = readOptionalString(message.plannerModelId) ?? store.settings.externalModelOrder.find(id => store.settings.externalModelsById[id]?.format !== 'local-agent')
       const model = plannerModelId ? store.settings.externalModelsById[plannerModelId] : undefined
       if (!model) throw new Error('请先配置外部模型后再使用自动编排')
       return { chat: { ...chat }, roles: roles.map(role => ({ ...role })), model, store: structuredClone(store) as OpenTeamStore }

@@ -12,6 +12,7 @@
     "README.zh-CN.md",
     "openteamcli.mjs",
     "openteam-daemon.mjs",
+    "acp-stdio.mjs",
     "skills"
   ],
   "engines": {

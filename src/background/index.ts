@@ -20,7 +20,11 @@ import {
 import { createMessageRouter } from './messageRouter'
 import { classifyRuntimeSender, isRuntimeMessageAllowed, responseForSender } from './senderPolicy'
 import { createExternalModelHandlers } from './externalModelHandlers'
-import { createExternalModelClient } from './externalModelClient'
+import { createExternalModelClient, type ExternalModelClient } from './externalModelClient'
+import { createLocalAgentApprovals } from './localAgentApprovals'
+import { createLocalAgentClient } from './localAgentClient'
+import type { LocalAgentInfo } from '../shared/localControlProtocol'
+import type { ExternalModelConfig } from '../group/types'
 import { createPromptSender } from './promptDelivery'
 import { createRoleHandlers } from './roleHandlers'
 import { createOrchestrationHandlers, type OrchestrationAutoStreamMessage } from './orchestrationHandlers'
@@ -46,7 +50,57 @@ const sendPrompt = createPromptSender({
   loadImages: async ids => (await imageAttachments.loadUploads(ids)).map(({ fileName, mimeType, data }) => ({ fileName, mimeType, data })),
 })
 const promptDeliveryLimiter = createSitePromptDeliveryLimiter({ log })
-const externalModelClient = createExternalModelClient()
+const apiModelClient = createExternalModelClient()
+// Questions local agent members wait on (run this task? allow this action?), answered on the page.
+const localAgentApprovals = createLocalAgentApprovals({
+  newId,
+  now,
+  mutateStore,
+  broadcastStoreUpdated: store => broadcastStoreUpdated(store),
+})
+const localAgentClient = createLocalAgentClient({
+  control: {
+    request: (action, payload, timeoutMs) => controlClient.request(action, payload, timeoutMs),
+    onAgentEvents: (runId, handler) => controlClient.onAgentEvents(runId, handler),
+  },
+  approvals: localAgentApprovals,
+  getLanguage: () => cachedLanguage,
+})
+let cachedLanguage: unknown
+// API models answer directly; a local agent runs through the daemon, only as a group member.
+const externalModelClient: ExternalModelClient = {
+  stream(input) {
+    if (input.model.format === 'local-agent') return localAgentClient.stream(input)
+    if (apiModelClient.stream) return apiModelClient.stream(input)
+    return (async function* () {
+      yield (await apiModelClient.complete(input)).content
+    })()
+  },
+  async complete(input) {
+    if (input.model.format !== 'local-agent') return apiModelClient.complete(input)
+    let content = ''
+    for await (const chunk of localAgentClient.stream(input)) content += chunk
+    return { content }
+  },
+}
+
+async function listLocalAgents(): Promise<LocalAgentInfo[]> {
+  const result = await controlClient.request('agent.list')
+  if (!result.ok) throw new Error(result.error?.message ?? '没有拿到本机智能体列表')
+  const agents = (result.data as { agents?: unknown } | undefined)?.agents
+  return Array.isArray(agents) ? agents as LocalAgentInfo[] : []
+}
+
+// Whether a local agent model can run: the agent is listed, and its folder is allowed.
+async function checkLocalAgent(model: ExternalModelConfig): Promise<string> {
+  const agent = (await listLocalAgents()).find(candidate => candidate.id === model.localAgentId)
+  if (!agent) throw new Error(`本地守护进程里没有这个智能体：${model.localAgentId}。用 openteamcli agent add 添加它。`)
+  if (agent.type !== 'stdio') throw new Error('这个智能体需要以 stdio 方式运行（ACP）。')
+  const workspace = (model.workspace ?? '').replace(/\/+$/, '')
+  const allowed = agent.cwdAllowlist.some(root => workspace === root || workspace.startsWith(`${root}/`))
+  if (!allowed) throw new Error(`工作目录 ${workspace} 不在这个智能体允许的范围内（${agent.cwdAllowlist.join('、') || '还没有允许任何目录'}）。`)
+  return `可以使用：${agent.name} 在 ${workspace}`
+}
 const imageAttachmentRepository = createIndexedDbImageAttachmentRepository()
 const imageAttachments = createImageAttachmentService({
   fetchImage(url, init) {
@@ -71,6 +125,7 @@ function newId(prefix: string): string {
 }
 
 async function broadcastStoreUpdated(store: OpenTeamStore, excludeTabId?: number): Promise<void> {
+  cachedLanguage = store.settings.language
   await broadcastRuntimeStoreUpdated(store, { excludeTabId })
 }
 
@@ -157,7 +212,20 @@ const routeMessage = createMessageRouter([
   ...createChatHandlers({ broadcastStoreUpdated, getChatStatusFromRoles, imageAttachments: imageAttachmentRepository, log, newId, now, runtimeFrames }),
   { type: 'GROUP_SETTINGS_UPDATE', handler: handleSettingsUpdate },
   ...createBackupHandlers({ broadcastStoreUpdated, log, imageAttachments: imageAttachmentRepository }),
-  ...createExternalModelHandlers({ broadcastStoreUpdated, externalModelClient, newId, now }),
+  ...createExternalModelHandlers({ broadcastStoreUpdated, externalModelClient, checkLocalAgent, newId, now }),
+  { type: 'LOCAL_AGENT_LIST', handler: async () => ({ ok: true, agents: await listLocalAgents() }) },
+  {
+    type: 'GROUP_LOCAL_AGENT_DECIDE',
+    handler: async message => {
+      const chatId = typeof message.chatId === 'string' ? message.chatId : ''
+      const roleId = typeof message.roleId === 'string' ? message.roleId : ''
+      const approvalId = typeof message.approvalId === 'string' ? message.approvalId : ''
+      const optionId = typeof message.optionId === 'string' ? message.optionId : ''
+      if (!chatId || !roleId || !approvalId || !optionId) throw new Error('缺少要回答的请求')
+      await localAgentApprovals.decide({ chatId, roleId }, approvalId, optionId)
+      return { ok: true }
+    },
+  },
   ...createRoleHandlers({ broadcastStoreUpdated, externalModelClient, log, newId, now, runtimeFrames, sendPrompt }),
   ...createOrchestrationHandlers({ broadcastStoreUpdated, broadcastAutoGenerateStream, externalModelClient, getChatStatusFromRoles, log, newId, now, promptDeliveryLimiter, requestRoleRecovery, runtimeFrames, sendPrompt }),
   ...createMessageHandlers({ broadcastStoreUpdated, externalModelClient, getChatStatusFromRoles, imageAttachments, log, newId, now, onPromptSettled: notifyWhenAnswered, promptDeliveryLimiter, requestRoleRecovery, runtimeFrames, sendError, sendPrompt, sendRoleMessage }),

@@ -1,5 +1,6 @@
 import type { ExternalModelConfig, ExternalModelFormat, OpenTeamStore } from '../group/types'
 import { normalizeLanguage, translateUi } from '../shared/i18n'
+import type { LocalAgentInfo } from '../shared/localControlProtocol'
 
 export interface ExternalModelsViewDependencies {
   getStore(): OpenTeamStore
@@ -19,6 +20,8 @@ export interface ExternalModelsViewDependencies {
   resetExternalModelFormEl: HTMLButtonElement
   runCommand(type: string, payload?: Record<string, unknown>): Promise<void>
   testExternalModel(modelId: string): Promise<void>
+  // The local agents the daemon offers (for a 本机智能体 model).
+  listLocalAgents?(): Promise<LocalAgentInfo[]>
   showError(message: string): void
 }
 
@@ -30,7 +33,57 @@ export interface ExternalModelsView {
 }
 
 export function createExternalModelsView(deps: ExternalModelsViewDependencies): ExternalModelsView {
+  const form = deps.externalModelFormEl
+  const localAgentEl = form.querySelector<HTMLSelectElement>('#external-model-local-agent')
+  const workspaceEl = form.querySelector<HTMLInputElement>('#external-model-workspace')
+  const workspacesEl = form.querySelector<HTMLDataListElement>('#external-model-workspaces')
+  const localStatusEl = form.querySelector<HTMLElement>('#local-agent-status')
+  const localHint = localStatusEl?.textContent ?? ''
+  let localAgents: LocalAgentInfo[] = []
+
+  // A 本机智能体 needs an agent and a folder; an API model needs its address, key and model name.
+  function showFieldsForFormat(): void {
+    const local = deps.externalModelFormatEl.value === 'local-agent'
+    for (const field of form.querySelectorAll<HTMLElement>('.local-agent-field')) field.hidden = !local
+    for (const field of form.querySelectorAll<HTMLElement>('.api-model-field')) field.hidden = local
+    if (local) void loadLocalAgents()
+  }
+
+  async function loadLocalAgents(selectedId?: string): Promise<void> {
+    if (!localAgentEl || !deps.listLocalAgents) return
+    try {
+      localAgents = (await deps.listLocalAgents()).filter(agent => agent.enabled)
+      if (localStatusEl) localStatusEl.textContent = localAgents.length ? ui('智能体在本机运行，只能访问它允许的目录。') : ui(localHint)
+    } catch (error) {
+      localAgents = []
+      if (localStatusEl) localStatusEl.textContent = error instanceof Error ? error.message : String(error)
+    }
+    const keep = selectedId ?? localAgentEl.value
+    localAgentEl.replaceChildren(...localAgents.map(agent => {
+      const option = document.createElement('option')
+      option.value = agent.id
+      option.textContent = `${agent.name}（${agent.id}）`
+      return option
+    }))
+    if (keep && localAgents.some(agent => agent.id === keep)) localAgentEl.value = keep
+    showWorkspacesForAgent()
+  }
+
+  // The folders the chosen agent may work in, offered for the 工作目录 field.
+  function showWorkspacesForAgent(): void {
+    const agent = localAgents.find(candidate => candidate.id === localAgentEl?.value)
+    workspacesEl?.replaceChildren(...(agent?.cwdAllowlist ?? []).map(folder => {
+      const option = document.createElement('option')
+      option.value = folder
+      return option
+    }))
+    if (workspaceEl && !workspaceEl.value && agent?.cwdAllowlist[0]) workspaceEl.value = agent.cwdAllowlist[0]
+    if (agent && !deps.externalModelNameEl.value.trim()) deps.externalModelNameEl.value = agent.name
+  }
+
   function registerExternalModelsEvents(): void {
+    deps.externalModelFormatEl.addEventListener('change', showFieldsForFormat)
+    localAgentEl?.addEventListener('change', showWorkspacesForAgent)
     deps.openExternalModelsEl.addEventListener('click', openExternalModels)
     deps.closeExternalModelsEl.addEventListener('click', closeExternalModels)
     deps.resetExternalModelFormEl.addEventListener('click', resetForm)
@@ -64,10 +117,12 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
     name.textContent = model.name
     const description = document.createElement('div')
     description.className = 'template-description'
-    description.textContent = `${model.format === 'anthropic' ? 'Anthropic' : 'OpenAI'} · ${model.modelName}`
+    description.textContent = model.format === 'local-agent'
+      ? `${ui('本机智能体')} · ${model.localAgentId ?? ''}`
+      : `${model.format === 'anthropic' ? 'Anthropic' : 'OpenAI'} · ${model.modelName}`
     const baseUrl = document.createElement('div')
     baseUrl.className = 'template-description'
-    baseUrl.textContent = model.baseUrl
+    baseUrl.textContent = model.format === 'local-agent' ? model.workspace ?? '' : model.baseUrl
     body.append(name, description, baseUrl)
 
     const actions = document.createElement('div')
@@ -94,13 +149,16 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
 
   async function saveModel(): Promise<void> {
     const modelId = deps.externalModelIdEl.value.trim()
-    const payload = {
-      name: deps.externalModelNameEl.value.trim(),
-      format: readFormat(),
-      baseUrl: deps.externalModelBaseUrlEl.value.trim(),
-      apiKey: deps.externalModelApiKeyEl.value.trim(),
-      modelName: deps.externalModelModelNameEl.value.trim(),
-    }
+    const format = readFormat()
+    const payload = format === 'local-agent'
+      ? { name: deps.externalModelNameEl.value.trim(), format, localAgentId: localAgentEl?.value ?? '', workspace: workspaceEl?.value.trim() ?? '' }
+      : {
+          name: deps.externalModelNameEl.value.trim(),
+          format,
+          baseUrl: deps.externalModelBaseUrlEl.value.trim(),
+          apiKey: deps.externalModelApiKeyEl.value.trim(),
+          modelName: deps.externalModelModelNameEl.value.trim(),
+        }
     await deps.runCommand(modelId ? 'EXTERNAL_MODEL_UPDATE' : 'EXTERNAL_MODEL_CREATE', modelId ? { modelId, ...payload } : payload)
     resetForm()
     renderExternalModels()
@@ -143,6 +201,9 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
     deps.externalModelBaseUrlEl.value = model.baseUrl
     deps.externalModelApiKeyEl.value = model.apiKey
     deps.externalModelModelNameEl.value = model.modelName
+    if (workspaceEl) workspaceEl.value = model.workspace ?? ''
+    showFieldsForFormat()
+    if (model.format === 'local-agent') void loadLocalAgents(model.localAgentId)
   }
 
   function resetForm(): void {
@@ -152,6 +213,8 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
     deps.externalModelBaseUrlEl.value = ''
     deps.externalModelApiKeyEl.value = ''
     deps.externalModelModelNameEl.value = ''
+    if (workspaceEl) workspaceEl.value = ''
+    showFieldsForFormat()
   }
 
   function openExternalModels(): void {
@@ -175,7 +238,8 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
   }
 
   function readFormat(): ExternalModelFormat {
-    return deps.externalModelFormatEl.value === 'anthropic' ? 'anthropic' : 'openai'
+    const value = deps.externalModelFormatEl.value
+    return value === 'anthropic' || value === 'local-agent' ? value : 'openai'
   }
 
   function language() {

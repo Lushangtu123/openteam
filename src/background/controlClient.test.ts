@@ -68,6 +68,50 @@ describe('background control client', () => {
     })
   })
 
+  it('asks the daemon for local agent work and follows a run’s events', async () => {
+    const sockets: FakeWebSocket[] = []
+    vi.stubGlobal('WebSocket', fakeWebSocketClass(sockets))
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true })))
+    const store = createDefaultStore()
+    store.settings.agentControlEnabled = true
+    const client = createControlClient({
+      loadStore: async () => store,
+      executeCommand: vi.fn(),
+      getExtensionVersion: () => '1.0.0',
+      getProfileId: () => 'profile-test',
+      log: testLog(),
+      setTimer: (handler, ms) => setTimeout(handler, ms),
+      clearTimer: timer => clearTimeout(timer),
+    })
+
+    // Not connected yet: the request fails at once, with how to fix it.
+    expect(await client.request('agent.list')).toMatchObject({ ok: false, error: { code: 'daemon_not_connected', message: expect.stringContaining('openteamcli daemon start') } })
+
+    await client.sync()
+    sockets[0].open()
+    const listed = client.request('agent.list')
+    const sent = JSON.parse(sockets[0].sent[1])
+    expect(sent).toMatchObject({ type: 'request', request: { action: 'agent.list', payload: {} } })
+    sockets[0].receive(JSON.stringify({ type: 'response', response: { id: sent.request.id, ok: true, data: { agents: [{ id: 'claude-code' }] } } }))
+    expect(await listed).toEqual({ id: sent.request.id, ok: true, data: { agents: [{ id: 'claude-code' }] } })
+
+    const events: unknown[] = []
+    const stop = client.onAgentEvents('run-1', event => events.push(event))
+    sockets[0].receive(JSON.stringify({ type: 'agent-event', runId: 'run-1', event: { kind: 'text', text: '你好' } }))
+    sockets[0].receive(JSON.stringify({ type: 'agent-event', runId: 'run-2', event: { kind: 'text', text: '别人的' } }))
+    stop()
+    sockets[0].receive(JSON.stringify({ type: 'agent-event', runId: 'run-1', event: { kind: 'text', text: '停止跟随后' } }))
+    expect(events).toEqual([{ kind: 'text', text: '你好' }])
+
+    // The connection dropping ends what was waiting.
+    const pending = client.request('agent.run', { agentId: 'x' })
+    const following: unknown[] = []
+    client.onAgentEvents('run-3', event => following.push(event))
+    sockets[0].close()
+    expect(await pending).toMatchObject({ ok: false, error: { code: 'daemon_disconnected' } })
+    expect(following).toEqual([{ kind: 'error', message: '和 OpenTeam 本地守护进程的连接断开了。' }])
+  })
+
   it('uses the default port when settings do not override it', async () => {
     const sockets: FakeWebSocket[] = []
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true })))
@@ -231,7 +275,7 @@ class FakeWebSocket {
   readyState = 0
   onopen: (() => void) | null = null
   onmessage: ((event: { data: string }) => void) | null = null
-  onclose: (() => void) | null = null
+  onclose: ((event: { code: number; reason: string; wasClean: boolean }) => void) | null = null
   onerror: (() => void) | null = null
 
   constructor(url: string) {
@@ -244,7 +288,7 @@ class FakeWebSocket {
 
   close(): void {
     this.readyState = 3
-    this.onclose?.()
+    this.onclose?.({ code: 1000, reason: '', wasClean: true })
   }
 
   open(): void {

@@ -119,6 +119,15 @@ export function createMessageHandlers(baseDeps: MessageHandlersDependencies): Ba
   const externalModelRuns = deps.externalModelRuns ?? createExternalModelRunRegistry()
   const roleErrorRetryCounts = new Map<string, number>()
 
+  // A local agent's run can take many minutes and waits on the user's approvals, so the request that
+  // started it does not wait for it; its reply arrives through store updates like any other.
+  async function deliverExternal(delivery: ExternalPromptDelivery): Promise<OpenTeamStore | undefined> {
+    const run = sendExternalModelDelivery(deps, externalModelClient, externalModelRuns, delivery)
+    if (delivery.model.format !== 'local-agent') return run
+    void run.catch(error => deps.log.warn('local-agent:delivery-failed', { chatId: delivery.chatId, roleId: delivery.roleId, error: error instanceof Error ? error.message : String(error) }))
+    return undefined
+  }
+
   const handleMessageSend = async (message: RuntimeMessage) => {
     const chatId = requireString(message.chatId, '缺少群聊 ID')
     const raw = requireString(message.raw, '消息内容不能为空')
@@ -321,7 +330,7 @@ export function createMessageHandlers(baseDeps: MessageHandlersDependencies): Ba
     await sendPromptDeliveries(deps, chatId, messageResult.deliveryMessageId ?? messageResult.message.id, messageResult.deliveries)
     let responseStore = store
     for (const delivery of messageResult.externalDeliveries) {
-      responseStore = await sendExternalModelDelivery(deps, externalModelClient, externalModelRuns, delivery) ?? responseStore
+      responseStore = await deliverExternal(delivery) ?? responseStore
     }
 
     return {
@@ -393,7 +402,7 @@ export function createMessageHandlers(baseDeps: MessageHandlersDependencies): Ba
     await deps.broadcastStoreUpdated(store)
     if (result.prepared.delivery) await sendPromptDeliveries(deps, chatId, result.request.id, [result.prepared.delivery])
     let responseStore = store
-    if (result.prepared.externalDelivery) responseStore = await sendExternalModelDelivery(deps, externalModelClient, externalModelRuns, result.prepared.externalDelivery) ?? responseStore
+    if (result.prepared.externalDelivery) responseStore = await deliverExternal(result.prepared.externalDelivery) ?? responseStore
     return { ok: true, message: result.request, store: responseStore }
   }
 
@@ -507,7 +516,7 @@ export function createMessageHandlers(baseDeps: MessageHandlersDependencies): Ba
 
   async function deliverOpenTeamRequest(chatId: string, sent: OpenTeamRequest): Promise<OpenTeamStore | undefined> {
     if (sent.prepared.delivery) await sendPromptDeliveries(deps, chatId, sent.request.id, [sent.prepared.delivery])
-    if (sent.prepared.externalDelivery) return sendExternalModelDelivery(deps, externalModelClient, externalModelRuns, sent.prepared.externalDelivery)
+    if (sent.prepared.externalDelivery) return deliverExternal(sent.prepared.externalDelivery)
     return undefined
   }
 
@@ -709,7 +718,7 @@ export function createMessageHandlers(baseDeps: MessageHandlersDependencies): Ba
         replyAttemptId: externalDelivery.replyAttemptId,
         modelId: externalDelivery.model.id,
       })
-      const responseStore = await sendExternalModelDelivery(deps, externalModelClient, externalModelRuns, externalDelivery) ?? store
+      const responseStore = await deliverExternal(externalDelivery) ?? store
       return { ok: true, store: responseStore, messageId: externalDelivery.messageId }
     }
     const delivery = 'delivery' in result ? result.delivery : undefined
@@ -1227,7 +1236,7 @@ export function createMessageHandlers(baseDeps: MessageHandlersDependencies): Ba
       })
       await waitForRetryDelay(deps, retry.delayMs)
       if (retry.externalDelivery) {
-        const responseStore = await sendExternalModelDelivery(deps, externalModelClient, externalModelRuns, retry.externalDelivery) ?? retry.store
+        const responseStore = await deliverExternal(retry.externalDelivery) ?? retry.store
         return { ok: true, retried: true, store: responseStore }
       }
       await enqueuePromptDelivery(deps, identity.chatId, promptMessageId!, retry.delivery)
@@ -1362,7 +1371,7 @@ function isMeaningfulConversationId(value: string | undefined): value is string 
   return Boolean(value && value !== '__default__')
 }
 
-async function markDeliveryError(deps: MessageHandlersDependencies, chatId: string, roleId: string, messageId: string, reason: string): Promise<void> {
+async function markDeliveryError(deps: MessageHandlersDependencies, chatId: string, roleId: string, messageId: string, reason: string): Promise<OpenTeamStore> {
   deps.log.warn('delivery:error', { chatId, roleId, messageId, reason })
   const { store } = await mutateStore(store => {
     const chat = requireChat(store, chatId)
@@ -1384,6 +1393,7 @@ async function markDeliveryError(deps: MessageHandlersDependencies, chatId: stri
   await deps.sendError(reason)
   // The member is done with this message (it never got it), like a member that failed to reply.
   reportPromptSettled(deps, store, chatId, messageId)
+  return store
 }
 
 function updateUserMessageDeliveryStatus(message: GroupMessage): void {
@@ -1558,7 +1568,7 @@ async function sendPromptDelivery(deps: MessageHandlersDependencies, chatId: str
     sendPrompt: deps.sendPrompt,
     getLatestBinding: (targetChatId, roleId) => deps.runtimeFrames.getByRole(targetChatId, roleId),
     isDeliveryStillActive: isPromptDeliveryStillActive,
-    markDeliveryError: (targetChatId, roleId, targetMessageId, reason) => markDeliveryError(deps, targetChatId, roleId, targetMessageId, reason),
+    markDeliveryError: async (targetChatId, roleId, targetMessageId, reason) => { await markDeliveryError(deps, targetChatId, roleId, targetMessageId, reason) },
     requestRoleRecovery: deps.requestRoleRecovery,
     waitForRetry: deps.waitForRetry,
   }, {
@@ -1599,14 +1609,16 @@ async function sendExternalModelDelivery(deps: MessageHandlersDependencies, clie
     const images = imageIds.length > 0 && deps.imageAttachments?.loadUploads
       ? (await deps.imageAttachments.loadUploads(imageIds)).map(upload => ({ bytes: upload.bytes, mimeType: upload.mimeType }))
       : undefined
-    const retryDelays = deps.externalModelRetryDelaysMs ?? DEFAULT_EXTERNAL_MODEL_RETRY_DELAYS_MS
+    // A local agent is never sent the same task again on its own: what it did cannot be undone.
+    const retryDelays = delivery.model.format === 'local-agent' ? [] : deps.externalModelRetryDelaysMs ?? DEFAULT_EXTERNAL_MODEL_RETRY_DELAYS_MS
+    const context = { chatId: delivery.chatId, roleId: delivery.roleId, messageId: delivery.messageId, roleName: delivery.roleName }
     for (let attemptIndex = 0; attemptIndex <= retryDelays.length; attemptIndex += 1) {
       try {
         content = ''
         usage = undefined
         const stream = typeof client.stream === 'function'
-          ? client.stream({ model: delivery.model, prompt: delivery.prompt, images, abortSignal: controller.signal, onUsage })
-          : streamCompleteFallback(client, { model: delivery.model, prompt: delivery.prompt, images, abortSignal: controller.signal, onUsage })
+          ? client.stream({ model: delivery.model, prompt: delivery.prompt, images, abortSignal: controller.signal, onUsage, context })
+          : streamCompleteFallback(client, { model: delivery.model, prompt: delivery.prompt, images, abortSignal: controller.signal, onUsage, context })
         for await (const chunk of abortableChunks(stream, controller.signal)) {
           throwIfAborted(controller.signal)
           if (!chunk) continue
@@ -1662,8 +1674,16 @@ async function sendExternalModelDelivery(deps: MessageHandlersDependencies, clie
     }
     const reason = error instanceof Error ? error.message : String(error)
     deps.log.warn('external-model:send:failed', { chatId: delivery.chatId, roleId: delivery.roleId, messageId: delivery.messageId, reason })
-    await markDeliveryError(deps, delivery.chatId, delivery.roleId, delivery.messageId, reason)
-    return undefined
+    // The reply shown while it was written becomes the failure, instead of waiting forever.
+    if (replyMessageId) {
+      await mutateStore(store => {
+        const chat = store.chatsById[delivery.chatId]
+        const role = store.rolesById[delivery.roleId]
+        if (chat && role) upsertFailedAssistantAfterPrompt(store, chat, role, delivery.messageId, reason, deps.now(), deps.newId)
+      })
+    }
+    // The latest store: what the caller hands the page must not be older than what was broadcast.
+    return markDeliveryError(deps, delivery.chatId, delivery.roleId, delivery.messageId, reason)
   } finally {
     runs.unregister(delivery.chatId, delivery.roleId, delivery.replyAttemptId)
   }

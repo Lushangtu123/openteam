@@ -8131,6 +8131,63 @@ select.reply-compare-select {
   margin-bottom: 8px;
 }
 
+/* A local agent waiting for the user: allow the run (the task can be read first), or one of its
+   actions. */
+:root[data-theme] .approval-card {
+  display: grid;
+  gap: 10px;
+  margin: 6px max(24px, calc((100% - 768px) / 2)) 4px;
+  border: 1px solid var(--line-strong);
+  border-radius: 16px;
+  padding: 14px 16px;
+  background: var(--workspace-bg);
+  box-shadow: 0 8px 24px -16px rgba(0, 0, 0, 0.35);
+}
+
+:root[data-theme] .approval-card-title {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+:root[data-theme] .approval-card-title::before {
+  content: "⚠ ";
+  color: #d97706;
+}
+
+:root[data-theme] .approval-card-detail > summary {
+  color: var(--muted);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+:root[data-theme] .approval-card-detail pre {
+  max-height: 260px;
+  margin: 8px 0 0;
+  overflow: auto;
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: var(--chip-bg);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+:root[data-theme] .approval-card-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+:root[data-theme] .approval-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 /* Narrow windows: the categories become a row of tabs above the settings. */
 @media (max-width: 640px) {
   :root[data-theme] .settings-body {
@@ -8658,4 +8715,9 @@ select.reply-compare-select {
 :root[data-ui-style="grok"] .project-board-chip {
   background: var(--gb-accent);
   color: #ffffff;
+}
+
+:root[data-ui-style="grok"] .approval-card {
+  margin-inline: max(24px, calc((100% - 860px) / 2));
+  border-radius: 22px;
 }

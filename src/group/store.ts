@@ -821,7 +821,16 @@ function normalizeExternalModelRecord(raw: unknown): Record<string, ExternalMode
     const baseUrl = readTrimmedString(value.baseUrl)
     const apiKey = readTrimmedString(value.apiKey)
     const modelName = readTrimmedString(value.modelName)
-    const format = value.format === 'anthropic' ? 'anthropic' : value.format === 'openai' ? 'openai' : undefined
+    const format = value.format === 'anthropic' ? 'anthropic' : value.format === 'openai' ? 'openai' : value.format === 'local-agent' ? 'local-agent' : undefined
+    const createdAt = typeof value.createdAt === 'number' ? value.createdAt : 0
+    const updatedAt = typeof value.updatedAt === 'number' ? value.updatedAt : 0
+    if (format === 'local-agent') {
+      const localAgentId = readTrimmedString(value.localAgentId)
+      const workspace = readTrimmedString(value.workspace)
+      if (!id || !name || !localAgentId || !workspace) continue
+      normalized[id] = { id, name, format, baseUrl: '', apiKey: '', modelName: localAgentId, localAgentId, workspace, createdAt, updatedAt }
+      continue
+    }
     if (!id || !name || !baseUrl || !apiKey || !modelName || !format) continue
     normalized[id] = {
       id,
@@ -830,8 +839,8 @@ function normalizeExternalModelRecord(raw: unknown): Record<string, ExternalMode
       baseUrl,
       apiKey,
       modelName,
-      createdAt: typeof value.createdAt === 'number' ? value.createdAt : 0,
-      updatedAt: typeof value.updatedAt === 'number' ? value.updatedAt : 0,
+      createdAt,
+      updatedAt,
     }
   }
   return normalized

@@ -34,6 +34,7 @@ Join the OpenTeam WeChat community by scanning the QR code below. If the QR code
 - 🧑‍🏫 **Built-in advisor library**: start with 38 expert and thinking-style advisor templates, or create your own people.
 - 📣 **Mention-based routing**: use `@person` to ask one member, or `@everyone` to dispatch the same task to the whole team.
 - 🔄 **Independent and collaborative modes**: compare isolated perspectives first, then let members reference, challenge, and build on each other.
+- 🖥️ **Local agents as members**: Claude Code, Codex or another ACP agent on your computer can join a group and work in a folder you allow, through the local daemon; every run, and every file edit or command it asks for, waits for your approval.
 - 🗂️ **Project mode**: give the team a goal; a coordinator breaks it into tasks with owners and "done" criteria, you approve, members work in parallel or in order, the coordinator checks the results, asks for rework and finally writes the complete deliverable, all on a task board in the chat.
 - 🗣️ **Turn-by-turn discussions**: switch on 轮流讨论 in a collaborative group and members speak one at a time, each seeing what was said before; a member can hand the next turn to another by @-mentioning them. You can add notes while it runs, stop it, or run one more round, and it ends with a summary.
 - 📋 **Key points and round summaries**: when a message goes to several members, each reply starts with its key points and long replies fold to them; once everyone has answered, one member (an API member when there is one) writes a short summary of agreements, disagreements, open questions and next steps.
@@ -201,6 +202,7 @@ npm run verify
 - [AI page health status](docs/AI_PAGE_HEALTH.md)
 - [Images and attachments](docs/MULTIMODAL_ATTACHMENTS.md)
 - [Project mode](docs/PROJECT_MODE.md)
+- [Local agents (ACP)](docs/ACP.md)
 - [ACP support](docs/ACP.md)
 - [OpenTeam CLI](packages/openteamcli/README.md)
 

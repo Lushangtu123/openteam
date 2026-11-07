@@ -11,6 +11,7 @@ import { createComposerAttachments } from './composerAttachments'
 import { createComposerView } from './composerView'
 import { createTeamPageDomRefs } from './domRefs'
 import { createExternalModelsView } from './externalModelsView'
+import type { LocalAgentInfo } from '../shared/localControlProtocol'
 import { createAiPagesView } from './aiPagesView'
 import { createIframeHost } from './iframeHost'
 import { applyTeamLanguage, createLanguageSettingsController } from './languageController'
@@ -383,6 +384,11 @@ const peopleLibraryView = createPeopleLibraryView({
 })
 const externalModelsView = createExternalModelsView({
   getStore: () => store,
+  listLocalAgents: async () => {
+    const response = await sendRuntimeMessage<unknown>('LOCAL_AGENT_LIST', {}) as { ok?: boolean; error?: string; agents?: unknown }
+    if (response.ok === false) throw new Error(response.error ?? '没有拿到本机智能体列表')
+    return Array.isArray(response.agents) ? response.agents as LocalAgentInfo[] : []
+  },
   settingsButtonEl,
   settingsMenuEl,
   openExternalModelsEl,

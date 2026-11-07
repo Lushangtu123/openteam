@@ -15,6 +15,8 @@ export const EXTERNAL_MODEL_ROUTE_TYPES = [
 export interface ExternalModelHandlersDependencies {
   broadcastStoreUpdated(store: OpenTeamStore, excludeTabId?: number): Promise<void> | void
   externalModelClient?: ExternalModelClient
+  // Checks a local agent with the daemon (it is there, and may work in that folder).
+  checkLocalAgent?(model: ExternalModelConfig): Promise<string>
   newId(prefix: string): string
   now(): number
 }
@@ -65,6 +67,10 @@ export function createExternalModelHandlers(deps: ExternalModelHandlersDependenc
     const store = await loadStore()
     const model = store.settings.externalModelsById[modelId]
     if (!model) throw new Error(`找不到外部模型：${modelId}`)
+    if (model.format === 'local-agent') {
+      if (!deps.checkLocalAgent) throw new Error('本机智能体检查不可用')
+      return { ok: true, content: await deps.checkLocalAgent(model) }
+    }
     const completion = await deps.externalModelClient.complete({
       model,
       prompt: '你是 OpenTeam 的外部模型连通性测试。请只回复 OK。',
@@ -81,6 +87,12 @@ export function createExternalModelHandlers(deps: ExternalModelHandlersDependenc
 }
 
 function readExternalModelInput(message: RuntimeMessage, id: string, createdAt: number, updatedAt: number): ExternalModelConfig {
+  if (message.format === 'local-agent') {
+    const localAgentId = requireString(message.localAgentId, '请选择本机智能体')
+    const workspace = requireString(message.workspace, '请填写工作目录')
+    if (!workspace.startsWith('/')) throw new Error('工作目录必须是完整路径，例如 /Users/me/projects/app')
+    return { id, name: requireString(message.name, '名称不能为空'), format: 'local-agent', baseUrl: '', apiKey: '', modelName: localAgentId, localAgentId, workspace, createdAt, updatedAt }
+  }
   return {
     id,
     name: requireString(message.name, '外部模型名称不能为空'),
@@ -94,7 +106,7 @@ function readExternalModelInput(message: RuntimeMessage, id: string, createdAt: 
 }
 
 function readExternalModelFormat(value: unknown): ExternalModelFormat {
-  if (value === 'openai' || value === 'anthropic') return value
+  if (value === 'openai' || value === 'anthropic') return value as ExternalModelFormat
   throw new Error('外部模型格式必须是 OpenAI 或 Anthropic')
 }
 

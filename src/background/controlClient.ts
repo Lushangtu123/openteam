@@ -8,6 +8,8 @@ import {
   type ControlHttpResult,
   type DaemonControlMessage,
   type ExtensionControlMessage,
+  type ExtensionRequest,
+  type LocalAgentEvent,
   type OpenTeamControlConnectionStatus,
 } from '../shared/localControlProtocol'
 import type { OpenTeamStore } from '../group/types'
@@ -31,7 +33,14 @@ export interface ControlClient {
   sync(): Promise<void>
   stop(): void
   status(): OpenTeamControlConnectionStatus
+  // Asks the daemon itself (local agents). Fails at once when it is not connected.
+  request(action: ExtensionRequest['action'], payload?: Record<string, unknown>, timeoutMs?: number): Promise<ControlHttpResult>
+  // Follows one local agent run's events; returns how to stop following.
+  onAgentEvents(runId: string, handler: (event: LocalAgentEvent) => void): () => void
 }
+
+const REQUEST_TIMEOUT_MS = 15_000
+export const CONTROL_NOT_CONNECTED_MESSAGE = '没有连上 OpenTeam 本地守护进程：请在设置里打开「本机智能体控制」，并在终端运行 openteamcli daemon start。'
 
 const DAEMON_PING_TIMEOUT_MS = 1_000
 const RECONNECT_BASE_DELAY_MS = 2_000
@@ -48,6 +57,9 @@ export function createControlClient(deps: ControlClientDependencies): ControlCli
     state: 'disabled',
     port: OPENTEAM_CONTROL_DEFAULT_PORT,
   }
+  let nextRequestId = 1
+  const pendingRequests = new Map<string, { resolve(result: ControlHttpResult): void; timer: ReturnType<typeof globalThis.setTimeout> }>()
+  const agentListeners = new Map<string, Set<(event: LocalAgentEvent) => void>>()
 
   diagnostic('info', 'createControlClient:created', {
     profileId: safeCall(deps.getProfileId),
@@ -194,6 +206,7 @@ export function createControlClient(deps: ControlClientDependencies): ControlCli
       })
       deps.log.warn('control-client:closed', { url })
       socket = undefined
+      failInFlight('和 OpenTeam 本地守护进程的连接断开了。')
       if (shouldReconnect) {
         updateStatus({ state: 'disconnected', port: portFromControlUrl(url), url, lastError: 'OpenTeam CLI daemon connection closed.' })
         scheduleReconnect()
@@ -229,7 +242,55 @@ export function createControlClient(deps: ControlClientDependencies): ControlCli
     }
   }
 
+  function request(action: ExtensionRequest['action'], payload: Record<string, unknown> = {}, timeoutMs = REQUEST_TIMEOUT_MS): Promise<ControlHttpResult> {
+    const id = `ext-${Date.now()}-${nextRequestId++}`
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      return Promise.resolve(controlFailure(id, 'daemon_not_connected', CONTROL_NOT_CONNECTED_MESSAGE))
+    }
+    return new Promise(resolveRequest => {
+      const timer = deps.setTimer(() => {
+        pendingRequests.delete(id)
+        resolveRequest(controlFailure(id, 'request_timeout', '本地守护进程没有及时回应。'))
+      }, timeoutMs)
+      pendingRequests.set(id, { resolve: resolveRequest, timer })
+      send({ type: 'request', request: { id, action, payload } })
+    })
+  }
+
+  function onAgentEvents(runId: string, handler: (event: LocalAgentEvent) => void): () => void {
+    const listeners = agentListeners.get(runId) ?? new Set()
+    listeners.add(handler)
+    agentListeners.set(runId, listeners)
+    return () => {
+      listeners.delete(handler)
+      if (listeners.size === 0) agentListeners.delete(runId)
+    }
+  }
+
+  // The connection is gone: requests and runs in progress cannot finish.
+  function failInFlight(reason: string): void {
+    for (const [id, entry] of pendingRequests) {
+      deps.clearTimer(entry.timer)
+      entry.resolve(controlFailure(id, 'daemon_disconnected', reason))
+    }
+    pendingRequests.clear()
+    for (const listeners of agentListeners.values()) for (const listener of [...listeners]) listener({ kind: 'error', message: reason })
+  }
+
   async function handleSocketMessage(data: unknown): Promise<void> {
+    const raw = typeof data === 'string' ? safeJson(data) : data
+    if (isRecord(raw) && raw.type === 'response' && isRecord(raw.response) && typeof raw.response.id === 'string') {
+      const entry = pendingRequests.get(raw.response.id)
+      if (!entry) return
+      pendingRequests.delete(raw.response.id)
+      deps.clearTimer(entry.timer)
+      entry.resolve(raw.response as unknown as ControlHttpResult)
+      return
+    }
+    if (isRecord(raw) && raw.type === 'agent-event' && typeof raw.runId === 'string' && isRecord(raw.event)) {
+      for (const listener of [...(agentListeners.get(raw.runId) ?? [])]) listener(raw.event as unknown as LocalAgentEvent)
+      return
+    }
     const message = parseDaemonMessage(data)
     if (!message) {
       diagnostic('warn', 'daemon-message:ignored', { dataType: typeof data })
@@ -275,6 +336,7 @@ export function createControlClient(deps: ControlClientDependencies): ControlCli
     const current = socket
     socket = undefined
     if (!current) return
+    failInFlight('和 OpenTeam 本地守护进程的连接已关闭。')
     diagnostic('warn', 'socket:close-requested', { activeUrl, readyState: current.readyState })
     current.onclose = null
     current.close()
@@ -306,7 +368,15 @@ export function createControlClient(deps: ControlClientDependencies): ControlCli
     })
   }
 
-  return { sync, stop, status }
+  return { sync, stop, status, request, onAgentEvents }
+}
+
+function safeJson(data: string): unknown {
+  try {
+    return JSON.parse(data) as unknown
+  } catch {
+    return undefined
+  }
 }
 
 function controlDaemonPort(store: OpenTeamStore): number {
@@ -332,7 +402,7 @@ function controlDaemonPingUrl(socketUrl: string): string {
   return url.toString()
 }
 
-function parseDaemonMessage(data: unknown): DaemonControlMessage | undefined {
+function parseDaemonMessage(data: unknown): Extract<DaemonControlMessage, { type: 'command' }> | undefined {
   const parsed = typeof data === 'string' ? JSON.parse(data) as unknown : data
   if (!isRecord(parsed) || parsed.type !== 'command' || !isRecord(parsed.command)) return undefined
   const id = typeof parsed.command.id === 'string' ? parsed.command.id : ''

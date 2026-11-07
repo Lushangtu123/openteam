@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 import { spawn } from 'node:child_process'
-import { readFileSync, realpathSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { DEFAULT_PORT, DEFAULT_TOKEN_PATH, readOrCreateToken } from './openteam-daemon.mjs'
+import { DEFAULT_AGENT_CONFIG_PATH, DEFAULT_PORT, DEFAULT_TOKEN_PATH, readOrCreateToken } from './openteam-daemon.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const DAEMON_SCRIPT = resolve(__dirname, 'openteam-daemon.mjs')
@@ -95,6 +96,8 @@ export function buildCliRequest(argv) {
   }
 
   if (group === 'agent') {
+    if (subcommand === 'add') return { kind: 'agent-add', agent: agentFromOptions(options) }
+    if (subcommand === 'remove') return { kind: 'agent-remove', id: positional(rest, 0) ?? requireOption(options, 'id') }
     if (subcommand === 'list') return command('agent.list')
     if (subcommand === 'run') return command('agent.run', {
       agentId: requireOption(options, 'agent'),
@@ -135,6 +138,8 @@ async function runRequest(request) {
   }
   if (request.kind === 'daemon-logs') return daemonFetch('/logs')
   if (request.kind === 'doctor') return doctor()
+  if (request.kind === 'agent-add') return { ok: true, ...saveAgent(agentConfigPath(), request.agent) }
+  if (request.kind === 'agent-remove') return { ok: true, ...removeAgent(agentConfigPath(), request.id) }
   if (request.kind === 'command') {
     await ensureDaemon()
     return daemonFetch('/command', { method: 'POST', body: request.command })
@@ -318,6 +323,66 @@ function writeJson(value) {
   process.stdout.write(`${JSON.stringify(value, null, 2)}\n`)
 }
 
+// Well-known ACP adapters. npx downloads the adapter the first time it runs.
+export const AGENT_PRESETS = {
+  'claude-code': { id: 'claude-code', name: 'Claude Code', command: 'npx', args: ['-y', '@zed-industries/claude-code-acp'] },
+  codex: { id: 'codex', name: 'Codex', command: 'npx', args: ['-y', '@zed-industries/codex-acp'] },
+  gemini: { id: 'gemini-cli', name: 'Gemini CLI', command: 'gemini', args: ['--experimental-acp'] },
+}
+
+// A local agent to add, from `agent add` options. Folders are checked to exist; `~` is the home folder.
+export function agentFromOptions(options) {
+  const preset = typeof options.preset === 'string' ? AGENT_PRESETS[options.preset] : undefined
+  if (options.preset !== undefined && !preset) throw new Error(`没有这个预设：${options.preset}（可选 ${Object.keys(AGENT_PRESETS).join('、')}）`)
+  const commandLine = typeof options.command === 'string' ? options.command.trim().split(/\s+/) : undefined
+  const command = commandLine?.[0] ?? preset?.command
+  if (!command) throw new Error('请用 --preset 选一个智能体，或用 --command 写出启动命令')
+  const id = typeof options.id === 'string' ? options.id.trim() : preset?.id
+  if (!id || !/^[\w.-]{1,40}$/.test(id)) throw new Error('请用 --id 给智能体起一个 ID（字母、数字、- _ .）')
+  const cwdAllowlist = String(requireOption(options, 'cwd')).split(',').map(item => item.trim()).filter(Boolean).map(folder => {
+    const absolute = resolve(folder.replace(/^~(?=$|\/)/, homedir()))
+    if (!existsSync(absolute)) throw new Error(`文件夹不存在：${absolute}`)
+    return realpathSync(absolute)
+  })
+  return {
+    id,
+    name: typeof options.name === 'string' ? options.name.trim() : preset?.name ?? id,
+    type: 'stdio',
+    command,
+    args: commandLine ? commandLine.slice(1) : preset?.args ?? [],
+    enabled: true,
+    cwdAllowlist,
+  }
+}
+
+function agentConfigPath() {
+  return process.env.OPENTEAM_ACP_AGENTS_FILE || DEFAULT_AGENT_CONFIG_PATH
+}
+
+function readAgentsFile(path) {
+  if (!existsSync(path)) return []
+  const value = JSON.parse(readFileSync(path, 'utf8'))
+  return Array.isArray(value) ? value : Array.isArray(value?.agents) ? value.agents : []
+}
+
+// Adds the agent to the config file, or replaces the one with its ID. The daemon reads the file on
+// each use, so it needs no restart.
+export function saveAgent(path, agent) {
+  const agents = readAgentsFile(path).filter(item => item?.id !== agent.id)
+  agents.push(agent)
+  mkdirSync(dirname(path), { recursive: true })
+  writeFileSync(path, `${JSON.stringify({ agents }, null, 2)}\n`, { mode: 0o600 })
+  return { agent, configPath: path }
+}
+
+export function removeAgent(path, id) {
+  const agents = readAgentsFile(path)
+  const kept = agents.filter(item => item?.id !== id)
+  if (kept.length === agents.length) throw new Error(`没有这个智能体：${id}`)
+  writeFileSync(path, `${JSON.stringify({ agents: kept }, null, 2)}\n`, { mode: 0o600 })
+  return { removed: id, configPath: path }
+}
+
 export function help() {
   return {
     ok: true,
@@ -329,6 +394,9 @@ export function help() {
       'openteamcli task post|wait|read',
       'openteamcli run create-and-post --file task.json --wait',
       'openteamcli agent list|run --agent <id> --content <prompt> --cwd <path>',
+      'openteamcli agent add --preset claude-code|codex|gemini --cwd <folder>[,<folder>] [--id <id>] [--name <name>]',
+      'openteamcli agent add --id <id> --name <name> --command "<command and arguments>" --cwd <folder>[,<folder>]',
+      'openteamcli agent remove <id>',
     ],
   }
 }

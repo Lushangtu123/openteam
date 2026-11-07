@@ -164,6 +164,57 @@ describe('openteam local daemon', () => {
     expect(isLoopbackHostHeader(undefined)).toBe(false)
   })
 
+  it('runs a local ACP agent for the extension: events stream back, permissions are asked, the folder is enforced', async () => {
+    const { realpathSync, readFileSync, existsSync } = await import('node:fs')
+    const { resolve } = await import('node:path')
+    const workspace = realpathSync(mkdtempSync(join(tmpdir(), 'ot-daemon-acp-')))
+    tempDirs.push(workspace)
+    const daemon = await createControlDaemon({
+      port: 0,
+      token: 'test-token',
+      logToConsole: false,
+      acpAgents: [
+        { id: 'mock', name: 'Mock agent', type: 'stdio', command: process.execPath, args: [resolve(import.meta.dirname, 'test-fixtures/mock-acp-agent.mjs')], cwdAllowlist: [workspace] },
+        { id: 'remote', name: 'Remote', type: 'websocket', url: 'ws://127.0.0.1:1', cwdAllowlist: [workspace] },
+      ],
+    })
+    daemons.push(daemon)
+    const extension = new WebSocket(`ws://127.0.0.1:${daemon.port}/ext?profileId=test-profile`, { headers: { Origin: EXTENSION_ORIGIN } })
+    const responses = new Map()
+    const events = []
+    extension.addEventListener('message', event => {
+      const message = JSON.parse(String(event.data))
+      if (message.type === 'response') responses.set(message.response.id, message.response)
+      if (message.type === 'agent-event') {
+        events.push(message.event)
+        if (message.event.kind === 'permission') {
+          extension.send(JSON.stringify({ type: 'request', request: { id: 'perm', action: 'agent.permission', payload: { runId: message.runId, permissionId: message.event.permissionId, optionId: 'allow' } } }))
+        }
+      }
+    })
+    await waitFor(() => daemon.status().extensionConnected)
+    const ask = async (id, action, payload) => {
+      extension.send(JSON.stringify({ type: 'request', request: { id, action, payload } }))
+      await waitFor(() => responses.has(id))
+      return responses.get(id)
+    }
+
+    expect((await ask('list', 'agent.list', {})).data.agents.map(agent => agent.id)).toEqual(['mock', 'remote'])
+    expect(await ask('outside', 'agent.run', { agentId: 'mock', prompt: 'x', cwd: tmpdir() })).toMatchObject({ ok: false, error: { code: 'workspace_not_allowed' } })
+    expect(await ask('ws', 'agent.run', { agentId: 'remote', prompt: 'x', cwd: workspace })).toMatchObject({ ok: false, error: { code: 'unsupported_agent_endpoint' } })
+    expect(await ask('bad', 'chat.list', {})).toMatchObject({ ok: false, error: { code: 'unsupported_action' } })
+
+    const started = await ask('run', 'agent.run', { agentId: 'mock', prompt: '写个文件', cwd: workspace })
+    expect(started).toMatchObject({ ok: true, data: { runId: expect.any(String) } })
+    await waitFor(() => events.some(event => event.kind === 'done'))
+    expect(events.map(event => event.kind)).toEqual(expect.arrayContaining(['started', 'text', 'tool', 'permission', 'file', 'done']))
+    expect(events.find(event => event.kind === 'permission')).toMatchObject({ title: '写入 hello.txt', toolKind: 'edit', options: [{ optionId: 'allow' }, { optionId: 'reject' }] })
+    expect(events.find(event => event.kind === 'done').output).toContain('已写入 hello.txt。')
+    expect(readFileSync(join(workspace, 'hello.txt'), 'utf8')).toContain('写个文件')
+    expect(existsSync(join(workspace, 'hello.txt'))).toBe(true)
+    extension.close()
+  })
+
   it('lists configured ACP agents without requiring an extension connection', async () => {
     const daemon = await createControlDaemon({
       port: 0,
@@ -196,7 +247,7 @@ describe('openteam local daemon', () => {
           enabled: true,
           cwdAllowlist: [process.cwd()],
         }],
-        capabilities: ['agent.list', 'agent.run', 'agent.cancel', 'agent.read'],
+        capabilities: ['agent.list', 'agent.run', 'agent.cancel', 'agent.read', 'agent.permission'],
       },
     })
   })

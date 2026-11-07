@@ -6,7 +6,9 @@ import type { ChatSite } from './chatSites'
 export type { ChatSite }
 export type OpenTeamLanguage = 'en' | 'zh-CN'
 export type RoleModelSource = 'site' | 'external'
-export type ExternalModelFormat = 'openai' | 'anthropic'
+// 'local-agent': an agent on this computer (Claude Code, Codex…) that works in one folder, run through the
+// OpenTeam daemon over ACP; each run needs the user's approval.
+export type ExternalModelFormat = 'openai' | 'anthropic' | 'local-agent'
 
 export type ChatStatus = 'draft' | 'initializing' | 'ready' | 'running' | 'error'
 
@@ -96,8 +98,22 @@ export interface ExternalModelConfig {
   baseUrl: string
   apiKey: string
   modelName: string
+  // For a local agent: its ID in the daemon's agent list, and the folder it works in.
+  localAgentId?: string
+  workspace?: string
   createdAt: number
   updatedAt: number
+}
+
+// A question OpenTeam waits on before a local agent goes on: run this task, or allow one of the
+// agent's actions (editing a file, running a command).
+export interface PendingApproval {
+  id: string
+  kind: 'run' | 'permission'
+  title: string
+  detail?: string
+  options: Array<{ id: string; label: string; kind?: string }>
+  createdAt: number
 }
 
 export interface ExternalRoleMemory {
@@ -378,6 +394,8 @@ export interface RoleTemplate {
 }
 
 export interface GroupRole {
+  // A local agent member waiting for the user's answer.
+  pendingApproval?: PendingApproval
   id: string
   chatId: string
   createdBy?: 'orchestration-auto' | 'orchestration-template' | 'team-formation'

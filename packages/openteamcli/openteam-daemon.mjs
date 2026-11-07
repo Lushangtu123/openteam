@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from
 import { homedir } from 'node:os'
 import { dirname, resolve } from 'node:path'
 import { createServer } from 'node:http'
+import { runStdioAcpAgent } from './acp-stdio.mjs'
 
 export const DEFAULT_PORT = 19305
 export const DEFAULT_TOKEN_PATH = resolve(homedir(), '.openteam/control-token')
@@ -11,8 +12,12 @@ export const DEFAULT_AGENT_CONFIG_PATH = resolve(homedir(), '.openteam/acp-agent
 // The extension ID is fixed by the `key` in public/manifest.json.
 export const DEFAULT_EXTENSION_ORIGINS = ['chrome-extension://cnccbifloajlkjglmiojkpimjciamlpe']
 const DEFAULT_COMMAND_TIMEOUT_MS = 300_000
+// A run in OpenTeam may wait for the user's permission answers, so it gets longer.
+const DEFAULT_AGENT_RUN_TIMEOUT_MS = 30 * 60_000
 const MAX_BODY_BYTES = 1024 * 1024
-const AGENT_CAPABILITIES = ['agent.list', 'agent.run', 'agent.cancel', 'agent.read']
+const AGENT_CAPABILITIES = ['agent.list', 'agent.run', 'agent.cancel', 'agent.read', 'agent.permission']
+// What the extension may ask of the daemon over its WebSocket.
+const EXTENSION_REQUEST_ACTIONS = new Set(['agent.list', 'agent.run', 'agent.cancel', 'agent.permission'])
 const LOOPBACK_HOSTNAMES = new Set(['127.0.0.1', 'localhost', '[::1]'])
 
 export async function createControlDaemon(options = {}) {
@@ -24,7 +29,10 @@ export async function createControlDaemon(options = {}) {
   const startedAt = Date.now()
   const logs = []
   const pending = new Map()
-  const acpAgents = normalizeAcpAgents(options.acpAgents ?? readAgentConfig(options.agentConfigPath ?? DEFAULT_AGENT_CONFIG_PATH))
+  // Agents are read again on each use, so editing the config (or `openteamcli agent add`) needs
+  // no restart; tests pass them in.
+  const agentConfigPath = options.agentConfigPath ?? DEFAULT_AGENT_CONFIG_PATH
+  const currentAgents = () => normalizeAcpAgents(options.acpAgents ?? safeReadAgentConfig(agentConfigPath, log))
   const agentRuns = new Map()
   let extension
 
@@ -161,7 +169,7 @@ export async function createControlDaemon(options = {}) {
         lastSeenAt: extension.lastSeenAt,
         capabilities: extension.capabilities,
       }] : [],
-      agents: acpAgents.map(publicAgent),
+      agents: currentAgents().map(publicAgent),
       agentCapabilities: AGENT_CAPABILITIES,
       pending: pending.size,
       port: daemon.port,
@@ -172,7 +180,7 @@ export async function createControlDaemon(options = {}) {
     switch (command.action) {
       case 'agent.list':
         return success(command.id, {
-          agents: acpAgents.map(publicAgent),
+          agents: currentAgents().map(publicAgent),
           capabilities: AGENT_CAPABILITIES,
         })
       case 'agent.run':
@@ -191,12 +199,11 @@ export async function createControlDaemon(options = {}) {
     const agentId = requireString(input.agentId ?? input.id, '缺少 agentId。')
     const prompt = requireString(input.prompt ?? input.content, '本地智能体任务内容不能为空。')
     const cwd = normalizeFsPath(readString(input.cwd) ?? process.cwd())
-    const agent = acpAgents.find(item => item.id === agentId && item.enabled)
+    const agent = currentAgents().find(item => item.id === agentId && item.enabled)
     if (!agent) return failure(command.id, 'agent_not_found', `找不到可用的本地智能体：${agentId}`)
     if (!isWorkspaceAllowed(cwd, agent.cwdAllowlist)) {
       return failure(command.id, 'workspace_not_allowed', '本地智能体工作目录不在允许范围内。', '请在 OpenTeam daemon 的 ACP agent 配置里加入该 workspace。')
     }
-    if (agent.type !== 'websocket') return failure(command.id, 'unsupported_agent_endpoint', '当前版本仅支持通过 WebSocket 连接 ACP agent。')
 
     const run = {
       id: newRunId(),
@@ -216,12 +223,11 @@ export async function createControlDaemon(options = {}) {
     run.cancel = () => controller.abort()
 
     try {
-      const result = await runWebSocketAgent(agent, {
-        prompt,
-        cwd,
-        timeoutMs: readPositiveNumber(input.timeoutMs) ?? command.timeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS,
-        signal: controller.signal,
-      })
+      const timeoutMs = readPositiveNumber(input.timeoutMs) ?? command.timeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS
+      // From the command line nobody can answer a permission request, so the agent's requests are declined.
+      const result = agent.type === 'stdio'
+        ? await runStdioAcpAgent(agent, { prompt, cwd, timeoutMs, signal: controller.signal })
+        : await runWebSocketAgent(agent, { prompt, cwd, timeoutMs, signal: controller.signal })
       run.status = 'completed'
       run.result = result
       run.output = extractAgentOutput(result)
@@ -311,6 +317,8 @@ export async function createControlDaemon(options = {}) {
     socket.on('close', () => {
       connection.open = false
       if (extension === connection) extension = undefined
+      // Runs the extension started stop with it: nobody is left to see them or answer permissions.
+      for (const run of agentRuns.values()) if (run.connection === connection && run.status === 'running') run.cancel?.()
       log('extension:closed', { profileId })
     })
     socket.on('error', error => {
@@ -346,6 +354,10 @@ export async function createControlDaemon(options = {}) {
       log('extension:hello', { profileId: connection.profileId, capabilities: connection.capabilities })
       return
     }
+    if (message.type === 'request' && message.request && typeof message.request.id === 'string') {
+      void handleExtensionRequest(connection, message.request)
+      return
+    }
     if (message.type === 'result' && message.result?.id) {
       const entry = pending.get(message.result.id)
       if (!entry) return
@@ -355,7 +367,120 @@ export async function createControlDaemon(options = {}) {
     }
   }
 
+  // Requests from the extension itself (its WebSocket is checked for the extension's origin): list the
+  // local agents, run one (its progress streams back as agent-event messages), answer one of its
+  // permission requests, or cancel a run.
+  async function handleExtensionRequest(connection, request) {
+    const reply = response => {
+      if (connection.open) sendFrame(connection.socket, JSON.stringify({ type: 'response', response }))
+    }
+    const id = request.id
+    try {
+      if (!EXTENSION_REQUEST_ACTIONS.has(request.action)) {
+        reply(failure(id, 'unsupported_action', `不支持的请求：${request.action}`))
+        return
+      }
+      const payload = request.payload && typeof request.payload === 'object' ? request.payload : {}
+      if (request.action === 'agent.list') {
+        reply(success(id, { agents: currentAgents().map(publicAgent) }))
+        return
+      }
+      if (request.action === 'agent.cancel') {
+        const run = agentRuns.get(readString(payload.runId))
+        if (run?.status === 'running') run.cancel?.()
+        reply(success(id, { cancelled: Boolean(run) }))
+        return
+      }
+      if (request.action === 'agent.permission') {
+        const run = agentRuns.get(readString(payload.runId))
+        const waiting = run?.permissions?.get(readString(payload.permissionId))
+        if (!waiting) {
+          reply(failure(id, 'permission_not_found', '这个许可请求已经失效。'))
+          return
+        }
+        run.permissions.delete(readString(payload.permissionId))
+        waiting(readString(payload.optionId))
+        reply(success(id, { answered: true }))
+        return
+      }
+      reply(startExtensionRun(connection, id, payload))
+    } catch (error) {
+      reply(failure(id, 'internal_error', error instanceof Error ? error.message : String(error)))
+    }
+  }
+
+  function startExtensionRun(connection, requestId, payload) {
+    const agentId = readString(payload.agentId)
+    const prompt = readString(payload.prompt)
+    const cwdInput = readString(payload.cwd)
+    if (!agentId || !prompt || !cwdInput) return failure(requestId, 'invalid_request', '缺少智能体、任务或工作目录。')
+    const cwd = normalizeFsPath(cwdInput)
+    const agent = currentAgents().find(item => item.id === agentId && item.enabled)
+    if (!agent) return failure(requestId, 'agent_not_found', `找不到可用的本地智能体：${agentId}`)
+    if (agent.type !== 'stdio') return failure(requestId, 'unsupported_agent_endpoint', '在 OpenTeam 里使用的本地智能体需要以 stdio 方式运行（ACP）。')
+    if (!isWorkspaceAllowed(cwd, agent.cwdAllowlist)) {
+      return failure(requestId, 'workspace_not_allowed', '工作目录不在这个智能体允许的范围内。', '用 openteamcli agent add 加入这个目录，或在 ~/.openteam/acp-agents.json 的 cwdAllowlist 里加上它。')
+    }
+    const controller = new AbortController()
+    const run = {
+      id: newRunId(),
+      agentId: agent.id,
+      status: 'running',
+      cwd,
+      prompt,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      cancel: () => controller.abort(),
+      permissions: new Map(),
+      connection,
+    }
+    agentRuns.set(run.id, run)
+    const emit = event => {
+      if (run.connection.open) sendFrame(run.connection.socket, JSON.stringify({ type: 'agent-event', runId: run.id, event }))
+    }
+    log('agent:run-start', { runId: run.id, agentId: agent.id, cwd })
+    runStdioAcpAgent(agent, {
+      prompt,
+      cwd,
+      timeoutMs: readPositiveNumber(payload.timeoutMs) ?? DEFAULT_AGENT_RUN_TIMEOUT_MS,
+      signal: controller.signal,
+      onEvent: emit,
+      // The user answers in OpenTeam; the run waits until then.
+      requestPermission: ({ toolCall, options }) => new Promise(resolvePermission => {
+        const permissionId = newRunId('permission')
+        run.permissions.set(permissionId, resolvePermission)
+        controller.signal.addEventListener('abort', () => resolvePermission(undefined), { once: true })
+        emit({
+          kind: 'permission',
+          permissionId,
+          title: typeof toolCall.title === 'string' ? toolCall.title : '',
+          toolKind: typeof toolCall.kind === 'string' ? toolCall.kind : '',
+          options,
+        })
+      }),
+    })
+      .then(result => {
+        run.status = 'completed'
+        run.output = result.output
+        emit({ kind: 'done', output: result.output, stopReason: result.stopReason })
+      })
+      .catch(error => {
+        run.status = controller.signal.aborted ? 'cancelled' : 'failed'
+        run.error = error instanceof Error ? error.message : String(error)
+        emit({ kind: controller.signal.aborted ? 'cancelled' : 'error', message: run.error })
+      })
+      .finally(() => {
+        run.updatedAt = Date.now()
+        run.cancel = undefined
+        for (const waiting of run.permissions.values()) waiting(undefined)
+        run.permissions.clear()
+        log('agent:run-end', { runId: run.id, status: run.status })
+      })
+    return success(requestId, { runId: run.id })
+  }
+
   async function close() {
+    for (const run of agentRuns.values()) if (run.status === 'running') run.cancel?.()
     for (const entry of pending.values()) clearTimeout(entry.timeout)
     pending.clear()
     extension?.socket.destroy()
@@ -411,6 +536,10 @@ function normalizeAcpAgents(raw) {
         type,
         url: readString(item.url),
         command: readString(item.command),
+        args: Array.isArray(item.args) ? item.args.filter(arg => typeof arg === 'string') : [],
+        env: item.env && typeof item.env === 'object' && !Array.isArray(item.env)
+          ? Object.fromEntries(Object.entries(item.env).filter(([, value]) => typeof value === 'string'))
+          : undefined,
         enabled: item.enabled !== false,
         cwdAllowlist: Array.isArray(item.cwdAllowlist) ? item.cwdAllowlist.map(readString).filter(Boolean).map(normalizeFsPath) : [],
         runMethod: readString(item.runMethod) ?? 'session/prompt',
@@ -423,6 +552,15 @@ function readAgentConfig(agentConfigPath) {
   if (envConfig?.trim()) return readAgentConfigValue(JSON.parse(envConfig))
   if (!existsSync(agentConfigPath)) return []
   return readAgentConfigValue(JSON.parse(readFileSync(agentConfigPath, 'utf8')))
+}
+
+function safeReadAgentConfig(path, log) {
+  try {
+    return readAgentConfig(path)
+  } catch (error) {
+    log('agent:config-invalid', { path, error: error instanceof Error ? error.message : String(error) })
+    return []
+  }
 }
 
 function readAgentConfigValue(value) {

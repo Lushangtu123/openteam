@@ -106,6 +106,8 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
   const expandedReplyIds = new Set<string>()
   // The discussion bar, kept while its state is the same so a click is not lost to a re-render.
   let discussionBarCache: { key: string; node: HTMLElement } | undefined
+  // Approval cards by approval id, kept while they wait.
+  let approvalCardCache = new Map<string, HTMLElement>()
   // Replies still being written flow in smoothly instead of jumping in bursts. While the user is
   // at the bottom of the chat, it stays there as the text grows.
   const reveal = createStreamingReveal({
@@ -179,6 +181,7 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     for (const role of getStoppedReplyRoles(deps.getCurrentRoles())) {
       nodes.push(replyControlBubble(role))
     }
+    nodes.push(...approvalCards(chat))
     const discussion = discussionBar(chat, messages)
     if (discussion) nodes.push(discussion)
     const projectBoard = deps.renderProjectBoard?.(chat, messages)
@@ -456,6 +459,70 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
       text += node.textContent ?? ''
     }
     return text
+  }
+
+  // What local agent members wait on: a run to allow (with the whole task), or one of the agent's
+  // actions. The buttons are the agent's own choices.
+  function approvalCards(chat: GroupChat): HTMLElement[] {
+    const next = new Map<string, HTMLElement>()
+    const cards: HTMLElement[] = []
+    for (const role of deps.getCurrentRoles()) {
+      const approval = role.pendingApproval
+      if (!approval) continue
+      const node = approvalCardCache.get(approval.id) ?? buildApprovalCard(chat, role, approval)
+      next.set(approval.id, node)
+      cards.push(node)
+    }
+    approvalCardCache = next
+    return cards
+  }
+
+  function buildApprovalCard(chat: GroupChat, role: GroupRole, approval: NonNullable<GroupRole['pendingApproval']>): HTMLElement {
+    const card = document.createElement('section')
+    card.className = `approval-card approval-${approval.kind}`
+    card.dataset.approvalId = approval.id
+    card.setAttribute('role', 'alertdialog')
+    const title = document.createElement('div')
+    title.className = 'approval-card-title'
+    title.textContent = approval.title
+    card.append(title)
+    if (approval.detail && approval.kind === 'run') {
+      const details = document.createElement('details')
+      details.className = 'approval-card-detail'
+      const summary = document.createElement('summary')
+      summary.textContent = '看看要执行的任务'
+      const text = document.createElement('pre')
+      text.textContent = approval.detail
+      details.append(summary, text)
+      card.append(details)
+    } else if (approval.detail) {
+      const detail = document.createElement('p')
+      detail.className = 'approval-card-note'
+      detail.textContent = approval.detail
+      card.append(detail)
+    }
+    const actions = document.createElement('div')
+    actions.className = 'approval-card-actions'
+    let primaryGiven = false
+    for (const option of approval.options) {
+      const button = document.createElement('button')
+      button.type = 'button'
+      const allow = option.kind?.startsWith('allow') ?? false
+      button.className = `btn btn-small${allow && !primaryGiven ? ' btn-primary' : ''}`
+      if (allow) primaryGiven = true
+      button.textContent = option.label
+      button.addEventListener('click', () => {
+        for (const other of actions.querySelectorAll('button')) other.disabled = true
+        deps.runCommand('GROUP_LOCAL_AGENT_DECIDE', { chatId: chat.id, roleId: role.id, approvalId: approval.id, optionId: option.id })
+          .catch(error => {
+            for (const other of actions.querySelectorAll('button')) other.disabled = false
+            deps.showError(error instanceof Error ? error.message : String(error))
+          })
+      })
+      actions.append(button)
+    }
+    card.append(actions)
+    return card
   }
 
   // The group's discussion while it runs (turn, speaker, stop), and once it ends (one more round,

@@ -443,7 +443,7 @@
         <div class="modal-header">
           <div>
             <h2 id="external-models-title">外部模型</h2>
-            <p class="tiny">配置 OpenAI 或 Anthropic 兼容 API，人员可直接选择这些模型。</p>
+            <p class="tiny">配置 OpenAI 或 Anthropic 兼容 API，或本机的智能体（Claude Code、Codex 等，经 ACP 连接），人员可直接选择这些模型。</p>
           </div>
           <button id="close-external-models" class="icon-btn modal-close" type="button" aria-label="关闭外部模型">×</button>
         </div>
@@ -459,17 +459,29 @@
             <select id="external-model-format">
               <option value="openai">OpenAI 格式</option>
               <option value="anthropic">Anthropic 格式</option>
+              <option value="local-agent">本机智能体（ACP）</option>
             </select>
           </div>
-          <div class="field">
+          <div class="field local-agent-field" hidden>
+            <label for="external-model-local-agent">本机智能体</label>
+            <select id="external-model-local-agent"></select>
+            <p id="local-agent-status" class="tiny">在终端运行 openteamcli agent add --preset claude-code --cwd 你的项目目录，智能体就会出现在这里。需要在设置里打开「本机智能体控制」。</p>
+          </div>
+          <div class="field local-agent-field" hidden>
+            <label for="external-model-workspace">工作目录</label>
+            <input id="external-model-workspace" type="text" autocomplete="off" list="external-model-workspaces" placeholder="/Users/me/projects/app" />
+            <datalist id="external-model-workspaces"></datalist>
+            <p class="tiny">智能体只能读写这个目录里的文件。每次执行前都会先问你，执行中要改文件或运行命令时也会再问你。</p>
+          </div>
+          <div class="field api-model-field">
             <label for="external-model-base-url">模型地址</label>
             <input id="external-model-base-url" type="url" autocomplete="off" placeholder="https://api.example.com/v1" />
           </div>
-          <div class="field">
+          <div class="field api-model-field">
             <label for="external-model-api-key">模型 Key</label>
             <input id="external-model-api-key" type="password" autocomplete="off" />
           </div>
-          <div class="field">
+          <div class="field api-model-field">
             <label for="external-model-model-name">模型名称</label>
             <input id="external-model-model-name" type="text" autocomplete="off" placeholder="gpt-4.1 / claude-sonnet" />
           </div>

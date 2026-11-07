@@ -27,6 +27,8 @@ export interface ExternalModelCompletionInput {
   abortSignal?: AbortSignal
   // Told how many tokens the reply used, once the model reports it at the end of the stream.
   onUsage?(usage: ExternalModelUsage): void
+  // The member and message the reply is for (a local agent asks the user's approval on that member).
+  context?: { chatId: string; roleId: string; messageId: string; roleName?: string }
 }
 
 export interface ExternalModelUsage {

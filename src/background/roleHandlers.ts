@@ -50,7 +50,8 @@ export function createRoleHandlers(deps: RoleHandlersDependencies): BackgroundMe
   const handleRoleTemplatePersonaGenerate = async (message: RuntimeMessage) => {
     const description = requireString(message.description, '请先描述想要生成的人设')
     const { result } = await mutateStore(store => {
-      const modelId = readOptionalString(message.modelId) ?? store.settings.externalModelOrder[0]
+      // A local agent works only as a group member, so writing a persona uses an API model.
+      const modelId = readOptionalString(message.modelId) ?? store.settings.externalModelOrder.find(id => store.settings.externalModelsById[id]?.format !== 'local-agent')
       const model = modelId ? store.settings.externalModelsById[modelId] : undefined
       if (!model) throw new Error('请先配置外部模型后再使用 AI 生成人设')
       return { model, language: store.settings.language }

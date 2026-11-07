@@ -100,3 +100,16 @@ For a beta release:
 ```bash
 npm publish --tag beta --access public
 ```
+
+## Local agents in OpenTeam groups
+
+Add a local ACP agent, then pick it in OpenTeam under 添加大模型 → 本机智能体（ACP）:
+
+```bash
+openteamcli agent add --preset claude-code --cwd ~/projects/app
+openteamcli agent list
+openteamcli agent remove claude-code
+```
+
+Presets: `claude-code`, `codex`, `gemini`; or `--id <id> --name <name> --command "<command and arguments>"`. The agent can read and write only inside the `--cwd` folders, and OpenTeam asks you before each run and for each permission the agent requests. See `docs/ACP.md` in the OpenTeam repository.
+

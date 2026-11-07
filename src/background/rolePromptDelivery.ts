@@ -13,6 +13,7 @@ import type { RuntimeFrameRegistry } from './runtimeFrames'
 
 export interface ExternalPromptDelivery {
   roleId: string
+  roleName?: string
   chatId: string
   messageId: string
   replyAttemptId: string
@@ -73,6 +74,7 @@ export function prepareRolePromptDelivery(input: PrepareRolePromptDeliveryInput)
       replyAttemptId,
       externalDelivery: {
         roleId: input.role.id,
+        roleName: input.role.name,
         chatId: input.chat.id,
         messageId: input.userMessage.id,
         replyAttemptId,
