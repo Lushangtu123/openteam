@@ -221,8 +221,6 @@
 }
 
 :root[data-theme] .chat-item .chat-menu-btn {
-  width: 26px;
-  height: 26px;
   font-size: 15px;
 }
 
@@ -391,7 +389,6 @@
   border: 0;
   background: transparent;
   color: var(--subtle);
-  font-size: 12px;
 }
 
 :root[data-theme] .message-system-pill {
@@ -651,7 +648,6 @@
 /* Tokens an API reply used, after the member's name. */
 :root[data-theme] .message-usage {
   color: var(--subtle);
-  font-size: 11.5px;
   font-weight: 400;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -814,7 +810,6 @@
 }
 
 :root[data-theme] .message-body.has-key-points > .key-points-heading {
-  margin: 0 0 6px;
   color: var(--muted);
   font-size: 12px;
   font-weight: 650;
@@ -859,14 +854,6 @@
   cursor: pointer;
 }
 
-:root[data-theme] .key-points-toggle::after {
-  content: " ↓";
-}
-
-:root[data-theme] .key-points-toggle[aria-expanded="true"]::after {
-  content: " ↑";
-}
-
 :root[data-theme] .key-points-toggle:hover {
   color: var(--text);
 }
@@ -883,9 +870,6 @@
   padding: 1px 8px;
   background: var(--chip-bg);
   color: var(--text);
-  font-size: 11px;
-  font-weight: 700;
-  line-height: 18px;
 }
 
 :root[data-theme] .round-summary-request .message-system-pill {
@@ -901,7 +885,6 @@
 :root[data-theme] .discussion-message-label {
   margin-bottom: 4px;
   color: var(--muted);
-  font-size: 11px;
   font-weight: 650;
 }
 
@@ -1174,7 +1157,6 @@
   padding: 1px 8px;
   background: var(--brand);
   color: var(--gpt-on-brand, #ffffff);
-  font-size: 11px;
   font-weight: 700;
   line-height: 18px;
 }
@@ -1232,7 +1214,6 @@
   padding: 1px 8px;
   background: var(--workspace-bg);
   color: var(--muted);
-  font-size: 11px;
   font-weight: 650;
   line-height: 18px;
   white-space: nowrap;
@@ -1343,7 +1324,6 @@
 }
 
 :root[data-theme] .approval-card-title::before {
-  content: "⚠ ";
   color: #d97706;
 }
 

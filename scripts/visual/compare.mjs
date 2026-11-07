@@ -4,9 +4,9 @@
 //   npm run visual:compare -- test-artifacts/visual/before test-artifacts/visual/after
 //
 // A pixel differs when a channel moves by more than 2 levels (smaller moves are anti-aliasing noise
-// between runs). Two areas change from run to run on their own and are left out: the members'
-// avatar colours in the orchestration window (they come from random ids) and the times in search
-// results.
+// between runs). snap.mjs hides what changes on its own (times, the avatar colours in the
+// orchestration window, which come from random ids); for screenshots taken before it did, those two
+// areas are left out here as well.
 import { readFileSync, readdirSync, existsSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { inflateSync } from 'node:zlib'
@@ -14,7 +14,7 @@ import { inflateSync } from 'node:zlib'
 const TOLERANCE = 2
 const NOISE = [
   { prefix: 'orchestration-', area: [180, 330, 240, 720] },
-  { prefix: 'search-', area: [600, 260, 670, 460] },
+  { prefix: 'search-', area: [540, 260, 720, 460] },
 ]
 
 // An 8-bit, non-interlaced PNG (what Chrome's screenshots are) to raw pixels.

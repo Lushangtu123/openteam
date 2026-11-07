@@ -72,7 +72,8 @@ const server = createServer((req, res) => {
 await new Promise(done => server.listen(MOCK_PORT, '127.0.0.1', done))
 const MOCK = `http://127.0.0.1:${MOCK_PORT}/v1`
 const FREEZE = `*, *::before, *::after { animation: none !important; transition: none !important; caret-color: transparent !important; }
-.message-time-divider, .chat-time, .message-usage { visibility: hidden !important; }`
+.message-time-divider, .chat-time, .message-usage, .message-search-meta > span:last-child { visibility: hidden !important; }
+.orchestration-person-avatar { background: #8a8a8a !important; }`
 
 console.log(`Screenshots of ${dist} into ${out}`)
 const profile = mkdtempSync(join(tmpdir(), 'ot-snap-'))
