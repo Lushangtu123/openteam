@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 import { spawn } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
+import { accessSync, constants, existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { dirname, resolve } from 'node:path'
+import { delimiter, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { DEFAULT_AGENT_CONFIG_PATH, DEFAULT_PORT, DEFAULT_TOKEN_PATH, readOrCreateToken } from './openteam-daemon.mjs'
 
@@ -331,6 +331,32 @@ export const AGENT_PRESETS = {
   gemini: { id: 'gemini-cli', name: 'Gemini CLI', command: 'gemini', args: ['--experimental-acp'] },
 }
 
+// The full path of a program on PATH, if it is there.
+export function findOnPath(name, path = process.env.PATH ?? '') {
+  for (const folder of path.split(delimiter).filter(Boolean)) {
+    const candidate = join(folder, name)
+    try {
+      accessSync(candidate, constants.X_OK)
+      if (statSync(candidate).isFile()) return candidate
+    } catch {
+      // Not here.
+    }
+  }
+  return undefined
+}
+
+// Extra environment for the agent, from `--env KEY=VALUE[,KEY=VALUE]`.
+function envFromOption(value) {
+  if (typeof value !== 'string') return {}
+  const env = {}
+  for (const pair of value.split(',').map(item => item.trim()).filter(Boolean)) {
+    const equals = pair.indexOf('=')
+    if (equals <= 0) throw new Error(`--env 的格式是 KEY=VALUE：${pair}`)
+    env[pair.slice(0, equals)] = pair.slice(equals + 1)
+  }
+  return env
+}
+
 // A local agent to add, from `agent add` options. Folders are checked to exist; `~` is the home folder.
 export function agentFromOptions(options) {
   const preset = typeof options.preset === 'string' ? AGENT_PRESETS[options.preset] : undefined
@@ -345,12 +371,17 @@ export function agentFromOptions(options) {
     if (!existsSync(absolute)) throw new Error(`文件夹不存在：${absolute}`)
     return realpathSync(absolute)
   })
+  // Claude Code's adapter starts its own bundled copy of Claude Code; pointing it at the installed
+  // `claude` makes it use the same program, settings and login as the terminal.
+  const installedClaude = options.preset === 'claude-code' ? findOnPath('claude') : undefined
+  const env = { ...(installedClaude ? { CLAUDE_CODE_EXECUTABLE: installedClaude } : {}), ...envFromOption(options.env) }
   return {
     id,
     name: typeof options.name === 'string' ? options.name.trim() : preset?.name ?? id,
     type: 'stdio',
     command,
     args: commandLine ? commandLine.slice(1) : preset?.args ?? [],
+    ...(Object.keys(env).length ? { env } : {}),
     enabled: true,
     cwdAllowlist,
   }
@@ -395,7 +426,7 @@ export function help() {
       'openteamcli task post|wait|read',
       'openteamcli run create-and-post --file task.json --wait',
       'openteamcli agent list|run --agent <id> --content <prompt> --cwd <path>',
-      'openteamcli agent add --preset claude-code|codex|gemini --cwd <folder>[,<folder>] [--id <id>] [--name <name>]',
+      'openteamcli agent add --preset claude-code|codex|gemini --cwd <folder>[,<folder>] [--id <id>] [--name <name>] [--env KEY=VALUE,...]',
       'openteamcli agent add --id <id> --name <name> --command "<command and arguments>" --cwd <folder>[,<folder>]',
       'openteamcli agent remove <id>',
     ],

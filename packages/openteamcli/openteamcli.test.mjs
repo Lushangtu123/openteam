@@ -68,7 +68,7 @@ describe('openteamcli command builder', () => {
         'openteamcli task post|wait|read',
         'openteamcli run create-and-post --file task.json --wait',
         'openteamcli agent list|run --agent <id> --content <prompt> --cwd <path>',
-        'openteamcli agent add --preset claude-code|codex|gemini --cwd <folder>[,<folder>] [--id <id>] [--name <name>]',
+        'openteamcli agent add --preset claude-code|codex|gemini --cwd <folder>[,<folder>] [--id <id>] [--name <name>] [--env KEY=VALUE,...]',
         'openteamcli agent add --id <id> --name <name> --command "<command and arguments>" --cwd <folder>[,<folder>]',
         'openteamcli agent remove <id>',
       ],
@@ -98,8 +98,20 @@ describe('openteamcli command builder', () => {
     const folder = realpathSync(mkdtempSync(join(tmpdir(), 'ot-cli-')))
     const configPath = join(folder, 'acp-agents.json')
     try {
+      const savedPath = process.env.PATH
+      process.env.PATH = join(folder, 'no-bin')
       const preset = agentFromOptions({ preset: 'claude-code', cwd: folder })
       expect(preset).toEqual({ id: 'claude-code', name: 'Claude Code', type: 'stdio', command: 'npx', args: ['-y', '@agentclientprotocol/claude-agent-acp'], enabled: true, cwdAllowlist: [folder] })
+      // With Claude Code installed, the adapter is pointed at it, so it uses that login.
+      const { mkdirSync, writeFileSync, chmodSync } = await import('node:fs')
+      mkdirSync(join(folder, 'bin'))
+      writeFileSync(join(folder, 'bin', 'claude'), '#!/bin/sh\n')
+      chmodSync(join(folder, 'bin', 'claude'), 0o755)
+      process.env.PATH = join(folder, 'bin')
+      expect(agentFromOptions({ preset: 'claude-code', cwd: folder, env: 'FOO=1,BAR=a=b' }).env).toEqual({ CLAUDE_CODE_EXECUTABLE: join(folder, 'bin', 'claude'), FOO: '1', BAR: 'a=b' })
+      expect(agentFromOptions({ preset: 'codex', cwd: folder }).env).toBeUndefined()
+      expect(() => agentFromOptions({ preset: 'codex', cwd: folder, env: 'NOEQUALS' })).toThrow('--env 的格式是 KEY=VALUE')
+      process.env.PATH = savedPath
       const custom = agentFromOptions({ id: 'mine', name: '我的智能体', command: 'node agent.mjs --acp', cwd: `${folder},${folder}` })
       expect(custom).toMatchObject({ id: 'mine', command: 'node', args: ['agent.mjs', '--acp'], cwdAllowlist: [folder, folder] })
       expect(() => agentFromOptions({ preset: 'nope', cwd: folder })).toThrow('没有这个预设')

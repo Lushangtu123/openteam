@@ -72,7 +72,7 @@ A local agent (Claude Code, Codex, Gemini CLI, or anything that speaks ACP over 
    openteamcli agent add --id mine --name "My agent" --command "node /path/agent.mjs --acp" --cwd ~/projects/app
    ```
    Presets: `claude-code` (`npx -y @agentclientprotocol/claude-agent-acp`, needs Node 22+), `codex` (`npx -y @agentclientprotocol/codex-acp`), `gemini` (`gemini --experimental-acp`). The older `@zed-industries/*-acp` packages are deprecated. `--cwd` takes one or more folders (comma-separated); they must exist. `openteamcli agent remove <id>` removes one.
-2. Log the agent in once, in a terminal, as you would to use it there: for Claude Code run `claude` and type `/login`; for Codex run `codex login`. The adapters use that login (or an API key in the agent's `env`). An agent that is not logged in answers ACP's "Authentication required"; OpenTeam shows that as 本机智能体还没有登录, with the login steps the agent lists.
+2. Log the agent in once, in a terminal, as you would to use it there: for Claude Code run `claude` and type `/login`; for Codex run `codex login`. The adapters use that login (or an API key in the agent's `env`). Claude Code's adapter starts its own bundled copy of Claude Code; the `claude-code` preset sets `CLAUDE_CODE_EXECUTABLE` to the installed `claude` when it finds one on PATH, so the agent uses the same program and login as the terminal (`--env KEY=VALUE` adds other variables, such as an `ANTHROPIC_API_KEY`). An agent that cannot use the account answers ACP's "Authentication required", whether nobody is logged in or the account cannot be used; OpenTeam shows 本机智能体不能用你的账号, says to run the agent once in a terminal to see its own reason (for Claude Code, `claude -p "hi"`), and lists the agent's login methods.
 3. Start the daemon (`openteamcli daemon start`, or `daemon restart` after updating OpenTeam) and turn on 本机智能体控制 in OpenTeam's settings.
 4. In 添加大模型, choose 接口格式 → 本机智能体（ACP）: the agent list comes from the daemon, and 工作目录 offers its allowed folders (a subfolder is fine). 测试 checks that the agent is listed and the folder allowed.
 5. Add a member with that model, like any API model.
@@ -95,5 +95,5 @@ A local agent (Claude Code, Codex, Gemini CLI, or anything that speaks ACP over 
 
 ## Follow-Up Tasks
 
-- Try the presets with signed-in Claude Code, Codex and Gemini CLI, and long runs. Tried so far (November 2026): Claude Code through the user's daemon got as far as starting the adapter (about 40 s, the first `npx` download included) and answered "Authentication required" because its command-line login was not set up.
+- Try the presets with signed-in Claude Code, Codex and Gemini CLI, and long runs. Tried so far (November 2026), through the user's daemon: approval, the adapter's first download and start (about 40 s), and Claude Code's answer "Authentication required" — which `claude -p` showed to be the subscription refusing ("Claude Code can't use your Claude subscription, usually because a payment is past due"), not OpenTeam. The file task itself is still to be seen with a usable account.
 - Offer "allow for this project" so a project's tasks for a local agent do not each need a click.

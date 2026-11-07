@@ -62,7 +62,7 @@ describe('ACP over stdio', () => {
 
   it('says how to log in when the agent is not logged in', async () => {
     await expect(runStdioAcpAgent({ ...agent, env: { MOCK_ACP_AUTH: '1' } }, { prompt: 'x', cwd: workspace(), timeoutMs: 10_000 }))
-      .rejects.toThrow('本机智能体还没有登录，请先登录后再试（Log in with Claude Code：Run `claude /login` in the terminal）。')
+      .rejects.toThrow('本机智能体不能用你的账号：可能还没有登录，或者账号/订阅暂时不能用。在终端里直接用一次这个智能体就能看到具体原因（例如 Claude Code：运行 claude -p "hi"）。登录方式：Log in with Claude Code：Run `claude /login` in the terminal。')
   })
 
   it('explains an agent that cannot start', async () => {

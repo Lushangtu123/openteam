@@ -22,14 +22,18 @@ export class AcpError extends Error {
 // ACP's error for an agent that is not logged in.
 const AUTH_REQUIRED_CODE = -32000
 
-// What to tell the user when the agent needs a login: how the agent itself says to log in.
+// What to tell the user when the agent refuses for lack of a usable account. Agents give this one
+// answer both when nobody is logged in and when the account cannot be used (Claude Code says so for
+// a subscription with a payment past due), so the user is told how to see the agent's own reason.
 export function loginHint(authMethods) {
   const ways = (Array.isArray(authMethods) ? authMethods : [])
     .map(method => [method?.name, method?.description].filter(text => typeof text === 'string' && text.trim()).join('：'))
     .filter(Boolean)
-  return ways.length
-    ? `本机智能体还没有登录，请先登录后再试（${ways.join('；')}）。`
-    : '本机智能体还没有登录，请先在终端里登录它后再试（例如 Claude Code：运行 claude，再输入 /login）。'
+  return [
+    '本机智能体不能用你的账号：可能还没有登录，或者账号/订阅暂时不能用。',
+    '在终端里直接用一次这个智能体就能看到具体原因（例如 Claude Code：运行 claude -p "hi"）。',
+    ways.length ? `登录方式：${ways.join('；')}。` : '',
+  ].filter(Boolean).join('')
 }
 
 /**
