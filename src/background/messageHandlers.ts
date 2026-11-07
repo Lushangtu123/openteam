@@ -1636,6 +1636,7 @@ async function sendExternalModelDelivery(deps: MessageHandlersDependencies, clie
       } catch (error) {
         if (isAbortError(error) || controller.signal.aborted) throw error
         if (content.trim()) throw error
+        if (isPermanentModelError(error)) throw error
         const reason = error instanceof Error ? error.message : String(error)
         const canRetry = attemptIndex < retryDelays.length && await isPromptDeliveryStillActive(delivery.chatId, delivery.roleId, delivery.messageId, delivery.replyAttemptId)
         if (!canRetry) throw error
@@ -1754,6 +1755,13 @@ async function updateExternalAssistantContent(
     return { ignored: false as const }
   })
   return result.ignored ? { ...result, store } : { ...result, store }
+}
+
+// A 4xx answer other than 408 (timeout) and 429 (too many requests) does not change when asked again:
+// a wrong key, a model that does not exist, a request the server refuses.
+function isPermanentModelError(error: unknown): boolean {
+  const status = (error as { status?: unknown } | undefined)?.status
+  return typeof status === 'number' && status >= 400 && status < 500 && status !== 408 && status !== 429
 }
 
 async function markExternalAssistantRetrying(

@@ -1840,6 +1840,73 @@ describe('background message handlers', () => {
     })
   })
 
+
+  it('does not retry an API error that asking again cannot fix, such as a wrong key', async () => {
+    vi.resetModules()
+    const startingStore = createStoreWithReadyRole()
+    startingStore.settings.externalModelOrder = ['model-1']
+    startingStore.settings.externalModelsById = {
+      'model-1': {
+        id: 'model-1',
+        name: 'API 模型',
+        format: 'openai',
+        baseUrl: 'https://api.example.test/v1',
+        apiKey: 'sk-test',
+        modelName: 'local-chat-model',
+        createdAt: 1,
+        updatedAt: 1,
+      },
+    }
+    startingStore.rolesById['role-1'].modelSource = 'external'
+    startingStore.rolesById['role-1'].externalModelId = 'model-1'
+
+    let currentStore = structuredClone(startingStore)
+    vi.doMock('./storeAccess', async importOriginal => {
+      const actual = await importOriginal<typeof import('./storeAccess')>()
+      return {
+        ...actual,
+        mutateStore: vi.fn(async (mutator: (store: OpenTeamStore) => unknown) => {
+          const result = await mutator(currentStore)
+          currentStore = structuredClone(currentStore)
+          return { store: currentStore, result }
+        }),
+      }
+    })
+
+    const { createMessageHandlers } = await import('./messageHandlers')
+    const externalModelClient = {
+      complete: vi.fn(async () => {
+        throw Object.assign(new Error('Unauthorized'), { status: 401 })
+      }),
+    }
+    let messageIdSeq = 0
+    // What the page was shown while the request was sent again.
+    const shown: Array<OpenTeamStore['messagesById'][string] | undefined> = []
+    const routes = createMessageHandlers({
+      broadcastStoreUpdated: vi.fn((store: OpenTeamStore) => { shown.push(structuredClone(store.messagesById['msg-2'])) }),
+      externalModelClient,
+      externalModelRetryDelaysMs: [0, 0, 0],
+      getChatStatusFromRoles: () => 'ready',
+      log: { debug: vi.fn(), info: vi.fn(), warn: vi.fn() },
+      newId: vi.fn((prefix: string) => prefix === 'msg' ? `${prefix}-${++messageIdSeq}` : `${prefix}-1`),
+      now: vi.fn(() => 100),
+      runtimeFrames: {
+        bind: vi.fn(),
+        getByAddress: vi.fn(),
+        getByRole: vi.fn(() => undefined),
+      },
+      sendRoleMessage: vi.fn(),
+      sendError: vi.fn(),
+      sendPrompt: vi.fn(),
+      waitForRetry: vi.fn(async () => undefined),
+    })
+
+    const sendRoute = routes.find(route => route.type === 'GROUP_MESSAGE_SEND')
+    const response = await sendRoute?.handler({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@all 用 API 回答' }, {}) as { store: OpenTeamStore }
+
+    expect(externalModelClient.complete).toHaveBeenCalledTimes(1)
+    expect(response.store.messagesById['msg-2']).toMatchObject({ type: 'assistant', status: 'error' })
+  })
   it('stops an active external model stream without requiring an iframe', async () => {
     vi.resetModules()
     const startingStore = createStoreWithReadyRole()

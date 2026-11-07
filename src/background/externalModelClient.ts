@@ -136,7 +136,8 @@ export function createExternalModelClient(fetchImpl: typeof fetch = fetch, optio
 async function* streamExternalModelWithTimeout(input: ExternalModelCompletionInput, fetchImpl: typeof fetch, timeoutMs: number): AsyncIterable<string> {
   const timeout = createTimedAbortSignal(input.abortSignal, timeoutMs)
   try {
-    yield* streamExternalModel({ ...input, abortSignal: timeout.signal }, fetchImpl)
+    // A group reply: OpenTeam's reply loop retries it and says so on the reply, so one attempt here.
+    yield* streamExternalModel({ ...input, abortSignal: timeout.signal }, fetchImpl, 1)
   } catch (error: any) {
     if (isAbortError(error)) {
       if (!timeout.timedOut()) throw error
@@ -176,8 +177,10 @@ function createTimedAbortSignal(parentSignal: AbortSignal | undefined, timeoutMs
   }
 }
 
-async function* streamExternalModel(input: ExternalModelCompletionInput, fetchImpl: typeof fetch): AsyncIterable<string> {
-  const maxRetries = 3
+// `attempts`: tries for 429, 5xx and network errors. One layer of retries only: the AI library's own
+// (maxRetries) is off, or every attempt here would be three requests.
+async function* streamExternalModel(input: ExternalModelCompletionInput, fetchImpl: typeof fetch, attempts = 3): AsyncIterable<string> {
+  const maxRetries = attempts
   let attempt = 0
 
   while (true) {
@@ -198,21 +201,30 @@ async function* streamExternalModel(input: ExternalModelCompletionInput, fetchIm
           includeUsage: true,
         })
 
+      // The text stream leaves errors out (an HTTP 500 just ends it empty); they arrive here, and
+      // are thrown once the text ends, so the real reason and status reach the caller.
+      let streamError: unknown
       const result = streamText({
         model: provider(input.model.modelName as never),
         ...promptOrMessages(input),
         abortSignal: input.abortSignal,
+        maxRetries: 0,
+        onError: ({ error }) => {
+          streamError ??= error
+        },
       })
 
       for await (const textPart of result.textStream) {
         if (textPart) yield textPart
       }
+      if (streamError) throw streamError
       await reportUsage(result.usage, input.onUsage)
       return
     } catch (error: any) {
       if (isAbortError(error)) throw error
       attempt++
-      const status = error.status || error.response?.status
+      // The AI library reports the HTTP status as statusCode.
+      const status = error.status || error.statusCode || error.response?.status
       const isRetryable = status === 429 || (status >= 500 && status <= 599) || error.message?.includes('timeout') || error.message?.includes('Network')
 
       if (!isRetryable || attempt >= maxRetries) {

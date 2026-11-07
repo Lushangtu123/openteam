@@ -142,6 +142,56 @@ describe('ExternalModelClient Stability Baseline', () => {
     expect(callCount).toBe(3)
   }, 10000)
 
+  it('retries the status the AI library reports as statusCode, with its own retries off', async () => {
+    let callCount = 0
+    vi.mocked(streamText).mockImplementation(() => {
+      callCount++
+      if (callCount < 3) {
+        const error: any = new Error('Service Unavailable')
+        error.statusCode = 503
+        throw error
+      }
+      return createMockStreamResult(['ok'])
+    })
+
+    const client = createExternalModelClient(mockFetch)
+    const result = await client.complete({ model: mockConfig, prompt: 'Hi' })
+
+    expect(callCount).toBe(3)
+    expect(result.content).toBe('ok')
+    expect(vi.mocked(streamText).mock.calls[0][0]).toMatchObject({ maxRetries: 0 })
+  }, 10000)
+
+  it('reports an error the stream ends with, instead of an empty reply', async () => {
+    vi.mocked(streamText).mockImplementation((options: any) => {
+      const error: any = new Error('upstream overloaded')
+      error.statusCode = 500
+      options.onError({ error })
+      return createMockStreamResult([])
+    })
+
+    const client = createExternalModelClient(mockFetch)
+    const failure = await (async () => { for await (const chunk of client.stream!({ model: mockConfig, prompt: 'Hi' })) void chunk })().catch(error => error)
+
+    expect(failure).toBeInstanceOf(ExternalModelError)
+    expect(failure).toMatchObject({ message: 'upstream overloaded', status: 500 })
+  })
+
+  it('tries a group reply once: OpenTeam retries it and shows the retries', async () => {
+    vi.mocked(streamText).mockImplementation(() => {
+      const error: any = new Error('Internal Server Error')
+      error.statusCode = 500
+      throw error
+    })
+
+    const client = createExternalModelClient(mockFetch)
+    const chunks: string[] = []
+    await expect((async () => { for await (const chunk of client.stream!({ model: mockConfig, prompt: 'Hi' })) chunks.push(chunk) })())
+      .rejects.toThrow(ExternalModelError)
+
+    expect(vi.mocked(streamText)).toHaveBeenCalledTimes(1)
+  })
+
   it('should fail immediately on non-retryable error (e.g. 400)', async () => {
     vi.mocked(streamText).mockImplementation(() => {
       const error: any = new Error('Bad Request')
