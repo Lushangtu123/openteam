@@ -322,7 +322,7 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
     const external: MemberChoice[] = store.settings.externalModelOrder
       .map(id => store.settings.externalModelsById[id])
       .filter((model): model is NonNullable<typeof model> => Boolean(model))
-      .map(model => ({ key: `external:${model.id}`, label: `API · ${model.name}`, pillClass: 'site-pill-external', member: { modelSource: 'external', externalModelId: model.id } }))
+      .map(model => ({ key: `external:${model.id}`, label: model.format === 'local-agent' ? model.name : `API · ${model.name}`, pillClass: 'site-pill-external', member: { modelSource: 'external', externalModelId: model.id } }))
     return [...sites, ...external]
   }
 
