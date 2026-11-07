@@ -138,7 +138,11 @@ async function runRequest(request) {
   }
   if (request.kind === 'daemon-logs') return daemonFetch('/logs')
   if (request.kind === 'doctor') return doctor()
-  if (request.kind === 'agent-add') return { ok: true, ...saveAgent(agentConfigPath(), request.agent) }
+  if (request.kind === 'agent-add') {
+    const saved = saveAgent(agentConfigPath(), request.agent)
+    // The values (API keys) are saved, but not printed: the output may be shared or logged.
+    return { ok: true, ...saved, agent: withHiddenEnv(saved.agent) }
+  }
   if (request.kind === 'agent-remove') return { ok: true, ...removeAgent(agentConfigPath(), request.id) }
   if (request.kind === 'command') {
     await ensureDaemon()
@@ -405,6 +409,17 @@ export function saveAgent(path, agent) {
   mkdirSync(dirname(path), { recursive: true })
   writeFileSync(path, `${JSON.stringify({ agents }, null, 2)}\n`, { mode: 0o600 })
   return { agent, configPath: path }
+}
+
+// The agent as printed: its environment values hidden, all but the last four characters.
+export function withHiddenEnv(agent) {
+  if (!agent.env) return agent
+  return { ...agent, env: Object.fromEntries(Object.entries(agent.env).map(([key, value]) => [key, key === 'CLAUDE_CODE_EXECUTABLE' ? value : hideValue(value)])) }
+}
+
+function hideValue(value) {
+  const text = String(value)
+  return text.length <= 8 ? '********' : `********${text.slice(-4)}`
 }
 
 export function removeAgent(path, id) {

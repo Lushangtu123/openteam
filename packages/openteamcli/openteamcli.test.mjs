@@ -111,6 +111,10 @@ describe('openteamcli command builder', () => {
       expect(agentFromOptions({ preset: 'claude-code', cwd: folder, env: 'FOO=1,BAR=a=b' }).env).toEqual({ CLAUDE_CODE_EXECUTABLE: join(folder, 'bin', 'claude'), FOO: '1', BAR: 'a=b' })
       expect(agentFromOptions({ preset: 'codex', cwd: folder }).env).toBeUndefined()
       expect(() => agentFromOptions({ preset: 'codex', cwd: folder, env: 'NOEQUALS' })).toThrow('--env 的格式是 KEY=VALUE')
+      // Printed back with the values hidden, so a key does not end up in logs or shared output.
+      const { withHiddenEnv } = await import('./openteamcli.mjs')
+      expect(withHiddenEnv({ id: 'x', env: { CLAUDE_CODE_EXECUTABLE: '/bin/claude', ANTHROPIC_API_KEY: 'sk-ant-1234567890abcd', SHORT: 'abc' } }).env)
+        .toEqual({ CLAUDE_CODE_EXECUTABLE: '/bin/claude', ANTHROPIC_API_KEY: '********abcd', SHORT: '********' })
       process.env.PATH = savedPath
       const custom = agentFromOptions({ id: 'mine', name: '我的智能体', command: 'node agent.mjs --acp', cwd: `${folder},${folder}` })
       expect(custom).toMatchObject({ id: 'mine', command: 'node', args: ['agent.mjs', '--acp'], cwdAllowlist: [folder, folder] })
