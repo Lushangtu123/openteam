@@ -15,6 +15,7 @@ Static extension files are in `public/`. Design docs and images are in `docs/`. 
 - `npm test`: run Vitest unit tests across `src/` and package tests.
 - `npm run verify`: run typecheck, unit tests, and build before a PR.
 - `npm run openteamcli -- doctor`: run the local CLI.
+- `npm run visual:snap -- <folder>` and `npm run visual:compare -- <before> <after>`: take 108 screenshots of the built extension (both styles, both themes, three widths) and compare two sets pixel by pixel. Use them around style or layout refactors that should not change the screen.
 
 ## Coding Style & Naming Conventions
 

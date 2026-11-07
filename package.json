@@ -9,7 +9,9 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "verify": "npm run typecheck && npm test && npm run build",
-    "openteamcli": "node packages/openteamcli/openteamcli.mjs"
+    "openteamcli": "node packages/openteamcli/openteamcli.mjs",
+    "visual:snap": "node scripts/visual/snap.mjs",
+    "visual:compare": "node scripts/visual/compare.mjs"
   },
   "devDependencies": {
     "@types/chrome": "^0.0.268",
