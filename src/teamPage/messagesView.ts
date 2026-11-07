@@ -641,9 +641,17 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
 
   // Puts `nodes` into `parent` in order while leaving nodes that are already in place untouched,
   // so an update does not detach, restyle and re-lay-out every message in the list.
+  // Old nodes that are gone are dropped as the walk reaches them: left in place, a replaced message
+  // would make every node after it move in front of it, re-laying out the whole of a long chat.
   function reconcileChildren(parent: HTMLElement, nodes: Node[]): void {
+    const kept = new Set(nodes)
     let cursor = parent.firstChild
     for (const node of nodes) {
+      while (cursor && !kept.has(cursor)) {
+        const gone = cursor
+        cursor = cursor.nextSibling
+        gone.remove()
+      }
       if (node === cursor) {
         cursor = cursor.nextSibling
         continue

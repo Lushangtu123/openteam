@@ -56,6 +56,49 @@ describe('team page language controller', () => {
     }
   })
 
+  it('leaves a page that has only ever been in Chinese alone, without walking it', () => {
+    const doc = document.implementation.createHTMLDocument('')
+    doc.body.innerHTML = '<button aria-label="设置">设置</button>'
+    const walk = vi.spyOn(doc, 'createTreeWalker')
+
+    applyTeamLanguage('zh-CN', doc)
+    applyTeamLanguage('zh-CN', doc)
+    expect(walk).not.toHaveBeenCalled()
+
+    applyTeamLanguage('en', doc)
+    expect(doc.querySelector('button')?.textContent).toBe('Settings')
+  })
+
+  it('after the first pass translates only what changed, and a language change walks the page again', () => {
+    const doc = document.implementation.createHTMLDocument('')
+    doc.body.innerHTML = '<button id="a" aria-label="设置">设置</button><span id="b">发送</span>'
+    applyTeamLanguage('en', doc)
+    const walk = vi.spyOn(doc, 'createTreeWalker')
+
+    // Nothing changed: no walk at all.
+    applyTeamLanguage('en', doc)
+    expect(walk).not.toHaveBeenCalled()
+
+    // A new button, text the page's code set, and an attribute it changed.
+    const added = doc.createElement('button')
+    added.title = '停止'
+    added.textContent = '停止'
+    doc.body.append(added)
+    doc.querySelector('#b')!.firstChild!.nodeValue = '停止'
+    doc.querySelector('#a')!.setAttribute('aria-label', '发送')
+    applyTeamLanguage('en', doc)
+    expect([added.textContent, added.title]).toEqual(['Stop', 'Stop'])
+    expect(doc.querySelector('#b')?.textContent).toBe('Stop')
+    expect(doc.querySelector('#a')?.getAttribute('aria-label')).toBe('Send')
+    // Only the new button was walked (its text and its attributes), not the page.
+    expect(walk.mock.calls.every(([root]) => root === added)).toBe(true)
+
+    walk.mockClear()
+    applyTeamLanguage('zh-CN', doc)
+    expect(walk.mock.calls.some(([root]) => root === doc.body)).toBe(true)
+    expect([doc.querySelector('#a')?.textContent, doc.querySelector('#a')?.getAttribute('aria-label'), doc.querySelector('#b')?.textContent, added.textContent]).toEqual(['设置', '发送', '停止', '停止'])
+  })
+
   it('persists language changes from the settings switch', () => {
     document.body.innerHTML = `
       <button id="language-en" aria-pressed="false">English</button>

@@ -314,6 +314,23 @@ describe('team page messages view boundary', () => {
     expect(messagesEl.querySelector('.discussion-bar')).toBeNull()
   })
 
+  it('replaces a changed older message without moving the messages after it', () => {
+    const { messagesEl, messages, view } = createLongChatView(40)
+    view.renderMessages()
+    const observer = new MutationObserver(() => undefined)
+    observer.observe(messagesEl, { childList: true })
+
+    messages[3] = { ...messages[3], content: 'edited reply' }
+    view.renderMessages()
+    const records = observer.takeRecords()
+    observer.disconnect()
+
+    // One node out and its new one in: the 36 messages after it stay where they are.
+    expect(records.flatMap(record => [...record.addedNodes]).map(node => (node as HTMLElement).dataset.messageId)).toEqual([messages[3].id])
+    expect(records.flatMap(record => [...record.removedNodes])).toHaveLength(1)
+    expect(messagesEl.querySelector(`[data-message-id="${messages[3].id}"] .message-body`)?.textContent).toContain('edited reply')
+  })
+
   it('keeps every message node of a long chat cached between renders', () => {
     const { messagesEl, view } = createLongChatView(450)
     view.renderMessages()
