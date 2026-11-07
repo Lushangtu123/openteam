@@ -99,7 +99,7 @@ describe('openteamcli command builder', () => {
     const configPath = join(folder, 'acp-agents.json')
     try {
       const preset = agentFromOptions({ preset: 'claude-code', cwd: folder })
-      expect(preset).toEqual({ id: 'claude-code', name: 'Claude Code', type: 'stdio', command: 'npx', args: ['-y', '@zed-industries/claude-code-acp'], enabled: true, cwdAllowlist: [folder] })
+      expect(preset).toEqual({ id: 'claude-code', name: 'Claude Code', type: 'stdio', command: 'npx', args: ['-y', '@agentclientprotocol/claude-agent-acp'], enabled: true, cwdAllowlist: [folder] })
       const custom = agentFromOptions({ id: 'mine', name: '我的智能体', command: 'node agent.mjs --acp', cwd: `${folder},${folder}` })
       expect(custom).toMatchObject({ id: 'mine', command: 'node', args: ['agent.mjs', '--acp'], cwdAllowlist: [folder, folder] })
       expect(() => agentFromOptions({ preset: 'nope', cwd: folder })).toThrow('没有这个预设')

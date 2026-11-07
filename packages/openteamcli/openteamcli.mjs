@@ -325,8 +325,9 @@ function writeJson(value) {
 
 // Well-known ACP adapters. npx downloads the adapter the first time it runs.
 export const AGENT_PRESETS = {
-  'claude-code': { id: 'claude-code', name: 'Claude Code', command: 'npx', args: ['-y', '@zed-industries/claude-code-acp'] },
-  codex: { id: 'codex', name: 'Codex', command: 'npx', args: ['-y', '@zed-industries/codex-acp'] },
+  // Formerly @zed-industries/claude-code-acp and @zed-industries/codex-acp, which are deprecated.
+  'claude-code': { id: 'claude-code', name: 'Claude Code', command: 'npx', args: ['-y', '@agentclientprotocol/claude-agent-acp'] },
+  codex: { id: 'codex', name: 'Codex', command: 'npx', args: ['-y', '@agentclientprotocol/codex-acp'] },
   gemini: { id: 'gemini-cli', name: 'Gemini CLI', command: 'gemini', args: ['--experimental-acp'] },
 }
 

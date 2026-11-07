@@ -71,7 +71,7 @@ A local agent (Claude Code, Codex, Gemini CLI, or anything that speaks ACP over 
    openteamcli agent add --preset codex --cwd ~/projects/app
    openteamcli agent add --id mine --name "My agent" --command "node /path/agent.mjs --acp" --cwd ~/projects/app
    ```
-   Presets: `claude-code` (`npx -y @zed-industries/claude-code-acp`), `codex` (`npx -y @zed-industries/codex-acp`), `gemini` (`gemini --experimental-acp`). `--cwd` takes one or more folders (comma-separated); they must exist. `openteamcli agent remove <id>` removes one.
+   Presets: `claude-code` (`npx -y @agentclientprotocol/claude-agent-acp`, needs Node 22+), `codex` (`npx -y @agentclientprotocol/codex-acp`), `gemini` (`gemini --experimental-acp`). The older `@zed-industries/*-acp` packages are deprecated. `--cwd` takes one or more folders (comma-separated); they must exist. `openteamcli agent remove <id>` removes one.
 2. Start the daemon (`openteamcli daemon start`) and turn on 本机智能体控制 in OpenTeam's settings.
 3. In 添加大模型, choose 接口格式 → 本机智能体（ACP）: the agent list comes from the daemon, and 工作目录 offers its allowed folders (a subfolder is fine). 测试 checks that the agent is listed and the folder allowed.
 4. Add a member with that model, like any API model.
