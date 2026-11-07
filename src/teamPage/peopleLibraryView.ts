@@ -346,10 +346,7 @@ export function createPeopleLibraryView(deps: PeopleLibraryViewDependencies): Pe
     const name = document.createElement('div')
     name.className = 'role-name'
     name.textContent = displayTemplate.name
-    const used = document.createElement('span')
-    used.className = `template-type-badge template-type-${template.type}`
-    used.textContent = template.type === 'builtin' ? ui('内置') : ui('自定义')
-    row.append(name, used)
+    row.append(name)
 
     const description = document.createElement('div')
     description.className = 'template-description'
@@ -358,10 +355,11 @@ export function createPeopleLibraryView(deps: PeopleLibraryViewDependencies): Pe
     site.className = 'template-description'
     const defaultChatSite = visibleChatSite(template.defaultChatSite ?? store.settings.defaultChatSite)
     site.textContent = ui(`默认模型：${templateModelLabel(template, store)}${defaultChatSite === 'chatgpt' && template.chatGptGptsUrl ? ' · GPTs' : defaultChatSite === 'grok' && template.grokProjectUrl ? ' · Project' : ''}`)
-    const meta = document.createElement('div')
-    meta.className = 'template-description template-meta'
-    meta.textContent = templateMetaText(displayTemplate, language())
-    body.append(row, description, meta, site)
+    // One quiet line: the default model, then the category and source, if any.
+    const meta = templateMetaText(displayTemplate, language(), false)
+    if (meta) site.textContent = `${site.textContent} · ${meta}`
+    site.classList.add('template-meta')
+    body.append(row, description, site)
 
     const edit = document.createElement('button')
     edit.type = 'button'
@@ -390,7 +388,7 @@ export function createPeopleLibraryView(deps: PeopleLibraryViewDependencies): Pe
 
     const remove = document.createElement('button')
     remove.type = 'button'
-    remove.className = 'btn btn-danger template-delete'
+    remove.className = 'btn btn-ghost template-delete'
     remove.textContent = ui('删除')
     remove.addEventListener('click', event => {
       event.stopPropagation()
@@ -992,9 +990,9 @@ function templateTypeLabel(type: RoleTemplate['type'], language: TeamLanguage): 
   return translateUi(type === 'builtin' ? '内置人员' : '自定义人员', language)
 }
 
-function templateMetaText(template: RoleTemplate, language: TeamLanguage): string {
+function templateMetaText(template: RoleTemplate, language: TeamLanguage, withType = true): string {
   return [
-    templateTypeLabel(template.type, language),
+    withType ? templateTypeLabel(template.type, language) : undefined,
     localizeCategory(template.category, language),
     template.sourceTemplateName,
   ].filter(Boolean).join(' · ')
@@ -1026,6 +1024,8 @@ function categoryOptions(categories: Array<string | undefined>): string[] {
 function renderCategoryFilter(element: HTMLElement, categories: string[], activeCategory: string, onSelect: (category: string) => void, language: TeamLanguage = 'zh-CN'): void {
   element.replaceChildren()
   element.className = 'template-category-filter'
+  // Only 全部: nothing to filter by.
+  element.hidden = categories.length <= 1
   for (const category of categories) {
     const button = document.createElement('button')
     button.type = 'button'

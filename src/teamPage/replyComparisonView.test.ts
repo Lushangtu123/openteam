@@ -100,7 +100,7 @@ describe('reply comparison view', () => {
 
     select.value = 'r1'
     select.dispatchEvent(new Event('change'))
-    expect(document.querySelector('.reply-compare-warning')?.textContent).toContain('TA 也回答了这个问题')
+    expect(document.querySelector('.reply-compare-warning')?.textContent).toMatch(/^「.+」也回答了这个问题/)
   })
 
   it('asks everyone who answered to respond only where they disagree', async () => {

@@ -132,9 +132,17 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
     const membersField = field(t('选择队员', 'Team members'))
     const total = element('p', 'tiny team-setup-total')
     const list = element('div', 'team-setup-members')
+    // The AIs this user works with come first; the rest wait behind 更多 AI.
+    const primary = primaryChoiceKeys(choices)
+    const moreRows: HTMLElement[] = []
     for (const choice of choices) {
       const row = element('div', 'team-setup-member')
       row.dataset.key = choice.key
+      if (!primary.has(choice.key)) {
+        row.classList.add('team-setup-member-more')
+        row.hidden = true
+        moreRows.push(row)
+      }
       const label = element('span', `role-site-badge ${choice.pillClass}`, choice.label)
       label.title = choice.label
       const stepper = element('div', 'team-setup-stepper')
@@ -156,7 +164,19 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
       row.append(label, stepper)
       list.append(row)
     }
-    membersField.append(list, total)
+    membersField.append(list)
+    if (moreRows.length > 0) {
+      const more = button(t(`更多 AI（${moreRows.length}）`, `More AIs (${moreRows.length})`), 'btn btn-ghost btn-small team-setup-more')
+      more.setAttribute('aria-expanded', 'false')
+      more.addEventListener('click', () => {
+        const show = moreRows[0].hidden
+        for (const row of moreRows) row.hidden = !show
+        more.setAttribute('aria-expanded', String(show))
+        more.textContent = show ? t('收起', 'Show fewer') : t(`更多 AI（${moreRows.length}）`, `More AIs (${moreRows.length})`)
+      })
+      membersField.append(more)
+    }
+    membersField.append(total)
 
     const requiredField = field(t('必须有的职位（选填）', 'Positions the team must have (optional)'), 'team-setup-required')
     const required = document.createElement('input')
@@ -331,6 +351,22 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
       .filter((model): model is NonNullable<typeof model> => Boolean(model))
       .map(model => ({ key: `external:${model.id}`, label: model.format === 'local-agent' ? model.name : `API · ${model.name}`, pillClass: 'site-pill-external', member: { modelSource: 'external', externalModelId: model.id } }))
     return [...sites, ...external]
+  }
+
+  // The models already in use (API models and local agents, the sites of existing members, the
+  // default site), topped up from the usual sites so there are at least three to pick from.
+  function primaryChoiceKeys(choices: MemberChoice[]): Set<string> {
+    const store = deps.getStore()
+    const keys = new Set<string>(choices.filter(choice => choice.member.modelSource === 'external').map(choice => choice.key))
+    for (const role of Object.values(store.rolesById)) {
+      if (role.modelSource !== 'external' && role.chatSite) keys.add(`site:${role.chatSite}`)
+    }
+    if (store.settings.defaultChatSite) keys.add(`site:${store.settings.defaultChatSite}`)
+    for (const site of ['chatgpt', 'gemini', 'deepseek']) {
+      if (keys.size >= 3) break
+      keys.add(`site:${site}`)
+    }
+    return new Set(choices.map(choice => choice.key).filter(key => keys.has(key)))
   }
 
   function closeSetup(): void {

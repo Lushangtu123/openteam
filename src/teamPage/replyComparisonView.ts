@@ -193,6 +193,7 @@ export function createReplyComparisonView(deps: ReplyComparisonViewDependencies)
     summarize.type = 'button'
     summarize.className = 'btn btn-primary reply-compare-summarize'
     summarize.textContent = ui(sending ? '正在发送…' : '汇总异同')
+    summarize.title = ui('由你选的人员整理共识、分歧和需要核实的地方')
     summarize.disabled = sending || !enough || !summarizer
     summarize.addEventListener('click', () => {
       if (summarizer) void send(comparison, [summarizer], comparisonSummaryRequest, ui(`已请 ${summarizer.name} 汇总异同`))
@@ -217,15 +218,16 @@ export function createReplyComparisonView(deps: ReplyComparisonViewDependencies)
       element.textContent = ui(text)
       hints.append(element)
     }
+    // What each button does is on its hover text; below the buttons, only what needs attention.
     if (!enough) {
       hint('至少要有两份回复才能讨论或汇总。')
-    } else {
-      hint('讨论分歧：回答过的人员会收到所有回答，只针对不同意的地方回应。汇总异同：由你选的人员整理共识、分歧和需要核实的地方。')
-      if (hasAnswered(comparison, summarizerRoleId)) hint('TA 也回答了这个问题，汇总可能偏向自己的观点。换一位没参与回答、或用不同模型的人员会更客观。', 'reply-compare-warning')
+    } else if (summarizer && hasAnswered(comparison, summarizerRoleId)) {
+      hint(`「${summarizer.name}」也回答了这个问题，汇总可能偏向自己的观点。换一位没参与回答、或用不同模型的人员会更客观。`, 'reply-compare-warning')
     }
     hint('几位都同意，不代表一定正确：数据、引语和日期请到原始出处核实。', 'reply-compare-factcheck')
 
-    opened.footer.replaceChildren(discuss, label, summarize, copy, hints)
+    // Copy at the left; the two ways forward at the right, the summary (the main one) last.
+    opened.footer.replaceChildren(copy, discuss, label, summarize, hints)
   }
 
   // Sends the comparison as an attached file to `recipients`, with a request built for its file name.

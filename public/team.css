@@ -9546,3 +9546,106 @@ select.reply-compare-select {
   color: var(--muted);
   font-size: 12px;
 }
+
+/* Models window: the list, then 添加模型; the form opens only to add or change a model. */
+:root[data-theme] .external-models-toolbar {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: 10px;
+}
+
+:root[data-theme] .external-models-toolbar [hidden],
+:root[data-theme] .external-model-form[hidden],
+:root[data-theme] .template-category-filter[hidden] {
+  display: none;
+}
+
+:root[data-theme] .external-models-toolbar .btn {
+  gap: 6px;
+}
+
+:root[data-theme] .external-models-toolbar .btn svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+:root[data-theme] .external-model-form {
+  margin-top: 12px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+:root[data-theme] .external-model-form-title {
+  margin: 0 0 4px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+/* Delete in lists of models and people: a quiet text button in red, not a filled pink one. */
+:root[data-theme] .model-delete,
+:root[data-theme] .template-delete {
+  border-color: transparent;
+  background: transparent;
+  color: #d93025;
+}
+
+:root[data-theme] .model-delete:hover,
+:root[data-theme] .template-delete:hover {
+  background: rgba(217, 48, 37, 0.1);
+  color: #d93025;
+}
+
+:root[data-theme="dark"] .model-delete,
+:root[data-theme="dark"] .template-delete,
+:root[data-theme="dark"] .model-delete:hover,
+:root[data-theme="dark"] .template-delete:hover {
+  color: #ff8a82;
+}
+
+/* People lists: rows as tall as their text (the list stretched them to fill its height). */
+:root[data-theme] #people-library-list,
+:root[data-theme] #add-library-people-list {
+  align-content: start;
+}
+
+/* Compare replies: copy at the left, discuss and summarize at the right, notes below. */
+:root[data-theme] .reply-compare-footer .reply-compare-copy {
+  margin-right: auto;
+}
+
+:root[data-theme] .reply-compare-hints {
+  margin-top: 2px;
+}
+
+/* Orchestration people: the name on its own line, the model and description under it. */
+:root[data-theme] .orchestration-person-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:root[data-theme] .orchestration-person-title {
+  gap: 6px;
+}
+
+:root[data-theme] .orchestration-person-title .tiny {
+  min-width: 0;
+}
+
+:root[data-theme] .orchestration-person-site {
+  font-size: 11px;
+}
+
+/* Team-up: the AIs in use first; 更多 AI shows the rest. */
+:root[data-theme] .team-setup-member[hidden] {
+  display: none;
+}
+
+:root[data-theme] .team-setup-more {
+  justify-self: start;
+  margin-top: 4px;
+}

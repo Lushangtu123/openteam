@@ -178,6 +178,20 @@ describe('team formation view', () => {
     expect(invitation.attachmentsFrom).toBe('materials')
   })
 
+  it('lists the AIs already in use first and keeps the rest behind 更多 AI', () => {
+    const { view } = setup()
+    view.openSetup()
+    const visible = () => [...document.querySelectorAll<HTMLElement>('.team-setup-member')].filter(row => !row.hidden).map(row => row.dataset.key)
+    // The test store's members use Claude and ChatGPT; the default site is in too.
+    expect(visible()).toEqual(expect.arrayContaining(['site:claude', 'site:chatgpt']))
+    expect(visible()).not.toContain('site:kimi')
+    const more = document.querySelector<HTMLButtonElement>('.team-setup-more')!
+    expect(more.textContent).toMatch(/^更多 AI（\d+）$/)
+    more.click()
+    expect(visible()).toContain('site:kimi')
+    expect(more.textContent).toBe('收起')
+  })
+
   it('takes up to five of the same AI and twelve members in all', () => {
     const { view } = setup()
     view.openSetup()

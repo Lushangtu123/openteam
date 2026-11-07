@@ -531,14 +531,14 @@ describe('team page people library view boundary', () => {
     view.renderTemplates()
 
     expect(peopleLibraryListEl.textContent).toContain('人员1')
-    expect(peopleLibraryListEl.textContent).toContain('自定义')
+    // The tab says which kind; the rows do not repeat it.
+    expect(peopleLibraryListEl.textContent).not.toContain('自定义')
     expect(peopleLibraryListEl.textContent).not.toContain('弗兰克尔')
     expect(peopleLibraryCustomTabEl.className).toContain('active')
     expect(peopleLibraryListEl.querySelector('.template-delete')).toBeDefined()
 
     peopleLibraryBuiltinTabEl.click()
     expect(peopleLibraryListEl.textContent).toContain('弗兰克尔')
-    expect(peopleLibraryListEl.textContent).toContain('内置')
     expect(peopleLibraryListEl.textContent).not.toContain('人员1')
     expect(peopleLibraryBuiltinTabEl.className).toContain('active')
     expect(peopleLibraryListEl.querySelector('.template-delete')).toBeNull()
@@ -573,7 +573,7 @@ describe('team page people library view boundary', () => {
     peopleLibraryBuiltinTabEl.click()
 
     expect(peopleLibraryListEl.textContent).toContain('ViktorFrankl')
-    expect(peopleLibraryListEl.textContent).toContain('Built-in')
+    expect(peopleLibraryListEl.textContent).not.toContain('Built-in')
     expect(peopleLibraryListEl.textContent).toContain('Thought-style advisors')
     expect(peopleLibraryListEl.textContent).not.toContain('弗兰克尔')
     expect(peopleLibraryListEl.textContent).not.toContain('内置')

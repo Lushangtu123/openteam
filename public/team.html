@@ -561,7 +561,14 @@
           <button id="close-external-models" class="icon-btn modal-close" type="button" aria-label="关闭模型"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none"><path d="M6.5 6.5l11 11" /><path d="M17.5 6.5l-11 11" /></svg></button>
         </div>
         <div id="external-models-list" class="template-list"></div>
-        <form id="external-model-form" class="modal-form">
+        <div class="external-models-toolbar">
+          <button id="add-external-model" class="btn btn-primary" type="button">
+            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none"><path d="M12 5.5v13" /><path d="M5.5 12h13" /></svg>
+            <span>添加模型</span>
+          </button>
+        </div>
+        <form id="external-model-form" class="modal-form external-model-form" hidden>
+          <h3 id="external-model-form-title" class="external-model-form-title">添加模型</h3>
           <input id="external-model-id" type="hidden" />
           <div class="field">
             <label for="external-model-name">显示名称</label>
@@ -599,7 +606,7 @@
             <input id="external-model-model-name" type="text" autocomplete="off" placeholder="gpt-4.1 / claude-sonnet" />
           </div>
           <div class="template-actions">
-            <button id="reset-external-model-form" class="btn" type="button">新建</button>
+            <button id="reset-external-model-form" class="btn" type="button">取消</button>
             <button class="btn btn-primary" type="submit">保存模型</button>
           </div>
         </form>
@@ -806,11 +813,11 @@
           </aside>
         </div>
         <div class="orchestration-footer">
-          <label class="field orchestration-rounds-field" for="orchestration-max-rounds">
+          <label class="field orchestration-rounds-field" for="orchestration-max-rounds" title="默认 50 个，最多 200 个；用于防止循环流程无限执行，执行节点和审核节点都会计数。">
             <span>最大节点执行数</span>
             <input id="orchestration-max-rounds" type="number" min="1" max="200" value="50" />
           </label>
-          <p class="tiny">默认 50 个，最多 200 个；用于防止循环流程无限执行，执行节点和审核节点都会计数。</p>
+          <p class="tiny orchestration-rounds-hint">防止流程无限循环</p>
           <div class="template-actions orchestration-actions">
             <button id="save-orchestration" class="btn" type="button">保存</button>
             <button id="run-orchestration" class="btn btn-primary" type="button">运行</button>

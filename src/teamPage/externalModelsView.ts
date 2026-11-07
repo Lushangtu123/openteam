@@ -39,7 +39,25 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
   const workspacesEl = form.querySelector<HTMLDataListElement>('#external-model-workspaces')
   const localStatusEl = form.querySelector<HTMLElement>('#local-agent-status')
   const localHint = localStatusEl?.textContent ?? ''
+  const addButtonEl = form.ownerDocument.querySelector<HTMLButtonElement>('#add-external-model')
+  const formTitleEl = form.querySelector<HTMLElement>('#external-model-form-title')
   let localAgents: LocalAgentInfo[] = []
+
+  // The window lists the models; the form opens only to add one or change one, and closes on save or
+  // cancel. With no models yet, the form is open from the start.
+  function showForm(model?: ExternalModelConfig): void {
+    form.hidden = false
+    if (addButtonEl) addButtonEl.hidden = true
+    if (formTitleEl) formTitleEl.textContent = model ? ui(`修改「${model.name}」`) : ui('添加模型')
+    deps.externalModelNameEl.focus()
+  }
+
+  function hideForm(): void {
+    resetForm()
+    form.hidden = listModels().length > 0
+    if (addButtonEl) addButtonEl.hidden = !form.hidden
+    if (formTitleEl) formTitleEl.textContent = ui('添加模型')
+  }
 
   // A 本机智能体 needs an agent and a folder; an API model needs its address, key and model name.
   function showFieldsForFormat(): void {
@@ -86,7 +104,11 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
     localAgentEl?.addEventListener('change', showWorkspacesForAgent)
     deps.openExternalModelsEl.addEventListener('click', openExternalModels)
     deps.closeExternalModelsEl.addEventListener('click', closeExternalModels)
-    deps.resetExternalModelFormEl.addEventListener('click', resetForm)
+    deps.resetExternalModelFormEl.addEventListener('click', hideForm)
+    addButtonEl?.addEventListener('click', () => {
+      resetForm()
+      showForm()
+    })
     deps.externalModelFormEl.addEventListener('submit', event => {
       event.preventDefault()
       saveModel().catch(error => deps.showError(error instanceof Error ? error.message : String(error)))
@@ -131,7 +153,10 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
     edit.type = 'button'
     edit.className = 'btn btn-ghost'
     edit.textContent = ui('编辑')
-    edit.addEventListener('click', () => fillForm(model))
+    edit.addEventListener('click', () => {
+      fillForm(model)
+      showForm(model)
+    })
     const test = document.createElement('button')
     test.type = 'button'
     test.className = 'btn btn-ghost'
@@ -139,7 +164,7 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
     test.addEventListener('click', () => testModel(model, test))
     const remove = document.createElement('button')
     remove.type = 'button'
-    remove.className = 'btn btn-danger'
+    remove.className = 'btn btn-ghost model-delete'
     remove.textContent = ui('删除')
     remove.addEventListener('click', () => deleteModel(model))
     actions.append(test, edit, remove)
@@ -160,17 +185,17 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
           modelName: deps.externalModelModelNameEl.value.trim(),
         }
     await deps.runCommand(modelId ? 'EXTERNAL_MODEL_UPDATE' : 'EXTERNAL_MODEL_CREATE', modelId ? { modelId, ...payload } : payload)
-    resetForm()
     renderExternalModels()
+    hideForm()
   }
 
   function deleteModel(model: ExternalModelConfig): void {
-    const message = language() === 'en' ? `Delete external model "${model.name}"?` : `确定删除外部模型「${model.name}」吗？`
+    const message = language() === 'en' ? `Delete the model "${model.name}"?` : `确定删除模型「${model.name}」吗？`
     if (!window.confirm(message)) return
     deps.runCommand('EXTERNAL_MODEL_DELETE', { modelId: model.id })
       .then(() => {
-        resetForm()
         renderExternalModels()
+        hideForm()
       })
       .catch(error => deps.showError(error instanceof Error ? error.message : String(error)))
   }
@@ -221,9 +246,10 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
     deps.settingsMenuEl.hidden = true
     deps.settingsButtonEl.setAttribute('aria-expanded', 'false')
     deps.externalModelsModalEl.hidden = false
-    resetForm()
     renderExternalModels()
-    deps.externalModelNameEl.focus()
+    hideForm()
+    if (!form.hidden) deps.externalModelNameEl.focus()
+    else addButtonEl?.focus()
   }
 
   function closeExternalModels(): void {

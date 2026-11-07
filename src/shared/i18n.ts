@@ -64,6 +64,9 @@ const UI_TRANSLATIONS: Record<string, string> = {
   '深色': 'Dark',
   '编排': 'Orchestration',
   '不@也回复': 'Reply without @',
+  '防止流程无限循环': 'Keeps a looping flow from running forever',
+  '由你选的人员整理共识、分歧和需要核实的地方': 'The member you choose writes up the agreements, the disagreements and what to check',
+  '添加模型': 'Add model',
   '选择模型': 'Choose models',
   '选择用哪个模型；选几个就加几位成员': 'Choose which models to use; each one chosen adds a member',
   '已在群里': 'Already in the group',
@@ -303,8 +306,6 @@ const UI_TRANSLATIONS: Record<string, string> = {
   '讨论分歧': 'Discuss differences',
   '把所有回答发给回答过的人员，请 TA 们只针对不同意的地方回应': 'Send all answers to the people who answered and ask them to respond only where they disagree',
   '至少要有两份回复才能讨论或汇总。': 'At least two replies are needed to discuss or summarize.',
-  '讨论分歧：回答过的人员会收到所有回答，只针对不同意的地方回应。汇总异同：由你选的人员整理共识、分歧和需要核实的地方。': 'Discuss differences: the people who answered get all the answers and respond only where they disagree. Summarize differences: the person you pick sorts out agreements, disagreements and what needs checking.',
-  'TA 也回答了这个问题，汇总可能偏向自己的观点。换一位没参与回答、或用不同模型的人员会更客观。': 'This person also answered, so the summary may lean toward their own view. Someone who did not answer, or who uses a different model, will be more neutral.',
   '几位都同意，不代表一定正确：数据、引语和日期请到原始出处核实。': 'Agreement is not proof: check figures, quotes and dates against the original sources.',
   '对比回复': 'Compare replies',
   '关闭': 'Close',
@@ -1011,6 +1012,10 @@ function translateUiPattern(source: string): string | undefined {
   if (currentPerson) return `${currentPerson[1]} people · Current: ${currentPerson[2]}`
   const memberCount = source.match(/^成员 (\d+)$/)
   if (memberCount) return `Members ${memberCount[1]}`
+  const summarizerAnswered = source.match(/^「(.+)」也回答了这个问题，汇总可能偏向自己的观点。换一位没参与回答、或用不同模型的人员会更客观。$/)
+  if (summarizerAnswered) return `${summarizerAnswered[1]} answered this question too, so the summary may lean toward its own view. Someone who did not answer, or on another model, would be more neutral.`
+  const editModel = source.match(/^修改「(.+)」$/)
+  if (editModel) return `Edit "${editModel[1]}"`
   const memberSummary = source.match(/^(\d+) 位成员(?: · 当前：(.+))?$/)
   if (memberSummary) return memberSummary[2] ? `${memberSummary[1]} members · Current: ${memberSummary[2]}` : `${memberSummary[1]} members`
   const memberMenu = source.match(/^(.+) 的更多操作$/)

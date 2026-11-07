@@ -74,6 +74,71 @@ describe('external models view', () => {
     expect(showError).not.toHaveBeenCalled()
   })
 
+  it('lists the models and opens the form only to add or change one', () => {
+    const store = createDefaultStore()
+    store.settings.language = 'zh-CN'
+    document.body.innerHTML = `
+      <button id="settings-button"></button>
+      <div id="settings-menu"></div>
+      <button id="open-external-models"></button>
+      <div id="external-models-modal" hidden>
+        <button id="close-external-models"></button>
+        <div id="external-models-list"></div>
+        <button id="add-external-model" type="button">添加模型</button>
+        <form id="external-model-form" hidden>
+          <h3 id="external-model-form-title">添加模型</h3>
+          <input id="external-model-id" />
+          <input id="external-model-name" />
+          <select id="external-model-format"><option value="openai">OpenAI</option></select>
+          <input id="external-model-base-url" />
+          <input id="external-model-api-key" />
+          <input id="external-model-model-name" />
+          <button id="reset-external-model-form" type="button">取消</button>
+        </form>
+      </div>
+    `
+    const $ = <T extends HTMLElement>(selector: string) => document.querySelector<T>(selector)!
+    const view = createExternalModelsView({
+      getStore: () => store,
+      settingsButtonEl: $('#settings-button'),
+      settingsMenuEl: $('#settings-menu'),
+      openExternalModelsEl: $('#open-external-models'),
+      closeExternalModelsEl: $('#close-external-models'),
+      externalModelsModalEl: $('#external-models-modal'),
+      externalModelsListEl: $('#external-models-list'),
+      externalModelFormEl: $('#external-model-form'),
+      externalModelIdEl: $('#external-model-id'),
+      externalModelNameEl: $('#external-model-name'),
+      externalModelFormatEl: $('#external-model-format'),
+      externalModelBaseUrlEl: $('#external-model-base-url'),
+      externalModelApiKeyEl: $('#external-model-api-key'),
+      externalModelModelNameEl: $('#external-model-model-name'),
+      resetExternalModelFormEl: $('#reset-external-model-form'),
+      runCommand: vi.fn(async () => undefined),
+      testExternalModel: vi.fn(async () => undefined),
+      showError: vi.fn(),
+    })
+    view.registerExternalModelsEvents()
+
+    // No models yet: the form is open right away.
+    view.openExternalModels()
+    expect([$('#external-model-form').hidden, $('#add-external-model').hidden]).toEqual([false, true])
+
+    store.settings.externalModelOrder = ['m1']
+    store.settings.externalModelsById.m1 = { id: 'm1', name: 'DeepSeek', format: 'openai', baseUrl: 'https://api.example.test/v1', apiKey: 'sk-test', modelName: 'chat', createdAt: 1, updatedAt: 1 }
+    view.openExternalModels()
+    expect([$('#external-model-form').hidden, $('#add-external-model').hidden]).toEqual([true, false])
+
+    $('#add-external-model').click()
+    expect([$('#external-model-form').hidden, $('#external-model-form-title').textContent]).toEqual([false, '添加模型'])
+    $('#reset-external-model-form').click()
+    expect($('#external-model-form').hidden).toBe(true)
+
+    const editButton = [...document.querySelectorAll<HTMLButtonElement>('#external-models-list button')].find(button => button.textContent === '编辑')!
+    editButton.click()
+    expect([$('#external-model-form').hidden, $('#external-model-form-title').textContent, $<HTMLInputElement>('#external-model-name').value]).toEqual([false, '修改「DeepSeek」', 'DeepSeek'])
+  })
+
   it('renders external model actions in English mode', () => {
     const store = createDefaultStore()
     store.settings.language = 'en'

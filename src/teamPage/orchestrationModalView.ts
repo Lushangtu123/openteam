@@ -187,15 +187,23 @@ export function createOrchestrationModalView(deps: OrchestrationModalDependencie
       avatar.textContent = roleInitial(role.name)
       const body = document.createElement('div')
       body.className = 'orchestration-person-body'
+      // The name gets the whole first line; the model and the description share the second. (How
+      // to use the cards is said once, in the list's heading.)
+      const name = document.createElement('strong')
+      name.className = 'orchestration-person-name'
+      name.textContent = role.name
+      name.title = role.name
       const row = document.createElement('div')
       row.className = 'orchestration-person-title'
-      const name = document.createElement('strong')
-      name.textContent = role.name
-      row.append(name, roleSitePill(role))
-      const description = document.createElement('span')
-      description.className = 'tiny'
-      description.textContent = role.description || '拖到画布创建节点'
-      body.append(row, description)
+      row.append(roleSitePill(role))
+      if (role.description) {
+        const description = document.createElement('span')
+        description.className = 'tiny'
+        description.textContent = role.description
+        description.title = role.description
+        row.append(description)
+      }
+      body.append(name, row)
       card.append(avatar, body)
       deps.orchestrationPeopleListEl.append(card)
     }

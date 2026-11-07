@@ -439,7 +439,7 @@ describe('team.html chat creation UI', () => {
     expect(source).toContain('function openTemplateEditor(templateId?: string): void')
     expect(source).toContain("edit.className = 'btn btn-ghost template-edit'")
     expect(source).toContain("edit.textContent = ui('编辑')")
-    expect(source).toContain("remove.className = 'btn btn-danger template-delete'")
+    expect(source).toContain("remove.className = 'btn btn-ghost template-delete'")
     expect(source).toContain("remove.textContent = ui('删除')")
     expect(source).toContain('window.confirm(`确定删除「${template.name}」吗？删除后这个人员会从人员库移除。`)')
     expect(source).toContain('if (!isTemplateUsed(template.id)) actions.append(remove)')
