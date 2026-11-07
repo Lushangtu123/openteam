@@ -215,6 +215,35 @@ describe('team formation view', () => {
     expect(footerButton('确认分工，开工').disabled).toBe(false)
   })
 
+  it('shows a local agent member\'s question on its row, since the card covers the chat', async () => {
+    const { store, view, runCommand } = setup()
+    view.openCard('c1')
+    footerButton('邀请它们自荐').click()
+    await vi.waitFor(() => expect(store.chatsById.c1.teamFormation!.invitationIds).toEqual(['inv1']))
+    await settle()
+    store.rolesById.r2.pendingApproval = {
+      id: 'ap1', kind: 'run', title: '「ChatGPT」要在 /work 里执行这项任务', detail: '邀请的全文', createdAt: 1,
+      options: [{ id: 'allow', label: '允许执行', kind: 'allow_once' }, { id: 'deny', label: '拒绝', kind: 'reject_once' }],
+    }
+    view.refresh()
+    expect(rowState().map(row => [row.name, row.state])).toEqual([['Claude', '等待回复'], ['ChatGPT', '等你决定'], ['Claude2', '等同款 AI 先选，再轮到它']])
+    const card = document.querySelector('.team-card-row[data-role-id="r2"] .approval-card')!
+    expect(card.querySelector('.approval-card-title')?.textContent).toBe('「ChatGPT」要在 /work 里执行这项任务')
+    expect(card.querySelector('pre')?.textContent).toBe('邀请的全文')
+
+    // Another member's reply re-renders the card; the question stays the same element.
+    reply(store, 'a1', 'r1', 'inv1', claimReply('产品负责人'))
+    view.refresh()
+    expect(document.querySelector('.team-card-row[data-role-id="r2"] .approval-card')).toBe(card)
+
+    ;[...card.querySelectorAll('button')].find(button => button.textContent === '允许执行')!.click()
+    expect(runCommand).toHaveBeenCalledWith('GROUP_LOCAL_AGENT_DECIDE', { chatId: 'c1', roleId: 'r2', approvalId: 'ap1', optionId: 'allow' })
+    expect([...card.querySelectorAll('button')].every(button => button.disabled)).toBe(true)
+    delete store.rolesById.r2.pendingApproval
+    view.refresh()
+    expect(document.querySelector('.approval-card')).toBeNull()
+  })
+
   it('reports a clash, asks the clashing members again, and lets the user type a position', async () => {
     const store = makeStore()
     store.chatsById.c1.teamFormation = { ...store.chatsById.c1.teamFormation!, status: 'claiming', nextRound: 2, invitationIds: ['inv1'], rounds: [['r1', 'r2', 'r3']] }

@@ -23,6 +23,7 @@ import {
 import type { GroupChat, GroupMessage, GroupRole, OpenTeamLanguage, OpenTeamStore } from '../group/types'
 import { normalizeLanguage, translateUi } from '../shared/i18n'
 import type { MessageUpload } from '../group/messageUploads'
+import { createApprovalCards } from './approvalCard'
 import { createComposerAttachments } from './composerAttachments'
 import { PROBLEM_HEALTH_STATUSES, rolePageHealthLabel, type RolePageHealth } from './roleHealth'
 
@@ -69,6 +70,8 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
   // The inline form open in a confirmed team's card.
   let panel: 'none' | 'save' | 'redivide' = 'none'
   let advancing = false
+  // A local agent member asked while the card covers the chat: the question shows on its row.
+  const approvalCards = createApprovalCards({ runCommand: (type, payload) => deps.runCommand(type, payload), showError: message => deps.showError(message) })
 
   function language(): OpenTeamLanguage {
     return normalizeLanguage(deps.getStore().settings.language)
@@ -396,7 +399,7 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
     const members = collectTeamMembers(store, chat)
     const resolution = resolution_(chat, members)
     const health = members.map(member => memberHealth(member.role))
-    const signature = JSON.stringify([formation.task, formation.status, formation.invitationIds, members.map(member => [member.roleId, member.role.name, member.status, member.claim, member.replyText?.length]), health.map(item => [item.status, item.reason, item.detail]), [...chatEdits(card.chatId)], busy, panel, formation.preset, formation.previousPositions, language()])
+    const signature = JSON.stringify([formation.task, formation.status, formation.invitationIds, members.map(member => [member.roleId, member.role.name, member.status, member.claim, member.replyText?.length, member.role.pendingApproval?.id]), health.map(item => [item.status, item.reason, item.detail]), [...chatEdits(card.chatId)], busy, panel, formation.preset, formation.previousPositions, language()])
     if (signature === card.signature) return
     card.signature = signature
     // Dividing the work again changes the task.
@@ -473,6 +476,7 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
     const conflictOf = new Map<string, string>()
     for (const conflict of resolution.conflicts) for (const roleId of conflict.roleIds) conflictOf.set(roleId, conflict.position)
     const editMap = chatEdits(chat.id)
+    const waiting = approvalCards.cardsByRole(chat.id, members.map(member => member.role))
 
     const rows = members.map(member => {
       const assignment = resolution.assignments[member.roleId]
@@ -484,6 +488,8 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
       const stateText = memberStateText(member, chat)
       if (stateText) head.append(element('span', `team-card-state${member.status === 'failed' || member.status === 'unreadable' ? ' team-card-problem' : ''}`, stateText))
       row.append(head)
+      const question = waiting.get(member.roleId)
+      if (question) row.append(question)
 
       if (!confirmed && (isTeamMemberSettled(member) || editMap.has(member.roleId))) {
         const positionRow = element('label', 'team-card-position')
@@ -639,6 +645,7 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
   }
 
   function memberStateText(member: TeamMember, chat: GroupChat): string | undefined {
+    if (member.role.pendingApproval) return t('等你决定', 'Waiting for your answer')
     switch (member.status) {
       case 'not-invited': return chat.teamFormation?.status === 'claiming' ? t('等同款 AI 先选，再轮到它', 'Waits for its twin to choose first') : t('还没邀请', 'Not invited yet')
       case 'waiting': return t('等待回复', 'Waiting for a reply')

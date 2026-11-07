@@ -8188,6 +8188,12 @@ select.reply-compare-select {
   gap: 6px;
 }
 
+/* On a member's row in the team-formation card, which covers the chat. */
+:root[data-theme] .team-card-row .approval-card {
+  margin: 0;
+  box-shadow: none;
+}
+
 /* Narrow windows: the categories become a row of tabs above the settings. */
 @media (max-width: 640px) {
   :root[data-theme] .settings-body {
