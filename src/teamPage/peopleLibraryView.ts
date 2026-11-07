@@ -470,7 +470,9 @@ export function createPeopleLibraryView(deps: PeopleLibraryViewDependencies): Pe
       const content = document.createElement('span')
       content.className = 'select-row-content'
       const name = document.createElement('strong')
+      name.id = `add-person-name-${item.key.replace(/[^\w-]/g, '_')}`
       name.textContent = displayItem.name
+      checkbox.setAttribute('aria-labelledby', name.id)
       const description = document.createElement('div')
       description.className = 'template-description'
       description.textContent = displayItem.description || ui('未填写描述')

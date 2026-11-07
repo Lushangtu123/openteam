@@ -553,13 +553,13 @@
   border-top: 1px solid var(--line);
   border-radius: 0 0 8px 8px;
   padding-top: 9px;
-  color: #d93025;
+  color: #cf2e23;
 }
 
 :root[data-theme] .role-action-menu .role-delete:hover,
 :root[data-theme] .role-action-menu .role-delete:focus-visible {
   background: rgba(217, 48, 37, 0.1);
-  color: #d93025;
+  color: #cf2e23;
 }
 
 :root[data-theme="dark"] .role-action-menu .role-delete,
@@ -621,6 +621,12 @@
   background: rgba(250, 204, 21, 0.42);
   color: inherit;
   font-weight: 600;
+}
+
+/* On the dark surfaces the yellow is thinner, so the light text on it stays readable (4.5:1 or more,
+   also on the highlighted result). */
+:root[data-theme="dark"] .message-search-snippet mark {
+  background: rgba(250, 204, 21, 0.27);
 }
 
 /* Icons inside text buttons: the compare and positions buttons, menu checks, steppers. */
@@ -775,13 +781,13 @@
 :root[data-theme] .template-delete {
   border-color: transparent;
   background: transparent;
-  color: #d93025;
+  color: #cf2e23;
 }
 
 :root[data-theme] .model-delete:hover,
 :root[data-theme] .template-delete:hover {
   background: rgba(217, 48, 37, 0.1);
-  color: #d93025;
+  color: #cf2e23;
 }
 
 :root[data-theme="dark"] .model-delete,

@@ -569,9 +569,9 @@ describe('team.html chat creation UI', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/teamPage/chatListView.ts'), 'utf8')
 
     expect(source).toContain("item.addEventListener('click', () => switchChat(chat.id))")
-    expect(source).toContain("item.addEventListener('keydown'")
-    expect(source).toContain("item.tabIndex = 0")
-    expect(source).toContain("item.setAttribute('role', 'button')")
+    // The row is not a button itself: it holds the name button and the menu button.
+    expect(source).not.toContain("item.setAttribute('role', 'button')")
+    expect(source).toContain("name.setAttribute('aria-current', 'true')")
     expect(source).toContain("menu.addEventListener('click', event => event.stopPropagation())")
   })
 
@@ -619,7 +619,7 @@ describe('team.html chat creation UI', () => {
     expect(html).toContain('placeholder="输入消息，@成员 让他回复；不 @ 只记在群里"')
     expect(source).toContain("togglePeopleDrawerEl.textContent = ui('成员 0')")
     expect(source).toContain('deps.togglePeopleDrawerEl.textContent = ui(`成员 ${roles.length}`)')
-    expect(source).toContain("deps.togglePeopleDrawerEl.setAttribute('aria-label', ui(deps.state.peopleDrawerOpen ? '收起成员面板' : '打开成员面板'))")
+    expect(source).toContain("deps.togglePeopleDrawerEl.setAttribute('aria-expanded', String(deps.state.peopleDrawerOpen))")
     expect(uiSource).toContain('deps.state.peopleDrawerOpen && target && !memberPanelDocked() && !deps.rolePanelEl.contains(target) && !deps.togglePeopleDrawerEl.contains(target)')
     expect(uiSource).toContain('deps.state.peopleDrawerOpen = false')
     expect(source).not.toContain('人回复中')

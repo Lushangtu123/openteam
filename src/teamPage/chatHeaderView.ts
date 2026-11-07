@@ -68,7 +68,6 @@ export function createChatHeaderView(deps: ChatHeaderViewDependencies): ChatHead
     deps.chatStatusEl.title = deps.chatStatusEl.textContent
     deps.togglePeopleDrawerEl.disabled = false
     deps.togglePeopleDrawerEl.textContent = ui(`成员 ${roles.length}`)
-    deps.togglePeopleDrawerEl.setAttribute('aria-label', ui(deps.state.peopleDrawerOpen ? '收起成员面板' : '打开成员面板'))
     deps.togglePeopleDrawerEl.setAttribute('aria-expanded', String(deps.state.peopleDrawerOpen))
     deps.openOrchestrationEl.hidden = chat.mode !== 'collaborative'
   }

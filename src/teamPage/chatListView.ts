@@ -78,15 +78,9 @@ export function createChatListView(deps: ChatListViewDependencies): ChatListView
       const item = document.createElement('section')
       const hasActivity = chat.id !== deps.state.selectedChatId && Boolean(store.viewState?.chatHasNewMessageById?.[chat.id])
       item.className = `chat-item${chat.id === deps.state.selectedChatId ? ' active' : ''}${hasActivity ? ' has-activity' : ''}`
-      item.tabIndex = 0
-      item.setAttribute('role', 'button')
-      item.setAttribute('aria-label', language() === 'en' ? `Switch to ${chat.name}` : `切换到 ${chat.name}`)
+      // The whole row switches to the chat on a click; for the keyboard and screen readers its name is
+      // the button (a row acting as a button could not hold the menu button too).
       item.addEventListener('click', () => switchChat(chat.id))
-      item.addEventListener('keydown', event => {
-        if (event.key !== 'Enter' && event.key !== ' ') return
-        event.preventDefault()
-        switchChat(chat.id)
-      })
 
       const avatar = document.createElement('div')
       avatar.className = `chat-avatar ${deps.roleToneClass(chat.name)}`
@@ -101,6 +95,7 @@ export function createChatListView(deps: ChatListViewDependencies): ChatListView
       name.type = 'button'
       name.className = 'chat-name'
       name.textContent = chat.name
+      if (chat.id === deps.state.selectedChatId) name.setAttribute('aria-current', 'true')
       const menuButton = document.createElement('button')
       menuButton.type = 'button'
       menuButton.className = 'icon-btn chat-menu-btn'

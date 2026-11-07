@@ -135,6 +135,7 @@ const UI_TRANSLATIONS: Record<string, string> = {
   '更多': 'More',
   '群聊列表': 'Group list',
   '笔记': 'Notes',
+  '搜索结果': 'Search results',
   '空': 'Empty',
   '恢复会话': 'Restore session',
   '输入消息，@成员 让他回复；不 @ 只记在群里': 'Message the group; @ a member to get a reply, or it is only recorded',

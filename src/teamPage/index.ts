@@ -660,7 +660,6 @@ function renderReplyNotificationSettings(): void {
 
 // A switch in the settings window; its row's title names it.
 function renderSettingSwitch(element: HTMLButtonElement, on: boolean): void {
-  element.setAttribute('aria-pressed', String(on))
   element.setAttribute('aria-checked', String(on))
 }
 

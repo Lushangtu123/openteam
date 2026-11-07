@@ -162,12 +162,13 @@ export function createRolePanelView(deps: RolePanelViewDependencies): RolePanelV
     renderRolePanel()
   }
 
-  function roleMenuItem(className: string, icon: Parameters<typeof createIcon>[0], label: string, ariaLabel: string, run: () => void): HTMLButtonElement {
+  // Named by its visible words and then whose they are, so voice control finds it by what it says.
+  function roleMenuItem(className: string, icon: Parameters<typeof createIcon>[0], label: string, roleName: string, run: () => void): HTMLButtonElement {
     const button = document.createElement('button')
     button.type = 'button'
     button.className = `role-action-item ${className}`
     button.setAttribute('role', 'menuitem')
-    button.setAttribute('aria-label', ariaLabel)
+    button.setAttribute('aria-label', language() === 'en' ? `${ui(label)}: ${roleName}` : `${label}：${roleName}`)
     const text = document.createElement('span')
     text.textContent = ui(label)
     button.append(createIcon(icon), text)
@@ -180,7 +181,7 @@ export function createRolePanelView(deps: RolePanelViewDependencies): RolePanelV
   }
 
   function rolePromptDetailButton(role: GroupRole): HTMLButtonElement {
-    const button = roleMenuItem('role-prompt-detail', 'prompt', '查看提示词', language() === 'en' ? `View ${role.name}'s prompt` : `查看 ${role.name} 的提示词`, () => {
+    const button = roleMenuItem('role-prompt-detail', 'prompt', '查看提示词', role.name, () => {
       renderRolePanel()
       openRolePromptDetail(role)
     })
@@ -235,7 +236,7 @@ export function createRolePanelView(deps: RolePanelViewDependencies): RolePanelV
 
   // Web members only: reloads the member's AI page.
   function roleRefreshButton(role: GroupRole): HTMLButtonElement {
-    const button = roleMenuItem('role-refresh', 'refresh', '刷新网页', language() === 'en' ? `Refresh ${role.name}'s member window` : `刷新 ${role.name} 的成员窗口`, () => {
+    const button = roleMenuItem('role-refresh', 'refresh', '刷新网页', role.name, () => {
       renderRolePanel()
       reloadRoleFrame(role)
     })
@@ -297,7 +298,7 @@ export function createRolePanelView(deps: RolePanelViewDependencies): RolePanelV
 
   // Web members only: shows the member's AI page.
   function roleJumpButton(role: GroupRole): HTMLButtonElement {
-    return roleMenuItem('role-jump', 'external', '查看网页', language() === 'en' ? `Jump to ${role.name}'s source window` : `跳转到 ${role.name} 的原始窗口`, () => {
+    return roleMenuItem('role-jump', 'external', '查看网页', role.name, () => {
       renderRolePanel()
       deps.focusRoleFrame(role.chatId, role.id)
     })
@@ -305,7 +306,7 @@ export function createRolePanelView(deps: RolePanelViewDependencies): RolePanelV
 
   // Last in the menu, and asks first.
   function roleDeleteButton(role: GroupRole): HTMLButtonElement {
-    const button = roleMenuItem('role-delete', 'trash', '移出群聊', language() === 'en' ? `Delete ${role.name}` : `删除 ${role.name}`, () => {
+    const button = roleMenuItem('role-delete', 'trash', '移出群聊', role.name, () => {
       deps.state.roleSiteMenuRoleId = undefined
       kickRoleFromChat(role).catch(error => deps.showError(error instanceof Error ? error.message : String(error)))
     })

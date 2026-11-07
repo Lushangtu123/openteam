@@ -25,7 +25,7 @@
   --line-hover: rgba(13, 13, 13, 0.16);
   --text: #0d0d0d;
   --muted: #5d5d5d;
-  --subtle: #8f8f8f;
+  --subtle: #6a6a6a;
   --shell-bg: #ffffff;
   --rail-bg: #f9f9f9;
   --sidebar-bg: #f9f9f9;
@@ -47,7 +47,7 @@
   --gpt-on-brand: #ffffff;
   --gpt-send-disabled-bg: #d7d7d7;
   --gpt-send-disabled-text: #f4f4f4;
-  --gpt-link: #0b66d6;
+  --gpt-link: #0b64d3;
   --gpt-logo-bg: #0d0d0d;
 }
 
@@ -65,7 +65,7 @@
   --line-hover: rgba(255, 255, 255, 0.16);
   --text: #ececec;
   --muted: #b4b4b4;
-  --subtle: #8f8f8f;
+  --subtle: #afafaf;
   --shell-bg: #212121;
   --rail-bg: #181818;
   --sidebar-bg: #181818;

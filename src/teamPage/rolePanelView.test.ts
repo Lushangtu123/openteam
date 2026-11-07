@@ -81,7 +81,7 @@ describe('team page role panel view boundary', () => {
     expect(roleListEl.querySelector('[data-role-refresh="role-1"]')).toBeNull()
     roleListEl.querySelector<HTMLButtonElement>('[data-role-more="role-1"]')?.click()
     const refresh = roleListEl.querySelector<HTMLButtonElement>('[data-role-refresh="role-1"]')
-    expect(refresh?.getAttribute('aria-label')).toBe('刷新 产品经理 的成员窗口')
+    expect(refresh?.getAttribute('aria-label')).toBe('刷新网页：产品经理')
     refresh?.click()
     await Promise.resolve()
 
@@ -186,7 +186,7 @@ describe('team page role panel view boundary', () => {
     const remove = roleListEl.querySelector<HTMLButtonElement>('[data-role-delete="role-1"]')
     expect(items[items.length - 1]).toBe(remove)
     expect(remove?.querySelector('svg')).not.toBeNull()
-    expect(remove?.getAttribute('aria-label')).toBe('删除 产品经理')
+    expect(remove?.getAttribute('aria-label')).toBe('移出群聊：产品经理')
     remove?.click()
     await Promise.resolve()
 
@@ -230,7 +230,7 @@ describe('team page role panel view boundary', () => {
     view.renderRolePanel()
     roleListEl.querySelector<HTMLButtonElement>('[data-role-more="role-1"]')?.click()
     const detail = roleListEl.querySelector<HTMLButtonElement>('[data-role-prompt-detail="role-1"]')
-    expect(detail?.getAttribute('aria-label')).toBe('查看 产品经理 的提示词')
+    expect(detail?.getAttribute('aria-label')).toBe('查看提示词：产品经理')
     expect(detail?.querySelector('svg')).not.toBeNull()
     expect(detail?.textContent?.trim()).toBe('查看提示词')
     detail?.click()

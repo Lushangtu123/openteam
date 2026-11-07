@@ -9,6 +9,7 @@ export function createTiptapNoteEditor(options: { element: HTMLElement; content:
     extensions: [StarterKit],
     content: options.content,
     onUpdate: options.onUpdate,
+    editorProps: { attributes: { 'aria-labelledby': 'notes-panel-title' } },
   })
 
   return {

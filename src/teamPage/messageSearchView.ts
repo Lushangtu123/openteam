@@ -95,6 +95,7 @@ export function createMessageSearchView(deps: MessageSearchViewDependencies): Me
     list.id = 'message-search-results'
     list.className = 'message-search-results'
     list.setAttribute('role', 'listbox')
+    list.setAttribute('aria-label', ui('搜索结果'))
 
     panel.append(bar, scopeRow, count, list)
     backdrop.append(panel)

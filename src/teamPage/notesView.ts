@@ -65,6 +65,8 @@ export function createNotesView(deps: NotesViewDependencies): NotesView {
     if (deps.state.notesPanelOpen) clampFloatingPanelPosition()
     deps.globalNoteTabEl.classList.toggle('active', scope === 'global')
     deps.chatNoteTabEl.classList.toggle('active', scope === 'chat')
+    deps.globalNoteTabEl.setAttribute('aria-selected', String(scope === 'global'))
+    deps.chatNoteTabEl.setAttribute('aria-selected', String(scope === 'chat'))
     deps.chatNoteTabEl.disabled = !chat
 
     if (deps.state.notesPanelOpen) ensureEditor()?.catch(() => undefined)

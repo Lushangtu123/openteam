@@ -19,8 +19,8 @@
   --line: rgba(17, 17, 17, 0.08);
   --line-hover: rgba(17, 17, 17, 0.16);
   --text: #111111;
-  --muted: #6f6f73;
-  --subtle: #9a9a9f;
+  --muted: #636367;
+  --subtle: #67676b;
   --shell-bg: #ffffff;
   --rail-bg: #f4f4f5;
   --sidebar-bg: #f4f4f5;
@@ -48,6 +48,8 @@
   --gb-pill-shadow: 0 0 0 1px rgba(17, 17, 17, 0.05), 0 4px 16px -6px rgba(17, 17, 17, 0.18);
   --gb-accent: #5b5bd6;
   --gb-accent-soft: rgba(91, 91, 214, 0.1);
+  /* Text and icons on a filled accent. */
+  --gb-on-accent: #ffffff;
   --gpt-link: #4f4fcf;
 }
 
@@ -61,8 +63,8 @@
   --line: rgba(255, 255, 255, 0.08);
   --line-hover: rgba(255, 255, 255, 0.18);
   --text: #f2f2f2;
-  --muted: #9b9ba1;
-  --subtle: #6e6e73;
+  --muted: #a2a2a7;
+  --subtle: #9d9da0;
   --shell-bg: #161618;
   --rail-bg: #0f0f11;
   --sidebar-bg: #0f0f11;
@@ -93,6 +95,8 @@
   --gb-pill-shadow: 0 0 0 1px rgba(255, 255, 255, 0.07), 0 6px 18px -8px rgba(0, 0, 0, 0.8);
   --gb-accent: #8f8fff;
   --gb-accent-soft: rgba(143, 143, 255, 0.14);
+  /* White on this light lavender is 2.8:1; a deep navy is 6.3:1. */
+  --gb-on-accent: #14143a;
   --gpt-link: #a5a5ff;
 }
 
@@ -361,7 +365,7 @@
   min-width: 44px;
   height: 44px;
   background: var(--gb-accent);
-  color: #ffffff;
+  color: var(--gb-on-accent);
 }
 
 :root[data-ui-style="grok"] #send-message:disabled {
@@ -376,7 +380,7 @@
 :root[data-ui-style="grok"] .btn-primary,
 :root[data-ui-style="grok"] .btn-primary:hover:not(:disabled) {
   background: var(--gb-accent);
-  color: #ffffff;
+  color: var(--gb-on-accent);
 }
 
 /* Buttons, cards and menus: rounder. */
@@ -415,7 +419,7 @@
 
 :root[data-ui-style="grok"] .round-summary-label {
   background: var(--gb-accent);
-  color: #ffffff;
+  color: var(--gb-on-accent);
 }
 
 :root[data-ui-style="grok"] .discussion-bar {
@@ -447,7 +451,7 @@
 
 :root[data-ui-style="grok"] .project-board-chip {
   background: var(--gb-accent);
-  color: #ffffff;
+  color: var(--gb-on-accent);
 }
 
 :root[data-ui-style="grok"] .approval-card {

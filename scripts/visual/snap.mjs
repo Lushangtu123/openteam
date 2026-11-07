@@ -1,7 +1,9 @@
 // Takes the same set of OpenTeam screenshots every time, so two builds can be compared pixel for
 // pixel (scripts/visual/compare.mjs) after a change that should not move anything on screen, such as
-// a stylesheet cleanup. Both styles, both themes, 21 screens, and three window widths: 108 images.
-// Animations, clocks and the caret are frozen; members answer from a local mock API.
+// a stylesheet cleanup. Both styles, both themes, 28 screens, and three window widths: 132 images.
+// Animations, clocks and the caret are frozen; members answer from a local mock API. Each screen is
+// also checked for accessibility problems with axe-core (WCAG 2.2 A and AA, and its best practices),
+// listed in a11y.txt.
 //
 //   npm run build
 //   npm run visual:snap -- test-artifacts/visual/before
@@ -42,6 +44,11 @@ function findChromeForTesting() {
   }
   throw new Error('Chrome for Testing not found: run npx playwright install chromium, or set OPENTEAM_CHROME.')
 }
+// Problems looked at and left as they are, with why; listed apart so new ones stand out.
+const A11Y_ACCEPTED = {
+  'scrollable-region-focusable #message-search-results': 'a combobox: the search box moves through the results with the arrow keys (aria-activedescendant) and scrolls the active one into view',
+}
+const AXE = readFileSync(fileURLToPath(new URL('../../node_modules/axe-core/axe.min.js', import.meta.url)), 'utf8')
 const TEAM_URL = 'chrome-extension://cnccbifloajlkjglmiojkpimjciamlpe/team.html'
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
 const REPLIES = {
@@ -148,6 +155,23 @@ try {
     await sleep(350)
     const { result } = await send('Page.captureScreenshot', { format: 'png' }, sessionId)
     writeFileSync(join(out, `${name}.png`), Buffer.from(result.data, 'base64'))
+  }
+  // Problems found, each once (rule and element), with the screens it was seen on.
+  const a11y = new Map()
+  const audit = async screen => {
+    if (await evaluate(`typeof axe`) === 'undefined') await send('Runtime.evaluate', { expression: AXE }, sessionId)
+    const raw = await evaluate(`axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice'] }, resultTypes: ['violations'] })
+      .then(r => JSON.stringify(r.violations.map(v => ({ id: v.id, impact: v.impact, help: v.help, nodes: v.nodes.map(n => ({ target: n.target.join(' '), summary: (n.failureSummary || '').split('\\n').slice(1).join(' ').trim() })) }))))`)
+    if (typeof raw !== 'string' || raw.startsWith('EXCEPTION')) { pageErrors.push(`axe on ${screen}: ${raw}`); return }
+    for (const violation of JSON.parse(raw)) {
+      for (const node of violation.nodes) {
+        // Colours differ by theme, so a contrast problem is listed once per colour pair.
+        const key = violation.id === 'color-contrast' ? `${violation.id} ${node.target} ${node.summary}` : `${violation.id} ${node.target}`
+        const found = a11y.get(key) ?? { ...violation, target: node.target, summary: node.summary, screens: [] }
+        found.screens.push(screen)
+        a11y.set(key, found)
+      }
+    }
   }
   const click = sel => evaluate(`(() => { const el = document.querySelector(${JSON.stringify(sel)}); if (!el) return 'missing'; el.click(); return 'ok' })()`)
   const closeAll = () => evaluate(`(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); document.querySelectorAll('.modal-close').forEach(b => b.offsetParent && b.click()); document.body.click(); return 'ok' })()`)
@@ -307,6 +331,7 @@ try {
       await open()
       await sleep(450)
       await shot(`${screen}-${name}-${style}`)
+      await audit(`${screen}-${name}-${style}`)
       await closeAll()
       await sendMouseAway()
       if (screen in { 'reply-error': 1, discussion: 1, 'project-board': 1, 'team-card': 1, approval: 1 }) await backToMain()
@@ -319,7 +344,8 @@ try {
       await size(width, height)
       await sleep(400)
       await shot(`chat-${width}-${name}-${style}`)
-      if (width <= 720) { await click('#open-chat-list'); await sleep(350); await shot(`chat-list-${width}-${name}-${style}`); await closeAll() }
+      await audit(`chat-${width}-${name}-${style}`)
+      if (width <= 720) { await click('#open-chat-list'); await sleep(350); await shot(`chat-list-${width}-${name}-${style}`); await audit(`chat-list-${width}-${name}-${style}`); await closeAll() }
     }
     await size(1440, 900)
   }
@@ -333,6 +359,14 @@ try {
   const uniqueErrors = [...new Set(pageErrors)].filter(error => !expected(error))
   const expectedCount = new Set(pageErrors.filter(expected)).size
   writeFileSync(join(out, 'errors.txt'), uniqueErrors.join('\n') + (uniqueErrors.length ? '\n' : ''))
+  const order = { critical: 0, serious: 1, moderate: 2, minor: 3 }
+  const accepted = [...a11y.values()].filter(problem => A11Y_ACCEPTED[`${problem.id} ${problem.target}`])
+  const problems = [...a11y.values()].filter(problem => !accepted.includes(problem)).sort((a, b) => (order[a.impact] ?? 4) - (order[b.impact] ?? 4) || a.id.localeCompare(b.id) || a.target.localeCompare(b.target))
+  const byRule = new Map()
+  for (const problem of problems) byRule.set(problem.id, [...(byRule.get(problem.id) ?? []), problem])
+  writeFileSync(join(out, 'a11y.txt'), [...byRule].map(([id, list]) => `${id} (${list[0].impact}): ${list[0].help}\n` + list.map(problem => `  ${problem.target}\n    ${problem.summary}\n    on ${problem.screens.length} screens: ${problem.screens.slice(0, 4).join(', ')}${problem.screens.length > 4 ? ', ...' : ''}`).join('\n')).join('\n\n') + (problems.length ? '\n' : '')
+    + (accepted.length ? `\nAccepted:\n${accepted.map(problem => `  ${problem.id} ${problem.target}: ${A11Y_ACCEPTED[`${problem.id} ${problem.target}`]}`).join('\n')}\n` : ''))
+  console.log(`${problems.length} accessibility problems${problems.length ? ` (${[...byRule].map(([id, list]) => `${id} ${list.length}`).join(', ')}), listed in a11y.txt` : ''} (plus ${accepted.length} accepted)`)
   console.log(`${uniqueErrors.length} distinct page and background errors${uniqueErrors.length ? ':\n  ' + uniqueErrors.join('\n  ') : ''} (plus ${expectedCount} expected from the failing member)`)
 } finally {
   chrome.kill()

@@ -35,11 +35,8 @@ export function registerChatListDrawer(deps: ChatListDrawerDependencies) {
   }
   deps.sidebarEl.addEventListener('click', event => {
     const target = event.target as Element | null
-    if (target?.closest('.chat-item') && !target.closest('button:not(.chat-item), [role="menu"], .chat-item-menu')) setOpen(false)
-  })
-  deps.sidebarEl.addEventListener('keydown', event => {
-    const target = event.target as Element | null
-    if ((event.key === 'Enter' || event.key === ' ') && target?.classList.contains('chat-item')) setOpen(false)
+    // A chat picked (its row or its name, also with the keyboard); not its menu.
+    if (target?.closest('.chat-item') && !target.closest('button:not(.chat-name), [role="menu"], .chat-item-menu')) setOpen(false)
   })
   deps.sidebarEl.addEventListener('submit', () => setOpen(false))
   documentRef.addEventListener('click', event => {

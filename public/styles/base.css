@@ -68,11 +68,11 @@
   color-scheme: light;
   --neutral-rgb: 96, 104, 130;
   --surface-rgb: 255, 255, 255;
-  --danger: #d93a5c;
+  --danger: #d6395b;
   --danger-soft: rgba(217, 58, 92, 0.08);
-  --warning: #b26b00;
+  --warning: #a06000;
   --warning-soft: rgba(230, 150, 20, 0.1);
-  --success: #12935f;
+  --success: #0e764c;
   --input-bg: #ffffff;
   --bubble-bg: #ffffff;
   --bubble-line: rgba(20, 24, 40, 0.07);
@@ -784,7 +784,9 @@ select:focus {
   justify-content: flex-start;
   border: 0;
   border-radius: 0;
-  padding: 0;
+  /* A hit area 24px tall (WCAG 2.5.8) that takes no more room than the text. */
+  margin: -3px 0;
+  padding: 3px 0;
   background: transparent;
   color: var(--text);
   cursor: pointer;

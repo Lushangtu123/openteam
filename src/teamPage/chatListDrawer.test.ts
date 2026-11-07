@@ -12,7 +12,7 @@ function setup(narrow: boolean) {
     <div id="app">
       <button id="rail-chats"></button>
       <aside id="sidebar">
-        <section class="chat-item" tabindex="0">群聊 A <button class="chat-menu-btn">更多</button></section>
+        <section class="chat-item"><button class="chat-name" type="button">群聊 A</button> <button class="chat-menu-btn">更多</button></section>
         <form id="create"><button type="submit">创建</button></form>
       </aside>
       <main><button id="open-chat-list"></button><p id="chat">聊天</p></main>
@@ -49,7 +49,7 @@ describe('chat list drawer', () => {
     expect(open()).toBe(false)
 
     $('rail-chats').click()
-    $('sidebar').querySelector<HTMLElement>('.chat-item')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    $('sidebar').querySelector<HTMLElement>('.chat-item .chat-name')!.click()
     expect(open()).toBe(false)
   })
 

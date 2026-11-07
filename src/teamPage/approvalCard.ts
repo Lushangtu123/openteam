@@ -38,7 +38,9 @@ function buildApprovalCard(chatId: string, role: GroupRole, approval: PendingApp
   card.setAttribute('role', 'alertdialog')
   const title = document.createElement('div')
   title.className = 'approval-card-title'
+  title.id = `approval-title-${approval.id}`
   title.textContent = approval.title
+  card.setAttribute('aria-labelledby', title.id)
   card.append(title)
   if (approval.detail && approval.kind === 'run') {
     const details = document.createElement('details')
