@@ -33,6 +33,7 @@ describe('background chat handlers', () => {
     expect(CHAT_ROUTE_TYPES).toEqual([
       'GROUP_CHAT_CREATE',
       'GROUP_TEAM_CREATE',
+      'GROUP_TEAM_HANDBOOK_SAVE',
       'GROUP_TEAM_TEMPLATE_SAVE',
       'GROUP_TEAM_TEMPLATE_DELETE',
       'GROUP_CHAT_DUPLICATE',

@@ -1,4 +1,5 @@
 import { chatSiteLabel, isChatSite } from '../group/chatSites'
+import { MAX_TEAM_HANDBOOKS, readTeamHandbook } from '../group/teamHandbooks'
 import { createGroupRole, createGroupRolesBatch, type GroupRoleBatchInput } from '../group/roleTemplates'
 import { planTeamRounds, readTeamFormation, splitPositions, TEAM_MAX_COPIES_PER_MODEL, TEAM_MAX_MEMBERS, TEAM_MAX_TEMPLATES, TEAM_MIN_MEMBERS, teamModelKey, teamTemplateFromChat } from '../group/teamFormation'
 import type { GroupChat, GroupMessage, GroupRole, OpenTeamStore, OrchestrationFlow, OrchestrationStage, RoomMode } from '../group/types'
@@ -10,6 +11,7 @@ import { mutateStore, requireChat } from './storeAccess'
 export const CHAT_ROUTE_TYPES = [
   'GROUP_CHAT_CREATE',
   'GROUP_TEAM_CREATE',
+  'GROUP_TEAM_HANDBOOK_SAVE',
   'GROUP_TEAM_TEMPLATE_SAVE',
   'GROUP_TEAM_TEMPLATE_DELETE',
   'GROUP_CHAT_DUPLICATE',
@@ -38,6 +40,21 @@ export interface ChatHandlersDependencies {
 }
 
 export function createChatHandlers(deps: ChatHandlersDependencies): BackgroundMessageRoute[] {
+  const handleHandbookSave = async (message: RuntimeMessage) => {
+    const { store, result } = await mutateStore(store => {
+      const name = requireString(message.name, '请填写手册名称')
+      const handbooks = store.settings.teamHandbooks ?? []
+      const existing = handbooks.find(item => item.name === name)
+      const handbook = readTeamHandbook({ id: existing?.id ?? deps.newId('handbook'), name, content: message.content })
+      if (!handbook) throw new Error('手册无效：名称最多 100 字，内容不能为空且最多 256K 字符')
+      if (!existing && handbooks.length >= MAX_TEAM_HANDBOOKS) throw new Error(`最多保存 ${MAX_TEAM_HANDBOOKS} 本手册`)
+      store.settings.teamHandbooks = [...handbooks.filter(item => item.id !== handbook.id), handbook]
+      return handbook
+    })
+    await deps.broadcastStoreUpdated(store)
+    return { ok: true, handbook: result, store }
+  }
+
   const handleChatCreate = async (message: RuntimeMessage) => {
     const { store, result } = await mutateStore(store => createChat(store, message, deps))
     await deps.broadcastStoreUpdated(store)
@@ -267,6 +284,7 @@ export function createChatHandlers(deps: ChatHandlersDependencies): BackgroundMe
   return [
     { type: 'GROUP_CHAT_CREATE', handler: handleChatCreate },
     { type: 'GROUP_TEAM_CREATE', handler: handleTeamCreate },
+    { type: 'GROUP_TEAM_HANDBOOK_SAVE', handler: handleHandbookSave },
     { type: 'GROUP_TEAM_TEMPLATE_SAVE', handler: handleTeamTemplateSave },
     { type: 'GROUP_TEAM_TEMPLATE_DELETE', handler: handleTeamTemplateDelete },
     { type: 'GROUP_CHAT_DUPLICATE', handler: handleChatDuplicate },
@@ -320,6 +338,14 @@ function createChat(store: OpenTeamStore, message: RuntimeMessage, deps: ChatHan
   return chat
 }
 
+function selectTeamHandbook(store: OpenTeamStore, chat: GroupChat, rawId: unknown): void {
+  const id = readOptionalString(rawId)
+  if (!id) return
+  const handbook = readTeamHandbook(store.settings.teamHandbooks?.find(item => item.id === id))
+  if (!handbook) throw new Error('找不到所选执行手册，请重新选择')
+  chat.executionHandbook = { ...handbook }
+}
+
 function createTeam(store: OpenTeamStore, message: RuntimeMessage, deps: ChatHandlersDependencies): { chat: GroupChat; roles: GroupRole[] } {
   const templateId = readOptionalString(message.templateId)
   if (templateId) return createTeamFromTemplate(store, message, templateId, deps)
@@ -335,6 +361,7 @@ function createTeam(store: OpenTeamStore, message: RuntimeMessage, deps: ChatHan
 
   const name = readOptionalString(message.name) ?? (task.length > 20 ? `${task.slice(0, 20)}…` : task)
   const chat = createChat(store, { type: 'GROUP_CHAT_CREATE', name, mode: 'collaborative' }, deps)
+  selectTeamHandbook(store, chat, message.handbookId)
   // Named after their model until they pick a position: "Claude", "Claude2" (names cannot hold spaces).
   const seen = new Map<string, number>()
   const items: GroupRoleBatchInput[] = members.map(member => {
@@ -379,6 +406,7 @@ function createTeamFromTemplate(store: OpenTeamStore, message: RuntimeMessage, t
   const task = readOptionalString(message.task) ?? template.task
   if (!task) throw new Error('请先写下要做的事')
   const chat = createChat(store, { type: 'GROUP_CHAT_CREATE', name: readOptionalString(message.name) ?? template.name, mode: 'collaborative' }, deps)
+  selectTeamHandbook(store, chat, message.handbookId)
   const roles = createGroupRolesBatch(store, chat.id, template.members.map(member => ({
     source: 'temporary',
     createdBy: 'team-formation',
@@ -448,6 +476,7 @@ export function duplicateChat(store: OpenTeamStore, sourceChatId: unknown, deps:
     id: deps.newId('chat'),
     name: duplicatedChatName(store, sourceChat.name),
     ...(sourceChat.description ? { description: sourceChat.description } : {}),
+    ...(sourceChat.executionHandbook ? { executionHandbook: { ...sourceChat.executionHandbook } } : {}),
     mode: sourceChat.mode,
     roleIds: [],
     messageIds: [],

@@ -63,6 +63,7 @@ export interface OpenTeamSettings {
   language: OpenTeamLanguage
   // Teams saved from "按任务组队", to start the same line-up again.
   teamTemplates?: TeamTemplate[]
+  teamHandbooks?: TeamHandbook[]
   // A desktop notification when every member has answered while OpenTeam is not in front. On
   // unless set to false.
   replyNotifications?: boolean
@@ -72,6 +73,12 @@ export interface OpenTeamSettings {
   // Once every member of such a round has answered, one member writes a short summary. On unless
   // set to false.
   roundSummary?: boolean
+}
+
+export interface TeamHandbook {
+  id: string
+  name: string
+  content: string
 }
 
 export interface TeamTemplateMember {
@@ -267,6 +274,7 @@ export interface GroupChat {
   pinned?: boolean
   // Set while the members of a group made with "按任务组队" pick their own positions.
   teamFormation?: TeamFormation
+  executionHandbook?: TeamHandbook
   // 轮流讨论: in a 协作 group, a message to two or more members starts a turn-by-turn discussion
   // instead of everyone answering at once.
   discussionMode?: boolean

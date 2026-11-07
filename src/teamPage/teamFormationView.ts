@@ -24,6 +24,7 @@ import type { GroupChat, GroupMessage, GroupRole, OpenTeamLanguage, OpenTeamStor
 import { normalizeLanguage, translateUi } from '../shared/i18n'
 import type { MessageUpload } from '../group/messageUploads'
 import { createApprovalCards } from './approvalCard'
+import { createTeamHandbookField } from './teamHandbookField'
 import { createComposerAttachments } from './composerAttachments'
 import { PROBLEM_HEALTH_STATUSES, rolePageHealthLabel, type RolePageHealth } from './roleHealth'
 
@@ -174,6 +175,7 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
 
     const error = element('p', 'team-form-error')
     error.setAttribute('role', 'alert')
+    const handbook = createTeamHandbookField({ getStore: deps.getStore, runCommand: deps.runCommand, t, showError: text => { error.textContent = text } })
     const actions = element('div', 'team-setup-actions')
     const cancel = button(t('取消', 'Cancel'), 'btn')
     cancel.addEventListener('click', () => closeSetup())
@@ -181,7 +183,9 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
     submit.type = 'submit'
     actions.append(cancel, submit)
     const savedField = savedTeamsField()
-    form.append(taskField, filesField, ...(savedField ? [savedField] : []), membersField, requiredField, nameField, error, actions)
+    const body = element('div', 'team-setup-body')
+    body.append(taskField, filesField, handbook.field, ...(savedField ? [savedField] : []), membersField, requiredField, nameField, error)
+    form.append(body, actions)
     const taskFiles = createComposerAttachments({
       trayEl: tray,
       attachButtonEl: attach,
@@ -221,6 +225,7 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
           use.disabled = true
           deps.runCommand('GROUP_TEAM_CREATE', {
             templateId: template.id,
+            ...handbook.payload(),
             ...(task.value.trim() ? { task: task.value.trim() } : {}),
             ...(name.value.trim() ? { name: name.value.trim() } : {}),
           }).then(async () => {
@@ -277,6 +282,7 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
       submit.disabled = true
       deps.runCommand('GROUP_TEAM_CREATE', {
         task: task.value.trim(),
+        ...handbook.payload(),
         members,
         requiredPositions: splitPositions(required.value),
         ...(name.value.trim() ? { name: name.value.trim() } : {}),
@@ -334,6 +340,11 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
 
   // ----- Role card -----
 
+  function cardTaskText(chat: GroupChat): string {
+    const task = chat.teamFormation?.task ?? ''
+    return chat.executionHandbook ? `${task}\n\n${t('执行手册', 'Execution handbook')}：${chat.executionHandbook.name}` : task
+  }
+
   function openCard(chatId: string): void {
     closeCard()
     const chat = deps.getStore().chatsById[chatId]
@@ -352,7 +363,7 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
     const heading = element('div')
     const title = element('h2')
     title.id = 'team-card-title'
-    const task = element('p', 'team-card-task', chat.teamFormation.task)
+    const task = element('p', 'team-card-task', cardTaskText(chat))
     heading.append(title, task)
     header.append(heading, closeButton(() => closeCard()))
     const body = element('div', 'team-card-body')
@@ -403,7 +414,7 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
     if (signature === card.signature) return
     card.signature = signature
     // Dividing the work again changes the task.
-    card.task.textContent = formation.task
+    card.task.textContent = cardTaskText(chat)
 
     const focused = document.activeElement instanceof HTMLInputElement && card.body.contains(document.activeElement) ? document.activeElement.dataset.roleId : undefined
     if (formation.status === 'checking') renderChecking(chat, members, health)

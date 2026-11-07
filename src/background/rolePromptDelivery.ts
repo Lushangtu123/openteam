@@ -7,6 +7,7 @@ import { buildPrompt, roleUsesChatGptGptsPersona } from '../group/promptBuilder'
 import { buildRoundSummaryPrompt, keyPointsInstruction, readSummarizableRound, wantsKeyPoints } from '../group/roundSummary'
 import { buildDiscussionTurnPrompt, discussionTranscript } from '../group/discussion'
 import { buildProjectPrompt } from '../group/project'
+import { withTeamHandbook } from '../group/teamHandbooks'
 import type { ExternalModelConfig, GroupChat, GroupMessage, GroupRole, MessageReference, OpenTeamStore } from '../group/types'
 import type { PromptDelivery } from './promptDelivery'
 import type { RuntimeFrameRegistry } from './runtimeFrames'
@@ -79,7 +80,7 @@ export function prepareRolePromptDelivery(input: PrepareRolePromptDeliveryInput)
         messageId: input.userMessage.id,
         replyAttemptId,
         model,
-        prompt: prompt.content,
+        prompt: withTeamHandbook(prompt.content, input.chat, input.store.settings.language),
         ...images,
       },
     }
@@ -116,7 +117,7 @@ export function prepareRolePromptDelivery(input: PrepareRolePromptDeliveryInput)
         roleId: input.role.id,
         messageId: input.userMessage.id,
         replyAttemptId,
-        content,
+        content: withTeamHandbook(content, input.chat, input.store.settings.language),
         includesPersona,
       },
       ...images,

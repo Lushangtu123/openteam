@@ -1,4 +1,5 @@
 import { normalizeStoreData } from './store'
+import { MAX_TEAM_HANDBOOKS } from './teamHandbooks'
 import type { OpenTeamStore } from './types'
 
 export const BACKUP_FORMAT = 'openteam-backup'
@@ -160,6 +161,10 @@ export function restoreBackup(current: OpenTeamStore, backupStore: OpenTeamStore
   }
 
   if (!store.globalNote && source.globalNote) store.globalNote = source.globalNote
+  for (const handbook of source.settings.teamHandbooks ?? []) {
+    const handbooks = store.settings.teamHandbooks ?? []
+    if (!handbooks.some(existing => existing.id === handbook.id) && handbooks.length < MAX_TEAM_HANDBOOKS) store.settings.teamHandbooks = [...handbooks, handbook]
+  }
   if (!store.currentChatId && addedChatIds.length > 0) store.currentChatId = addedChatIds[0]
   return { store, addedChatIds, skippedChatIds }
 }

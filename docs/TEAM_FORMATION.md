@@ -18,6 +18,14 @@
 
 ## Code
 
+### Optional execution handbook
+
+The setup window has an **Execution handbook** selector, initially set to **No handbook**. Import a `.md` or `.txt` guide (for example a local export of Personal Work Agent / PWA skills), preview it, and select it for the team. Imports stay in browser storage; importing the same name updates the library entry for future teams. Each team keeps its own snapshot, including when duplicated or restored from a backup.
+
+The selected guide accompanies every member request, including invitations, kickoff, project tasks and reviews, orchestration, web members, API members and local agents. Its full content is added after conversation-history budgeting. It is workflow text: it does not install plugins, grant tools or change an agent's permissions. Include referenced sections in the imported document when members cannot access the original skill files. The selector works when creating a fresh team or using a saved team.
+
+Only import content you want sent to the selected members. Files are limited to 1 MB and 256K characters; the library holds up to 20 guides. Private skill content is imported locally rather than bundled with the extension's source.
+
 - `src/group/teamFormation.ts`: rounds, invitation and kickoff text, claim parsing, resolution, member names and briefs.
 - `src/background/chatHandlers.ts`: `GROUP_TEAM_CREATE`, and `teamFormation` in `GROUP_CHAT_UPDATE` patches.
 - `src/background/messageHandlers.ts`: `teamInvitation`, `teamRound` and `refreshPersona` on `GROUP_MESSAGE_SEND`.

@@ -2206,6 +2206,7 @@ select:focus {
   min-width: 40px;
   height: 40px;
   padding: 0;
+  gap: 0;
   border-radius: 8px;
   font-size: 0;
 }
@@ -5901,6 +5902,7 @@ select:focus {
   place-items: center;
   width: 36px;
   height: 36px;
+  padding: 0;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: transparent;
@@ -6427,6 +6429,48 @@ select.reply-compare-select {
   min-height: 92px;
 }
 
+.team-handbook-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.team-handbook-select {
+  position: relative;
+  display: grid;
+  flex: 1 1 180px;
+  min-width: 0;
+}
+
+.team-handbook-select select {
+  appearance: none;
+  min-width: 0;
+  padding-inline: 14px 40px;
+}
+
+.team-handbook-select::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  width: 18px;
+  height: 18px;
+  transform: translateY(-50%);
+  background: currentColor;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") center / contain no-repeat;
+  pointer-events: none;
+}
+
+.team-handbook-preview pre {
+  max-height: 220px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
 .team-setup-members {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
@@ -6508,6 +6552,94 @@ select.reply-compare-select {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+
+/* Keep the team setup centred with equal content insets. Only the form body scrolls, so
+   the title, close button and actions stay inside the rounded window at every height. */
+.team-formation-modal {
+  --team-dialog-edge: clamp(12px, 3vw, 24px);
+  padding: var(--team-dialog-edge);
+}
+
+:root[data-theme] .team-formation-modal > .team-setup-dialog {
+  --team-dialog-inset: clamp(18px, 3vw, 28px);
+  display: flex;
+  flex-direction: column;
+  width: min(720px, 100%);
+  max-height: min(840px, calc(100dvh - 2 * var(--team-dialog-edge)));
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+  scrollbar-gutter: auto;
+}
+
+.team-formation-modal .modal-header {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 24px var(--team-dialog-inset) 18px;
+  padding-inline-end: calc(var(--team-dialog-inset) + 44px);
+}
+
+.team-formation-modal .modal-header > div {
+  min-width: 0;
+}
+
+.team-formation-modal .modal-close {
+  top: 20px;
+  right: var(--team-dialog-inset);
+}
+
+.team-formation-modal .team-setup-form {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  gap: 0;
+  overflow: hidden;
+}
+
+.team-setup-body {
+  display: grid;
+  gap: 18px;
+  min-height: 0;
+  margin-inline: calc(var(--team-dialog-inset) - 10px);
+  padding-block: 4px 20px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable both-edges;
+}
+
+.team-setup-body > .field {
+  min-width: 0;
+}
+
+.team-formation-modal .team-setup-actions {
+  flex: 0 0 auto;
+  padding: 16px var(--team-dialog-inset) 20px;
+  border-top: 1px solid var(--line);
+}
+
+.team-formation-modal .team-setup-members {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+}
+
+.team-formation-modal .team-handbook-controls {
+  align-items: center;
+}
+
+.team-formation-modal .team-handbook-controls > .btn {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 480px) {
+  .team-formation-modal .team-handbook-controls > .team-handbook-select,
+  .team-formation-modal .team-handbook-controls > .btn {
+    width: 100%;
+    flex-basis: 100%;
+  }
+
+  .team-formation-modal .team-setup-actions > .btn {
+    flex: 1;
+  }
 }
 
 .modal.team-card-dialog {

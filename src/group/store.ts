@@ -1,4 +1,5 @@
 import { normalizeTeamTemplates } from './teamFormation'
+import { normalizeTeamHandbooks } from './teamHandbooks'
 import { isChatSite } from './chatSites'
 import {
   DEFAULT_ORCHESTRATION_MAX_NODE_EXECUTIONS,
@@ -774,6 +775,7 @@ function normalizeSettings(raw: unknown, storedVersion = CURRENT_STORE_VERSION):
 
   const externalModelsById = normalizeExternalModelRecord(raw.externalModelsById)
   const defaultChatSite = readSettingsChatSite(raw.defaultChatSite)
+  const teamHandbooks = normalizeTeamHandbooks(raw.teamHandbooks)
   return {
     defaultMode: raw.defaultMode === 'collaborative' ? 'collaborative' : DEFAULT_SETTINGS.defaultMode,
     maxContextChars: typeof raw.maxContextChars === 'number' ? raw.maxContextChars : DEFAULT_SETTINGS.maxContextChars,
@@ -784,6 +786,7 @@ function normalizeSettings(raw: unknown, storedVersion = CURRENT_STORE_VERSION):
     agentControlPort: readAgentControlPort(raw.agentControlPort, storedVersion),
     language: readSettingsLanguage(raw.language),
     ...teamTemplatesSetting(raw.teamTemplates),
+    ...(teamHandbooks.length ? { teamHandbooks } : {}),
     ...(raw.replyNotifications === false ? { replyNotifications: false } : {}),
     ...(raw.replyKeyPoints === false ? { replyKeyPoints: false } : {}),
     ...(raw.roundSummary === false ? { roundSummary: false } : {}),

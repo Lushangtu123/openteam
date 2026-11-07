@@ -92,6 +92,37 @@ const settle = () => new Promise(resolve => setTimeout(resolve, 0))
 const footerButton = (label: string) => [...document.querySelectorAll<HTMLButtonElement>('.team-card-footer button')].find(button => button.textContent === label)!
 
 describe('team formation view', () => {
+  it('imports a local skill handbook, selects it and renders its preview as text', async () => {
+    const { store, view, runCommand } = setup()
+    const content = '# PWA\n<script id="handbook-script">example</script>\n先检查，再实现。'
+    runCommand.mockImplementation(async (type, payload) => {
+      if (type === 'GROUP_TEAM_HANDBOOK_SAVE') store.settings.teamHandbooks = [{ id: 'pwa', name: String(payload?.name), content: String(payload?.content) }]
+    })
+    view.openSetup()
+    const input = document.querySelector<HTMLInputElement>('.team-handbook-controls + input[type="file"]')!
+    Object.defineProperty(input, 'files', { configurable: true, value: [new File([content], 'PWA Skills.md', { type: 'text/markdown' })] })
+    input.dispatchEvent(new Event('change'))
+    await vi.waitFor(() => expect(document.querySelector<HTMLSelectElement>('#team-setup-handbook')!.value).toBe('pwa'))
+    expect(runCommand).toHaveBeenCalledWith('GROUP_TEAM_HANDBOOK_SAVE', { name: 'PWA Skills', content })
+    expect(document.querySelector('.team-handbook-preview pre')?.textContent).toBe(content)
+    expect(document.querySelector('#handbook-script')).toBeNull()
+  })
+
+  it('lets the user choose a team execution handbook without selecting one by default', async () => {
+    const { store, view, runCommand } = setup()
+    store.settings.teamHandbooks = [{ id: 'pwa', name: 'PWA Skills', content: '先验证，再交付。' }]
+    view.openSetup()
+    const handbook = document.querySelector<HTMLSelectElement>('#team-setup-handbook')!
+    expect(handbook).not.toBeNull()
+    expect(handbook.value).toBe('')
+    expect(handbook.textContent).toContain('PWA Skills')
+    handbook.value = 'pwa'
+    document.querySelector<HTMLTextAreaElement>('#team-setup-task')!.value = '开发待办项目'
+    for (const site of ['claude', 'chatgpt']) document.querySelector<HTMLButtonElement>(`.team-setup-member[data-key="site:${site}"] .team-setup-step:last-child`)!.click()
+    document.querySelector<HTMLFormElement>('.team-setup-form')!.dispatchEvent(new Event('submit', { cancelable: true }))
+    await vi.waitFor(() => expect(runCommand).toHaveBeenCalledWith('GROUP_TEAM_CREATE', expect.objectContaining({ handbookId: 'pwa' })))
+  })
+
   it('asks for the task and at least two members, then creates the team', async () => {
     const { view, runCommand } = setup()
     view.openSetup()
