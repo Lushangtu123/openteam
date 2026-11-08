@@ -75,9 +75,11 @@ describe('project rules', () => {
     expect(parseReview('看起来都不错', run, members, members[2])).toBeUndefined()
   })
 
-  it('starts tasks once what they depend on is done', () => {
-    const run = project([task('t1', { status: 'done' }), task('t2', { dependsOn: ['t1'] }), task('t3', { dependsOn: ['t2'] }), task('t4', { status: 'redo' })])
+  it('starts tasks once what they depend on is done and checked', () => {
+    const run = project([task('t1', { status: 'done', checked: true }), task('t2', { dependsOn: ['t1'] }), task('t3', { dependsOn: ['t2'] }), task('t4', { status: 'redo' })])
     expect(readyTasks(run).map(ready => ready.id)).toEqual(['t2', 't4'])
+    // Done but not yet checked by the coordinator: what builds on it waits.
+    expect(readyTasks(project([task('t1', { status: 'done' }), task('t2', { dependsOn: ['t1'] })])).map(ready => ready.id)).toEqual([])
     expect(allTasksDone(run)).toBe(false)
     expect(allTasksDone(project([task('t1', { status: 'done' })]))).toBe(true)
   })

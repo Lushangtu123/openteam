@@ -1628,9 +1628,12 @@ describe('background message handlers', () => {
       }
       if (prompt.includes('任务和结果：')) {
         reviews += 1
+        // t1 and t2 are checked before t3 starts; t3 is sent back once, then passes.
         return { content: '```json\n' + JSON.stringify(reviews === 1
-          ? { decisions: [{ task: 't1', verdict: 'pass' }, { task: 't2', verdict: 'pass' }, { task: 't3', verdict: 'redo', note: '加上风险' }], newTasks: [], finish: false }
-          : { decisions: [{ task: 't3', verdict: 'pass' }], newTasks: [], finish: true }) + '\n```' }
+          ? { decisions: [{ task: 't1', verdict: 'pass' }, { task: 't2', verdict: 'pass' }], newTasks: [], finish: false }
+          : reviews === 2
+            ? { decisions: [{ task: 't3', verdict: 'redo', note: '加上风险' }], newTasks: [], finish: false }
+            : { decisions: [{ task: 't3', verdict: 'pass' }], newTasks: [], finish: true }) + '\n```' }
       }
       if (prompt.includes('整合成一份完整的最终交付')) return { content: '# 最终方案\n全部内容' }
       return { content: '?' }
@@ -1671,18 +1674,19 @@ describe('background message handlers', () => {
     const prompts = complete.mock.calls.map(([input]) => input.prompt)
     const order = prompts.map(prompt => prompt.match(/你的任务（(t\d)/)?.[1] ?? (prompt.includes('任务和结果：') ? 'review' : prompt.includes('最终交付') ? 'final' : 'plan'))
     expect(order.slice(0, 3)).toEqual(['plan', 't1', 't2'])
-    expect(order.slice(3)).toEqual(['t3', 'review', 't3', 'review', 'final'])
-    const firstT3 = prompts[3]
+    // t3 builds on t1 and t2, so it starts only once the coordinator has checked them.
+    expect(order.slice(3)).toEqual(['review', 't3', 'review', 't3', 'review', 'final'])
+    const firstT3 = prompts[4]
     expect(firstT3).toContain('【t1 · 技术方案 · 工程师】\nt1 成果')
     expect(firstT3).toContain('【t2 · 界面草图 · 设计师】\nt2 成果')
-    expect(prompts[5]).toContain('上一次结果的检查意见：\n加上风险')
-    expect(prompts[6]).toContain('结果：\nt1 摘要')
-    expect(prompts[6]).toContain('t3 改好的成果')
+    expect(prompts[6]).toContain('上一次结果的检查意见：\n加上风险')
+    expect(prompts[7]).toContain('结果：\nt1 摘要')
+    expect(prompts[7]).toContain('t3 改好的成果')
 
     expect(project().tasks.map(task => [task.id, task.status, task.attempts, task.summary])).toEqual([
       ['t1', 'done', 1, 't1 摘要'], ['t2', 'done', 1, 't2 摘要'], ['t3', 'done', 2, 't3 摘要（含风险）'],
     ])
-    expect(project().steps).toBe(8)
+    expect(project().steps).toBe(9)
     expect(currentStore.messagesById[project().finalMessageId!]).toMatchObject({ type: 'assistant', content: '# 最终方案\n全部内容' })
     const notices = Object.values(currentStore.messagesById).filter(message => message.projectRequest).sort((a, b) => a.seq - b.seq).map(message => message.content)
     expect(notices).toContain('项目 · 任务 t3「上线清单」交给「设计师」（第 2 次）')

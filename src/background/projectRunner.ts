@@ -228,6 +228,11 @@ export function createProjectRunner(ctx: ProjectRunnerContext) {
         for (const decision of outcome.decisions) {
           const task = project.tasks.find(candidate => candidate.id === decision.taskId)
           if (!task || task.status === 'doing') continue
+          // A task not started yet has no result to pass or redo; it can only get a new owner.
+          if (task.status === 'todo') {
+            if (decision.verdict === 'reassign' && decision.ownerRoleId) task.ownerRoleId = decision.ownerRoleId
+            continue
+          }
           if (decision.verdict === 'pass') {
             task.status = 'done'
             delete task.note

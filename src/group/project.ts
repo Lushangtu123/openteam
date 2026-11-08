@@ -20,9 +20,11 @@ export function isProjectActive(project: ProjectRun | undefined): boolean {
 }
 
 // Tasks whose dependencies are done and that are waiting to start.
+// A task can start once every task it builds on is done and the coordinator has checked it: the next
+// member works from reviewed results. Tasks that build on nothing start at once, side by side.
 export function readyTasks(project: ProjectRun): ProjectTask[] {
-  const done = new Set(project.tasks.filter(task => task.status === 'done').map(task => task.id))
-  return project.tasks.filter(task => (task.status === 'todo' || task.status === 'redo') && task.dependsOn.every(id => done.has(id)))
+  const passed = new Set(project.tasks.filter(task => task.status === 'done' && task.checked).map(task => task.id))
+  return project.tasks.filter(task => (task.status === 'todo' || task.status === 'redo') && task.dependsOn.every(id => passed.has(id)))
 }
 
 export function tasksInFlight(project: ProjectRun): ProjectTask[] {
@@ -322,8 +324,8 @@ function buildReviewPrompt(input: ProjectPromptInput): string {
     `${en ? 'Tasks and results:' : '任务和结果：'}\n\n${taskLines.join('\n\n')}`,
     notesBlock(input, en),
     en
-      ? 'Check each new result against its "done when" and decide what happens next. For each checked task give a verdict: "pass", "redo" (with what to fix in note) or "reassign" (with the new owner). Blocked or failed tasks need a decision too. Add newTasks only if the goal cannot be reached without them. Ask a question only when the user must decide something. Set finish to true only when every task has passed and the goal is reached.'
-      : '请检查每个新结果是否达到完成标准，并决定下一步。对每个检查的任务给出 verdict："pass"（通过）、"redo"（重做，在 note 里写清要改什么）或 "reassign"（换人，写上新的 owner）。受阻或失败的任务也要给出决定。只有不加任务就无法完成目标时才写 newTasks。只有需要用户拍板时才写 question。只有所有任务都通过、目标已经达成时，finish 才为 true。',
+      ? 'Check each new result against its "done when" and decide what happens next. For each checked task give a verdict: "pass", "redo" (with what to fix in note) or "reassign" (with the new owner). Blocked or failed tasks need a decision too. Add newTasks only if the goal cannot be reached without them. Ask a question only when the user must decide something. Set finish to true only when every task has passed and the goal is reached. Tasks not started yet begin once the tasks they depend on have passed: give them no verdict unless they need a new owner.'
+      : '请检查每个新结果是否达到完成标准，并决定下一步。对每个检查的任务给出 verdict："pass"（通过）、"redo"（重做，在 note 里写清要改什么）或 "reassign"（换人，写上新的 owner）。受阻或失败的任务也要给出决定。只有不加任务就无法完成目标时才写 newTasks。只有需要用户拍板时才写 question。只有所有任务都通过、目标已经达成时，finish 才为 true。还没开始的任务会在它依赖的任务通过检查后开始：不用给它们结论，除非要换负责人。',
     `${en ? 'Reply with only one JSON code block, in this form:' : '只回复一个 JSON 代码块，格式如下：'}\n\`\`\`json\n${example}\n\`\`\``,
     en ? `New tasks use the same form as in the plan: ${TASK_JSON_EXAMPLE}` : `newTasks 里每个任务的格式和计划里一样：${TASK_JSON_EXAMPLE}`,
   ].filter(Boolean).join('\n\n')
