@@ -170,6 +170,18 @@ export function createProjectRunner(ctx: ProjectRunnerContext) {
     return askReview(store, chat, project, timestamp)
   }
 
+  // Why the member's reply to a request failed, when it did (its failed reply says).
+  function latestFailure(store: OpenTeamStore, chat: GroupChat, requestId: string): string | undefined {
+    for (let index = chat.messageIds.length - 1; index >= 0; index -= 1) {
+      const message = store.messagesById[chat.messageIds[index]]
+      if (message?.type === 'assistant' && message.sourceMessageId === requestId) {
+        if (message.status !== 'error' || !message.content.trim()) return undefined
+        return message.content.replace(/\n+可以点击下方的.*$/s, '').replace(/^回复失败：/, '').trim().slice(0, 300)
+      }
+    }
+    return undefined
+  }
+
   function latestReply(store: OpenTeamStore, chat: GroupChat, requestId: string): GroupMessage | undefined {
     for (let index = chat.messageIds.length - 1; index >= 0; index -= 1) {
       const message = store.messagesById[chat.messageIds[index]]
@@ -210,9 +222,18 @@ export function createProjectRunner(ctx: ProjectRunnerContext) {
           task.status = outcome.status
           if (outcome.status === 'blocked') task.note = outcome.blockedReason || '成员说这项任务受阻'
         } else {
-          task.note = '上一次没有收到回复'
-          task.status = task.attempts < PROJECT_MAX_TASK_ATTEMPTS ? 'redo' : 'failed'
-          task.checked = task.status !== 'failed'
+          const failure = latestFailure(store, chat, requestId)
+          if (failure) {
+            // The member's page could not do it (a notice in the way, out of quota): sending it
+            // again at once fails the same way, so the coordinator decides (another owner, or later).
+            task.note = failure
+            task.status = 'blocked'
+            task.checked = false
+          } else {
+            task.note = '上一次没有收到回复'
+            task.status = task.attempts < PROJECT_MAX_TASK_ATTEMPTS ? 'redo' : 'failed'
+            task.checked = task.status !== 'failed'
+          }
         }
         project.updatedAt = timestamp
         return continueProject(store, chat, project, timestamp)
@@ -302,6 +323,9 @@ export function createProjectRunner(ctx: ProjectRunnerContext) {
             }
             return askCoordinator(store, chat, project, 'final', timestamp)
           }
+          // A member checked the coordinator's work and a task has failed: the coordinator decides
+          // (another owner, a new task, or finishing with what passed).
+          if (!byCoordinator && budgetLeft(project)) return askReview(store, chat, project, timestamp)
           stop(project, 'failed', '有任务没有完成，协调员也没有安排下一步', timestamp)
           milestone = project.goalMessageId
           return []

@@ -1700,6 +1700,100 @@ describe('background message handlers', () => {
     expect(notices[notices.length - 1]).toBe('项目 · 请「工程师」整理最终交付')
   })
 
+  // A project between 工程师 (the coordinator, role-1) and 设计师 (role-2), answered by `answer`.
+  async function runProjectWith(answer: (prompt: string) => { content: string }) {
+    vi.resetModules()
+    let currentStore = structuredClone(createStoreWithTwoApiRoles())
+    vi.doMock('./storeAccess', async importOriginal => {
+      const actual = await importOriginal<typeof import('./storeAccess')>()
+      return {
+        ...actual,
+        mutateStore: vi.fn(async (mutator: (store: OpenTeamStore) => unknown) => {
+          const result = await mutator(currentStore)
+          currentStore = structuredClone(currentStore)
+          return { store: currentStore, result }
+        }),
+      }
+    })
+    const { createMessageHandlers } = await import('./messageHandlers')
+    const prompts: string[] = []
+    const complete = vi.fn(async (input: { prompt: string }) => {
+      prompts.push(input.prompt)
+      return answer(input.prompt)
+    })
+    let messageIdSeq = 0
+    const routes = createMessageHandlers({
+      broadcastStoreUpdated: vi.fn(),
+      externalModelClient: { complete },
+      getChatStatusFromRoles: () => 'ready',
+      log: { debug: vi.fn(), info: vi.fn(), warn: vi.fn() },
+      newId: vi.fn((prefix: string) => prefix === 'msg' ? `${prefix}-${++messageIdSeq}` : `${prefix}-${messageIdSeq}`),
+      now: vi.fn(() => 100),
+      runtimeFrames: { bind: vi.fn(), getByAddress: vi.fn(), getByRole: vi.fn(() => undefined) },
+      sendRoleMessage: vi.fn(),
+      sendError: vi.fn(),
+      sendPrompt: vi.fn(),
+      waitForRetry: vi.fn(async () => {}),
+    })
+    const route = (type: string) => routes.find(candidate => candidate.type === type)!
+    await route('GROUP_PROJECT_START').handler({ type: 'GROUP_PROJECT_START', chatId: 'chat-1', goal: '记账 App 的上线方案' }, {})
+    await vi.waitFor(() => expect(currentStore.chatsById['chat-1'].project?.status).toBe('awaiting-approval'))
+    await route('GROUP_PROJECT_APPROVE').handler({ type: 'GROUP_PROJECT_APPROVE', chatId: 'chat-1' }, {})
+    await vi.waitFor(() => expect(['done', 'stopped']).toContain(currentStore.chatsById['chat-1'].project?.status))
+    return { project: currentStore.chatsById['chat-1'].project!, prompts, store: currentStore }
+  }
+
+  const twoTaskPlan = '```json\n' + JSON.stringify({ tasks: [
+    { id: 't1', title: '技术方案', owner: '工程师', dependsOn: [], detail: '写技术方案', doneWhen: '有架构说明' },
+    { id: 't2', title: '界面草图', owner: '设计师', dependsOn: [], detail: '画界面', doneWhen: '有三个页面' },
+  ] }) + '\n```'
+  const reviewOf = (prompt: string) => prompt.match(/这些新结果：([^。]+)。/)?.[1].split('、') ?? []
+  const verdicts = (tasks: string[], verdict: string, extra: Record<string, unknown> = {}) => ({ content: '```json\n' + JSON.stringify({ decisions: tasks.map(task => ({ task, verdict, note: '对照完成标准检查过' })), newTasks: [], finish: false, ...extra }) + '\n```' })
+
+  it("hands back to the coordinator when a member's check leaves a task failed", async () => {
+    const { project, prompts } = await runProjectWith(prompt => {
+      if (prompt.includes('请用完成目标所需的最少任务')) return { content: twoTaskPlan }
+      const task = prompt.match(/你的任务（(t\d)/)?.[1]
+      if (task) return { content: `${task} 成果\n【状态】完成\n【摘要】${task} 摘要` }
+      if (prompt.includes('由你来检查')) return verdicts(reviewOf(prompt), 'pass')
+      // The coordinator keeps sending t2 back until it fails, then finishes with what passed.
+      if (prompt.includes('任务和结果：')) return reviewOf(prompt).includes('t2') ? verdicts(['t2'], 'redo') : verdicts([], 'pass', { finish: true })
+      return { content: '# 最终方案' }
+    })
+
+    expect(project.status).toBe('done')
+    expect(project.tasks.map(task => [task.id, task.status])).toEqual([['t1', 'done'], ['t2', 'failed']])
+    const reviewers = prompts.filter(prompt => prompt.includes('任务和结果：')).map(prompt => prompt.includes('由你来检查') ? 'member' : 'coordinator')
+    // Three checks of t2 by the coordinator, the member's check of the coordinator's t1, then the
+    // coordinator decides about the failed t2.
+    expect(reviewers).toEqual(['coordinator', 'coordinator', 'coordinator', 'member', 'coordinator'])
+  })
+
+  it('makes a task blocked, not sent again at once, when the member could not do it', async () => {
+    let designerTries = 0
+    const { project, prompts } = await runProjectWith(prompt => {
+      if (prompt.includes('请用完成目标所需的最少任务')) return { content: twoTaskPlan }
+      const task = prompt.match(/你的任务（(t\d)/)?.[1]
+      if (task === 't2' && prompt.includes('你是「设计师」')) {
+        designerTries += 1
+        throw Object.assign(new Error('页面上有弹窗挡住了发送'), { status: 403 })
+      }
+      if (task) return { content: `${task} 成果\n【状态】完成\n【摘要】${task} 摘要` }
+      if (prompt.includes('由你来检查')) return verdicts(reviewOf(prompt), 'pass')
+      // The coordinator gives the blocked task to 工程师.
+      if (prompt.includes('受阻原因：')) return { content: '```json\n' + JSON.stringify({ decisions: [{ task: 't2', verdict: 'reassign', owner: '工程师', note: '设计师的页面用不了' }], newTasks: [], finish: false }) + '\n```' }
+      if (prompt.includes('任务和结果：')) return verdicts(reviewOf(prompt), 'pass')
+      return { content: '# 最终方案' }
+    })
+
+    expect(designerTries).toBe(1)
+    expect(prompts.find(prompt => prompt.includes('受阻原因：'))).toContain('弹窗')
+    expect(project.status).toBe('done')
+    expect(project.tasks.map(task => [task.id, task.status, task.ownerRoleId])).toEqual([['t1', 'done', 'role-1'], ['t2', 'done', 'role-1']])
+    // Both are the coordinator's work now: 设计师 checks them.
+    expect(prompts.some(prompt => prompt.includes('你是「设计师」。下面这些任务是协调员「工程师」自己做的') && prompt.includes('这些新结果：t1、t2。'))).toBe(true)
+  })
+
   it('waits for the user when the coordinator asks, goes on with the answer, and can be stopped and continued', async () => {
     vi.resetModules()
     let currentStore = structuredClone(createStoreWithTwoApiRoles())
