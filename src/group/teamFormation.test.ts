@@ -22,7 +22,7 @@ import type { GroupMessage } from './types'
 const claim = (firstChoice: string, secondChoice?: string, neededPositions: string[] = []): TeamClaim => ({ firstChoice, ...(secondChoice ? { secondChoice } : {}), neededPositions })
 
 describe('team formation', () => {
-  it('asks copies of the same model in later rounds', () => {
+  it('asks one member at a time, one copy of every model first', () => {
     const rounds = planTeamRounds([
       { roleId: 'c1', modelKey: 'site:claude' },
       { roleId: 'g1', modelKey: 'site:chatgpt' },
@@ -31,7 +31,7 @@ describe('team formation', () => {
       { roleId: 'k1', modelKey: 'site:kimi' },
     ])
 
-    expect(rounds).toEqual([['c1', 'g1', 'k1'], ['c2'], ['c3']])
+    expect(rounds).toEqual([['c1'], ['g1'], ['k1'], ['c2'], ['c3']])
   })
 
   it('reads a claim from a ```json block, with Chinese keys or trailing commas', () => {
@@ -129,13 +129,15 @@ describe('team formation', () => {
       teamLabels: ['Claude ×2', 'Kimi'],
       requiredPositions: ['测试'],
       taken: [{ position: '产品负责人', holder: 'Claude' }],
+      open: ['测试', '后端'],
       language: 'zh-CN',
     })
 
     expect(invitation).toContain('做一个记账小程序')
     expect(invitation).toContain('团队成员：Claude ×2、Kimi')
     expect(invitation).toContain('团队必须有的职位：测试。')
-    expect(invitation).toContain('- 产品负责人（Claude）')
+    expect(invitation).toContain('这些职位已经有人了。请选一个职责和它们不重叠的职位（名字不同但做同样的事，也算重叠）：\n- 产品负责人（Claude）')
+    expect(invitation).toContain('团队还缺这些职位（优先从中选）：测试、后端。')
     expect(invitation).toContain('"second_choice"')
     expect(invitation).toContain('"needed_positions"')
     expect(buildTeamInvitation({ task: 'Ship it', teamLabels: ['Claude'], requiredPositions: [], repick: true, language: 'en' })).toMatch(/^Some of you picked the same position/)

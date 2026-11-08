@@ -1619,7 +1619,7 @@ describe('live replies from web members', () => {
 })
 
 describe('team formation in the background', () => {
-  it('creates a collaborative group of AIs named after their model, asking copies of a model in later rounds', async () => {
+  it('creates a collaborative group of AIs named after their model, asking them one at a time, copies of a model last', async () => {
     const harness = await setupBackground(makeStore())
 
     const response = await harness.invoke({
@@ -1637,7 +1637,7 @@ describe('team formation in the background', () => {
     expect(chat.mode).toBe('collaborative')
     expect(chat.name).toBe('做一个面向大学生的记账小程序')
     expect(roles.map(role => [role.name, role.chatSite, role.createdBy])).toEqual([['Claude', 'claude', 'team-formation'], ['ChatGPT', 'chatgpt', 'team-formation'], ['Claude2', 'claude', 'team-formation']])
-    expect(chat.teamFormation).toMatchObject({ task: '做一个面向大学生的记账小程序', requiredPositions: ['测试', '运维'], status: 'checking', rounds: [[roles[0].id, roles[1].id], [roles[2].id]], nextRound: 0, invitationIds: [] })
+    expect(chat.teamFormation).toMatchObject({ task: '做一个面向大学生的记账小程序', requiredPositions: ['测试', '运维'], status: 'checking', rounds: [[roles[0].id], [roles[1].id], [roles[2].id]], nextRound: 0, invitationIds: [] })
 
     expect(await harness.invoke({ type: 'GROUP_TEAM_CREATE', task: '做事', members: [{ modelSource: 'site', chatSite: 'claude' }] })).toMatchObject({ ok: false, error: '请选择 2–12 位队员' })
     expect(await harness.invoke({ type: 'GROUP_TEAM_CREATE', task: '做事', members: Array.from({ length: 13 }, (_, index) => ({ modelSource: 'site', chatSite: ['kimi', 'qwen', 'grok'][index % 3] })) })).toMatchObject({ ok: false, error: '请选择 2–12 位队员' })

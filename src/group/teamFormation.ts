@@ -49,18 +49,20 @@ export interface TeamResolution {
   uncovered: Array<{ position: string; mentions: number; required: boolean }>
 }
 
-// Rounds of invitations: one copy of every model first, then the next copies, so a copy picks after
-// seeing what the earlier copy of its model took (the same model given the same prompt would pick
-// the same position).
+// Rounds of invitations, one member each: every member picks after seeing the positions taken so
+// far and what the team still lacks. Asked together, members picked overlapping positions under
+// different names ("需求负责人/产品经理" and "产品经理与需求分析负责人"), which a name check cannot
+// catch. One copy of every model goes first, then the next copies (the same model given the same
+// prompt would pick the same position).
 export function planTeamRounds(members: Array<{ roleId: string; modelKey: string }>): string[][] {
-  const rounds: string[][] = []
+  const byCopy: string[][] = []
   const copiesSeen = new Map<string, number>()
   for (const member of members) {
     const copy = copiesSeen.get(member.modelKey) ?? 0
     copiesSeen.set(member.modelKey, copy + 1)
-    ;(rounds[copy] ??= []).push(member.roleId)
+    ;(byCopy[copy] ??= []).push(member.roleId)
   }
-  return rounds
+  return byCopy.flat().map(roleId => [roleId])
 }
 
 export function teamModelKey(role: Pick<GroupRole, 'modelSource' | 'externalModelId' | 'chatSite'>): string {
@@ -107,6 +109,8 @@ export function buildTeamInvitation(input: {
   teamLabels: string[]
   requiredPositions: string[]
   taken?: Array<{ position: string; holder: string }>
+  // Positions the team still lacks (from the task and earlier members' answers), to pick from first.
+  open?: string[]
   // The current positions, when members divide the work again for a new phase.
   previous?: Array<{ position: string; holder: string }>
   repick?: boolean
@@ -140,9 +144,15 @@ export function buildTeamInvitation(input: {
   }
   if (taken.length > 0) {
     lines.push(
-      english ? 'Already taken (choose a different one):' : '这些职位已经有人了（请选别的）：',
+      english
+        ? 'Already taken. Choose a position whose work does not overlap with these (the same work under another name overlaps too):'
+        : '这些职位已经有人了。请选一个职责和它们不重叠的职位（名字不同但做同样的事，也算重叠）：',
       ...taken.map(item => `- ${item.position}${english ? ` (${item.holder})` : `（${item.holder}）`}`),
     )
+  }
+  const open = (input.open ?? []).filter(position => position.trim())
+  if (open.length > 0) {
+    lines.push(english ? `Still missing on the team (pick from these first): ${open.join(', ')}.` : `团队还缺这些职位（优先从中选）：${open.join('、')}。`)
   }
   lines.push(
     '',

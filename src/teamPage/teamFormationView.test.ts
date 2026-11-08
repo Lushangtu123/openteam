@@ -400,7 +400,7 @@ describe('team formation view', () => {
     await vi.waitFor(() => expect(store.chatsById.c1.teamFormation).toMatchObject({
       task: '第二阶段：上线前的测试和推广',
       status: 'checking',
-      rounds: [['r1', 'r2']],
+      rounds: [['r1'], ['r2']],
       nextRound: 0,
       invitationIds: [],
       previousPositions: [{ position: '产品负责人', holder: 'Claude' }, { position: '前端工程师', holder: 'ChatGPT' }],

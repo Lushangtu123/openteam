@@ -511,7 +511,7 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
       ? t('等所有队员的网页都显示“可以发送”。', 'Wait until every member\'s page says it can send.')
       : preset
         ? t('这是保存的团队：职位和人设都在，可以直接开工。', 'This is a saved team: positions and personas are set, so it can start right away.')
-        : t('它们会各自回答最适合自己的职位、备选职位和项目需要的职位。', 'Each will answer with the position that suits it, a fallback, and the positions the project needs.'))
+        : t('它们会一个接一个选职位：每位都能看到前面的人选了什么、团队还缺什么，避免职位重叠。', 'They choose one after another: each sees what the earlier ones took and what the team still lacks, so positions do not overlap.'))
     if (!preset) {
       card.footer.replaceChildren(hint, invite)
       return
@@ -744,7 +744,8 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
       const members = collectTeamMembers(store, chat)
       const resolution = resolution_(chat, members)
       const taken = Object.entries(resolution.assignments).map(([roleId, assignment]) => ({ position: assignment.position, holder: store.rolesById[roleId]?.name ?? roleId }))
-      const text = buildTeamInvitation({ task: formation.task, teamLabels: teamLabels(store, chatRoles(store, chat)), requiredPositions: formation.requiredPositions, taken, previous: formation.previousPositions, language: language() })
+      const open = resolution.uncovered.slice(0, 6).map(entry => entry.position)
+      const text = buildTeamInvitation({ task: formation.task, teamLabels: teamLabels(store, chatRoles(store, chat)), requiredPositions: formation.requiredPositions, taken, open, previous: formation.previousPositions, language: language() })
       await deps.runCommand('GROUP_MESSAGE_SEND', { chatId, raw: invitationRaw(store, roles, text), teamInvitation: true, teamRound: round, ...taskFilesPayload(chat) })
     } catch (caught) {
       // Another team page sent this round already.
