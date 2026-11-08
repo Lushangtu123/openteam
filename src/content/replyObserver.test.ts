@@ -637,6 +637,72 @@ describe('createReplyObserver', () => {
     vi.useRealTimers()
   })
 
+  it('reports a reply taken at the timeout as Markdown, so its tables and headings stay', async () => {
+    vi.useFakeTimers()
+    document.body.innerHTML = '<message-content id="new">最终版清单</message-content>'
+
+    const sentMessages: RoleToBackgroundMessage[] = []
+    const roleSession = createFakeRoleSession()
+    let generating = true
+    const observer = createReplyObserver({
+      siteAdapter: createFakeAdapter({ isGenerating: () => generating, readResponseMarkdown: node => `# ${node.textContent ?? ''}` }),
+      roleSession,
+      log: createFakeLog(),
+      sendRuntimeMessage: async message => {
+        sentMessages.push(message)
+        return { ok: true } as never
+      },
+      reportRoleError: vi.fn(),
+    })
+
+    roleSession.startPrompt('msg-1', 'attempt-1')
+    observer.startReplyPolling('msg-1', 'attempt-1')
+    // The page says it is writing until just before the timeout, so polling never reports it.
+    await vi.advanceTimersByTimeAsync(119_500)
+    generating = false
+    await vi.advanceTimersByTimeAsync(500)
+
+    expect(sentMessages).toContainEqual(expect.objectContaining({ type: 'TEAM_ROLE_REPLY', content: '# 最终版清单', contentFormat: 'markdown' }))
+    observer.clearReplyPolling()
+    vi.useRealTimers()
+  })
+
+  it('does not take a reply at the timeout while its text is still changing', async () => {
+    vi.useFakeTimers()
+    const element = createMessageContent('new', '第一段：这是一份很长的检查清单，正在一段一段地写出来。')
+    document.body.replaceChildren(element)
+
+    const sentMessages: RoleToBackgroundMessage[] = []
+    const roleSession = createFakeRoleSession()
+    const observer = createReplyObserver({
+      siteAdapter: createFakeAdapter({ isGenerating: () => false }),
+      roleSession,
+      log: createFakeLog(),
+      sendRuntimeMessage: async message => {
+        sentMessages.push(message)
+        return { ok: true } as never
+      },
+      reportRoleError: vi.fn(),
+    })
+
+    roleSession.startPrompt('msg-1', 'attempt-1')
+    observer.startReplyPolling('msg-1', 'attempt-1')
+    // The site writes on past the timeout without saying it is writing.
+    let written = 0
+    const writer = setInterval(() => {
+      if (written >= 121) return clearInterval(writer)
+      written += 1
+      element.textContent += `第${written}行。`
+    }, 1_000)
+    await vi.advanceTimersByTimeAsync(130_000)
+
+    const replies = sentMessages.filter(message => message.type === 'TEAM_ROLE_REPLY')
+    expect(replies).toHaveLength(1)
+    expect(replies[0]).toEqual(expect.objectContaining({ content: element.textContent }))
+    expect(element.textContent).toContain('第121行。')
+    vi.useRealTimers()
+  })
+
   it('does not send idle for an old reply after a new prompt starts in the same frame', async () => {
     vi.useFakeTimers()
     document.body.innerHTML = ''

@@ -1,4 +1,10 @@
-const SKIP_SELECTORS = 'button, svg, style, script, textarea, mat-icon'
+// Not part of a reply: controls (DeepSeek's are <div role="button">), and the bar above a ChatGPT
+// writing block, which repeats the document's title.
+const SKIP_SELECTORS = 'button, [role="button"], svg, style, script, textarea, mat-icon, header'
+// Prose outside a code block's <pre> means the element holds more than the code block.
+const PROSE_SELECTORS = 'p, li, h1, h2, h3, h4, h5, h6, table, blockquote'
+const CONTROL_SELECTORS = 'button, [role="button"]'
+const TOOLBAR_LABEL_MAX_LENGTH = 24
 
 export function extractMarkdownFromDom(node: Node): string {
   return normalizeMarkdown(block(node))
@@ -14,10 +20,9 @@ function block(node: Node, depth = 0): string {
   if (element.getAttribute('aria-hidden') === 'true') return ''
   if (element.matches(SKIP_SELECTORS)) return ''
 
-  if (tag === 'pre') {
-    const code = element.querySelector('code')?.textContent ?? element.textContent ?? ''
-    return `\n\`\`\`\n${code.trim()}\n\`\`\`\n`
-  }
+  if (tag === 'pre') return fence(element)
+  const codeBlock = codeBlockWithToolbar(element)
+  if (codeBlock) return codeBlock
 
   if (/^h[1-6]$/.test(tag)) {
     const level = Number(tag.slice(1))
@@ -83,6 +88,46 @@ function listItemText(element: Element, depth: number): string {
     .map(child => block(child, depth + 1).trimEnd())
     .join('\n')
   return [inlinePart, nestedPart].filter(Boolean).join('\n')
+}
+
+// A code block drawn with a toolbar beside its <pre>, as ChatGPT and DeepSeek draw them: the
+// toolbar's label names the language ("JSON") and the rest is buttons. None of it is the reply.
+// The toolbar is what sits beside the code's branch, and it has a control; text with no control
+// beside the code is prose (Kimi draws paragraphs as <div>), so that is not a code block.
+function codeBlockWithToolbar(element: Element): string | undefined {
+  const pres = element.getElementsByTagName('pre')
+  if (pres.length !== 1) return undefined
+  const pre = pres[0]
+  if ([...element.querySelectorAll(PROSE_SELECTORS)].some(node => !pre.contains(node))) return undefined
+  const codeBranch = [...element.children].find(child => child.contains(pre))
+  if (!codeBranch) return undefined
+  // The code's own branch holds its toolbar: it is found further in.
+  if (codeBranch !== pre && textOutside(codeBranch, pre).trim()) return undefined
+
+  const toolbar = [...element.children].filter(child => child !== codeBranch)
+  if (!toolbar.some(child => child.matches(CONTROL_SELECTORS) || child.querySelector(CONTROL_SELECTORS))) return undefined
+  const label = textOutside(element, codeBranch).replace(/\s+/g, ' ').trim()
+  return label.length <= TOOLBAR_LABEL_MAX_LENGTH ? fence(pre, label) : undefined
+}
+
+function textOutside(element: Element, inner?: Element): string {
+  return [...element.childNodes].map(child => {
+    if (child === inner) return ''
+    if (child.nodeType === Node.TEXT_NODE) return child.textContent || ''
+    if (child.nodeType !== Node.ELEMENT_NODE) return ''
+    const childElement = child as Element
+    if (childElement.getAttribute('aria-hidden') === 'true' || childElement.matches(SKIP_SELECTORS)) return ''
+    return textOutside(childElement, inner)
+  }).join(' ')
+}
+
+// The fence names the language when the toolbar or the <code> element does.
+function fence(pre: Element, label = ''): string {
+  const code = pre.querySelector('code')
+  const labelled = label.toLowerCase().replace(/\s+/g, '')
+  const language = /^[\w+#.-]+$/.test(labelled) ? labelled : (code?.className.match(/\blanguage-([\w+#.-]+)/)?.[1] ?? '').toLowerCase()
+  const text = code?.textContent ?? pre.textContent ?? ''
+  return `\n\`\`\`${language}\n${text.trim()}\n\`\`\`\n`
 }
 
 function tableMarkdown(element: Element): string {

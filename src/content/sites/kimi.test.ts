@@ -232,7 +232,7 @@ describe('Kimi site adapter', () => {
     const adapter = createKimiAdapter()
     const [turn] = adapter.getResponseContainers()
 
-    expect(adapter.readResponseMarkdown?.(turn)).toBe('## 结论\n\n我是 **Kimi**。\n\n- 长文本\n- 搜索\n\n```\nprint("hi")\n```')
+    expect(adapter.readResponseMarkdown?.(turn)).toBe('## 结论\n\n我是 **Kimi**。\n\n- 长文本\n- 搜索\n\n```python\nprint("hi")\n```')
     expect(adapter.readResponseText(turn)).not.toContain('先想一想')
     expect(adapter.readResponseText(turn)).not.toMatch(/Python|Copy/)
     expect(adapter.getAllAssistantReplies()).toHaveLength(1)

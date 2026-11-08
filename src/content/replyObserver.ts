@@ -15,6 +15,9 @@ const RESPONSE_DEBOUNCE_MS = 2500
 const RESPONSE_FINAL_SETTLE_MS = 1500
 const REPLY_POLL_INTERVAL_MS = 2000
 const REPLY_TIMEOUT_MS = 120000
+// Polling reports a reply once its text has stayed the same for two polls; a change more recent
+// than this is still settling.
+const REPLY_RECENT_CHANGE_MS = 2 * REPLY_POLL_INTERVAL_MS + RESPONSE_FINAL_SETTLE_MS
 const SHORT_REPLY_MAX_CHARS = 50
 const SHORT_REPLY_STABLE_SETTLE_MS = 5000
 // How often the reply written so far is sent to the chat while the site is still writing. The
@@ -46,6 +49,8 @@ export function createReplyObserver(options: {
   let promptBaselinePromptId = ''
   let replyPollingTimer: number | null = null
   let replyPollingInFlight = false
+  // When polling last saw the reply's text change.
+  let replyChangedAt = 0
   let replyProgressTimer: number | null = null
   let replyProgressInFlight = false
   let lastProgressText = ''
@@ -65,6 +70,13 @@ export function createReplyObserver(options: {
           ...statusIdentityPayload(),
         })
         .catch(error => log.warn('reply-timeout:heartbeat-failed', { messageId, error: error instanceof Error ? error.message : String(error) }))
+      replyTimeout.arm(messageId)
+      return
+    }
+    // Polling is about to report it: it is reading the reply now, or the text changed a moment ago
+    // and may not be finished. Taking it here would race that report.
+    if (activePrompt?.messageId === messageId && (replyPollingInFlight || (replyPollingTimer !== null && Date.now() - replyChangedAt < REPLY_RECENT_CHANGE_MS))) {
+      log.warn('reply-timeout:extended-settling', { messageId, roleId: assignedRole?.roleId, inFlight: replyPollingInFlight })
       replyTimeout.arm(messageId)
       return
     }
@@ -205,7 +217,7 @@ export function createReplyObserver(options: {
     if (!candidate) return
     const conversationId = getConversationId()
     if (replyTracker.isKnown(conversationId, candidate.text)) return
-    const partial = readPartialReply(candidate.element, candidate.text)
+    const partial = readReplyContent(candidate.element, candidate.text)
     if (!partial.text || partial.text === lastProgressText || replyTracker.isKnown(conversationId, partial.text)) return
 
     lastProgressText = partial.text
@@ -226,7 +238,7 @@ export function createReplyObserver(options: {
       })
   }
 
-  function readPartialReply(element: Element, domText: string): { text: string; contentFormat?: 'markdown' } {
+  function readReplyContent(element: Element, domText: string): { text: string; contentFormat?: 'markdown' } {
     try {
       const markdown = siteAdapter.readResponseMarkdown?.(element).trim()
       if (markdown) return { text: markdown, contentFormat: 'markdown' }
@@ -247,6 +259,7 @@ export function createReplyObserver(options: {
 
   function startReplyPolling(messageId: string, replyAttemptId: string | undefined): void {
     clearReplyPolling()
+    replyChangedAt = 0
     replyTimeout.arm(messageId)
     startReplyProgress(messageId, replyAttemptId)
 
@@ -289,6 +302,7 @@ export function createReplyObserver(options: {
       if (candidateSnapshot.key !== stableKey) {
         stableKey = candidateSnapshot.key
         stableSince = timestamp
+        replyChangedAt = timestamp
         log.debug('reply-poll:candidate', { messageId, textLength: candidate.text.length, imageCount: candidateSnapshot.images.length })
         schedule()
         return
@@ -398,7 +412,9 @@ export function createReplyObserver(options: {
 
     log.warn('reply:compensated', { messageId, textLength: reply.text.length, roleId: assignedRole.roleId, source })
     const snapshot = readReplySnapshot(reply.element, reply.text)
-    reportAcceptedReply(messageId, { text: reply.text, ...(snapshot.images.length > 0 ? { images: snapshot.images } : {}) }, source)
+    // As Markdown when the site can read it, like every other way a reply is reported: plain text
+    // would flatten its tables and headings.
+    reportAcceptedReply(messageId, { ...readReplyContent(reply.element, reply.text), ...(snapshot.images.length > 0 ? { images: snapshot.images } : {}) }, source)
     return true
   }
 
