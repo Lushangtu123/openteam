@@ -96,6 +96,25 @@ describe('Claude site adapter', () => {
     expect(inputListener).toHaveBeenCalledTimes(1)
   })
 
+  // Should the input box lose its own selectors (as ChatGPT's did), the generic ones must not find
+  // an editor inside a reply first.
+  it('types into the input box, not into an editor inside a reply', async () => {
+    document.body.innerHTML = `
+      <div data-testid="assistant-message"><div class="font-claude-response">
+        <div class="ProseMirror" contenteditable="true" role="textbox"><p>草稿</p></div>
+      </div></div>
+      <fieldset><div class="ProseMirror" contenteditable="true" role="textbox" aria-label="Reply"><p><br></p></div></fieldset>
+    `
+    const adapter = createClaudeAdapter()
+    const input = document.querySelector<HTMLElement>('fieldset [contenteditable]')!
+
+    expect(adapter.findEditor?.()).toBe(input)
+    await adapter.fillAndSend('下一步', false)
+
+    expect(input.textContent).toBe('下一步')
+    expect(document.querySelector('.font-claude-response')?.textContent?.trim()).toBe('草稿')
+  })
+
   it('waits for the Claude send button before clicking', async () => {
     document.body.innerHTML = `
       <div contenteditable="true" data-testid="chat-input" role="textbox"></div>

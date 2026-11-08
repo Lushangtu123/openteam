@@ -17,6 +17,18 @@ export function querySelectorFirstMatching(selectors: string, predicate: (elemen
   return null
 }
 
+// Like waitForElement, for the first element (selector by selector, in order) that passes the check:
+// an input box, say, that is not an editor inside the conversation.
+export async function waitForElementMatching(selectors: string, predicate: (element: HTMLElement) => boolean, timeoutMs: number): Promise<HTMLElement> {
+  const startedAt = Date.now()
+  for (;;) {
+    const element = querySelectorFirstMatching(selectors, predicate)
+    if (element) return element
+    if (Date.now() - startedAt >= timeoutMs) throw new Error(`Element not found: ${selectors}`)
+    await new Promise(resolve => window.setTimeout(resolve, 250))
+  }
+}
+
 export function waitForElement(selectors: string, timeoutMs: number): Promise<HTMLElement> {
   const immediate = querySelectorFirst(selectors)
   if (immediate) return Promise.resolve(immediate)

@@ -6,7 +6,7 @@ import { findClickableCopyButton, readResponseTextFromCopyAction } from './clipb
 import { readEditorText, setContentEditableText, tryKeyboardSubmit } from './contentEditable'
 import { extractMarkdownFromDom } from './domMarkdown'
 import { buttonLabelMatches, describeElement, extractCleanTextFromDom, findClosestMatchingAncestor } from './domText'
-import { isClickableButton, waitForClickableButton, waitForElement } from './waitForElement'
+import { isClickableButton, querySelectorFirstMatching, waitForClickableButton, waitForElementMatching } from './waitForElement'
 
 const CLAUDE_HOSTS = new Set(['claude.ai'])
 const DEFAULT_INPUT_TIMEOUT_MS = 15000
@@ -43,6 +43,26 @@ interface ClaudeAdapterOptions {
   clipboardPollMs?: number
 }
 
+// Editors inside the conversation (a message, an artifact) are never the input box: once the input
+// box's own selectors stop matching (as ChatGPT's did), the generic ones would find them first.
+const CLAUDE_CONVERSATION_EDITOR_SCOPE = '.font-claude-response, [data-testid="assistant-message"], [data-testid="user-message"], [data-is-streaming], [data-testid*="artifact"]'
+
+function isClaudeInputBox(element: HTMLElement): boolean {
+  return !element.closest(CLAUDE_CONVERSATION_EDITOR_SCOPE)
+}
+
+export function findClaudeEditor(): HTMLElement | null {
+  return querySelectorFirstMatching(CLAUDE_SELECTORS.editor, isClaudeInputBox)
+}
+
+function querySelectorFirstMatchingIn(root: ParentNode, selectors: string, predicate: (element: HTMLElement) => boolean): HTMLElement | null {
+  for (const selector of selectors.split(',').map(item => item.trim())) {
+    const match = [...root.querySelectorAll<HTMLElement>(selector)].find(predicate)
+    if (match) return match
+  }
+  return null
+}
+
 export function createClaudeAdapter(options: ClaudeAdapterOptions = {}): ChatSiteAdapter {
   const inputTimeoutMs = options.inputTimeoutMs ?? DEFAULT_INPUT_TIMEOUT_MS
   const clipboardTimeoutMs = options.clipboardTimeoutMs ?? DEFAULT_CLIPBOARD_TIMEOUT_MS
@@ -69,7 +89,7 @@ export function createClaudeAdapter(options: ClaudeAdapterOptions = {}): ChatSit
   }
 
   async function fillAndSend(content: string, autoSend = true): Promise<void> {
-    const editor = await waitForElement(CLAUDE_SELECTORS.editor, inputTimeoutMs)
+    const editor = await waitForElementMatching(CLAUDE_SELECTORS.editor, isClaudeInputBox, inputTimeoutMs)
 
     setContentEditableText(editor, content)
     if (readEditorText(editor, { normalizeNbsp: true }) !== content.trim()) {
@@ -98,7 +118,7 @@ export function createClaudeAdapter(options: ClaudeAdapterOptions = {}): ChatSit
     findResponseContainer,
     isGenerating: isClaudeGenerating,
     checkStatus: checkClaudeStatus,
-    findEditor: () => document.querySelector<HTMLElement>(CLAUDE_SELECTORS.editor),
+    findEditor: findClaudeEditor,
     stopGenerating: stopClaudeGenerating,
     fillAndSend,
     collectPromptDiagnostics,
@@ -187,7 +207,7 @@ function findClaudeStopButton(): HTMLButtonElement | undefined {
 // ("This page can't run in an embedded view…") in place of the app. Nothing OpenTeam sends can
 // reach it, so report that instead of waiting for an input box that never comes.
 export function findClaudeEmbedBlock(doc: Document = document, embedded: boolean = isEmbeddedFrame()): string | undefined {
-  if (!embedded || doc.querySelector(CLAUDE_SELECTORS.editor)) return undefined
+  if (!embedded || querySelectorFirstMatchingIn(doc, CLAUDE_SELECTORS.editor, isClaudeInputBox)) return undefined
   const notice = doc.querySelector<HTMLElement>(CLAUDE_SELECTORS.embedNotice)
   return notice?.textContent?.replace(/\s+/g, ' ').trim() || undefined
 }
@@ -196,7 +216,7 @@ function checkClaudeStatus(context: SiteHealthContext): SiteStatusInfo {
   const embedBlock = findClaudeEmbedBlock(context.document ?? document)
   if (embedBlock) return { status: 'blocked', reason: 'embed-blocked', detail: embedBlock.slice(0, 160), timestamp: context.now ?? Date.now() }
   return checkSiteHealth({
-    findEditor: () => document.querySelector(CLAUDE_SELECTORS.editor),
+    findEditor: findClaudeEditor,
     isGenerating: isClaudeGenerating,
     isLoginPage: () => /^\/(login|auth|magic-link)\b/.test(location.pathname) || Boolean(document.querySelector(CLAUDE_SELECTORS.loginOverlay)),
     hasBlockingOverlay: () => Boolean(document.querySelector(CLAUDE_SELECTORS.blocker)),
