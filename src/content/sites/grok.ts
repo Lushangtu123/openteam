@@ -30,6 +30,11 @@ const GROK_SELECTORS = {
 }
 
 const SKIP_TAGS = new Set(['SCRIPT', 'STYLE', 'BUTTON', 'TEXTAREA', 'SVG'])
+// Inside a reply bubble but not the reply: a heading only screen readers see ("Grok",
+// h2#turn-heading-….sr-only), and the "Worked for 10s" thinking toggle (with Grok's reasoning once
+// opened). Read as part of the reply, the heading became "## Grok" at its top, and a bubble that
+// held only the heading (its text not there yet) passed for a whole reply of "## Grok".
+const GROK_REPLY_CHROME = '.sr-only, [id^="turn-heading-"], .thinking-container'
 
 interface GrokAdapterOptions {
   href?: string
@@ -86,7 +91,7 @@ export function createGrokAdapter(options: GrokAdapterOptions = {}): ChatSiteAda
     readResponseText: extractCleanText,
     readResponseImages: readGrokImages,
     readResponseTextFromCopy: node => readResponseTextFromCopy(node, clipboardTimeoutMs, clipboardPollMs),
-    readResponseMarkdown: extractMarkdownFromDom,
+    readResponseMarkdown: node => extractMarkdownFromDom(withoutReplyChrome(node)),
     findResponseContainer,
     isGenerating: isGrokGenerating,
     findEditor: () => findGrokEditor() ?? null,
@@ -293,7 +298,15 @@ function collectPromptDiagnostics(): Record<string, unknown> {
 }
 
 function extractCleanText(node: Node): string {
-  return extractCleanTextFromDom(node, { skipTags: SKIP_TAGS })
+  return extractCleanTextFromDom(withoutReplyChrome(node), { skipTags: SKIP_TAGS })
+}
+
+// The reply as read: a copy without GROK_REPLY_CHROME (the page itself is left alone).
+function withoutReplyChrome(node: Node): Node {
+  if (!(node instanceof Element) || !node.querySelector(GROK_REPLY_CHROME)) return node
+  const copy = node.cloneNode(true) as Element
+  copy.querySelectorAll(GROK_REPLY_CHROME).forEach(element => element.remove())
+  return copy
 }
 
 function findResponseContainer(element: Element | null): Element | null {

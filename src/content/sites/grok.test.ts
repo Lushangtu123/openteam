@@ -214,7 +214,34 @@ describe('Grok site adapter', () => {
       </div>
     `
 
-    expect(createGrokAdapter().getAllAssistantReplies()).toEqual(['Thought for 5s\n\nGROK_VALIDATION_DONE'])
+    expect(createGrokAdapter().getAllAssistantReplies()).toEqual(['GROK_VALIDATION_DONE'])
+  })
+
+  // Grok's reply bubble as of November 2026.
+  it("leaves Grok's screen-reader heading and thinking toggle out of the reply, and an unwritten reply out entirely", () => {
+    const bubble = (body: string) => `
+      <div id="response-031d9d9b" class="relative group flex flex-col">
+        <div data-testid="assistant-message" class="message-bubble relative rounded-3xl text-fg-primary">
+          <h2 id="turn-heading-031d9d9b" class="sr-only">Grok</h2>
+          <div class="thinking-container mb-1"><div class="not-prose relative mb-2 text-sm"><button data-testid="canvas-trigger"><span>Worked for 10s</span></button></div></div>
+          <div class="relative response-content-markdown markdown">${body}</div>
+          <section class="inline-media-container flex flex-col"></section>
+          <div class="flex gap-2 mt-2"><button aria-label="Copy">Copy</button></div>
+        </div>
+      </div>`
+    const adapter = createGrokAdapter()
+
+    document.body.innerHTML = bubble('<p>收到。</p><p><strong>你此刻真正想做的事是什么？</strong></p>')
+    const response = document.querySelector('[data-testid="assistant-message"]')!
+    expect(adapter.readResponseMarkdown?.(response)).toBe('收到。\n\n**你此刻真正想做的事是什么？**')
+    expect(adapter.getAllAssistantReplies()).toEqual(['收到。\n你此刻真正想做的事是什么？'])
+    // The page itself keeps its heading.
+    expect(response.querySelector('.sr-only')?.textContent).toBe('Grok')
+
+    // Before its text arrives the bubble holds only the heading: not a reply yet.
+    document.body.innerHTML = bubble('')
+    expect(adapter.getResponseContainers()).toEqual([])
+    expect(adapter.getAllAssistantReplies()).toEqual([])
   })
 
   it('converts Grok reply DOM to markdown', () => {
