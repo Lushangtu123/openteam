@@ -72,6 +72,31 @@ describe('ChatGPT site adapter', () => {
     expect(inputListener).toHaveBeenCalledTimes(1)
   })
 
+  // ChatGPT as of November 2026: the input box has no #prompt-textarea, and a reply may hold an
+  // editable writing block (canvas) above it.
+  it('types into the input box, not into the editable writing block of an earlier reply', async () => {
+    document.body.innerHTML = `
+      <main>
+        <div data-content-search-unit-key="c1:assistant">
+          <div data-testid="chatgpt-writing-block">
+            <div class="ProseMirror" contenteditable="true" role="textbox" aria-label="Start writing"><p>需求文档</p></div>
+          </div>
+        </div>
+        <form data-chatgpt-composer="" data-composer-placement="thread">
+          <div class="ProseMirror" contenteditable="true" role="textbox" data-composer-markdown="" aria-label="Ask ChatGPT"><p><br></p></div>
+        </form>
+      </main>
+    `
+    const adapter = createChatGptAdapter()
+    const composer = document.querySelector<HTMLElement>('[data-composer-markdown]')!
+
+    expect(adapter.findEditor?.()).toBe(composer)
+    await adapter.fillAndSend('请检查各项任务的结果', false)
+
+    expect(composer.textContent).toBe('请检查各项任务的结果')
+    expect(document.querySelector('[data-testid="chatgpt-writing-block"]')?.textContent?.trim()).toBe('需求文档')
+  })
+
   it('waits for the ChatGPT send button before clicking', async () => {
     document.body.innerHTML = `
       <form data-type="unified-composer">

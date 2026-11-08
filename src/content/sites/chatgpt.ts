@@ -6,7 +6,7 @@ import { readResponseTextFromCopyAction } from './clipboardCopy'
 import { readEditorText, setContentEditableText, tryKeyboardSubmit } from './contentEditable'
 import { extractMarkdownFromDom } from './domMarkdown'
 import { buttonLabelMatches, describeElement, extractCleanTextFromDom, findClosestMatchingAncestor } from './domText'
-import { isClickableButton, waitForClickableButton, waitForElement } from './waitForElement'
+import { isClickableButton, querySelectorFirstMatching, waitForClickableButton } from './waitForElement'
 
 const CHATGPT_HOSTS = new Set(['chatgpt.com', 'chat.openai.com'])
 const DEFAULT_INPUT_TIMEOUT_MS = 15000
@@ -14,7 +14,11 @@ const DEFAULT_CLIPBOARD_TIMEOUT_MS = 900
 const DEFAULT_CLIPBOARD_POLL_MS = 40
 
 const CHATGPT_SELECTORS = {
+  // The input box, most specific first. Since November 2026 it has no #prompt-textarea: it is the
+  // editor of form[data-chatgpt-composer] (data-composer-markdown, "Ask ChatGPT").
   editor: [
+    'form[data-chatgpt-composer] [contenteditable="true"][data-composer-markdown]',
+    'form[data-chatgpt-composer] .ProseMirror[contenteditable="true"]',
     'form[data-type="unified-composer"] #prompt-textarea[contenteditable="true"]',
     '#prompt-textarea.ProseMirror[contenteditable="true"]',
     '#prompt-textarea[contenteditable="true"]',
@@ -50,6 +54,23 @@ const CHATGPT_SELECTORS = {
 }
 
 const SKIP_TAGS = new Set(['SCRIPT', 'STYLE', 'BUTTON', 'TEXTAREA', 'SVG'])
+// Editors inside the conversation, never the input box: a reply's editable writing block (canvas)
+// matched the generic selectors before the input box did, and the prompt was typed into it.
+const CHATGPT_CONVERSATION_EDITOR_SCOPE = '[data-testid="chatgpt-writing-block"], [data-content-search-unit-key], [data-message-author-role], [data-turn]'
+
+export function findChatGptEditor(): HTMLElement | null {
+  return querySelectorFirstMatching(CHATGPT_SELECTORS.editor, element => !element.closest(CHATGPT_CONVERSATION_EDITOR_SCOPE))
+}
+
+async function waitForChatGptEditor(timeoutMs: number): Promise<HTMLElement> {
+  const startedAt = Date.now()
+  for (;;) {
+    const editor = findChatGptEditor()
+    if (editor) return editor
+    if (Date.now() - startedAt >= timeoutMs) throw new Error('ChatGPT 输入框暂不可用，请稍后重试')
+    await new Promise(resolve => window.setTimeout(resolve, 250))
+  }
+}
 const CHATGPT_ORIGINS = new Set(['https://chatgpt.com', 'https://chat.openai.com'])
 
 interface ChatGptAdapterOptions {
@@ -101,7 +122,7 @@ export function createChatGptAdapter(options: ChatGptAdapterOptions = {}): ChatS
   }
 
   async function fillAndSend(content: string, autoSend = true): Promise<void> {
-    const editor = await waitForElement(CHATGPT_SELECTORS.editor, inputTimeoutMs)
+    const editor = await waitForChatGptEditor(inputTimeoutMs)
 
     setContentEditableText(editor, content)
     if (readEditorText(editor) !== content.trim()) {
@@ -131,7 +152,7 @@ export function createChatGptAdapter(options: ChatGptAdapterOptions = {}): ChatS
     findResponseContainer,
     isGenerating: isChatGptGenerating,
     checkStatus: checkChatGptStatus,
-    findEditor: () => document.querySelector<HTMLElement>(CHATGPT_SELECTORS.editor),
+    findEditor: findChatGptEditor,
     stopGenerating: stopChatGptGenerating,
     fillAndSend,
     collectPromptDiagnostics,
@@ -140,7 +161,7 @@ export function createChatGptAdapter(options: ChatGptAdapterOptions = {}): ChatS
 
 function checkChatGptStatus(context: SiteHealthContext): SiteStatusInfo {
   return checkSiteHealth({
-    findEditor: () => document.querySelector(CHATGPT_SELECTORS.editor),
+    findEditor: findChatGptEditor,
     isGenerating: isChatGptGenerating,
     isLoginPage: () => /\/(auth\/)?log-?in\b/.test(location.pathname),
     findSiteError: () => document.querySelector(CHATGPT_SELECTORS.errorDialog)?.textContent?.trim() || undefined,
