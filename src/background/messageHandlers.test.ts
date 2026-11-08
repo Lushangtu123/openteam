@@ -1236,6 +1236,112 @@ describe('background message handlers', () => {
     expect(complete).toHaveBeenCalledTimes(3)
   })
 
+  it('has members review each other once all have answered (互相审), then summarizes the reviews', async () => {
+    vi.resetModules()
+    const startingStore = createStoreWithTwoApiRoles()
+    Object.assign(startingStore.chatsById['chat-1'], { mode: 'collaborative', crossReview: true })
+    let currentStore = structuredClone(startingStore)
+    vi.doMock('./storeAccess', async importOriginal => {
+      const actual = await importOriginal<typeof import('./storeAccess')>()
+      return {
+        ...actual,
+        mutateStore: vi.fn(async (mutator: (store: OpenTeamStore) => unknown) => {
+          const result = await mutator(currentStore)
+          currentStore = structuredClone(currentStore)
+          return { store: currentStore, result }
+        }),
+      }
+    })
+
+    const { createMessageHandlers } = await import('./messageHandlers')
+    const prompts: string[] = []
+    const complete = vi.fn(async (input: { prompt: string }) => {
+      prompts.push(input.prompt)
+      const who = input.prompt.includes('你是「设计师」') ? '设计师' : '工程师'
+      if (input.prompt.includes('担任本轮讨论的汇总人')) return { content: '**共识**\n- 用 Go' }
+      if (input.prompt.includes('互相审一审')) return { content: `${who}的审阅：同意对方，修正后用 Go` }
+      return { content: `${who}的回答：用 Python` }
+    })
+    let messageIdSeq = 0
+    const routes = createMessageHandlers({
+      broadcastStoreUpdated: vi.fn(),
+      externalModelClient: { complete },
+      getChatStatusFromRoles: () => 'ready',
+      log: { debug: vi.fn(), info: vi.fn(), warn: vi.fn() },
+      newId: vi.fn((prefix: string) => `${prefix}-${++messageIdSeq}`),
+      now: vi.fn(() => 100),
+      runtimeFrames: { bind: vi.fn(), getByAddress: vi.fn(), getByRole: vi.fn(() => undefined) },
+      sendRoleMessage: vi.fn(),
+      sendError: vi.fn(),
+      sendPrompt: vi.fn(),
+      waitForRetry: vi.fn(async () => {}),
+    })
+
+    await routes.find(route => route.type === 'GROUP_MESSAGE_SEND')?.handler({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@all 用 Python 还是 Go？' }, {})
+    const messages = () => currentStore.chatsById['chat-1'].messageIds.map(id => currentStore.messagesById[id])
+    await vi.waitFor(() => expect(messages().some(message => message.roundSummaryOf)).toBe(true))
+    await vi.waitFor(() => expect(complete).toHaveBeenCalledTimes(5))
+
+    const question = messages().find(message => message.type === 'user' && message.content.includes('Python 还是 Go'))!
+    const review = messages().find(message => message.crossReviewOf)!
+    expect(review).toMatchObject({ crossReviewOf: question.id, targetRoleIds: ['role-1', 'role-2'], content: '互相审阅上一轮的回答' })
+    // Each reviewer sees its own answer and the other's.
+    const reviewPrompts = prompts.filter(prompt => prompt.includes('互相审一审'))
+    expect(reviewPrompts).toHaveLength(2)
+    for (const prompt of reviewPrompts) {
+      expect(prompt).toContain('用 Python 还是 Go？')
+      expect(prompt).toContain('你刚才的回答：')
+      expect(prompt).toContain('其他成员的回答：')
+      expect(prompt).toContain('**修正后的方案**')
+    }
+    expect(reviewPrompts.some(prompt => prompt.includes('你是「工程师」') && prompt.includes('【设计师】'))).toBe(true)
+    expect(reviewPrompts.some(prompt => prompt.includes('你是「设计师」') && prompt.includes('【工程师】'))).toBe(true)
+    // The summary is of the reviews, against the user's question, and only once.
+    const summaryRequests = messages().filter(message => message.roundSummaryOf)
+    expect(summaryRequests.map(message => message.roundSummaryOf)).toEqual([review.id])
+    const summaryPrompt = prompts.find(prompt => prompt.includes('担任本轮讨论的汇总人'))!
+    expect(summaryPrompt).toContain('各成员看过彼此的回答后的意见，以及修正后的方案')
+    expect(summaryPrompt).toContain('用 Python 还是 Go？')
+  })
+
+  it('summarizes the round right away, with no review, when the group is not 互相审', async () => {
+    vi.resetModules()
+    const startingStore = createStoreWithTwoApiRoles()
+    Object.assign(startingStore.chatsById['chat-1'], { mode: 'collaborative' })
+    let currentStore = structuredClone(startingStore)
+    vi.doMock('./storeAccess', async importOriginal => {
+      const actual = await importOriginal<typeof import('./storeAccess')>()
+      return {
+        ...actual,
+        mutateStore: vi.fn(async (mutator: (store: OpenTeamStore) => unknown) => {
+          const result = await mutator(currentStore)
+          currentStore = structuredClone(currentStore)
+          return { store: currentStore, result }
+        }),
+      }
+    })
+    const { createMessageHandlers } = await import('./messageHandlers')
+    const complete = vi.fn(async (input: { prompt: string }) => ({ content: input.prompt.includes('汇总人') ? '汇总' : '回答' }))
+    let messageIdSeq = 0
+    const routes = createMessageHandlers({
+      broadcastStoreUpdated: vi.fn(),
+      externalModelClient: { complete },
+      getChatStatusFromRoles: () => 'ready',
+      log: { debug: vi.fn(), info: vi.fn(), warn: vi.fn() },
+      newId: vi.fn((prefix: string) => `${prefix}-${++messageIdSeq}`),
+      now: vi.fn(() => 100),
+      runtimeFrames: { bind: vi.fn(), getByAddress: vi.fn(), getByRole: vi.fn(() => undefined) },
+      sendRoleMessage: vi.fn(),
+      sendError: vi.fn(),
+      sendPrompt: vi.fn(),
+      waitForRetry: vi.fn(async () => {}),
+    })
+    await routes.find(route => route.type === 'GROUP_MESSAGE_SEND')?.handler({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@all 用 Python 还是 Go？' }, {})
+    const messages = () => currentStore.chatsById['chat-1'].messageIds.map(id => currentStore.messagesById[id])
+    await vi.waitFor(() => expect(messages().some(message => message.roundSummaryOf)).toBe(true))
+    expect(messages().some(message => message.crossReviewOf)).toBe(false)
+  })
+
   it('lets API members reply at the same time, at most two at once on one model', async () => {
     vi.resetModules()
     const startingStore = createStoreWithTwoApiRoles()

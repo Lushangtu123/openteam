@@ -18,6 +18,7 @@ describe('shared i18n configuration', () => {
     expect(translateUi('进行中', 'en')).toBe('Active')
     expect(translateUi('进行中', 'zh-CN')).toBe('进行中')
     expect(translateUi('9 个群聊 · 311 个角色', 'en')).toBe('9 chats · 311 people')
+    expect(translateUi('已请「工程师」「设计师」互相审阅回答', 'en')).toBe("Asked 工程师, 设计师 to review each other's answers")
   })
 
   it('translates the chat buttons whose icons are drawn, not written', () => {

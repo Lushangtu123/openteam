@@ -1,3 +1,4 @@
+import { readNewChatCollaboration } from './collaboration'
 import { normalizeTeamTemplates } from './teamFormation'
 import { normalizeTeamHandbooks } from './teamHandbooks'
 import { isChatSite } from './chatSites'
@@ -790,7 +791,13 @@ function normalizeSettings(raw: unknown, storedVersion = CURRENT_STORE_VERSION):
     ...(raw.replyNotifications === false ? { replyNotifications: false } : {}),
     ...(raw.replyKeyPoints === false ? { replyKeyPoints: false } : {}),
     ...(raw.roundSummary === false ? { roundSummary: false } : {}),
+    ...newChatCollaborationSetting(raw.newChatCollaboration),
   }
+}
+
+function newChatCollaborationSetting(raw: unknown): Pick<OpenTeamSettings, 'newChatCollaboration'> {
+  const newChatCollaboration = readNewChatCollaboration(raw)
+  return newChatCollaboration ? { newChatCollaboration } : {}
 }
 
 function teamTemplatesSetting(raw: unknown): Pick<OpenTeamSettings, 'teamTemplates'> {

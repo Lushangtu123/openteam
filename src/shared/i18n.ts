@@ -136,6 +136,18 @@ const UI_TRANSLATIONS: Record<string, string> = {
   '群聊列表': 'Group list',
   '笔记': 'Notes',
   '搜索结果': 'Search results',
+  '互相审': 'Answer, then review',
+  '各自回答': 'Answer separately',
+  '成员怎么回答': 'How members answer',
+  '几位成员都收到一条消息时，他们怎么回答': 'How members answer a message several of them get',
+  '先各自回答，再看彼此的回答、互相审阅并修正': "Each answers, then reviews the others' answers and revises its own",
+  '一个接一个发言，每人先回应前面的人': 'One after another, each responding to those before it',
+  '各答各的，不互相审阅，最快': 'Each answers on its own, with no review; fastest',
+  '先各自回答，再看彼此的回答、互相审阅并修正。': "Each answers, then reviews the others' answers and revises its own.",
+  '一个接一个发言，每人先回应前面的人。': 'One after another, each responding to those before it.',
+  '各答各的，不互相审阅，最快。': 'Each answers on its own, with no review; fastest.',
+  '不@也回复：不 @ 的消息也会让所有成员回复': 'Reply without @: a message without @ goes to every member',
+  '互相审阅上一轮的回答': "Review each other's answers",
   '空': 'Empty',
   '恢复会话': 'Restore session',
   '输入消息，@成员 让他回复；不 @ 只记在群里': 'Message the group; @ a member to get a reply, or it is only recorded',
@@ -1114,6 +1126,8 @@ function translateUiPattern(source: string): string | undefined {
   if (passwordFile) return `Cannot open a password-protected file: ${passwordFile[1]}`
   const unreadableFile = source.match(/^无法读取文件：(.+)（文件已损坏或格式不对）$/)
   if (unreadableFile) return `Cannot read ${unreadableFile[1]} (the file is damaged or not in the expected format)`
+  const reviewAsked = source.match(/^已请((?:「[^」]+」)+)互相审阅回答$/)
+  if (reviewAsked) return `Asked ${[...reviewAsked[1].matchAll(/「([^」]+)」/g)].map(match => match[1]).join(', ')} to review each other's answers`
   const summaryAsked = source.match(/^已请「(.+)」汇总本轮回复$/)
   if (summaryAsked) return `Asked ${summaryAsked[1]} to summarize this round`
   const discussionRunning = source.match(/^轮流讨论中 · 第 (\d+)\/(\d+) 轮$/)

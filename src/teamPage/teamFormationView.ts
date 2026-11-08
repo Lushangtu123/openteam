@@ -2,6 +2,7 @@ import { CHAT_SITES, chatSiteLabel, type ChatSite } from '../group/chatSites'
 import {
   buildTeamInvitation,
   buildTeamKickoff,
+  buildTeamProjectGoal,
   buildTeamBrief,
   buildTeamFlowInstruction,
   collectTeamMembers,
@@ -25,6 +26,8 @@ import { normalizeLanguage, translateUi } from '../shared/i18n'
 import type { MessageUpload } from '../group/messageUploads'
 import { createApprovalCards } from './approvalCard'
 import { createTeamHandbookField } from './teamHandbookField'
+import { createCollaborationChoice } from './collaborationChoice'
+import { newChatCollaboration } from '../group/collaboration'
 import { createComposerAttachments } from './composerAttachments'
 import { PROBLEM_HEALTH_STATUSES, rolePageHealthLabel, type RolePageHealth } from './roleHealth'
 import { createIcon } from './icons'
@@ -197,6 +200,7 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
     const error = element('p', 'team-form-error')
     error.setAttribute('role', 'alert')
     const handbook = createTeamHandbookField({ getStore: deps.getStore, runCommand: deps.runCommand, t, showError: text => { error.textContent = text } })
+    const collaboration = createCollaborationChoice('team-setup', t, newChatCollaboration(deps.getStore().settings))
     const actions = element('div', 'team-setup-actions')
     const cancel = button(t('取消', 'Cancel'), 'btn')
     cancel.addEventListener('click', () => closeSetup())
@@ -205,7 +209,7 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
     actions.append(cancel, submit)
     const savedField = savedTeamsField()
     const body = element('div', 'team-setup-body')
-    body.append(taskField, filesField, handbook.field, ...(savedField ? [savedField] : []), membersField, requiredField, nameField, error)
+    body.append(taskField, filesField, collaboration.element, handbook.field, ...(savedField ? [savedField] : []), membersField, requiredField, nameField, error)
     form.append(body, actions)
     const taskFiles = createComposerAttachments({
       trayEl: tray,
@@ -247,6 +251,7 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
           deps.runCommand('GROUP_TEAM_CREATE', {
             templateId: template.id,
             ...handbook.payload(),
+            collaboration: collaboration.value(),
             ...(task.value.trim() ? { task: task.value.trim() } : {}),
             ...(name.value.trim() ? { name: name.value.trim() } : {}),
           }).then(async () => {
@@ -304,6 +309,7 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
       deps.runCommand('GROUP_TEAM_CREATE', {
         task: task.value.trim(),
         ...handbook.payload(),
+        collaboration: collaboration.value(),
         members,
         requiredPositions: splitPositions(required.value),
         ...(name.value.trim() ? { name: name.value.trim() } : {}),
@@ -510,10 +516,13 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
       card.footer.replaceChildren(hint, invite)
       return
     }
-    const start = button(t('开工', 'Start'), 'btn btn-primary')
+    const discuss = button(t('先讨论方案', 'Discuss first'), 'btn')
+    discuss.disabled = busy || !ready
+    discuss.addEventListener('click', () => void startPreset(chat.id, 'discussion'))
+    const start = button(t('按项目开工', 'Run as a project'), 'btn btn-primary')
     start.disabled = busy || !ready
-    start.addEventListener('click', () => void startPreset(chat.id))
-    card.footer.replaceChildren(hint, invite, start)
+    start.addEventListener('click', () => void startPreset(chat.id, 'project'))
+    card.footer.replaceChildren(hint, invite, discuss, start)
   }
 
   function renderClaims(chat: GroupChat, members: TeamMember[], resolution: TeamResolution): void {
@@ -609,17 +618,23 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
     const repick = button(t('让重复的重选', 'Ask the clashing ones to choose again'), 'btn')
     repick.disabled = busy || pending || resolution.conflicts.length === 0
     repick.addEventListener('click', () => void inviteRepick(chat.id, resolution))
-    const confirm = button(t('确认分工，开工', 'Confirm and start'), 'btn btn-primary')
-    confirm.disabled = busy || pending || missing || resolution.conflicts.length > 0
-    confirm.addEventListener('click', () => void confirmTeam(chat.id, members, positions))
+    const blocked = busy || pending || missing || resolution.conflicts.length > 0
+    // Working as a project is the default: the coordinator plans steps by position, each step's
+    // result is checked before the next. Discussing first sends the kickoff to everyone.
+    const discuss = button(t('确认分工，先讨论方案', 'Confirm and discuss first'), 'btn')
+    discuss.disabled = blocked
+    discuss.addEventListener('click', () => void confirmTeam(chat.id, members, positions, 'discussion'))
+    const confirm = button(t('确认分工，按项目开工', 'Confirm and run as a project'), 'btn btn-primary')
+    confirm.disabled = blocked
+    confirm.addEventListener('click', () => void confirmTeam(chat.id, members, positions, 'project'))
     const hint = element('p', 'team-card-hint', pending
       ? t('还有队员在回答。', 'Some members are still answering.')
       : resolution.conflicts.length > 0
         ? t('先解决重复的职位。', 'Settle the clashing positions first.')
         : missing
           ? t('给每位队员填一个职位。', 'Give every member a position.')
-          : t('确认后，每位队员会改名为它的职位，并收到开工消息和自己的分工。', 'On confirm, each member is renamed to its position and gets the kickoff message with its own brief.'))
-    card.footer.replaceChildren(hint, repick, confirm)
+          : t('确认后，每位队员会改名为它的职位。按项目开工：协调员按分工排出步骤，你批准后逐步完成，每一步做完都会审查。', 'On confirm, each member is renamed to its position. As a project: a coordinator plans the steps by position, and once you approve, each step is checked when done.'))
+    card.footer.replaceChildren(hint, repick, discuss, confirm)
   }
 
   function renderConfirmedActions(chat: GroupChat, members: TeamMember[]): void {
@@ -762,7 +777,7 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
     }
   }
 
-  async function confirmTeam(chatId: string, members: TeamMember[], positions: Array<{ roleId: string; position: string }>): Promise<void> {
+  async function confirmTeam(chatId: string, members: TeamMember[], positions: Array<{ roleId: string; position: string }>, startAs: 'project' | 'discussion'): Promise<void> {
     const chat = deps.getStore().chatsById[chatId]
     const formation = chat?.teamFormation
     if (!chat || !formation || busy) return
@@ -784,19 +799,14 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
       }
       await deps.runCommand('GROUP_CHAT_UPDATE', { chatId, patch: { teamFormation: { status: 'confirmed', confirmedAt: Date.now() } } })
       const store = deps.getStore()
-      const kickoff = buildTeamKickoff({
-        task: formation.task,
-        members: members.map(member => ({
-          name: store.rolesById[member.roleId]?.name ?? names[member.roleId],
-          modelLabel: member.modelLabel,
-          responsibility: briefs.get(member.roleId)?.responsibility,
-        })),
-        language: lang,
-      })
-      await deps.runCommand('GROUP_MESSAGE_SEND', { chatId, raw: kickoff, refreshPersona: true })
+      const team = members.map(member => ({
+        name: store.rolesById[member.roleId]?.name ?? names[member.roleId],
+        modelLabel: member.modelLabel,
+        responsibility: briefs.get(member.roleId)?.responsibility,
+      }))
+      await startTeamWork(chatId, formation.task, team, startAs, lang)
       edits.delete(chatId)
       panel = 'none'
-      deps.showSuccess(t('分工已确认，开工消息已发出', 'Positions confirmed; the kickoff message is out'))
     } catch (caught) {
       deps.showError(message(caught))
     } finally {
@@ -805,7 +815,19 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
     }
   }
 
-  async function startPreset(chatId: string): Promise<void> {
+  // A confirmed team starts as a project (a coordinator plans steps by position), or by discussing:
+  // the kickoff goes to everyone and they answer as the group's style says.
+  async function startTeamWork(chatId: string, task: string, team: Array<{ name: string; modelLabel: string; responsibility?: string }>, startAs: 'project' | 'discussion', lang: OpenTeamLanguage, kickoffExtra: Record<string, unknown> = {}): Promise<void> {
+    if (startAs === 'project') {
+      await deps.runCommand('GROUP_PROJECT_START', { chatId, goal: buildTeamProjectGoal({ task, members: team, language: lang }) })
+      deps.showSuccess(t('分工已确认，协调员正在排步骤', 'Positions confirmed; the coordinator is planning the steps'))
+      return
+    }
+    await deps.runCommand('GROUP_MESSAGE_SEND', { chatId, raw: buildTeamKickoff({ task, members: team, language: lang }), refreshPersona: true, ...kickoffExtra })
+    deps.showSuccess(t('分工已确认，开工消息已发出', 'Positions confirmed; the kickoff message is out'))
+  }
+
+  async function startPreset(chatId: string, startAs: 'project' | 'discussion'): Promise<void> {
     const store = deps.getStore()
     const chat = store.chatsById[chatId]
     const formation = chat?.teamFormation
@@ -814,15 +836,10 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
     renderCard()
     try {
       const members = collectTeamMembers(store, chat)
-      const kickoff = buildTeamKickoff({
-        task: formation.task,
-        members: members.map(member => ({ name: member.role.name, modelLabel: member.modelLabel, responsibility: member.role.description && member.role.description !== member.role.name ? member.role.description : undefined })),
-        language: language(),
-      })
+      const team = members.map(member => ({ name: member.role.name, modelLabel: member.modelLabel, responsibility: member.role.description && member.role.description !== member.role.name ? member.role.description : undefined }))
       await deps.runCommand('GROUP_CHAT_UPDATE', { chatId, patch: { teamFormation: { status: 'confirmed', confirmedAt: Date.now() } } })
       // A saved team skips the invitations, so its kickoff carries the task's files.
-      await deps.runCommand('GROUP_MESSAGE_SEND', { chatId, raw: kickoff, refreshPersona: true, ...(formation.invitationIds.length === 0 ? taskFilesPayload(chat) : {}) })
-      deps.showSuccess(t('已开工', 'Started'))
+      await startTeamWork(chatId, formation.task, team, startAs, language(), formation.invitationIds.length === 0 ? taskFilesPayload(chat) : {})
     } catch (caught) {
       deps.showError(message(caught))
     } finally {

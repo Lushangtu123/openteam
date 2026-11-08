@@ -1,6 +1,6 @@
 // Takes the same set of OpenTeam screenshots every time, so two builds can be compared pixel for
 // pixel (scripts/visual/compare.mjs) after a change that should not move anything on screen, such as
-// a stylesheet cleanup. Both styles, both themes, 28 screens, and three window widths: 132 images.
+// a stylesheet cleanup. Both styles, both themes, 29 screens, and three window widths: 136 images.
 // Animations, clocks and the caret are frozen; members answer from a local mock API. Each screen is
 // also checked for accessibility problems with axe-core (WCAG 2.2 A and AA, and its best practices),
 // listed in a11y.txt.
@@ -74,6 +74,13 @@ const server = createServer((req, res) => {
     }
     const name = all.match(/你是(架构师|产品经理|测试工程师)。/)?.[1] ?? '架构师'
     let text = REPLIES[name]
+    // 互相审: a member's review of the others' answers, and the summary of the reviews.
+    if (all.includes('互相审一审')) {
+      const reviewer = all.match(/你是「(架构师|产品经理|测试工程师)」/)?.[1] ?? name
+      text = `**同意**\n- 同意先做原型\n\n**反对或担心**\n- 只用 Python 发布时要带运行时\n\n**遗漏**\n- 没人提到测试\n\n**修正后的方案**\n- ${reviewer}：先用 Python 做原型，稳定后用 Go 重写`
+    } else if (all.includes('各成员看过彼此的回答后的意见')) {
+      text = '**共识**\n- 先用 Python 做原型，再用 Go 发布\n\n**分歧**\n- 无明显分歧\n\n**待定问题**\n- 无\n\n**建议下一步**\n- 两周内做出最常用的三个命令'
+    }
     // A coordinator asked for a plan gets two tasks; a team-up invitation gets a position.
     if (all.includes('dependsOn')) {
       text = '```json\n' + JSON.stringify({ tasks: [
@@ -224,6 +231,19 @@ try {
   await say('@所有人 试一下')
   await waitFor(`s => Object.values(s.messagesById).some(m => m.chatId === '${extraChats.error}' && m.type === 'assistant' && m.status === 'error')`, 70000)
 
+  // 互相审: both answer, review each other, and the reviews are summarized.
+  extraChats.review = await evaluate(`(async () => {
+    const send = m => new Promise(r => chrome.runtime.sendMessage(m, r))
+    const store = (await send({ type: 'GROUP_STORE_GET' })).store
+    const model = Object.values(store.settings.externalModelsById).find(m => m.format === 'openai')
+    const chat = await send({ type: 'GROUP_CHAT_CREATE', name: '互相审', mode: 'collaborative', collaboration: { style: 'review', replyAll: true } })
+    await send({ type: 'GROUP_ROLES_CREATE_BATCH', chatId: chat.chat.id, items: ['架构师', '产品经理'].map(name => ({ source: 'temporary', name, systemPrompt: '你是' + name + '。', modelSource: 'external', externalModelId: model.id })) })
+    return chat.chat.id
+  })()`)
+  await sleep(1200)
+  await say('内部命令行工具用 Python 还是 Go？')
+  await waitFor(`s => Object.values(s.messagesById).some(m => m.chatId === '${extraChats.review}' && m.type === 'assistant' && m.status === 'received' && s.messagesById[m.sourceMessageId]?.roundSummaryOf)`, 60000)
+
   // A turn-by-turn discussion that has finished, with its bar.
   extraChats.discussion = await newGroup('轮流讨论', ['架构师', '产品经理'])
   await evaluate(runtime(`{ type: 'GROUP_CHAT_UPDATE', chatId: ${JSON.stringify(extraChats.discussion)}, discussionMode: true }`))
@@ -320,6 +340,7 @@ try {
       await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: point.x, y: point.y }, sessionId)
     }],
     ['reply-error', inGroup('error')],
+    ['cross-review', inGroup('review')],
     ['discussion', inGroup('discussion')],
     ['project-board', inGroup('project')],
     ['team-card', inGroup('team', async () => { await click('.team-formation-banner button') })],
@@ -334,7 +355,7 @@ try {
       await audit(`${screen}-${name}-${style}`)
       await closeAll()
       await sendMouseAway()
-      if (screen in { 'reply-error': 1, discussion: 1, 'project-board': 1, 'team-card': 1, approval: 1 }) await backToMain()
+      if (screen in { 'reply-error': 1, 'cross-review': 1, discussion: 1, 'project-board': 1, 'team-card': 1, approval: 1 }) await backToMain()
       await sleep(250)
       // Some windows keep state across reopenings; a reload starts each screen clean.
       await evaluate('location.reload()')

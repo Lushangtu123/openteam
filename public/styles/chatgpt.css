@@ -872,7 +872,8 @@
   color: var(--text);
 }
 
-:root[data-theme] .round-summary-request .message-system-pill {
+:root[data-theme] .round-summary-request .message-system-pill,
+:root[data-theme] .cross-review-request .message-system-pill {
   font-size: 12px;
 }
 

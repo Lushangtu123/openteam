@@ -26,7 +26,7 @@ export function keyPointsInstruction(languageInput: OpenTeamLanguage | undefined
 // easy to scan. Orchestration steps, team invitations and summary requests keep their own formats.
 export function wantsKeyPoints(settings: Pick<OpenTeamSettings, 'replyKeyPoints'>, chat: GroupChat | undefined, message: GroupMessage): boolean {
   if (settings.replyKeyPoints === false) return false
-  if (message.type !== 'user' || message.orchestrationKind || message.roundSummaryOf) return false
+  if (message.type !== 'user' || message.orchestrationKind || message.roundSummaryOf || message.crossReviewOf) return false
   if (chat?.teamFormation?.invitationIds.includes(message.id)) return false
   return (message.targetRoleIds?.length ?? 0) >= 2
 }
@@ -45,6 +45,8 @@ export interface SummarizableRound {
   // The latest good reply of each member, in the order they arrived; in a discussion, every turn.
   replies: RoundReply[]
   discussion?: boolean
+  // A review round (互相审): the user's message whose answers were reviewed.
+  reviewOf?: GroupMessage
 }
 
 export const ROUND_SUMMARY_MIN_REPLIES = 2
@@ -55,10 +57,10 @@ export function isRoundSummaryRequest(message: GroupMessage | undefined): boolea
   return message?.type === 'user' && Boolean(message.roundSummaryOf)
 }
 
-// What OpenTeam itself asks one member (a summary, or a discussion turn); members do not get these
-// as context, and the user did not write them.
+// What OpenTeam itself asks members (a summary, a discussion turn, a project step, a review round);
+// members do not get these as context, and the user did not write them.
 export function isOpenTeamRequest(message: GroupMessage | undefined): boolean {
-  return message?.type === 'user' && Boolean(message.roundSummaryOf || message.discussionTurnOf || message.projectRequest)
+  return message?.type === 'user' && Boolean(message.roundSummaryOf || message.discussionTurnOf || message.projectRequest || message.crossReviewOf)
 }
 
 // A summary request, or the summary written in answer to one.
@@ -89,7 +91,8 @@ export function readSummarizableRound(store: OpenTeamStore, chat: GroupChat, que
       const role = store.rolesById[message.roleId!]
       return role ? [{ role, message }] : []
     })
-  return replies.length >= ROUND_SUMMARY_MIN_REPLIES ? { question, replies } : undefined
+  const reviewOf = question.crossReviewOf ? store.messagesById[question.crossReviewOf] : undefined
+  return replies.length >= ROUND_SUMMARY_MIN_REPLIES ? { question, replies, ...(reviewOf ? { reviewOf } : {}) } : undefined
 }
 
 // A discussion is summarized once it has stopped, with every turn in order.
@@ -149,15 +152,19 @@ export function buildRoundSummaryPrompt(input: {
   const label = (name: string, turn: number | undefined) => en
     ? `[${name}${turn ? `, turn ${turn}` : ''}]`
     : `【${name}${turn ? ` · 第 ${turn} 轮` : ''}】`
-  const quoted = replies.map(({ role, message, turn }) => `${label(role.name, turn)}\n${trimReply(message.content, share, en)}`)
-  const questionText = `${question.content}${describeAttachments(question.attachments, language)}`.trim()
+  const quoted = replies.map(({ role, message, turn }) => `${label(role.name, turn)}\n${trimRoundReply(message.content, share, en)}`)
+  // A review round is summarized against the user's question it reviewed.
+  const asked = input.round.reviewOf ?? question
+  const questionText = `${asked.content}${describeAttachments(asked.attachments, language)}`.trim()
 
   return [
     en ? `You are "${input.summarizer.name}". This time, act as the summarizer of this round of the group discussion.` : `你是「${input.summarizer.name}」，这次请你担任本轮讨论的汇总人。`,
     `${en ? "The user's question:" : '用户的问题：'}\n${questionText}`,
     input.round.discussion
       ? `${en ? 'The discussion, turn by turn:' : '讨论中的发言（按顺序）：'}\n\n${quoted.join('\n\n')}`
-      : `${en ? "The members' replies:" : '各成员的回复：'}\n\n${quoted.join('\n\n')}`,
+      : input.round.reviewOf
+        ? `${en ? "Each member's review of the others' answers, with its revised plan:" : '各成员看过彼此的回答后的意见，以及修正后的方案：'}\n\n${quoted.join('\n\n')}`
+        : `${en ? "The members' replies:" : '各成员的回复：'}\n\n${quoted.join('\n\n')}`,
     en
       ? [
           'Summarize these replies so the user can see at a glance where things stand (under 200 words), in this format:',
@@ -186,7 +193,7 @@ export function buildRoundSummaryPrompt(input: {
   ].join('\n\n')
 }
 
-function trimReply(content: string, maxChars: number, en: boolean): string {
+export function trimRoundReply(content: string, maxChars: number, en: boolean): string {
   const text = content.trim()
   if (text.length <= maxChars) return text
   return `${text.slice(0, maxChars).trimEnd()}\n${en ? '[…the rest of this reply is omitted]' : '［……其余部分已省略］'}`

@@ -52,6 +52,16 @@ export interface OpenTeamViewState {
   chatHasNewMessageById?: Record<string, boolean>
 }
 
+// How the members of a 协作 group answer a message to several of them: each answers and then
+// reviews the others' answers (互相审), they take turns (轮流讨论), or each answers on its own.
+export type CollaborationStyle = 'review' | 'turns' | 'parallel'
+
+export interface NewChatCollaboration {
+  style: CollaborationStyle
+  // 不@也回复: a message without @ goes to every member.
+  replyAll: boolean
+}
+
 export interface OpenTeamSettings {
   defaultMode: RoomMode
   maxContextChars: number
@@ -73,6 +83,8 @@ export interface OpenTeamSettings {
   // Once every member of such a round has answered, one member writes a short summary. On unless
   // set to false.
   roundSummary?: boolean
+  // What the last group was created with, offered again for the next one.
+  newChatCollaboration?: NewChatCollaboration
 }
 
 export interface TeamHandbook {
@@ -278,6 +290,10 @@ export interface GroupChat {
   // 轮流讨论: in a 协作 group, a message to two or more members starts a turn-by-turn discussion
   // instead of everyone answering at once.
   discussionMode?: boolean
+  // 互相审: in a 协作 group, once the members a message went to have all answered, each reads the
+  // others' answers, says what it agrees with, disputes or finds missing, and revises its own. Not
+  // together with discussionMode.
+  crossReview?: boolean
   // The group's latest discussion.
   discussion?: DiscussionRun
   // The group's latest 项目 (a coordinator plans tasks for the members and checks the results).
@@ -480,6 +496,9 @@ export interface GroupMessage {
   // On a request OpenTeam sends to one member to summarize a round: the message that started the
   // round. That member's answer is the round's summary.
   roundSummaryOf?: string
+  // On a request OpenTeam sends to the members who answered a message, once all of them had, to
+  // review each other's answers (互相审): the message they answered.
+  crossReviewOf?: string
   // On the user's message that started a turn-by-turn discussion.
   discussionTopic?: boolean
   // On a request OpenTeam sends to the member whose turn it is: the topic message, the turn number,

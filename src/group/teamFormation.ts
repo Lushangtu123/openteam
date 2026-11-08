@@ -429,6 +429,18 @@ export function buildTeamKickoff(input: { task: string; members: Array<{ name: s
   ].join('\n')
 }
 
+// A confirmed team's project goal: the task, and who holds which position, for the coordinator to
+// plan the steps by.
+export function buildTeamProjectGoal(input: { task: string; members: Array<{ name: string; responsibility?: string }>; language: OpenTeamLanguage }): string {
+  const english = input.language === 'en'
+  return [
+    input.task.trim(),
+    '',
+    english ? 'The team and its positions (plan the tasks by them):' : '团队分工（请按这个分工安排任务）：',
+    ...input.members.map(member => `- ${member.name}${member.responsibility ? `${english ? ': ' : '：'}${member.responsibility}` : ''}`),
+  ].join('\n')
+}
+
 // Accepts only a well-formed formation, so a malformed patch cannot break the group.
 export function readTeamFormation(value: unknown, now: number): TeamFormation | undefined {
   if (!value || typeof value !== 'object') return undefined

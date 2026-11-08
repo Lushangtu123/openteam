@@ -21,3 +21,26 @@ describe('team execution handbook delivery', () => {
     expect(prompt).toContain('实现待办工具')
   })
 })
+
+describe('project task prompts', () => {
+  it("send a member's persona with its first task in the project, also when it has spoken before", () => {
+    const store = createDefaultStore()
+    store.settings.language = 'zh-CN'
+    const role: GroupRole = { id: 'r', chatId: 'c', name: '前端工程师', systemPrompt: '你在这个项目中担任「前端工程师」。', chatSite: 'claude', status: 'ready', contextCursor: 0, createdAt: 1, updatedAt: 1 }
+    // It answered the team's invitation before the project started.
+    const invitation: GroupMessage = { id: 'inv', chatId: 'c', seq: 1, type: 'user', content: '选职位', targetRoleIds: ['r'], deliveryStatus: { r: 'received' }, createdAt: 1, status: 'received' }
+    const goal: GroupMessage = { id: 'goal', chatId: 'c', seq: 2, type: 'user', content: '做记账小程序', projectGoal: true, targetRoleIds: [], createdAt: 2, status: 'received' }
+    const task = (id: string, seq: number): GroupMessage => ({ id, chatId: 'c', seq, type: 'user', content: '任务', targetRoleIds: ['r'], projectRequest: { kind: 'task', taskId: 't1' }, deliveryStatus: { r: 'sent' }, createdAt: seq, status: 'pending' })
+    const first = task('task-1', 3)
+    const second = task('task-2', 4)
+    const chat: GroupChat = {
+      id: 'c', name: '项目', mode: 'collaborative', roleIds: ['r'], messageIds: ['inv', 'goal', 'task-1', 'task-2'], nextMessageSeq: 5, status: 'running', createdAt: 1, updatedAt: 1,
+      project: { id: 'p', goalMessageId: 'goal', coordinatorRoleId: 'r', status: 'running', tasks: [{ id: 't1', title: '做页面', ownerRoleId: 'r', dependsOn: [], detail: '做页面', doneWhen: '能打开', status: 'doing', attempts: 1 }], steps: 1, maxSteps: 20, planAttempts: 1, reviewAttempts: 0, createdAt: 2, updatedAt: 2 },
+    }
+    Object.assign(store, { chatsById: { c: chat }, rolesById: { r: role }, messagesById: { inv: invitation, goal, 'task-1': first, 'task-2': second } })
+    const promptFor = (userMessage: GroupMessage, messages: GroupMessage[]) => prepareRolePromptDelivery({ store, chat, role, userMessage, roles: [role], messages, timestamp: 5, newId: () => 'attempt', runtimeFrames: { getByRole: () => ({ chatId: 'c', roleId: 'r', tabId: 1, frameId: 2, ready: true, lastSeenAt: 1 }) } }).delivery!.message.content
+
+    expect(promptFor(first, [invitation, goal, first])).toContain('人设：\n你在这个项目中担任「前端工程师」。')
+    expect(promptFor(second, [invitation, goal, first, second])).not.toContain('人设：')
+  })
+})

@@ -2,6 +2,7 @@ import { chatSiteLabel, isChatSite } from '../group/chatSites'
 import { MAX_TEAM_HANDBOOKS, readTeamHandbook } from '../group/teamHandbooks'
 import { createGroupRole, createGroupRolesBatch, type GroupRoleBatchInput } from '../group/roleTemplates'
 import { planTeamRounds, readTeamFormation, splitPositions, TEAM_MAX_COPIES_PER_MODEL, TEAM_MAX_MEMBERS, TEAM_MAX_TEMPLATES, TEAM_MIN_MEMBERS, teamModelKey, teamTemplateFromChat } from '../group/teamFormation'
+import { applyCollaborationStyle, isCollaborationStyle, readNewChatCollaboration } from '../group/collaboration'
 import type { GroupChat, GroupMessage, GroupRole, OpenTeamStore, OrchestrationFlow, OrchestrationStage, RoomMode } from '../group/types'
 import type { BackgroundMessageRoute } from './messageRouter'
 import { messageTabId, type RuntimeMessage } from './runtimeClient'
@@ -147,9 +148,12 @@ export function createChatHandlers(deps: ChatHandlersDependencies): BackgroundMe
         patchKeys.push('pinned')
       }
 
-      if (patch.discussionMode !== undefined) {
-        if (patch.discussionMode) chat.discussionMode = true
-        else delete chat.discussionMode
+      // How members answer a message to several of them; 轮流讨论 and 互相审 are never both on.
+      if (isCollaborationStyle(patch.collaborationStyle)) {
+        applyCollaborationStyle(chat, patch.collaborationStyle)
+        patchKeys.push('collaborationStyle')
+      } else if (patch.discussionMode !== undefined) {
+        applyCollaborationStyle(chat, patch.discussionMode ? 'turns' : chat.crossReview ? 'review' : 'parallel')
         patchKeys.push('discussionMode')
       }
 
@@ -314,6 +318,13 @@ function createChat(store: OpenTeamStore, message: RuntimeMessage, deps: ChatHan
     createdAt: timestamp,
     updatedAt: timestamp,
   }
+  // How its members work together, chosen when it is made (协作 groups); remembered for the next one.
+  const collaboration = readNewChatCollaboration(message.collaboration)
+  if (collaboration && chat.mode === 'collaborative') {
+    applyCollaborationStyle(chat, collaboration.style)
+    chat.requireManualMention = !collaboration.replyAll
+    store.settings.newChatCollaboration = collaboration
+  }
 
   store.chatsById[chat.id] = chat
   store.chatOrder.unshift(chat.id)
@@ -360,7 +371,7 @@ function createTeam(store: OpenTeamStore, message: RuntimeMessage, deps: ChatHan
   }
 
   const name = readOptionalString(message.name) ?? (task.length > 20 ? `${task.slice(0, 20)}…` : task)
-  const chat = createChat(store, { type: 'GROUP_CHAT_CREATE', name, mode: 'collaborative' }, deps)
+  const chat = createChat(store, { type: 'GROUP_CHAT_CREATE', name, mode: 'collaborative', collaboration: message.collaboration }, deps)
   selectTeamHandbook(store, chat, message.handbookId)
   // Named after their model until they pick a position: "Claude", "Claude2" (names cannot hold spaces).
   const seen = new Map<string, number>()
@@ -405,7 +416,7 @@ function createTeamFromTemplate(store: OpenTeamStore, message: RuntimeMessage, t
   }
   const task = readOptionalString(message.task) ?? template.task
   if (!task) throw new Error('请先写下要做的事')
-  const chat = createChat(store, { type: 'GROUP_CHAT_CREATE', name: readOptionalString(message.name) ?? template.name, mode: 'collaborative' }, deps)
+  const chat = createChat(store, { type: 'GROUP_CHAT_CREATE', name: readOptionalString(message.name) ?? template.name, mode: 'collaborative', collaboration: message.collaboration }, deps)
   selectTeamHandbook(store, chat, message.handbookId)
   const roles = createGroupRolesBatch(store, chat.id, template.members.map(member => ({
     source: 'temporary',
@@ -483,6 +494,8 @@ export function duplicateChat(store: OpenTeamStore, sourceChatId: unknown, deps:
     nextMessageSeq: 1,
     status: sourceChat.roleIds.length > 0 ? 'initializing' : 'draft',
     requireManualMention: sourceChat.requireManualMention,
+    ...(sourceChat.discussionMode ? { discussionMode: true } : {}),
+    ...(sourceChat.crossReview ? { crossReview: true } : {}),
     createdAt: timestamp,
     updatedAt: timestamp,
   }

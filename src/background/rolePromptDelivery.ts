@@ -5,6 +5,7 @@ import { buildOrchestrationReviewResponseInstruction } from '../group/orchestrat
 import { uploadedImageIds } from '../group/messageUploads'
 import { buildPrompt, roleUsesChatGptGptsPersona } from '../group/promptBuilder'
 import { buildRoundSummaryPrompt, keyPointsInstruction, readSummarizableRound, wantsKeyPoints } from '../group/roundSummary'
+import { buildCrossReviewPrompt } from '../group/collaboration'
 import { buildDiscussionTurnPrompt, discussionTranscript } from '../group/discussion'
 import { buildProjectPrompt } from '../group/project'
 import { withTeamHandbook } from '../group/teamHandbooks'
@@ -47,9 +48,9 @@ export interface PrepareRolePromptDeliveryInput {
 
 export function prepareRolePromptDelivery(input: PrepareRolePromptDeliveryInput): PreparedRolePromptDelivery {
   const roleHistoryCount = countLocalRoleHistory(input.messages, input.role, input.userMessage.id)
-  const summaryPrompt = roundSummaryPromptFor(input)
+  const summaryPrompt = roundSummaryPromptFor(input) ?? crossReviewPromptFor(input)
   const projectKind = input.userMessage.projectRequest?.kind
-  const includesPersona = !summaryPrompt && (!projectKind || projectKind === 'task') && shouldIncludePersonaForPrompt(input.role, roleHistoryCount, input.userMessage)
+  const includesPersona = !summaryPrompt && (!projectKind || projectKind === 'task') && (shouldIncludePersonaForPrompt(input.role, roleHistoryCount, input.userMessage) || isFirstProjectTask(input))
   // OpenTeam's own requests (a summary, a discussion turn, a project step) carry their whole prompt.
   const summary = summaryPrompt ?? (input.userMessage.discussionTurnOf
     ? buildDiscussionTurnPrompt({ store: input.store, chat: input.chat, request: input.userMessage, role: input.role, roles: input.roles, includePersona: includesPersona, language: input.store.settings.language })
@@ -167,6 +168,18 @@ function shouldIncludePersonaForPrompt(role: GroupRole, roleHistoryCount: number
   return !roleUsesChatGptGptsPersona(role) && (roleHistoryCount === 0 || message.refreshPersona === true)
 }
 
+// A member's first task in a project carries its persona, also when it has spoken before (a team's
+// members have, to choose their positions).
+function isFirstProjectTask(input: PrepareRolePromptDeliveryInput): boolean {
+  const project = input.chat.project
+  if (input.userMessage.projectRequest?.kind !== 'task' || !project || roleUsesChatGptGptsPersona(input.role)) return false
+  const goal = input.store.messagesById[project.goalMessageId]
+  return !input.messages.some(message => message.id !== input.userMessage.id
+    && message.projectRequest?.kind === 'task'
+    && message.targetRoleIds?.includes(input.role.id)
+    && (!goal || message.seq > goal.seq))
+}
+
 function buildProjectPromptFor(input: PrepareRolePromptDeliveryInput, includePersona: boolean): string {
   const project = input.chat.project
   if (!project) throw new Error('这个群聊没有进行中的项目')
@@ -187,6 +200,14 @@ function roundSummaryPromptFor(input: PrepareRolePromptDeliveryInput): string | 
   const round = readSummarizableRound(input.store, input.chat, input.store.messagesById[input.userMessage.roundSummaryOf])
   if (!round) throw new Error('这一轮的回复已经不在了，无法汇总')
   return buildRoundSummaryPrompt({ round, summarizer: input.role, language: input.store.settings.language, maxReplyChars: contextCharBudgetForRole(input.store, input.role) })
+}
+
+// A review round's request carries the question and everyone's answers itself (互相审).
+function crossReviewPromptFor(input: PrepareRolePromptDeliveryInput): string | undefined {
+  if (!input.userMessage.crossReviewOf) return undefined
+  const round = readSummarizableRound(input.store, input.chat, input.store.messagesById[input.userMessage.crossReviewOf])
+  if (!round) throw new Error('上一轮的回答已经不在了，无法互相审阅')
+  return buildCrossReviewPrompt({ round, reviewer: input.role, language: input.store.settings.language, maxReplyChars: contextCharBudgetForRole(input.store, input.role) })
 }
 
 function countLocalRoleHistory(messages: GroupMessage[], role: GroupRole, currentMessageId: string): number {

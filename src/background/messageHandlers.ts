@@ -1,7 +1,8 @@
 import { CHAT_SITE_INFO, chatSiteForUrl, isChatSite } from '../group/chatSites'
 import { extractSupportedConversationId, getDefaultChatSiteUrlForRole, normalizeSupportedChatConversationUrl } from '../group/conversationUrl'
 import { readMessageUploads, type MessageUpload } from '../group/messageUploads'
-import { hasRoundSummary, pickSummarizer, readSummarizableRound, roundSummaryRequestText } from '../group/roundSummary'
+import { hasRoundSummary, isOpenTeamRequest, pickSummarizer, readSummarizableRound, roundSummaryRequestText } from '../group/roundSummary'
+import { crossReviewRequestText, wantsCrossReview } from '../group/collaboration'
 import { isProjectActive } from '../group/project'
 import { createProjectRunner } from './projectRunner'
 import { chooseNextSpeaker, discussionMaxTurns, discussionTranscript, discussionTurnRequestText, DISCUSSION_MAX_FAILED_TURNS, isDiscussionRunning, startsDiscussion, turnCountsOf } from '../group/discussion'
@@ -117,7 +118,7 @@ export function createMessageHandlers(baseDeps: MessageHandlersDependencies): Ba
       const settled = store.messagesById[promptMessageId]
       if (settled?.projectRequest) projectRunner.onSettled(chatId, promptMessageId)
       else if (settled?.discussionTurnOf) scheduleDiscussionAdvance(chatId, promptMessageId)
-      else scheduleRoundSummary(store, chatId, promptMessageId)
+      else scheduleAfterRound(store, chatId, promptMessageId)
       return baseDeps.onPromptSettled?.(store, chatId, promptMessageId)
     },
   }
@@ -428,6 +429,81 @@ export function createMessageHandlers(baseDeps: MessageHandlersDependencies): Ba
     let responseStore = store
     if (result.prepared.externalDelivery) responseStore = await deliverExternal(result.prepared.externalDelivery) ?? responseStore
     return { ok: true, message: result.request, store: responseStore }
+  }
+
+  // A round that has everyone's answers: in a 互相审 group they review each other's answers first,
+  // and the summary is of the reviews; otherwise the round is summarized now.
+  function scheduleAfterRound(store: OpenTeamStore, chatId: string, questionId: string): void {
+    const chat = store.chatsById[chatId]
+    const question = store.messagesById[questionId]
+    if (!chat || !wantsCrossReview(chat, question) || !readSummarizableRound(store, chat, question) || hasCrossReview(store, chat, questionId)) {
+      scheduleRoundSummary(store, chatId, questionId)
+      return
+    }
+    void (async () => {
+      await waitForRetryDelay(deps, ROUND_SUMMARY_DELAY_MS)
+      // Members that cannot review (fewer than two free, or the user has moved on): summarize as before.
+      if (!await requestCrossReview(chatId, questionId)) await requestRoundSummary(chatId, questionId, { auto: true })
+    })().catch(error => deps.log.warn('cross-review:failed', { chatId, questionId, error: error instanceof Error ? error.message : String(error) }))
+  }
+
+  // One request to every member that answered; each gets the others' answers in its own prompt.
+  // Returns false when no review was started.
+  async function requestCrossReview(chatId: string, questionId: string): Promise<boolean> {
+    const timestamp = deps.now()
+    const { store, result } = await mutateStore(store => {
+      const chat = store.chatsById[chatId]
+      const question = store.messagesById[questionId]
+      if (!chat || !question || !wantsCrossReview(chat, question) || hasCrossReview(store, chat, questionId)) return undefined
+      if (userMovedOnFrom(store, chat, question)) return undefined
+      const round = readSummarizableRound(store, chat, question)
+      if (!round) return undefined
+      const roles = getChatRoles(store, chat)
+      const reviewers = round.replies
+        .map(reply => roles.find(role => role.id === reply.role.id))
+        .filter((role): role is GroupRole => Boolean(role) && role!.status !== 'thinking' && (isExternalModelRole(role!)
+          ? Boolean(getExternalModelForRole(store, role!))
+          : isRoleDeliverable(role!, deps.runtimeFrames.getByRole(chat.id, role!.id), timestamp)))
+      if (reviewers.length < 2) return undefined
+
+      const request: GroupMessage = {
+        id: deps.newId('msg'),
+        chatId: chat.id,
+        seq: chat.nextMessageSeq,
+        type: 'user',
+        content: crossReviewRequestText(store.settings.language),
+        targetRoleIds: reviewers.map(role => role.id),
+        mentionedRoleIds: reviewers.map(role => role.id),
+        crossReviewOf: question.id,
+        createdAt: timestamp,
+        status: 'pending',
+        deliveryStatus: Object.fromEntries(reviewers.map(role => [role.id, 'pending' as const])),
+      }
+      store.messagesById[request.id] = request
+      chat.messageIds.push(request.id)
+      chat.nextMessageSeq += 1
+      chat.updatedAt = timestamp
+      chat.status = 'running'
+
+      const messages = getChatMessages(store, chat)
+      const prepared = reviewers.map(reviewer => {
+        const delivery = prepareRolePromptDelivery({ store, chat, role: reviewer, userMessage: request, roles, messages, timestamp, newId: deps.newId, runtimeFrames: deps.runtimeFrames })
+        recoverDeliverableRoleStatus(reviewer, timestamp, deps.log)
+        reviewer.status = 'thinking'
+        reviewer.lastPromptMessageId = request.id
+        reviewer.replyAttemptId = delivery.replyAttemptId
+        reviewer.updatedAt = timestamp
+        return delivery
+      })
+      return { request, prepared }
+    })
+    if (!result) return false
+
+    deps.log.info('cross-review:requested', { chatId, questionId, messageId: result.request.id, reviewers: result.request.targetRoleIds })
+    await deps.broadcastStoreUpdated(store)
+    await sendPromptDeliveries(deps, chatId, result.request.id, result.prepared.flatMap(item => item.delivery ? [item.delivery] : []))
+    await deliverExternalTogether(result.prepared.flatMap(item => item.externalDelivery ? [item.externalDelivery] : []))
+    return true
   }
 
   function scheduleRoundSummary(store: OpenTeamStore, chatId: string, questionId: string): void {
@@ -1416,6 +1492,18 @@ function conversationLeftFor(role: GroupRole, pageUrl: string | undefined, defau
   // Gemini's start page is /app.
   if (site === 'gemini') startPaths.add('/app')
   return startPaths.has(path(safeUrl)) ? savedUrl : undefined
+}
+
+function hasCrossReview(store: OpenTeamStore, chat: GroupChat, questionId: string): boolean {
+  return chat.messageIds.some(id => store.messagesById[id]?.crossReviewOf === questionId)
+}
+
+// The user has written again since the message (their own message, not one of OpenTeam's requests).
+function userMovedOnFrom(store: OpenTeamStore, chat: GroupChat, message: GroupMessage): boolean {
+  return chat.messageIds.some(id => {
+    const later = store.messagesById[id]
+    return Boolean(later && later.seq > message.seq && later.type === 'user' && !isOpenTeamRequest(later))
+  })
 }
 
 function isMeaningfulConversationId(value: string | undefined): value is string {

@@ -106,6 +106,8 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
   // Questions whose round has a summary (or one on the way), and the summary requests by id.
   let summarizedQuestionIds = new Set<string>()
   let summaryRequestsById = new Map<string, GroupMessage>()
+  // Questions whose answers the members are reviewing (互相审).
+  let reviewedQuestionIds = new Set<string>()
   // Folded replies the user opened, until the page is reloaded.
   const expandedReplyIds = new Set<string>()
   // The discussion bar, kept while its state is the same so a click is not lost to a re-render.
@@ -129,6 +131,7 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     replyCounts = countRepliesByQuestion(messages)
     summaryRequestsById = new Map(messages.filter(message => message.type === 'user' && message.roundSummaryOf).map(message => [message.id, message]))
     summarizedQuestionIds = new Set([...summaryRequestsById.values()].map(message => message.roundSummaryOf!))
+    reviewedQuestionIds = new Set(messages.flatMap(message => message.crossReviewOf ? [message.crossReviewOf] : []))
     // OpenTeam's own requests (summaries, discussion turns) are not the user speaking, so they leave
     // the round's choices open.
     latestUserSeq = messages.reduce((latest, message) => message.type === 'user' && !isOpenTeamRequest(message) ? Math.max(latest, message.seq) : latest, 0)
@@ -228,6 +231,18 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
       const pill = document.createElement('div')
       pill.className = 'message-system-pill'
       pill.textContent = message.content
+      article.append(pill)
+      cacheMessageNode(message.id, signature, article, streamingSignature)
+      return article
+    }
+
+    // 互相审: the members who answered are reviewing each other's answers.
+    if (message.type === 'user' && message.crossReviewOf) {
+      article.className = 'message-row message system cross-review-request'
+      const pill = document.createElement('div')
+      pill.className = 'message-system-pill'
+      const names = (message.targetRoleIds ?? []).map(id => deps.getStore().rolesById[id]?.name).filter(Boolean)
+      pill.textContent = `已请${names.map(name => `「${name}」`).join('')}互相审阅回答`
       article.append(pill)
       cacheMessageNode(message.id, signature, article, streamingSignature)
       return article
@@ -557,6 +572,8 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
   // Asks a member to summarize a round that has no summary yet.
   function summarizeButton(message: GroupMessage): HTMLButtonElement | undefined {
     if (message.type !== 'user' || message.roundSummaryOf || message.orchestrationKind || message.status === 'pending') return undefined
+    // Answers being reviewed (互相审) are summarized after the reviews, on their own.
+    if (reviewedQuestionIds.has(message.id)) return undefined
     if ((replyCounts.get(message.id) ?? 0) < 2 || summarizedQuestionIds.has(message.id)) return undefined
     const chat = deps.getCurrentChat()
     if (chat && deps.isTeamInvitation?.(chat, message.id)) return undefined

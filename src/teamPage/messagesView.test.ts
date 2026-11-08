@@ -276,6 +276,23 @@ describe('team page messages view boundary', () => {
     expect(button?.disabled).toBe(true)
   })
 
+  it('notes a review round (互相审), and leaves the reviewed question without a summary button', () => {
+    const { messagesEl, messages, view } = createLongChatView(0)
+    const question = (id: string, seq: number) => ({ ...makeLongChatMessage(seq, '@all 选哪个'), id, type: 'user' as const, roleId: undefined, roleName: undefined, targetRoleIds: ['role-1', 'role-2'] })
+    const answer = (questionId: string, seq: number, roleId: string) => ({ ...makeLongChatMessage(seq, `回答 ${seq}`), id: `a-${seq}`, roleId, sourceMessageId: questionId })
+    messages.push(
+      question('q1', 0), answer('q1', 1, 'role-1'), answer('q1', 2, 'role-2'),
+      { ...question('r1', 3), content: '互相审阅上一轮的回答', crossReviewOf: 'q1' },
+      answer('r1', 4, 'role-1'), answer('r1', 5, 'role-2'),
+    )
+
+    view.renderMessages()
+    const note = messagesEl.querySelector('[data-message-id="r1"]')
+    expect(note?.classList.contains('cross-review-request')).toBe(true)
+    expect(note?.textContent).toMatch(/^已请(「[^」]+」)+互相审阅回答$/)
+    expect(messagesEl.querySelector('[data-message-id="q1"] .message-summary-btn')).toBeNull()
+  })
+
   it('announces discussion turns and shows the discussion bar with its controls', () => {
     const { messagesEl, messages, view, deps } = createLongChatView(0)
     const runCommand = vi.fn(async () => undefined)

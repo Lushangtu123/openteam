@@ -21,8 +21,8 @@ export function findAnsweredPrompt(store: OpenTeamStore, chatId: string, message
   const chat = store.chatsById[chatId]
   const message = store.messagesById[messageId]
   if (!chat || !message || message.type !== 'user' || message.chatId !== chatId) return undefined
-  // A round's summary and a discussion turn are not questions the user asked.
-  if (message.roundSummaryOf || message.discussionTurnOf) return undefined
+  // A round's summary, a discussion turn and a review round are not questions the user asked.
+  if (message.roundSummaryOf || message.discussionTurnOf || message.crossReviewOf) return undefined
   // A project tells the user when its plan is ready, when it has a question, and when it ends.
   if (message.projectGoal) {
     const project = chat.project

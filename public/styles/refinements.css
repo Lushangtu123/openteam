@@ -1020,3 +1020,46 @@
   font-size: 12.5px;
   font-weight: 600;
 }
+
+/* The input box's choice of how members answer (互相审 / 轮流讨论 / 各自回答): a chip whose menu opens
+   upward, with a check on the group's style. */
+/* A closed menu: its display: grid would otherwise override the hidden attribute. */
+:root[data-theme] .header-menu-list[hidden] {
+  display: none;
+}
+
+:root[data-theme] .composer-style-menu {
+  top: auto;
+  right: auto;
+  bottom: calc(100% + 6px);
+  left: 0;
+}
+
+:root[data-theme] .composer-style-menu .header-menu-item[aria-checked="false"] .menu-check {
+  visibility: hidden;
+}
+
+/* How members of a new group answer: in the forms, a select, a line about the chosen way and a
+   checkbox; in the template window's footer, one row beside the confirm button. */
+:root[data-theme] .collaboration-choice .collaboration-choice-help {
+  margin: 0;
+}
+
+:root[data-theme] .group-template-footer {
+  align-items: center;
+  gap: 16px;
+}
+
+:root[data-theme] .group-template-footer .collaboration-choice {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px 12px;
+  min-width: 0;
+}
+
+:root[data-theme] .group-template-footer .collaboration-choice select {
+  width: auto;
+}

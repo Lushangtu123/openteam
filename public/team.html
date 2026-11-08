@@ -273,13 +273,38 @@
                 </svg>
                 <span>不@也回复</span>
               </button>
-              <button id="discussion-toggle" class="composer-chip" type="button" role="switch" aria-checked="false" title="开启后，@ 两位以上成员时，他们会一个接一个发言，每人都能看到前面说了什么，也可以 @ 别人接着说">
-                <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
-                  <path d="M4.5 6.5h9a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H9l-3 2.5v-2.5H4.5" />
-                  <path d="M15.5 9.5h2a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H17v2l-2.5-2h-3" />
-                </svg>
-                <span>轮流讨论</span>
-              </button>
+              <div class="header-menu composer-style">
+                <button id="collaboration-style-toggle" class="composer-chip header-menu-trigger" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="collaboration-style-menu" title="几位成员都收到一条消息时，他们怎么回答">
+                  <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
+                    <path d="M4.5 6.5h9a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H9l-3 2.5v-2.5H4.5" />
+                    <path d="M15.5 9.5h2a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H17v2l-2.5-2h-3" />
+                  </svg>
+                  <span>互相审</span>
+                </button>
+                <div id="collaboration-style-menu" class="header-menu-list composer-style-menu" role="menu" aria-label="成员怎么回答" hidden>
+                <button class="header-menu-item" type="button" role="menuitemradio" aria-checked="false" data-collaboration-style="review">
+                  <svg class="menu-check" aria-hidden="true" viewBox="0 0 24 24" fill="none"><path d="m5.5 12.5 4 4 9-9.5" /></svg>
+                  <span class="header-menu-text">
+                    <span class="header-menu-label">互相审</span>
+                    <span class="header-menu-hint">先各自回答，再看彼此的回答、互相审阅并修正</span>
+                  </span>
+                </button>
+                <button class="header-menu-item" type="button" role="menuitemradio" aria-checked="false" data-collaboration-style="turns">
+                  <svg class="menu-check" aria-hidden="true" viewBox="0 0 24 24" fill="none"><path d="m5.5 12.5 4 4 9-9.5" /></svg>
+                  <span class="header-menu-text">
+                    <span class="header-menu-label">轮流讨论</span>
+                    <span class="header-menu-hint">一个接一个发言，每人先回应前面的人</span>
+                  </span>
+                </button>
+                <button class="header-menu-item" type="button" role="menuitemradio" aria-checked="false" data-collaboration-style="parallel">
+                  <svg class="menu-check" aria-hidden="true" viewBox="0 0 24 24" fill="none"><path d="m5.5 12.5 4 4 9-9.5" /></svg>
+                  <span class="header-menu-text">
+                    <span class="header-menu-label">各自回答</span>
+                    <span class="header-menu-hint">各答各的，不互相审阅，最快</span>
+                  </span>
+                </button>
+                </div>
+              </div>
             </div>
             <button id="voice-input" class="composer-attach composer-mic" type="button" aria-label="语音输入" data-tooltip="语音输入" aria-pressed="false" hidden>
               <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">

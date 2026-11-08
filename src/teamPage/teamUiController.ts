@@ -7,9 +7,10 @@ import {
   getBuiltinGroupTemplateCategories,
   type BuiltinGroupTemplate,
 } from '../group/builtinGroupTemplates'
-import type { ChatSite, GroupChat, GroupRole, RoomMode } from '../group/types'
+import type { ChatSite, GroupChat, GroupRole, NewChatCollaboration, RoomMode } from '../group/types'
 import { localizeCategory, localizeGroupTemplate, normalizeLanguage, translateUi, type TeamLanguage } from '../shared/i18n'
 import type { TeamPageState } from './appState'
+import { createCollaborationChoice } from './collaborationChoice'
 import { requireElement } from './domRefs'
 import type { RoleFrameState } from './iframeHost'
 
@@ -28,6 +29,8 @@ export interface TeamUiControllerDependencies {
   rolePanelEl: HTMLElement
   iframeHost: TeamUiIframeHost
   getLanguage(): TeamLanguage
+  // What a new group is offered for how its members answer: the last choice, or the default.
+  getNewChatCollaboration(): NewChatCollaboration
   getCurrentChat(): GroupChat | undefined
   getCurrentRoles(): GroupRole[]
   getSelectedLoginSite(): ChatSite
@@ -81,6 +84,15 @@ export function createTeamUiController(deps: TeamUiControllerDependencies): Team
     const groupTemplateListEl = requireElement<HTMLElement>('#group-template-list')
     const confirmGroupTemplateCreateEl = requireElement<HTMLButtonElement>('#confirm-group-template-create')
     const closeGroupTemplateModalEl = requireElement<HTMLButtonElement>('#close-group-template-modal')
+    // Chinese source text: the language pass translates it, also after a change of language.
+    const source = (zh: string) => zh
+    blankCollaboration.choice = createCollaborationChoice('new-chat', source, deps.getNewChatCollaboration())
+    templateCollaboration.choice = createCollaborationChoice('group-template', source, deps.getNewChatCollaboration())
+    deps.createChatFormEl.querySelector('#chat-create-blank .two-col')?.before(blankCollaboration.choice.element)
+    confirmGroupTemplateCreateEl.before(templateCollaboration.choice.element)
+    for (const radio of deps.createChatFormEl.querySelectorAll<HTMLInputElement>('input[name="new-chat-mode"]')) {
+      radio.addEventListener('change', syncBlankCollaboration)
+    }
 
     deps.quickCreateChatEl.addEventListener('click', () => {
       setChatCreatePopoverVisible(deps.createChatFormEl.hidden)
@@ -199,6 +211,7 @@ export function createTeamUiController(deps: TeamUiControllerDependencies): Team
         name: localizedTemplate.defaultChatName,
         mode: localizedTemplate.defaultMode,
         roles: localizedTemplate.roles,
+        ...(templateCollaboration.choice ? { collaboration: templateCollaboration.choice.value() } : {}),
         welcomeMessage: buildBuiltinGroupTemplateWelcomeMessage(localizedTemplate, language()),
       }).catch(error => deps.showError(error instanceof Error ? error.message : String(error)))
     })
@@ -209,7 +222,7 @@ export function createTeamUiController(deps: TeamUiControllerDependencies): Team
       const mode = readNewChatMode()
       deps.newChatNameEl.value = ''
       setChatCreatePopoverVisible(false)
-      deps.runCommand('GROUP_CHAT_CREATE', { name, mode, roles: [] }).catch(error => deps.showError(error instanceof Error ? error.message : String(error)))
+      deps.runCommand('GROUP_CHAT_CREATE', { name, mode, roles: [], ...(blankCollaboration.choice ? { collaboration: blankCollaboration.choice.value() } : {}) }).catch(error => deps.showError(error instanceof Error ? error.message : String(error)))
     })
 
     requireElement<HTMLButtonElement>('#restore-chat').addEventListener('click', () => {
@@ -241,6 +254,7 @@ export function createTeamUiController(deps: TeamUiControllerDependencies): Team
     selectedGroupTemplateCategory = GROUP_TEMPLATE_ALL_CATEGORY
     groupTemplateSearchQuery = ''
     searchEl.value = ''
+    templateCollaboration.choice?.reset(deps.getNewChatCollaboration())
     updateGroupTemplateConfirmButton(confirmButton)
     renderGroupTemplateCategories(categoriesEl, listEl, confirmButton)
     renderGroupTemplateList(listEl, confirmButton)
@@ -469,6 +483,9 @@ export function createTeamUiController(deps: TeamUiControllerDependencies): Team
     ].join('\n').toLowerCase()
   }
 
+  const blankCollaboration: { choice?: ReturnType<typeof createCollaborationChoice> } = {}
+  const templateCollaboration: { choice?: ReturnType<typeof createCollaborationChoice> } = {}
+
   function language(): TeamLanguage {
     return normalizeLanguage(deps.getLanguage())
   }
@@ -498,7 +515,14 @@ export function createTeamUiController(deps: TeamUiControllerDependencies): Team
     const blank = deps.createChatFormEl.querySelector<HTMLElement>('#chat-create-blank')
     if (choices) choices.hidden = true
     if (blank) blank.hidden = false
+    blankCollaboration.choice?.reset(deps.getNewChatCollaboration())
+    syncBlankCollaboration()
     deps.newChatNameEl.focus()
+  }
+
+  // Only a 协作 group has members that answer together.
+  function syncBlankCollaboration(): void {
+    if (blankCollaboration.choice) blankCollaboration.choice.element.hidden = readNewChatMode() !== 'collaborative'
   }
 
   let startNewChatImpl: (kind: NewChatKind) => void = () => undefined

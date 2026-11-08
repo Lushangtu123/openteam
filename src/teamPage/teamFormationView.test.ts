@@ -147,6 +147,8 @@ describe('team formation view', () => {
       task: '做一个记账小程序',
       members: [{ modelSource: 'site', chatSite: 'claude' }, { modelSource: 'site', chatSite: 'claude' }, { modelSource: 'site', chatSite: 'kimi' }],
       requiredPositions: ['测试', '运维'],
+      // How members answer, as last chosen (互相审 and 不@也回复 at first).
+      collaboration: { style: 'review', replyAll: true },
     }])
     await vi.waitFor(() => expect(document.querySelector('.team-setup-dialog')).toBeNull())
     // The store's current chat has a formation, so its card opens.
@@ -247,7 +249,7 @@ describe('team formation view', () => {
       ['Claude2', '产品负责人', ['和别人重复']],
     ])
     expect(document.querySelector('.team-card-note-conflict')?.textContent).toBe('「产品负责人」已经是 Claude 的了，Claude2 也想要。改 Claude2 的职位，或让它重选。')
-    expect(footerButton('确认分工，开工').disabled).toBe(true)
+    expect(footerButton('确认分工，按项目开工').disabled).toBe(true)
 
     // Only the latecomer is asked again.
     footerButton('让重复的重选').click()
@@ -257,7 +259,7 @@ describe('team formation view', () => {
     reply(store, 'a4', 'r3', 'inv3', claimReply('测试工程师'))
     view.refresh()
     expect(rowState().map(row => row.position)).toEqual(['产品负责人', '前端工程师', '测试工程师'])
-    expect(footerButton('确认分工，开工').disabled).toBe(false)
+    expect(footerButton('确认分工，按项目开工').disabled).toBe(false)
   })
 
   it('shows a local agent member\'s question on its row, since the card covers the chat', async () => {
@@ -301,7 +303,7 @@ describe('team formation view', () => {
 
     expect(document.querySelector('.team-card-note-conflict')?.textContent).toBe('「架构师」有 2 位想要：Claude、ChatGPT。改其中一位的职位，或让它们重选。')
     expect(rowState()[2]).toMatchObject({ name: 'Claude2', state: '没按格式回答，请手动填写', position: '' })
-    expect(footerButton('确认分工，开工').disabled).toBe(true)
+    expect(footerButton('确认分工，按项目开工').disabled).toBe(true)
 
     footerButton('让重复的重选').click()
     await vi.waitFor(() => expect(runCommand).toHaveBeenCalledWith('GROUP_MESSAGE_SEND', expect.objectContaining({ teamInvitation: true })))
@@ -320,10 +322,10 @@ describe('team formation view', () => {
     input('Claude2').value = '测试 工程师'
     input('Claude2').dispatchEvent(new Event('change'))
     expect(document.querySelector('.team-card-note-conflict')).toBeNull()
-    expect(footerButton('确认分工，开工').disabled).toBe(false)
+    expect(footerButton('确认分工，按项目开工').disabled).toBe(false)
   })
 
-  it('renames everyone to their position, records the persona, and sends the kickoff with personas', async () => {
+  it('renames everyone to their position, records the persona, and sends the kickoff with personas to discuss first', async () => {
     const store = makeStore()
     store.chatsById.c1.teamFormation = { ...store.chatsById.c1.teamFormation!, status: 'claiming', nextRound: 1, invitationIds: ['inv1'], rounds: [['r1', 'r2']] }
     store.chatsById.c1.roleIds = ['r1', 'r2']
@@ -333,7 +335,7 @@ describe('team formation view', () => {
     const { view, runCommand, showSuccess } = setup(store)
     view.openCard('c1')
 
-    footerButton('确认分工，开工').click()
+    footerButton('确认分工，先讨论方案').click()
     await vi.waitFor(() => expect(showSuccess).toHaveBeenCalledWith('分工已确认，开工消息已发出'))
 
     const calls = runCommand.mock.calls.map(([type, payload]) => [type, payload])
@@ -347,6 +349,25 @@ describe('team formation view', () => {
     expect(document.querySelector('#team-card-title')?.textContent).toBe('分工已确认')
     expect([...document.querySelectorAll('.team-card-row .team-card-detail')].map(detail => detail.textContent?.split('\n')[0])).toEqual(['你在这个项目中担任「产品 负责人」，这是你自己在组队时选的职位。', '你在这个项目中担任「前端工程师」，这是你自己在组队时选的职位。'])
     expect([...document.querySelectorAll('.team-card-footer button')].map(button => button.textContent)).toEqual(['按分工生成流程', '存为群聊模板', '重新分工', '关闭'])
+  })
+
+  it('starts a confirmed team as a project, with the task and who holds which position as its goal', async () => {
+    const store = makeStore()
+    store.chatsById.c1.teamFormation = { ...store.chatsById.c1.teamFormation!, status: 'claiming', nextRound: 1, invitationIds: ['inv1'], rounds: [['r1', 'r2']] }
+    store.chatsById.c1.roleIds = ['r1', 'r2']
+    addMessage(store, { id: 'inv1', type: 'user', content: '邀请', targetRoleIds: ['r1', 'r2'], status: 'pending', deliveryStatus: { r1: 'received', r2: 'received' } })
+    reply(store, 'a1', 'r1', 'inv1', claimReply('产品负责人'))
+    reply(store, 'a2', 'r2', 'inv1', claimReply('前端工程师'))
+    const { view, runCommand, showSuccess } = setup(store)
+    view.openCard('c1')
+
+    footerButton('确认分工，按项目开工').click()
+    await vi.waitFor(() => expect(showSuccess).toHaveBeenCalledWith('分工已确认，协调员正在排步骤'))
+
+    expect(runCommand.mock.calls.some(([type]) => type === 'GROUP_MESSAGE_SEND')).toBe(false)
+    const start = runCommand.mock.calls.find(([type]) => type === 'GROUP_PROJECT_START')![1]!
+    expect(start).toMatchObject({ chatId: 'c1' })
+    expect(start.goal).toBe('做一个记账小程序\n\n团队分工（请按这个分工安排任务）：\n- 产品负责人：产品负责人的工作\n- 前端工程师：前端工程师的工作')
   })
 
   it('plans a flow from the confirmed roles, saves the team, and divides the work again', async () => {
@@ -410,8 +431,8 @@ describe('team formation view', () => {
     const { view, runCommand } = setup(store)
 
     view.openCard('c1')
-    expect([...document.querySelectorAll('.team-card-footer button')].map(button => button.textContent)).toEqual(['让它们重新自荐', '开工'])
-    footerButton('开工').click()
+    expect([...document.querySelectorAll('.team-card-footer button')].map(button => button.textContent)).toEqual(['让它们重新自荐', '先讨论方案', '按项目开工'])
+    footerButton('先讨论方案').click()
     await vi.waitFor(() => expect(runCommand).toHaveBeenCalledWith('GROUP_MESSAGE_SEND', expect.objectContaining({ refreshPersona: true })))
     expect(runCommand.mock.calls[0]).toEqual(['GROUP_CHAT_UPDATE', { chatId: 'c1', patch: { teamFormation: { status: 'confirmed', confirmedAt: expect.any(Number) } } }])
     expect(String(runCommand.mock.calls[1][1]!.raw)).toContain('- 产品负责人（Claude）：需求和验收\n- 前端工程师（ChatGPT）\n')
@@ -422,7 +443,7 @@ describe('team formation view', () => {
     expect(document.querySelector('.team-setup-saved-row .team-card-name')?.textContent).toBe('记账团队')
     document.querySelector<HTMLTextAreaElement>('#team-setup-task')!.value = '新任务'
     document.querySelector<HTMLButtonElement>('.team-setup-saved-row .btn-small')!.click()
-    await vi.waitFor(() => expect(runCommand).toHaveBeenCalledWith('GROUP_TEAM_CREATE', { templateId: 'team-1', task: '新任务' }))
+    await vi.waitFor(() => expect(runCommand).toHaveBeenCalledWith('GROUP_TEAM_CREATE', { templateId: 'team-1', task: '新任务', collaboration: { style: 'review', replyAll: true } }))
   })
 
   it('shows a banner while members choose, and marks invitations', () => {

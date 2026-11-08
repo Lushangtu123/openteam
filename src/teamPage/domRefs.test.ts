@@ -49,7 +49,7 @@ describe('team page dom refs', () => {
       <input id="attach-file-input" type="file" />
       <button id="voice-input"></button>
       <button id="open-message-search"></button>
-      <div id="composer-modes"><button id="reply-all-toggle"></button><button id="discussion-toggle"></button></div>
+      <div id="composer-modes"><button id="reply-all-toggle"></button><button id="collaboration-style-toggle"></button><div id="collaboration-style-menu"></div></div>
       <header class="chat-header"><div id="workflow-menu-wrap"></div><div id="more-menu-wrap"></div><button id="open-chat-list"></button></header>
       <aside id="chat-sidebar"></aside>
       <button id="rail-chats"></button>
@@ -184,7 +184,8 @@ describe('team page dom refs', () => {
 
     expect(refs.appShellEl.id).toBe('app')
     expect(refs.replyAllToggleEl.id).toBe('reply-all-toggle')
-    expect(refs.discussionToggleEl.id).toBe('discussion-toggle')
+    expect(refs.collaborationStyleToggleEl.id).toBe('collaboration-style-toggle')
+    expect(refs.collaborationStyleMenuEl.id).toBe('collaboration-style-menu')
     expect(refs.openChatListEl.id).toBe('open-chat-list')
     expect(refs.chatSidebarEl.id).toBe('chat-sidebar')
     expect(refs.settingsUiStyleGrokEl.id).toBe('settings-ui-style-grok')

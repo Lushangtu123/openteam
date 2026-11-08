@@ -26,7 +26,7 @@ export function registerHeaderMenus(root: HTMLElement, documentRef: Document = d
   }
 
   function items(menu: HTMLElement): HTMLButtonElement[] {
-    return [...menu.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')]
+    return [...menu.querySelectorAll<HTMLButtonElement>('[role="menuitem"], [role="menuitemradio"]')]
       .filter(item => !item.hidden && documentRef.defaultView?.getComputedStyle(item).display !== 'none')
   }
 
@@ -67,7 +67,7 @@ export function registerHeaderMenus(root: HTMLElement, documentRef: Document = d
       open(pair, true)
     })
     pair.menu.addEventListener('click', event => {
-      const item = (event.target as Element | null)?.closest<HTMLButtonElement>('[role="menuitem"]')
+      const item = (event.target as Element | null)?.closest<HTMLButtonElement>('[role="menuitem"], [role="menuitemradio"]')
       if (!item) return
       close(pair)
       const proxied = item.dataset.menuProxy ? documentRef.getElementById(item.dataset.menuProxy) : null

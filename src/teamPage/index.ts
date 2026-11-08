@@ -1,3 +1,4 @@
+import { newChatCollaboration } from '../group/collaboration'
 import type { GroupChat, GroupMessage, GroupRole, OpenTeamStore, RoleTemplate } from '../group/types'
 import type { GeneratedPersonDraft } from '../group/personaGeneration'
 import { createDefaultStore } from '../group/store'
@@ -220,7 +221,8 @@ const composerModesView = createComposerModesView({
   composerFormEl: teamDomRefs.composerFormEl,
   modesEl: teamDomRefs.composerModesEl,
   replyAllToggleEl: teamDomRefs.replyAllToggleEl,
-  discussionToggleEl: teamDomRefs.discussionToggleEl,
+  styleToggleEl: teamDomRefs.collaborationStyleToggleEl,
+  styleMenuEl: teamDomRefs.collaborationStyleMenuEl,
   messageInputEl: teamDomRefs.messageInputEl as HTMLTextAreaElement,
   getLanguage: () => store.settings.language,
   getCurrentChat,
@@ -520,6 +522,7 @@ const messagesView = createMessagesView({
 const renderMessages = messagesView.renderMessages
 const teamUiController = createTeamUiController({
   state: appState,
+  getNewChatCollaboration: () => newChatCollaboration(store.settings),
   settingsButtonEl,
   settingsMenuEl,
   quickCreateChatEl,
@@ -861,6 +864,7 @@ async function boot(): Promise<void> {
   aiPagesView.registerAiPagesControls()
   registerSettingsWindow({ windowEl: settingsMenuEl, settingsButtonEl })
   registerHeaderMenus(teamDomRefs.chatHeaderEl)
+  registerHeaderMenus(teamDomRefs.composerModesEl)
   registerChatListDrawer({
     appShellEl,
     sidebarEl: teamDomRefs.chatSidebarEl,

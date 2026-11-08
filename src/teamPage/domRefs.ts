@@ -54,7 +54,8 @@ export interface TeamPageDomRefs {
   voiceInputEl: HTMLButtonElement
   composerModesEl: HTMLElement
   replyAllToggleEl: HTMLButtonElement
-  discussionToggleEl: HTMLButtonElement
+  collaborationStyleToggleEl: HTMLButtonElement
+  collaborationStyleMenuEl: HTMLElement
   workflowMenuWrapEl: HTMLElement
   moreMenuWrapEl: HTMLElement
   chatHeaderEl: HTMLElement
@@ -238,7 +239,8 @@ export function createTeamPageDomRefs(): TeamPageDomRefs {
     voiceInputEl: requireElement<HTMLButtonElement>('#voice-input'),
     composerModesEl: requireElement<HTMLElement>('#composer-modes'),
     replyAllToggleEl: requireElement<HTMLButtonElement>('#reply-all-toggle'),
-    discussionToggleEl: requireElement<HTMLButtonElement>('#discussion-toggle'),
+    collaborationStyleToggleEl: requireElement<HTMLButtonElement>('#collaboration-style-toggle'),
+    collaborationStyleMenuEl: requireElement<HTMLElement>('#collaboration-style-menu'),
     workflowMenuWrapEl: requireElement<HTMLElement>('#workflow-menu-wrap'),
     moreMenuWrapEl: requireElement<HTMLElement>('#more-menu-wrap'),
     chatHeaderEl: requireElement<HTMLElement>('.chat-header'),
