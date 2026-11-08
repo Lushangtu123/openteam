@@ -9,6 +9,7 @@ import {
   normalizeTeamTemplates,
   parseTeamClaim,
   planTeamRounds,
+  cleanPosition,
   readTeamFormation,
   resolveTeamPositions,
   splitPositions,
@@ -49,6 +50,22 @@ describe('team formation', () => {
     expect(parseTeamClaim('{"职位": "设计师", "第二选择": "设计师", "需要的职位": "设计、开发"}')).toEqual({ firstChoice: '设计师', neededPositions: ['设计', '开发'] })
     expect(parseTeamClaim('我想当产品经理。')).toBeUndefined()
     expect(parseTeamClaim('```json\n{"why": "没有职位"}\n```')).toBeUndefined()
+  })
+
+  it('reads positions as names: without the model in brackets or a description after a colon', () => {
+    const reply = '```json\n' + JSON.stringify({
+      first_choice: '技术架构与全栈开发负责人（DeepSeek）',
+      second_choice: '用户反馈与迭代建议负责人（上线后，不替代产品与测试职责）',
+      needed_positions: ['测试与质量保障负责人（Kimi）：负责测试计划、测试用例、功能验证、边界条件检查和上线质量评估。', '产品负责人：核心功能定义', '运维。'],
+    }) + '\n```'
+    expect(parseTeamClaim(reply)).toMatchObject({
+      firstChoice: '技术架构与全栈开发负责人',
+      // Not a model's name: kept.
+      secondChoice: '用户反馈与迭代建议负责人（上线后，不替代产品与测试职责）',
+      neededPositions: ['测试与质量保障负责人', '产品负责人：核心功能定义', '运维'],
+    })
+    expect(cleanPosition('产品经理与项目协调负责人（ChatGPT）')).toBe('产品经理与项目协调负责人')
+    expect(cleanPosition('Frontend engineer (Claude)')).toBe('Frontend engineer')
   })
 
   it('gives everyone their first choice when nobody overlaps', () => {

@@ -1,7 +1,7 @@
 import { roleMentionLabel, roleModelLabel, roleMentionLabelOptionsFromSettings } from './mentionParser'
 import { collectReplies, type ComparedReplyStatus } from './replyComparison'
 import { ROLE_NAME_MAX_CHARACTERS } from './roleTemplates'
-import { isChatSite } from './chatSites'
+import { chatSiteFromText, isChatSite } from './chatSites'
 import type { GroupChat, GroupMessage, GroupRole, OpenTeamLanguage, OpenTeamStore, TeamFormation, TeamTemplate, TeamTemplateMember } from './types'
 
 export const TEAM_MIN_MEMBERS = 2
@@ -191,9 +191,9 @@ export function parseTeamClaim(content: string): TeamClaim | undefined {
     const value = parseLooseJson(candidate)
     if (!value || typeof value !== 'object' || Array.isArray(value)) continue
     const record = value as Record<string, unknown>
-    const firstChoice = readText(record, ['first_choice', 'firstChoice', 'position', '第一选择', '职位'])
+    const firstChoice = cleanPosition(readText(record, ['first_choice', 'firstChoice', 'position', '第一选择', '职位']))
     if (!firstChoice) continue
-    const secondChoice = readText(record, ['second_choice', 'secondChoice', '第二选择', '备选职位'])
+    const secondChoice = cleanPosition(readText(record, ['second_choice', 'secondChoice', '第二选择', '备选职位']))
     return {
       firstChoice,
       ...(secondChoice && !samePosition(secondChoice, firstChoice) ? { secondChoice } : {}),
@@ -201,10 +201,25 @@ export function parseTeamClaim(content: string): TeamClaim | undefined {
       ...optional('responsibility', readText(record, ['responsibility', 'responsibilities', '负责'])),
       ...optional('notResponsible', readText(record, ['not_responsible', 'notResponsible', '不负责'])),
       ...optional('firstDeliverable', readText(record, ['first_deliverable', 'firstDeliverable', '第一份交付', '先交付'])),
-      neededPositions: uniquePositions(readList(record, ['needed_positions', 'neededPositions', '需要的职位'])),
+      neededPositions: uniquePositions(readList(record, ['needed_positions', 'neededPositions', '需要的职位']).map(cleanPosition)),
     }
   }
   return undefined
+}
+
+// A position as a name, without what models add around it: their own name in brackets
+// ("产品经理（ChatGPT）") and a description after a colon ("测试负责人（Kimi）：负责测试计划……"). A short
+// focus after a colon stays ("产品负责人：核心功能定义").
+export function cleanPosition(value: string | undefined): string {
+  let text = (value ?? '').trim()
+  const colon = text.search(/[：:]/)
+  if (colon > 0) {
+    const rest = text.slice(colon + 1).trim()
+    if (/^(负责|responsible)/i.test(rest) || rest.length > 20) text = text.slice(0, colon)
+  }
+  text = text.trim().replace(/[。．.；;，,、]+$/, '').trim()
+  text = text.replace(/\s*[（(]([^（）()]{1,24})[）)]$/, (bracket, inner: string) => chatSiteFromText(inner) ? '' : bracket)
+  return text.trim()
 }
 
 function jsonCandidates(content: string): string[] {
