@@ -32,6 +32,9 @@ export function buildCliRequest(argv) {
       name: requireOption(options, 'name'),
       description: options.description,
       mode: options.mode,
+      // How members answer a message to several of them (协作 groups): review (answer, then review
+      // each other), turns or parallel; --reply-all makes a message without @ reach everyone.
+      ...(typeof options.style === 'string' ? { collaboration: { style: options.style, replyAll: options['reply-all'] === true } } : {}),
     })
     if (subcommand === 'activate') return command('chat.activate', { chatId: positional(rest, 0) ?? requireOption(options, 'chat') })
     if (subcommand === 'initialize') return command('chat.initialize', {
@@ -440,6 +443,7 @@ export function help() {
       'openteamcli doctor',
       'openteamcli daemon start|status|stop|restart|logs',
       'openteamcli chat list|get|create|activate|initialize',
+      'openteamcli chat create --name <name> [--mode collaborative|independent] [--style review|turns|parallel] [--reply-all]',
       'openteamcli role batch-add --chat <chatId> --file roles.json',
       'openteamcli task post|wait|read',
       'openteamcli run create-and-post --file task.json --wait',

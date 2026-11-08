@@ -24,6 +24,10 @@ describe('openteamcli command builder', () => {
       kind: 'command',
       command: { action: 'chat.create', payload: { name: '评审群', mode: 'independent' } },
     })
+    expect(buildCliRequest(['chat', 'create', '--name', '评审群', '--mode', 'collaborative', '--style', 'review', '--reply-all'])).toMatchObject({
+      kind: 'command',
+      command: { action: 'chat.create', payload: { name: '评审群', mode: 'collaborative', collaboration: { style: 'review', replyAll: true } } },
+    })
     expect(buildCliRequest(['role', 'batch-add', '--chat', 'chat-1', '--file', 'roles.json'])).toMatchObject({
       kind: 'file-command',
       action: 'roles.batchAdd',
@@ -64,6 +68,7 @@ describe('openteamcli command builder', () => {
         'openteamcli doctor',
         'openteamcli daemon start|status|stop|restart|logs',
         'openteamcli chat list|get|create|activate|initialize',
+        'openteamcli chat create --name <name> [--mode collaborative|independent] [--style review|turns|parallel] [--reply-all]',
         'openteamcli role batch-add --chat <chatId> --file roles.json',
         'openteamcli task post|wait|read',
         'openteamcli run create-and-post --file task.json --wait',

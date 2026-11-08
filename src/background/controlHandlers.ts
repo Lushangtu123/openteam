@@ -1,6 +1,7 @@
 import { OPENTEAM_CONTROL_CAPABILITIES, controlFailure, controlSuccess, isRecord, type ControlHttpCommand, type ControlHttpResult } from '../shared/localControlProtocol'
 import type { GroupChat, GroupMessage, GroupRole, OpenTeamStore, RoomMode, RuntimeFrameBinding } from '../group/types'
 import type { RuntimeMessage } from './runtimeClient'
+import { readNewChatCollaboration } from '../group/collaboration'
 
 export interface ControlActionExecutorDependencies {
   loadStore(): Promise<OpenTeamStore>
@@ -99,11 +100,14 @@ async function executeEnabledCommand(command: ControlHttpCommand, initialStore: 
 
 async function createChat(payload: unknown, deps: ControlActionExecutorDependencies): Promise<unknown> {
   const input = requireRecord(payload, '缺少群聊参数')
+  // How its members answer a message to several of them: { style: 'review' | 'turns' | 'parallel', replyAll }.
+  const collaboration = readNewChatCollaboration(input.collaboration)
   const response = await routeOk(deps, {
     type: 'GROUP_CHAT_CREATE',
     name: readString(input.name) ?? '新群聊',
     description: readString(input.description),
     mode: readRoomMode(input.mode),
+    ...(collaboration ? { collaboration } : {}),
   })
   return {
     chat: response.chat,
