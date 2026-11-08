@@ -343,8 +343,12 @@ export interface ProjectRun {
   question?: string
   stopReason?: 'user' | 'budget' | 'failed' | 'unavailable'
   stopDetail?: string
-  // The coordinator's request out (plan, check or final write-up).
+  // The coordinator's request out (plan, check or final write-up); a check may be another member's.
   coordinatorRequestId?: string
+  // The check out: who checks and which tasks' results. Nobody checks their own work: the
+  // coordinator checks the others' tasks, and another member checks the coordinator's.
+  reviewerRoleId?: string
+  reviewTaskIds?: string[]
   finalMessageId?: string
   createdAt: number
   updatedAt: number

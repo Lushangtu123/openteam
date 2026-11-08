@@ -1611,9 +1611,10 @@ describe('background message handlers', () => {
 
     const { createMessageHandlers } = await import('./messageHandlers')
     let reviews = 0
+    let t3Checks = 0
     const complete = vi.fn(async (input: { prompt: string }): Promise<{ content: string }> => {
       const prompt = input.prompt
-      if (prompt.includes('拆成 2–8 个具体任务')) {
+      if (prompt.includes('请用完成目标所需的最少任务')) {
         return { content: '```json\n' + JSON.stringify({ tasks: [
           { id: 't1', title: '技术方案', owner: '工程师', dependsOn: [], detail: '写技术方案', doneWhen: '有架构说明' },
           { id: 't2', title: '界面草图', owner: '设计师', dependsOn: [], detail: '画界面', doneWhen: '有三个页面' },
@@ -1627,13 +1628,12 @@ describe('background message handlers', () => {
         }
       }
       if (prompt.includes('任务和结果：')) {
+        // Passes what the check lists; t3 is sent back once, then passes.
         reviews += 1
-        // t1 and t2 are checked before t3 starts; t3 is sent back once, then passes.
-        return { content: '```json\n' + JSON.stringify(reviews === 1
-          ? { decisions: [{ task: 't1', verdict: 'pass' }, { task: 't2', verdict: 'pass' }], newTasks: [], finish: false }
-          : reviews === 2
-            ? { decisions: [{ task: 't3', verdict: 'redo', note: '加上风险' }], newTasks: [], finish: false }
-            : { decisions: [{ task: 't3', verdict: 'pass' }], newTasks: [], finish: true }) + '\n```' }
+        const listed = prompt.match(/这些新结果：([^。]+)。/)?.[1].split('、') ?? []
+        if (listed.includes('t3')) t3Checks += 1
+        const decisions = listed.map(task => task === 't3' && t3Checks === 1 ? { task, verdict: 'redo', note: '加上风险' } : { task, verdict: 'pass', note: '对照完成标准检查过' })
+        return { content: '```json\n' + JSON.stringify({ decisions, newTasks: [], finish: listed.includes('t3') && t3Checks > 1 }) + '\n```' }
       }
       if (prompt.includes('整合成一份完整的最终交付')) return { content: '# 最终方案\n全部内容' }
       return { content: '?' }
@@ -1672,21 +1672,28 @@ describe('background message handlers', () => {
     await vi.waitFor(() => expect(project().status).toBe('done'))
 
     const prompts = complete.mock.calls.map(([input]) => input.prompt)
-    const order = prompts.map(prompt => prompt.match(/你的任务（(t\d)/)?.[1] ?? (prompt.includes('任务和结果：') ? 'review' : prompt.includes('最终交付') ? 'final' : 'plan'))
+    const order = prompts.map(prompt => prompt.match(/你的任务（(t\d)/)?.[1] ?? (prompt.includes('任务和结果：') ? 'review' : prompt.includes('请用完成目标所需的最少任务') ? 'plan' : prompt.includes('最终交付') ? 'final' : '?'))
     expect(order.slice(0, 3)).toEqual(['plan', 't1', 't2'])
-    // t3 builds on t1 and t2, so it starts only once the coordinator has checked them.
-    expect(order.slice(3)).toEqual(['review', 't3', 'review', 't3', 'review', 'final'])
-    const firstT3 = prompts[4]
+    // t3 builds on t1 and t2, so it starts only once both are checked: the coordinator (工程师) checks
+    // 设计师's t2, and 设计师 checks the coordinator's own t1.
+    expect(order.slice(3)).toEqual(['review', 'review', 't3', 'review', 't3', 'review', 'final'])
+    expect(prompts[3]).toContain('你是「工程师」，这个项目的协调员。')
+    expect(prompts[3]).toContain('这些新结果：t2。')
+    expect(prompts[3]).toContain('至少指出一个具体问题或可以改进的地方')
+    expect(prompts[4]).toContain('你是「设计师」。下面这些任务是协调员「工程师」自己做的，由你来检查')
+    expect(prompts[4]).toContain('这些新结果：t1。')
+    expect(prompts[4]).not.toContain('newTasks')
+    const firstT3 = prompts[5]
     expect(firstT3).toContain('【t1 · 技术方案 · 工程师】\nt1 成果')
     expect(firstT3).toContain('【t2 · 界面草图 · 设计师】\nt2 成果')
-    expect(prompts[6]).toContain('上一次结果的检查意见：\n加上风险')
-    expect(prompts[7]).toContain('结果：\nt1 摘要')
-    expect(prompts[7]).toContain('t3 改好的成果')
+    expect(prompts[7]).toContain('上一次结果的检查意见：\n加上风险')
+    expect(prompts[8]).toContain('结果：\nt1 摘要')
+    expect(prompts[8]).toContain('t3 改好的成果')
 
     expect(project().tasks.map(task => [task.id, task.status, task.attempts, task.summary])).toEqual([
       ['t1', 'done', 1, 't1 摘要'], ['t2', 'done', 1, 't2 摘要'], ['t3', 'done', 2, 't3 摘要（含风险）'],
     ])
-    expect(project().steps).toBe(9)
+    expect(project().steps).toBe(10)
     expect(currentStore.messagesById[project().finalMessageId!]).toMatchObject({ type: 'assistant', content: '# 最终方案\n全部内容' })
     const notices = Object.values(currentStore.messagesById).filter(message => message.projectRequest).sort((a, b) => a.seq - b.seq).map(message => message.content)
     expect(notices).toContain('项目 · 任务 t3「上线清单」交给「设计师」（第 2 次）')
@@ -1711,7 +1718,7 @@ describe('background message handlers', () => {
     const { createMessageHandlers } = await import('./messageHandlers')
     const complete = vi.fn(async (input: { prompt: string }): Promise<{ content: string }> => {
       const prompt = input.prompt
-      if (prompt.includes('拆成 2–8 个具体任务')) {
+      if (prompt.includes('请用完成目标所需的最少任务')) {
         return { content: '{"tasks":[{"id":"t1","title":"预算表","owner":"设计师","detail":"列预算","doneWhen":"有总数"},{"id":"t2","title":"排期","owner":"工程师","detail":"排期","doneWhen":"有日期"}]}' }
       }
       if (prompt.includes('你的任务（')) return { content: '成果\n【状态】完成\n【摘要】做好了' }

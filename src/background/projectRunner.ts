@@ -71,11 +71,12 @@ export function createProjectRunner(ctx: ProjectRunnerContext) {
     return role
   }
 
-  // Inside a mutation: asks the coordinator for a plan, a check or the final write-up.
-  function askCoordinator(store: OpenTeamStore, chat: GroupChat, project: ProjectRun, kind: Exclude<ProjectRequestKind, 'task'>, timestamp: number): ProjectRequestSent[] {
-    const coordinator = coordinatorOf(store, project)
+  // Inside a mutation: asks the coordinator for a plan, a check or the final write-up (a check of the
+  // coordinator's own work goes to another member: see askReview).
+  function askCoordinator(store: OpenTeamStore, chat: GroupChat, project: ProjectRun, kind: Exclude<ProjectRequestKind, 'task'>, timestamp: number, asked: GroupRole = coordinatorOf(store, project)): ProjectRequestSent[] {
+    const coordinator = asked
     if (!ctx.canTakeTurn(store, chat, coordinator, timestamp)) {
-      stop(project, 'unavailable', `协调员「${coordinator.name}」现在不可用`, timestamp)
+      stop(project, 'unavailable', `${coordinator.id === project.coordinatorRoleId ? '协调员' : '检查人'}「${coordinator.name}」现在不可用`, timestamp)
       return []
     }
     project.steps += 1
@@ -89,6 +90,25 @@ export function createProjectRunner(ctx: ProjectRunnerContext) {
     project.coordinatorRequestId = sent.request.id
     project.updatedAt = timestamp
     return [sent]
+  }
+
+  // A check of the new results, never by their author. The coordinator checks the tasks others did;
+  // when only its own are new, another member checks them. A retry asks the same member again.
+  function askReview(store: OpenTeamStore, chat: GroupChat, project: ProjectRun, timestamp: number, retry = false): ProjectRequestSent[] {
+    const coordinator = coordinatorOf(store, project)
+    const retried = retry && project.reviewerRoleId ? store.rolesById[project.reviewerRoleId] : undefined
+    if (retried) return askCoordinator(store, chat, project, 'review', timestamp, retried)
+    const fresh = project.tasks.filter(task => task.status !== 'todo' && !task.checked)
+    const others = fresh.filter(task => task.ownerRoleId !== coordinator.id)
+    let reviewer = coordinator
+    let batch = others
+    if (others.length === 0 && fresh.length > 0) {
+      batch = fresh
+      reviewer = projectMembers(store, chat).find(role => role.id !== coordinator.id && ctx.canTakeTurn(store, chat, role, timestamp)) ?? coordinator
+    }
+    project.reviewerRoleId = reviewer.id
+    project.reviewTaskIds = batch.map(task => task.id)
+    return askCoordinator(store, chat, project, 'review', timestamp, reviewer)
   }
 
   function stop(project: ProjectRun, reason: NonNullable<ProjectRun['stopReason']>, detail: string | undefined, timestamp: number): void {
@@ -147,7 +167,7 @@ export function createProjectRunner(ctx: ProjectRunnerContext) {
       return []
     }
     project.reviewAttempts = 0
-    return askCoordinator(store, chat, project, 'review', timestamp)
+    return askReview(store, chat, project, timestamp)
   }
 
   function latestReply(store: OpenTeamStore, chat: GroupChat, requestId: string): GroupMessage | undefined {
@@ -218,16 +238,24 @@ export function createProjectRunner(ctx: ProjectRunnerContext) {
       }
 
       if (kind === 'review') {
-        const outcome = reply ? parseReview(reply.content, project, members, coordinator) : undefined
+        let outcome = reply ? parseReview(reply.content, project, members, coordinator) : undefined
         if (!outcome) {
-          if (project.reviewAttempts < 2 && budgetLeft(project)) return askCoordinator(store, chat, project, 'review', timestamp)
+          if (project.reviewAttempts < 2 && budgetLeft(project)) return askReview(store, chat, project, timestamp, true)
           stop(project, 'failed', '协调员没有给出可用的检查结果', timestamp)
           milestone = project.goalMessageId
           return []
         }
+        // Verdicts count only for the tasks this check was about; only the coordinator adds tasks,
+        // asks the user or finishes.
+        const batch = new Set(project.reviewTaskIds ?? [])
+        const inBatch = (task: ProjectTask) => batch.size === 0 || batch.has(task.id)
+        const byCoordinator = (project.reviewerRoleId ?? project.coordinatorRoleId) === project.coordinatorRoleId
+        if (!byCoordinator) outcome = { decisions: outcome.decisions, newTasks: [], finish: false }
+        delete project.reviewerRoleId
+        delete project.reviewTaskIds
         for (const decision of outcome.decisions) {
           const task = project.tasks.find(candidate => candidate.id === decision.taskId)
-          if (!task || task.status === 'doing') continue
+          if (!task || task.status === 'doing' || !inBatch(task)) continue
           // A task not started yet has no result to pass or redo; it can only get a new owner.
           if (task.status === 'todo') {
             if (decision.verdict === 'reassign' && decision.ownerRoleId) task.ownerRoleId = decision.ownerRoleId
@@ -247,9 +275,9 @@ export function createProjectRunner(ctx: ProjectRunnerContext) {
           }
           task.checked = true
         }
-        // Results the coordinator saw without a verdict count as accepted.
+        // Results checked here without a verdict count as accepted.
         for (const task of project.tasks) {
-          if (!task.checked && (task.status === 'done' || task.status === 'blocked' || task.status === 'failed')) task.checked = true
+          if (inBatch(task) && !task.checked && (task.status === 'done' || task.status === 'blocked' || task.status === 'failed')) task.checked = true
         }
         project.tasks.push(...outcome.newTasks.map(newTask))
         if (outcome.question) {
@@ -261,7 +289,9 @@ export function createProjectRunner(ctx: ProjectRunnerContext) {
         }
         delete project.question
         const pending = project.tasks.some(task => task.status === 'todo' || task.status === 'redo' || task.status === 'doing')
-        if (!pending) {
+        // Results still to be checked (the coordinator's own, by another member) come first.
+        const unchecked = project.tasks.some(task => task.status !== 'todo' && !task.checked)
+        if (!pending && !unchecked) {
           // Nothing is left to do: write it up if everything passed or the coordinator says it is
           // enough (failed tasks are then left out); otherwise nothing more can happen.
           if (outcome.finish || allTasksDone(project)) {
@@ -434,7 +464,7 @@ export function createProjectRunner(ctx: ProjectRunnerContext) {
       // What the user added is for the coordinator: it checks again before more work goes out.
       project.reviewAttempts = 0
       if (tasksInFlight(project).length > 0) return []
-      return askCoordinator(store, chat, project, 'review', timestamp)
+      return askReview(store, chat, project, timestamp)
     })
   }
 

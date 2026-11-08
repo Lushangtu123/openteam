@@ -246,8 +246,8 @@ function buildPlanPrompt(input: ProjectPromptInput): string {
     `${en ? 'Team members (tasks can go only to them, you included):' : '团队成员（任务只能分给他们，也可以分给你自己）：'}\n${memberLines(input, en)}`,
     notesBlock(input, en),
     en
-      ? 'Break the goal into 2–8 concrete tasks. Each task must be something one member can finish alone in one reply: say what to do, what to deliver, and how to tell it is done. Give each task to the member it suits best and spread the work. Mark order with dependsOn; tasks without dependencies run at the same time.'
-      : '请把目标拆成 2–8 个具体任务。每个任务要能由一位成员在一次回复里独立完成：写清楚做什么、交付什么、怎样算完成。按成员擅长的方向分配，尽量分摊。有先后关系的用 dependsOn 标出；没有依赖的任务会同时进行。',
+      ? 'Break the goal into as few concrete tasks as it needs: 2–3 for a small goal (a short document, a list, one answer), at most 8 for a large one. Each task must be something one member can finish alone in one reply: say what to do, what to deliver, and how to tell it is done. Do not split what one member can do at once, and add no tasks only to check, review or combine the others\' results: every result is checked once it is done, and you write up the final deliverable at the end. Give each task to the member it suits best and spread the work. Mark order with dependsOn; tasks without dependencies run at the same time.'
+      : '请用完成目标所需的最少任务：小目标（一份短文档、一个清单、一个回答）2–3 个就够，大项目最多 8 个。每个任务要能由一位成员在一次回复里独立完成：写清楚做什么、交付什么、怎样算完成。一位成员一次能做完的事不要拆开；不要单独安排「检查」「审核」「整合成果」这类任务：每个结果完成后都会有人检查，最后由你整理最终交付。按成员擅长的方向分配，尽量分摊。有先后关系的用 dependsOn 标出；没有依赖的任务会同时进行。',
     `${en ? 'Reply with only one JSON code block, in this form:' : '只回复一个 JSON 代码块，格式如下：'}\n\`\`\`json\n{"tasks":[${TASK_JSON_EXAMPLE}]}\n\`\`\``,
     en ? 'Use the member names exactly as listed (without the model in brackets).' : 'owner 写成员的名字（不带括号里的模型）。',
   ].filter(Boolean).join('\n\n')
@@ -303,19 +303,48 @@ function statusLabel(task: ProjectTask, en: boolean): string {
 
 function buildReviewPrompt(input: ProjectPromptInput): string {
   const en = normalizeLanguage(input.language) === 'en'
-  // New results are quoted in full (as far as they fit); results already checked, by their summary.
-  const fresh = input.project.tasks.filter(task => task.status !== 'todo' && !task.checked)
+  const project = input.project
+  // This check's tasks: the new results it is about (all of them when the check names none).
+  const batch = new Set(project.reviewTaskIds ?? [])
+  const fresh = project.tasks.filter(task => task.status !== 'todo' && !task.checked && (batch.size === 0 || batch.has(task.id)))
   const share = Math.floor(PROJECT_MAX_CONTEXT_CHARS / Math.max(1, fresh.length))
-  const taskLines = input.project.tasks.map(task => {
+  const coordinator = input.store.rolesById[project.coordinatorRoleId]
+  const byCoordinator = input.role.id === project.coordinatorRoleId
+  const taskLines = project.tasks.map(task => {
     const owner = input.store.rolesById[task.ownerRoleId]?.name ?? ''
     const head = en
       ? `[${task.id} · ${task.title} · owner: ${owner} · ${statusLabel(task, en)}]`
       : `【${task.id} · ${task.title} · 负责人：${owner} · ${statusLabel(task, en)}】`
     const parts = [head, task.doneWhen ? `${en ? 'Done when:' : '完成标准：'}${task.doneWhen}` : '']
     if (task.status === 'blocked' && task.note) parts.push(`${en ? 'Blocked:' : '受阻原因：'}${task.note}`)
-    if (task.resultMessageId) parts.push(`${en ? 'Result:' : '结果：'}\n${task.checked ? task.summary ?? '' : resultText(input.store, task, share, en)}`)
+    if (task.resultMessageId) {
+      // New results in this check in full (as far as they fit), checked ones by their summary, and
+      // others wait for their own check.
+      const result = fresh.includes(task)
+        ? resultText(input.store, task, share, en)
+        : task.checked ? task.summary ?? '' : en ? '(checked separately)' : '（另行检查）'
+      parts.push(`${en ? 'Result:' : '结果：'}\n${result}`)
+    }
     return parts.filter(Boolean).join('\n')
   })
+  const toCheck = fresh.map(task => task.id).join(en ? ', ' : '、')
+  const howToCheck = en
+    ? `Check ${toCheck ? `the new results (${toCheck})` : 'where the tasks stand'} against their "done when", item by item. For each one, say in note what you checked and name at least one concrete problem or improvement; if there truly is none, say why it meets the standard. If any part of "done when" is not met, the verdict is "redo", with what to fix.`
+    : `请对照完成标准逐条检查${toCheck ? `这些新结果：${toCheck}` : '各任务的情况'}。每个结果的 note 里写清你检查了什么，并至少指出一个具体问题或可以改进的地方；真的没有问题，就写明为什么达标。只要有一条完成标准没做到，verdict 就是 "redo"，并写清要改什么。`
+  if (!byCoordinator) {
+    const example = `{"decisions":[{"task":"${fresh[0]?.id ?? 't1'}","verdict":"pass","note":"…"}]}`
+    return [
+      en
+        ? `You are "${input.role.name}". The coordinator${coordinator ? ` "${coordinator.name}"` : ''} did these tasks itself, so you check them instead: nobody checks their own work.`
+        : `你是「${input.role.name}」。下面这些任务是协调员${coordinator ? `「${coordinator.name}」` : ''}自己做的，由你来检查：谁都不检查自己的成果。`,
+      goalBlock(input, en),
+      `${en ? 'Tasks and results:' : '任务和结果：'}\n\n${taskLines.join('\n\n')}`,
+      notesBlock(input, en),
+      howToCheck,
+      en ? 'Give a verdict for these tasks only: "pass", or "redo" with what to fix in note.' : '只给这些任务结论："pass"（通过）或 "redo"（重做，在 note 里写清要改什么）。',
+      `${en ? 'Reply with only one JSON code block, in this form:' : '只回复一个 JSON 代码块，格式如下：'}\n\`\`\`json\n${example}\n\`\`\``,
+    ].filter(Boolean).join('\n\n')
+  }
   const example = `{"decisions":[{"task":"t1","verdict":"pass","note":"…"}],"newTasks":[],"finish":false}`
   return [
     en ? `You are "${input.role.name}", the coordinator of this project.` : `你是「${input.role.name}」，这个项目的协调员。`,
@@ -323,9 +352,10 @@ function buildReviewPrompt(input: ProjectPromptInput): string {
     `${en ? 'Team members:' : '团队成员：'}\n${memberLines(input, en)}`,
     `${en ? 'Tasks and results:' : '任务和结果：'}\n\n${taskLines.join('\n\n')}`,
     notesBlock(input, en),
+    howToCheck,
     en
-      ? 'Check each new result against its "done when" and decide what happens next. For each checked task give a verdict: "pass", "redo" (with what to fix in note) or "reassign" (with the new owner). Blocked or failed tasks need a decision too. Add newTasks only if the goal cannot be reached without them. Ask a question only when the user must decide something. Set finish to true only when every task has passed and the goal is reached. Tasks not started yet begin once the tasks they depend on have passed: give them no verdict unless they need a new owner.'
-      : '请检查每个新结果是否达到完成标准，并决定下一步。对每个检查的任务给出 verdict："pass"（通过）、"redo"（重做，在 note 里写清要改什么）或 "reassign"（换人，写上新的 owner）。受阻或失败的任务也要给出决定。只有不加任务就无法完成目标时才写 newTasks。只有需要用户拍板时才写 question。只有所有任务都通过、目标已经达成时，finish 才为 true。还没开始的任务会在它依赖的任务通过检查后开始：不用给它们结论，除非要换负责人。',
+      ? 'Then decide what happens next. For each checked task give a verdict: "pass", "redo" (with what to fix in note) or "reassign" (with the new owner). Blocked or failed tasks need a decision too. Add newTasks only if the goal cannot be reached without them. Ask a question only when the user must decide something. Set finish to true only when every task has passed and the goal is reached. Tasks not started yet begin once the tasks they depend on have passed: give them no verdict unless they need a new owner.'
+      : '然后决定下一步。对每个检查的任务给出 verdict："pass"（通过）、"redo"（重做，在 note 里写清要改什么）或 "reassign"（换人，写上新的 owner）。受阻或失败的任务也要给出决定。只有不加任务就无法完成目标时才写 newTasks。只有需要用户拍板时才写 question。只有所有任务都通过、目标已经达成时，finish 才为 true。还没开始的任务会在它依赖的任务通过检查后开始：不用给它们结论，除非要换负责人。',
     `${en ? 'Reply with only one JSON code block, in this form:' : '只回复一个 JSON 代码块，格式如下：'}\n\`\`\`json\n${example}\n\`\`\``,
     en ? `New tasks use the same form as in the plan: ${TASK_JSON_EXAMPLE}` : `newTasks 里每个任务的格式和计划里一样：${TASK_JSON_EXAMPLE}`,
   ].filter(Boolean).join('\n\n')
