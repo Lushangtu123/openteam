@@ -477,6 +477,31 @@ describe('background group chat experience handlers', () => {
     expect(promptCalls[1][1].content).not.toContain('只需要首轮发送的人设')
   })
 
+  it("does not take OpenTeam's own prompt, read back from the page, as a member's reply", async () => {
+    const store = makeStore()
+    store.currentChatId = 'chat-1'
+    store.chatsById['chat-1'] = makeChat('chat-1', ['role-1'])
+    store.chatOrder = ['chat-1']
+    store.rolesById['role-1'] = makeRole('chat-1', 'role-1', '工程师')
+    const harness = await setupBackground(store)
+
+    await harness.invoke({ type: 'TEAM_FRAME_ROLE_READY', chatId: 'chat-1', roleId: 'role-1', hostTabId: 900 }, { tab: { id: 101 } as chrome.tabs.Tab, frameId: 7, url: 'https://gemini.google.com/' })
+    const sent = await harness.invoke({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@all 选哪个方案' }) as { ok: boolean; message: { id: string } }
+    await harness.invoke({ type: 'TEAM_SEND_ACK', chatId: 'chat-1', roleId: 'role-1', messageId: sent.message.id })
+    // What the page gave back is the prompt the member was sent, not its answer.
+    const prompt = harness.tabsSendMessage.mock.calls.find(call => call[1]?.type === 'TEAM_SEND_PROMPT')![1].content as string
+    const response = await harness.invoke({ type: 'TEAM_ROLE_REPLY', chatId: 'chat-1', roleId: 'role-1', messageId: sent.message.id, content: prompt }) as { ok: boolean; ignored?: boolean; store: OpenTeamStore }
+
+    expect(response.ignored).toBe(true)
+    const stored = await harness.getStore()
+    const replies = Object.values(stored.messagesById).filter(message => message.type === 'assistant')
+    expect(replies).toHaveLength(1)
+    expect(replies[0]).toMatchObject({ status: 'error', roleId: 'role-1', sourceMessageId: sent.message.id })
+    expect(replies[0].content).toContain('没有读到它真正的回复（读到的是 OpenTeam 发给它的提示词）')
+    expect(stored.messagesById[sent.message.id].deliveryStatus).toEqual({ 'role-1': 'error' })
+    expect(stored.rolesById['role-1'].status).toBe('ready')
+  })
+
   it('includes persona on the first real user message after a template welcome message', async () => {
     const store = makeStore()
     store.currentChatId = 'chat-1'

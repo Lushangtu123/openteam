@@ -3,6 +3,7 @@ import { extractSupportedConversationId, getDefaultChatSiteUrlForRole, normalize
 import { readMessageUploads, type MessageUpload } from '../group/messageUploads'
 import { hasRoundSummary, isOpenTeamRequest, pickSummarizer, readSummarizableRound, roundSummaryRequestText } from '../group/roundSummary'
 import { crossReviewRequestText, wantsCrossReview } from '../group/collaboration'
+import { misreadReplyReason } from '../group/misreadReply'
 import { isProjectActive } from '../group/project'
 import { createProjectRunner } from './projectRunner'
 import { chooseNextSpeaker, discussionMaxTurns, discussionTranscript, discussionTurnRequestText, DISCUSSION_MAX_FAILED_TURNS, isDiscussionRunning, startsDiscussion, turnCountsOf } from '../group/discussion'
@@ -1177,7 +1178,7 @@ export function createMessageHandlers(baseDeps: MessageHandlersDependencies): Ba
       : undefined
     deps.log.info('role-reply:received', { ...identity, promptMessageId, replyAttemptId, contentLength: content.length, imageCount: images.length, senderUrl: sender.url })
 
-    let mutation: Awaited<ReturnType<typeof mutateStore<{ ignored: true; reason: string; roleId: string; promptMessageId: string | undefined } | { ignored: false; reply: GroupMessage }>>>
+    let mutation: Awaited<ReturnType<typeof mutateStore<{ ignored: true; reason: string; roleId: string; promptMessageId: string | undefined; misread?: string } | { ignored: false; reply: GroupMessage }>>>
     try {
       mutation = await mutateStore(store => {
         const chat = requireChat(store, identity.chatId)
@@ -1185,6 +1186,28 @@ export function createMessageHandlers(baseDeps: MessageHandlersDependencies): Ba
         const staleReason = staleReplyReason(store, chat, role, promptMessageId, replyAttemptId)
         if (staleReason) {
           return { ignored: true as const, reason: staleReason, roleId: role.id, promptMessageId }
+        }
+
+        // Read from the wrong place on the page: not taken as the reply, which fails instead, so it
+        // can be synced again.
+        const previousReply = [...chat.messageIds].reverse().map(id => store.messagesById[id]).find(item => item?.type === 'assistant' && item.roleId === role.id && item.status === 'received')
+        const misread = promptMessageId && images.length === 0 ? misreadReplyReason(content, previousReply?.content) : undefined
+        if (misread && promptMessageId) {
+          const reason = `没有读到它真正的回复（${misread}），可以点「重新同步完整回复」再读一次`
+          upsertFailedAssistantAfterPrompt(store, chat, role, promptMessageId, reason, timestamp, deps.newId)
+          const userMessage = store.messagesById[promptMessageId]
+          if (userMessage?.deliveryStatus?.[role.id]) {
+            userMessage.deliveryStatus[role.id] = 'error'
+            updateUserMessageDeliveryStatus(userMessage)
+          }
+          role.status = 'ready'
+          role.updatedAt = timestamp
+          delete role.liveReply
+          if (role.lastPromptMessageId === promptMessageId) delete role.lastPromptMessageId
+          delete role.replyAttemptId
+          chat.status = deps.getChatStatusFromRoles(store, chat)
+          chat.updatedAt = timestamp
+          return { ignored: true as const, reason, roleId: role.id, promptMessageId, misread }
         }
 
         updateConversation(role, readOptionalString(message.conversationUrl), readOptionalString(message.conversationId))
@@ -1234,6 +1257,13 @@ export function createMessageHandlers(baseDeps: MessageHandlersDependencies): Ba
 
     if (result.ignored) {
       await deleteReadyAttachmentsBestEffort(deps, attachments, 'role-reply:attachment-cleanup-failed')
+      if (result.misread && promptMessageId) {
+        deps.log.warn('role-reply:misread', { ...identity, promptMessageId, misread: result.misread, contentLength: content.length })
+        await deps.broadcastStoreUpdated(store)
+        reportPromptSettled(deps, store, identity.chatId, promptMessageId)
+        await deps.promptDeliveryLimiter?.complete(identity.chatId, promptMessageId, identity.roleId)
+        return { ok: true, ignored: true, reason: result.reason, store }
+      }
       deps.log.warn('role-reply:ignored-stale', { ...identity, promptMessageId: result.promptMessageId, reason: result.reason })
       return { ok: true, ignored: true, reason: result.reason, store }
     }
