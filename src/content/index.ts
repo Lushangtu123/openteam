@@ -14,6 +14,7 @@ import { getActiveChatSiteAdapter } from './sites'
 import type { SiteStatusInfo } from './sites/types'
 import { createSiteProblemTracker } from './siteProblem'
 import { chatSiteForHostname, chatSiteLabel } from '../group/chatSites'
+import { signalFrameInput } from '../shared/frameInput'
 
 const OPEN_TEAM_LOADED_KEY = '__OPENTEAM_LOADED__'
 
@@ -313,8 +314,7 @@ function handleSendPromptMessage(message: Extract<BackgroundToRoleMessage, { typ
       log.info('message:send-prompt:delay-before-input', { messageId: message.messageId, delayMs: PROMPT_INPUT_DELAY_MS })
       return waitBeforePromptInput()
     })
-    .then(() => attachPromptFiles(message.files))
-    .then(() => fillAndSend(message.content, message.autoSend !== false))
+    .then(() => whileTypingPrompt(() => attachPromptFiles(message.files).then(() => fillAndSend(message.content, message.autoSend !== false))))
     .then(() => {
       conversationMonitor?.reportConversationUpdate()
       if (promptChatId && promptRoleId) {
@@ -339,6 +339,18 @@ function handleSendPromptMessage(message: Extract<BackgroundToRoleMessage, { typ
       sendBackgroundMessage(promptStatusMessage('error', promptChatId, promptRoleId, reason)).catch(() => undefined)
       sendResponse({ ok: false, messageId: message.messageId, error: reason })
     })
+}
+
+// Typing a prompt takes the keyboard focus into this page. The OpenTeam page that embeds it is told
+// when typing starts and ends, and takes the focus back afterwards.
+async function whileTypingPrompt(type: () => Promise<void>): Promise<void> {
+  const extensionOrigin = chrome.runtime.getURL('').replace(/\/$/, '')
+  signalFrameInput(true, extensionOrigin)
+  try {
+    await type()
+  } finally {
+    signalFrameInput(false, extensionOrigin)
+  }
 }
 
 function startOpenTeam(): void {

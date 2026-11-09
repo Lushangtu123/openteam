@@ -17,6 +17,7 @@ import { createTeamPageDomRefs } from './domRefs'
 import { createExternalModelsView } from './externalModelsView'
 import type { LocalAgentInfo } from '../shared/localControlProtocol'
 import { createAiPagesView } from './aiPagesView'
+import { createMemberFocusGuard } from './memberFocusGuard'
 import { createIframeHost } from './iframeHost'
 import { applyTeamLanguage, createLanguageSettingsController } from './languageController'
 import { createMessageSearchView } from './messageSearchView'
@@ -152,8 +153,19 @@ async function testExternalModel(modelId: string): Promise<void> {
 let renderComposerState = (): void => {}
 let insertMention = (_role: GroupRole): void => {}
 let insertTextIntoActiveNote = (_text: string): void => {}
-const aiPagesView = createAiPagesView({ appShellEl, returnEl: returnToTeamEl, showPagesEl: showAiPagesEl })
+const aiPagesView = createAiPagesView({
+  appShellEl,
+  returnEl: returnToTeamEl,
+  showPagesEl: showAiPagesEl,
+  pagesHostEl: teamDomRefs.iframeHostEl,
+  homeFocusEl: teamDomRefs.messageInputEl,
+})
 const showAiPages = aiPagesView.showAiPages
+createMemberFocusGuard({
+  hostEl: teamDomRefs.iframeHostEl,
+  isShowingPages: aiPagesView.isShowingAiPages,
+  homeFocusEl: teamDomRefs.messageInputEl,
+})
 const allNotesView = createAllNotesView({
   openAllNotesEl,
   closeAllNotesEl,
