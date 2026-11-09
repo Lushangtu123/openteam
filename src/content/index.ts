@@ -14,7 +14,7 @@ import { getActiveChatSiteAdapter } from './sites'
 import type { SiteStatusInfo } from './sites/types'
 import { createSiteProblemTracker } from './siteProblem'
 import { chatSiteForHostname, chatSiteLabel } from '../group/chatSites'
-import { signalFrameInput } from '../shared/frameInput'
+import { requestTypingTurn, watchPromptInBox } from './typingTurn'
 
 const OPEN_TEAM_LOADED_KEY = '__OPENTEAM_LOADED__'
 
@@ -314,7 +314,7 @@ function handleSendPromptMessage(message: Extract<BackgroundToRoleMessage, { typ
       log.info('message:send-prompt:delay-before-input', { messageId: message.messageId, delayMs: PROMPT_INPUT_DELAY_MS })
       return waitBeforePromptInput()
     })
-    .then(() => whileTypingPrompt(() => attachPromptFiles(message.files).then(() => fillAndSend(message.content, message.autoSend !== false))))
+    .then(() => inTypingTurn(message.content, () => attachPromptFiles(message.files).then(() => fillAndSend(message.content, message.autoSend !== false))))
     .then(() => {
       conversationMonitor?.reportConversationUpdate()
       if (promptChatId && promptRoleId) {
@@ -341,15 +341,18 @@ function handleSendPromptMessage(message: Extract<BackgroundToRoleMessage, { typ
     })
 }
 
-// Typing a prompt takes the keyboard focus into this page. The OpenTeam page that embeds it is told
-// when typing starts and ends, and takes the focus back afterwards.
-async function whileTypingPrompt(type: () => Promise<void>): Promise<void> {
-  const extensionOrigin = chrome.runtime.getURL('').replace(/\/$/, '')
-  signalFrameInput(true, extensionOrigin)
+// Typing a prompt takes the keyboard focus into this page. Inside OpenTeam it waits for a turn (the
+// user has paused typing, no other member page is typing), and gives the turn back as soon as the
+// prompt is in the box: sending is a click and needs no focus.
+async function inTypingTurn(prompt: string, type: () => Promise<void>): Promise<void> {
+  const turn = requestTypingTurn({ extensionOrigin: chrome.runtime.getURL('').replace(/\/$/, '') })
+  await turn.granted
+  const stopWatching = watchPromptInBox(() => siteAdapter.findEditor?.(), prompt, turn.done)
   try {
     await type()
   } finally {
-    signalFrameInput(false, extensionOrigin)
+    stopWatching()
+    turn.done()
   }
 }
 
