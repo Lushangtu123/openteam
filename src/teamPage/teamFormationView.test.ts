@@ -339,8 +339,8 @@ describe('team formation view', () => {
     await vi.waitFor(() => expect(showSuccess).toHaveBeenCalledWith('分工已确认，开工消息已发出'))
 
     const calls = runCommand.mock.calls.map(([type, payload]) => [type, payload])
-    expect(calls[0]).toEqual(['GROUP_ROLE_UPDATE', { roleId: 'r1', patch: { name: '产品负责人', description: '产品 负责人的工作', systemPrompt: '你在这个项目中担任「产品 负责人」，这是你自己在组队时选的职位。\n你负责：产品 负责人的工作\n你不负责：写代码\n你会先交付：需求文档' } }])
-    expect(calls[1]).toEqual(['GROUP_ROLE_UPDATE', { roleId: 'r2', patch: { name: '前端工程师', description: '前端工程师的工作', systemPrompt: '你在这个项目中担任「前端工程师」，这是你自己在组队时选的职位。\n你负责：前端工程师的工作' } }])
+    expect(calls[0]).toEqual(['GROUP_ROLE_UPDATE', { roleId: 'r1', patch: { name: '产品负责人', teamPosition: '产品 负责人', description: '产品 负责人的工作', systemPrompt: '你在这个项目中担任「产品 负责人」，这是你自己在组队时选的职位。\n你负责：产品 负责人的工作\n你不负责：写代码\n你会先交付：需求文档' } }])
+    expect(calls[1]).toEqual(['GROUP_ROLE_UPDATE', { roleId: 'r2', patch: { name: '前端工程师', teamPosition: '前端工程师', description: '前端工程师的工作', systemPrompt: '你在这个项目中担任「前端工程师」，这是你自己在组队时选的职位。\n你负责：前端工程师的工作' } }])
     expect(calls[2]).toEqual(['GROUP_CHAT_UPDATE', { chatId: 'c1', patch: { teamFormation: { status: 'confirmed', confirmedAt: expect.any(Number) } } }])
     expect(calls[3][0]).toBe('GROUP_MESSAGE_SEND')
     expect(calls[3][1]).toMatchObject({ chatId: 'c1', refreshPersona: true })
@@ -349,6 +349,32 @@ describe('team formation view', () => {
     expect(document.querySelector('#team-card-title')?.textContent).toBe('分工已确认')
     expect([...document.querySelectorAll('.team-card-row .team-card-detail')].map(detail => detail.textContent?.split('\n')[0])).toEqual(['你在这个项目中担任「产品 负责人」，这是你自己在组队时选的职位。', '你在这个项目中担任「前端工程师」，这是你自己在组队时选的职位。'])
     expect([...document.querySelectorAll('.team-card-footer button')].map(button => button.textContent)).toEqual(['按分工生成流程', '存为群聊模板', '重新分工', '关闭'])
+  })
+
+  it('keeps a name the user gave a member, records its position beside it, and tells the team both', async () => {
+    const store = makeStore()
+    store.chatsById.c1.teamFormation = { ...store.chatsById.c1.teamFormation!, status: 'claiming', nextRound: 1, invitationIds: ['inv1'], rounds: [['r1', 'r2']] }
+    store.chatsById.c1.roleIds = ['r1', 'r2']
+    // The user called r1 "前端工程师"; r2 claims that position, so it is named apart.
+    Object.assign(store.rolesById.r1, { name: '前端工程师', userNamed: true })
+    addMessage(store, { id: 'inv1', type: 'user', content: '邀请', targetRoleIds: ['r1', 'r2'], status: 'pending', deliveryStatus: { r1: 'received', r2: 'received' } })
+    reply(store, 'a1', 'r1', 'inv1', claimReply('产品负责人'))
+    reply(store, 'a2', 'r2', 'inv1', claimReply('前端工程师'))
+    const { view, runCommand, showSuccess } = setup(store)
+    view.openCard('c1')
+
+    footerButton('确认分工，先讨论方案').click()
+    await vi.waitFor(() => expect(showSuccess).toHaveBeenCalledWith('分工已确认，开工消息已发出'))
+
+    const updates = runCommand.mock.calls.filter(([type]) => type === 'GROUP_ROLE_UPDATE').map(([, payload]) => payload as { roleId: string; patch: Record<string, unknown> })
+    expect(updates[0].patch).not.toHaveProperty('name')
+    expect(updates[0].patch).toMatchObject({ teamPosition: '产品负责人', description: '产品负责人的工作' })
+    expect(updates[1].patch).toMatchObject({ name: '前端工程师2', teamPosition: '前端工程师' })
+    expect(store.rolesById.r1.name).toBe('前端工程师')
+    const kickoff = String(runCommand.mock.calls.find(([type]) => type === 'GROUP_MESSAGE_SEND')![1]!.raw)
+    expect(kickoff).toContain('- 前端工程师（Claude）：产品负责人：产品负责人的工作')
+    expect(kickoff).toContain('- 前端工程师2（ChatGPT）：前端工程师的工作')
+    expect(rowState().map(row => row.name)).toEqual(['前端工程师 · 产品负责人', '前端工程师2'])
   })
 
   it('starts a confirmed team as a project, with the task and who holds which position as its goal', async () => {

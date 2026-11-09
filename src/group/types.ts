@@ -100,6 +100,11 @@ export interface TeamTemplateMember {
   modelSource: RoleModelSource
   chatSite?: ChatSite
   externalModelId?: string
+  avatarColor?: string
+  avatarText?: string
+  avatarImage?: string
+  userNamed?: boolean
+  teamPosition?: string
 }
 
 export interface TeamTemplate {
@@ -434,7 +439,15 @@ export interface GroupRole {
   name: string
   description?: string
   systemPrompt?: string
+  // The avatar the user picked: a preset colour (tone-0 … tone-5), up to two characters in place of
+  // the name's first one, or a small picture (a data: URL) shown instead of both.
   avatarColor?: string
+  avatarText?: string
+  avatarImage?: string
+  // The user named this member. Confirming a team keeps the name and records the position beside it.
+  userNamed?: boolean
+  // The position the member holds in a confirmed team.
+  teamPosition?: string
   status: RoleStatus
   contextCursor: number
   geminiConversationId?: string

@@ -500,10 +500,12 @@
   color: var(--text);
 }
 
+/* Beside the button, not below it: every card's button sits in the same column, so a menu below
+   would cover the next member's button. */
 :root[data-theme] .role-action-menu {
   position: absolute;
-  top: calc(100% + 4px);
-  right: 0;
+  top: 0;
+  right: calc(100% + 6px);
   z-index: 6;
   display: grid;
   gap: 2px;

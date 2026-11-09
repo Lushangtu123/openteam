@@ -2256,6 +2256,22 @@ select:focus {
   background: linear-gradient(135deg, var(--accent-from), var(--accent-to));
 }
 
+/* A member's own picture fills its avatar in place of the colour and text. */
+.avatar-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+  pointer-events: none;
+}
+
+/* Two characters of avatar text, a little smaller so they fit. */
+.avatar-text-pair {
+  font-size: 0.78em;
+  letter-spacing: -0.02em;
+}
+
 .role-card-main {
   min-width: 0;
 }

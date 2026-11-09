@@ -1334,6 +1334,115 @@ select.reply-compare-select {
   gap: 8px;
 }
 
+/* A member's name and avatar: the avatar as it will look beside the name, then its colour, text and
+   picture. */
+.modal.team-setup-dialog.role-profile-dialog {
+  width: min(460px, 100%);
+}
+
+.role-profile-identity {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.role-profile-name-field {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.role-avatar.role-profile-preview {
+  width: 56px;
+  height: 56px;
+  margin-top: 4px;
+  font-size: 22px;
+}
+
+.role-profile-form .tiny {
+  margin: 0;
+}
+
+.role-profile-colors {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.role-profile-colors legend,
+.role-profile-label {
+  padding: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.role-profile-colors legend {
+  margin-bottom: 7px;
+}
+
+.role-profile-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.role-profile-swatch {
+  position: relative;
+  display: inline-grid;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+/* The radio button itself covers the chip, unseen, so clicks and keys reach it. */
+.role-profile-swatch input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.role-avatar.role-profile-swatch-chip {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  color: #ffffff;
+}
+
+.role-profile-swatch-chip svg {
+  width: 16px;
+  height: 16px;
+}
+
+.role-profile-swatch input:not(:checked) + .role-profile-swatch-chip svg {
+  visibility: hidden;
+}
+
+.role-profile-swatch input:checked + .role-profile-swatch-chip {
+  box-shadow: 0 0 0 2px var(--popover), 0 0 0 4px var(--text);
+}
+
+.role-profile-swatch:has(input:focus-visible) .role-profile-swatch-chip {
+  outline: 2px solid rgba(var(--accent-rgb), 0.6);
+  outline-offset: 4px;
+}
+
+.role-profile-image-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Shown only while there is a picture to remove; .btn would otherwise keep it on screen. */
+.role-profile-image-actions .btn[hidden] {
+  display: none;
+}
+
 /* Keep the team setup centred with equal content insets. Only the form body scrolls, so
    the title, close button and actions stay inside the rounded window at every height. */
 .team-formation-modal {

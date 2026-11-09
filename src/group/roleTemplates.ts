@@ -2,8 +2,9 @@ import { normalizeChatGptGptsUrl, normalizeGrokProjectUrl } from './conversation
 import { BUILTIN_ROLE_TEMPLATES, getBuiltinRoleTemplate, isBuiltinRoleTemplateId } from './builtinRoleTemplates'
 import type { ChatSite, GroupChat, GroupRole, OpenTeamStore, RoleModelSource, RoleTemplate } from './types'
 import { localizeRoleTemplate } from '../shared/i18n'
+import { readStoredAvatar, renameRoleInMessages, roleNameProblem, ROLE_NAME_MAX_CHARACTERS } from './roleProfile'
 
-export const ROLE_NAME_MAX_CHARACTERS = 50
+export { ROLE_NAME_MAX_CHARACTERS }
 
 export interface RoleTemplateInput {
   name: string
@@ -27,9 +28,17 @@ export interface GroupRoleInput {
   description?: string
   systemPrompt?: string
   avatarColor?: string
+  avatarText?: string
+  avatarImage?: string
+  userNamed?: boolean
+  // The position the member holds in a confirmed team; an empty string clears it.
+  teamPosition?: string
   chatGptGptsUrl?: string
   grokProjectUrl?: string
 }
+
+// What a saved team carries over to the member it creates: the look and name the user gave it.
+type GroupRoleCarriedProfile = Pick<GroupRoleInput, 'avatarText' | 'avatarImage' | 'userNamed' | 'teamPosition'>
 
 export type GroupRoleBatchInput =
   | {
@@ -50,34 +59,24 @@ export type GroupRoleBatchInput =
       chatSite?: ChatSite
       externalModelId?: string
       avatarColor?: string
-    }
+    } & GroupRoleCarriedProfile
 
 type PreparedGroupRoleBatchItem = Omit<GroupRoleInput, 'chatId'> & {
   name: string
   systemPrompt?: string
 }
 
-interface GraphemeSegment {
-  segment: string
-}
-
-interface GraphemeSegmenter {
-  segment(value: string): Iterable<GraphemeSegment>
-}
-
-interface IntlWithSegmenter {
-  Segmenter?: new (locale: string | undefined, options: { granularity: 'grapheme' }) => GraphemeSegmenter
-}
-
 export function validateRoleName(name: string, existingNames: string[] = []): string | undefined {
   const trimmed = name.trim()
-  if (!trimmed) return '人员名称不能为空'
-  if (countUserPerceivedCharacters(trimmed) > ROLE_NAME_MAX_CHARACTERS) return `人员名称不能超过 ${ROLE_NAME_MAX_CHARACTERS} 个字`
-  if (/\s/.test(trimmed)) return '人员名称不能包含空白字符'
-  if (trimmed.includes('@')) return '人员名称不能包含 @'
-  if (trimmed.toLowerCase() === 'all') return '人员名称不能是 all'
-  if (existingNames.some(existingName => existingName.toLowerCase() === trimmed.toLowerCase())) return `人员名称已存在：${trimmed}`
-  return undefined
+  switch (roleNameProblem(trimmed, existingNames)) {
+    case 'empty': return '人员名称不能为空'
+    case 'too-long': return `人员名称不能超过 ${ROLE_NAME_MAX_CHARACTERS} 个字`
+    case 'whitespace': return '人员名称不能包含空白字符'
+    case 'at': return '人员名称不能包含 @'
+    case 'reserved': return `人员名称不能是 ${trimmed.toLowerCase() === 'all' ? 'all' : trimmed}`
+    case 'duplicate': return `人员名称已存在：${trimmed}`
+    default: return undefined
+  }
 }
 
 export function assertValidRoleName(name: string, existingRoles: GroupRole[], currentRoleId?: string): string {
@@ -252,6 +251,12 @@ export function createGroupRole(
 
   const avatarColor = input.avatarColor?.trim()
   if (avatarColor) role.avatarColor = avatarColor
+  const { avatarText, avatarImage } = readStoredAvatar(input)
+  if (avatarText) role.avatarText = avatarText
+  if (avatarImage) role.avatarImage = avatarImage
+  if (input.userNamed) role.userNamed = true
+  const teamPosition = input.teamPosition?.trim()
+  if (teamPosition) role.teamPosition = teamPosition
 
   store.rolesById[id] = role
   chat.roleIds.push(id)
@@ -271,6 +276,7 @@ export function updateGroupRole(
   const chat = store.chatsById[role.chatId]
   if (!chat) throw new Error(`找不到群聊：${role.chatId}`)
 
+  const previousName = role.name
   const nextName = patch.name !== undefined ? assertValidRoleName(patch.name, []) : role.name
   const nextModelSource = patch.modelSource ?? role.modelSource ?? 'site'
   const nextExternalModelId = nextModelSource === 'external' ? requireExternalModelId(store, patch.externalModelId ?? role.externalModelId) : undefined
@@ -342,6 +348,15 @@ export function updateGroupRole(
       delete role.avatarColor
     }
   }
+  if (patch.teamPosition !== undefined) {
+    const teamPosition = patch.teamPosition.trim()
+    if (teamPosition) {
+      role.teamPosition = teamPosition
+    } else {
+      delete role.teamPosition
+    }
+  }
+  if (patch.name !== undefined && nextName !== previousName) renameRoleInMessages(store, chat, role.id, nextName)
 
   role.updatedAt = now
   chat.updatedAt = now
@@ -413,6 +428,10 @@ function prepareBatchItem(store: OpenTeamStore, item: GroupRoleBatchInput, index
       description: item.description,
       systemPrompt: normalizeSystemPrompt(item.systemPrompt),
       avatarColor: item.avatarColor,
+      ...(item.avatarText ? { avatarText: item.avatarText } : {}),
+      ...(item.avatarImage ? { avatarImage: item.avatarImage } : {}),
+      ...(item.userNamed ? { userNamed: true } : {}),
+      ...(item.teamPosition ? { teamPosition: item.teamPosition } : {}),
     }
   }
 
@@ -482,12 +501,6 @@ function normalizeOptionalGrokProjectUrl(value: string | undefined): string | un
   const normalized = normalizeGrokProjectUrl(trimmed)
   if (!normalized) throw new Error('Grok 项目链接必须是 grok.com/project/... 格式')
   return normalized
-}
-
-function countUserPerceivedCharacters(value: string): number {
-  const Segmenter = (Intl as IntlWithSegmenter).Segmenter
-  if (!Segmenter) return [...value].length
-  return [...new Segmenter(undefined, { granularity: 'grapheme' }).segment(value)].length
 }
 
 function getChatRoles(store: OpenTeamStore, chat: GroupChat): GroupRole[] {

@@ -263,8 +263,6 @@ function createComposerHarness(options: { roleStatus?: GroupRole['status']; role
     getStore: () => store,
     getCurrentChat: () => chat,
     getCurrentRoles: () => roles,
-    roleToneClass: () => 'tone-test',
-    roleAvatarLabel: () => '工',
     reconnectRolesForSend,
     runCommand,
     showError,

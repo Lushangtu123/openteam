@@ -17,6 +17,7 @@ import {
   TEAM_MIN_MEMBERS,
   teamLabels,
   teamMemberNames,
+  teamMemberResponsibility,
   teamModelKey,
   type TeamMember,
   type TeamResolution,
@@ -31,6 +32,7 @@ import { newChatCollaboration } from '../group/collaboration'
 import { createComposerAttachments } from './composerAttachments'
 import { PROBLEM_HEALTH_STATUSES, rolePageHealthLabel, type RolePageHealth } from './roleHealth'
 import { createIcon } from './icons'
+import { rolePositionBesideName } from '../group/roleProfile'
 
 export interface TeamFormationViewDependencies {
   getStore(): OpenTeamStore
@@ -453,7 +455,7 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
     const members = collectTeamMembers(store, chat)
     const resolution = resolution_(chat, members)
     const health = members.map(member => memberHealth(member.role))
-    const signature = JSON.stringify([formation.task, formation.status, formation.invitationIds, members.map(member => [member.roleId, member.role.name, member.status, member.claim, member.replyText?.length, member.role.pendingApproval?.id]), health.map(item => [item.status, item.reason, item.detail]), [...chatEdits(card.chatId)], busy, panel, formation.preset, formation.previousPositions, language()])
+    const signature = JSON.stringify([formation.task, formation.status, formation.invitationIds, members.map(member => [member.roleId, member.role.name, member.role.teamPosition, member.role.userNamed, member.status, member.claim, member.replyText?.length, member.role.pendingApproval?.id]), health.map(item => [item.status, item.reason, item.detail]), [...chatEdits(card.chatId)], busy, panel, formation.preset, formation.previousPositions, language()])
     if (signature === card.signature) return
     card.signature = signature
     // Dividing the work again changes the task.
@@ -479,7 +481,7 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
       const row = element('div', `team-card-row team-health-${item.status}`)
       row.dataset.roleId = member.roleId
       const head = element('div', 'team-card-row-head')
-      head.append(element('span', 'team-card-name', member.role.name), modelPill(member))
+      head.append(element('span', 'team-card-name', memberTitle(member.role, chat.teamFormation?.preset === true)), modelPill(member))
       const state = element('span', `team-card-state${problem ? ' team-card-problem' : ''}`, uiHealth(item))
       head.append(state)
       row.append(head)
@@ -541,7 +543,7 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
       const row = element('div', `team-card-row team-member-${member.status}${conflict ? ' team-card-conflict' : ''}`)
       row.dataset.roleId = member.roleId
       const head = element('div', 'team-card-row-head')
-      head.append(element('span', 'team-card-name', member.role.name), modelPill(member))
+      head.append(element('span', 'team-card-name', memberTitle(member.role, confirmed)), modelPill(member))
       const stateText = memberStateText(member, chat)
       if (stateText) head.append(element('span', `team-card-state${member.status === 'failed' || member.status === 'unreadable' ? ' team-card-problem' : ''}`, stateText))
       row.append(head)
@@ -686,7 +688,10 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
       const flow = button(t('按分工生成流程', 'Plan a flow from the roles'), 'btn')
       flow.addEventListener('click', () => {
         const store = deps.getStore()
-        const instruction = buildTeamFlowInstruction(members.map(member => ({ name: store.rolesById[member.roleId]?.name ?? member.role.name, modelLabel: member.modelLabel, description: store.rolesById[member.roleId]?.description })), language())
+        const instruction = buildTeamFlowInstruction(members.map(member => {
+          const role = store.rolesById[member.roleId] ?? member.role
+          return { name: role.name, modelLabel: member.modelLabel, description: teamMemberResponsibility(role, role.description, language()) }
+        }), language())
         closeCard()
         deps.openAutoPlan?.(formation.task, instruction)
       })
@@ -782,7 +787,9 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
     const chat = deps.getStore().chatsById[chatId]
     const formation = chat?.teamFormation
     if (!chat || !formation || busy) return
-    const names = teamMemberNames(positions)
+    // A member the user named keeps its name; the others are named after their positions.
+    const named = new Set(members.filter(member => deps.getStore().rolesById[member.roleId]?.userNamed).map(member => member.roleId))
+    const names = teamMemberNames(positions.filter(item => !named.has(item.roleId)), members.filter(member => named.has(member.roleId)).map(member => deps.getStore().rolesById[member.roleId]?.name ?? member.role.name))
     const lang = language()
     busy = true
     renderCard()
@@ -793,18 +800,23 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
       }))
       for (const member of members) {
         const brief = briefs.get(member.roleId)!
+        const position = positions.find(item => item.roleId === member.roleId)?.position.trim() ?? ''
         await deps.runCommand('GROUP_ROLE_UPDATE', {
           roleId: member.roleId,
-          patch: { name: names[member.roleId], description: brief.description, systemPrompt: brief.persona },
+          patch: { ...(named.has(member.roleId) ? {} : { name: names[member.roleId] }), teamPosition: position, description: brief.description, systemPrompt: brief.persona },
         })
       }
       await deps.runCommand('GROUP_CHAT_UPDATE', { chatId, patch: { teamFormation: { status: 'confirmed', confirmedAt: Date.now() } } })
       const store = deps.getStore()
-      const team = members.map(member => ({
-        name: store.rolesById[member.roleId]?.name ?? names[member.roleId],
-        modelLabel: member.modelLabel,
-        responsibility: briefs.get(member.roleId)?.responsibility,
-      }))
+      const team = members.map(member => {
+        const role = store.rolesById[member.roleId]
+        const responsibility = briefs.get(member.roleId)?.responsibility
+        return {
+          name: role?.name ?? names[member.roleId],
+          modelLabel: member.modelLabel,
+          responsibility: role ? teamMemberResponsibility(role, responsibility, lang) : responsibility,
+        }
+      })
       await startTeamWork(chatId, formation.task, team, startAs, lang)
       edits.delete(chatId)
       panel = 'none'
@@ -837,7 +849,7 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
     renderCard()
     try {
       const members = collectTeamMembers(store, chat)
-      const team = members.map(member => ({ name: member.role.name, modelLabel: member.modelLabel, responsibility: member.role.description && member.role.description !== member.role.name ? member.role.description : undefined }))
+      const team = members.map(member => ({ name: member.role.name, modelLabel: member.modelLabel, responsibility: teamMemberResponsibility(member.role, member.role.description && member.role.description !== member.role.name ? member.role.description : undefined, language()) }))
       await deps.runCommand('GROUP_CHAT_UPDATE', { chatId, patch: { teamFormation: { status: 'confirmed', confirmedAt: Date.now() } } })
       // A saved team skips the invitations, so its kickoff carries the task's files.
       await startTeamWork(chatId, formation.task, team, startAs, language(), formation.invitationIds.length === 0 ? taskFilesPayload(chat) : {})
@@ -886,7 +898,10 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
             rounds: planTeamRounds(roles.map(role => ({ roleId: role.id, modelKey: teamModelKey(role) }))),
             nextRound: 0,
             invitationIds: [],
-            previousPositions: members.map(member => ({ position: store.rolesById[member.roleId]?.name ?? member.role.name, holder: member.modelLabel })),
+            previousPositions: members.map(member => {
+              const role = store.rolesById[member.roleId] ?? member.role
+              return { position: role.teamPosition ?? role.name, holder: member.modelLabel }
+            }),
             confirmedAt: null,
           },
         },
@@ -980,6 +995,12 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
       可以发送: 'Ready', '可以发送（未登录）': 'Ready (signed out)', 网页回复中: 'Replying', 需要登录: 'Sign-in needed', 需要人机验证: 'Verification needed',
       网站拒绝访问: 'Site refused access', 有弹窗挡住页面: 'A dialog covers the page', 网站不允许嵌入: 'Site blocks embedding', 页面被拦截: 'Page blocked', 找不到输入框: 'No input box', 网站报错: 'Site error', 网页异常: 'Page problem',
     } as Record<string, string>)[label] ?? label
+  }
+
+  // A member the user named shows its position beside the name once the positions are settled.
+  function memberTitle(role: GroupRole, withPosition: boolean): string {
+    const position = withPosition ? rolePositionBesideName(role) : undefined
+    return position ? `${role.name} · ${position}` : role.name
   }
 
   function modelPill(member: TeamMember): HTMLElement {

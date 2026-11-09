@@ -7,6 +7,7 @@ import { PROBLEM_HEALTH_STATUSES, rolePageHealthLabel, type RolePageHealth } fro
 import { getVisibleThinkingRoles, shouldAutoReconnectRole, shouldConfirmMentionWithEnter, shouldSendMessageWithEnter } from './chatExperience'
 import { runCommandWithReconnect } from './sendWithReconnect'
 import { createIcon } from './icons'
+import { paintRoleAvatar } from './viewHelpers'
 
 export interface ComposerViewDependencies {
   state: TeamPageState
@@ -20,8 +21,6 @@ export interface ComposerViewDependencies {
   getStore(): OpenTeamStore
   getCurrentChat(): GroupChat | undefined
   getCurrentRoles(): GroupRole[]
-  roleToneClass(seed: string | undefined): string
-  roleAvatarLabel(name: string | undefined): string
   reconnectRolesForSend(chat: GroupChat, roles: GroupRole[]): Promise<void>
   runCommand(type: string, payload?: Record<string, unknown>): Promise<void>
   showError(message: string): void
@@ -187,8 +186,7 @@ export function createComposerView(deps: ComposerViewDependencies): ComposerView
         option.addEventListener('click', () => insertAllMention())
       } else {
         const role = mentionOption.role
-        avatar.className = `mention-avatar ${deps.roleToneClass(role.name)}`
-        avatar.textContent = deps.roleAvatarLabel(role.name)
+        paintRoleAvatar(avatar, 'mention-avatar', role)
         name.textContent = role.name
         site.className = `mention-site-badge ${role.modelSource === 'external' ? 'site-pill-external' : `site-pill-${role.chatSite ?? 'gemini'}`}`
         site.textContent = roleModelLabel(role, mentionLabelOptions())

@@ -15,6 +15,7 @@ import {
   splitPositions,
   teamLabels,
   teamMemberNames,
+  teamMemberResponsibility,
   teamTemplateFromChat,
   type TeamClaim,
 } from './teamFormation'
@@ -176,6 +177,16 @@ describe('team formation', () => {
     expect(splitPositions('测试，运维、 测试; 安全')).toEqual(['测试', '运维', '安全'])
   })
 
+  it('names members after positions around the names the user gave, and puts a named member\'s position first', () => {
+    expect(teamMemberNames([{ roleId: 'a', position: '前端' }, { roleId: 'b', position: '设计' }, { roleId: 'c', position: '所有人' }], ['前端', '小D'])).toEqual({ a: '前端2', b: '设计', c: 'member' })
+    const named = { name: '小D', userNamed: true, teamPosition: '产品经理' }
+    expect(teamMemberResponsibility(named, '需求文档', 'zh-CN')).toBe('产品经理：需求文档')
+    expect(teamMemberResponsibility(named, '需求文档', 'en')).toBe('产品经理: 需求文档')
+    expect(teamMemberResponsibility(named, '产品经理', 'zh-CN')).toBe('产品经理')
+    expect(teamMemberResponsibility(named, undefined, 'zh-CN')).toBe('产品经理')
+    expect(teamMemberResponsibility({ name: '产品经理', teamPosition: '产品经理' }, '需求文档', 'zh-CN')).toBe('需求文档')
+  })
+
   it('collects each member\'s latest answer and where it stands', () => {
     const store = createDefaultStore()
     store.settings.language = 'zh-CN'
@@ -218,6 +229,24 @@ describe('team formation', () => {
     ] })
     expect(normalizeTeamTemplates([template, { id: 'bad', name: 'x', members: [{ name: 'a', modelSource: 'site', chatSite: 'nope' }] }, 'junk'])).toEqual([template])
     expect(normalizeTeamTemplates(undefined)).toEqual([])
+  })
+
+  it('keeps the names and avatars the user gave members in a saved team, and drops unsafe ones when reading it back', () => {
+    const png = 'data:image/png;base64,iVBORw0KGgo='
+    const store = createDefaultStore()
+    store.rolesById.r1 = { id: 'r1', chatId: 'c1', name: '小D', userNamed: true, teamPosition: '产品负责人', avatarColor: 'tone-2', avatarText: 'D', avatarImage: png, status: 'ready', contextCursor: 0, chatSite: 'claude', createdAt: 1, updatedAt: 1 }
+    store.rolesById.r2 = { id: 'r2', chatId: 'c1', name: '后端工程师', avatarColor: '#123456', status: 'ready', contextCursor: 0, chatSite: 'kimi', createdAt: 1, updatedAt: 1 }
+    store.chatsById.c1 = { id: 'c1', name: '记账', mode: 'collaborative', roleIds: ['r1', 'r2'], messageIds: [], nextMessageSeq: 1, status: 'ready', createdAt: 1, updatedAt: 1 }
+
+    const template = teamTemplateFromChat(store, store.chatsById.c1, '记账', 'team-1', 9)
+
+    expect(template.members).toEqual([
+      { name: '小D', modelSource: 'site', chatSite: 'claude', avatarColor: 'tone-2', avatarText: 'D', avatarImage: png, userNamed: true, teamPosition: '产品负责人' },
+      { name: '后端工程师', modelSource: 'site', chatSite: 'kimi' },
+    ])
+    expect(normalizeTeamTemplates([template])).toEqual([template])
+    const tampered = { ...template, members: template.members.map(member => ({ ...member, avatarImage: 'https://tracker.test/a.png', avatarText: '太长的字', userNamed: 'yes' })) }
+    expect(normalizeTeamTemplates([tampered])[0].members[0]).toEqual({ name: '小D', modelSource: 'site', chatSite: 'claude', avatarColor: 'tone-2', teamPosition: '产品负责人' })
   })
 
   it('asks the planner for a flow that keeps the team as it is', () => {

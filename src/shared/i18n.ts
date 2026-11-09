@@ -474,6 +474,7 @@ const UI_TRANSLATIONS: Record<string, string> = {
   '通过': 'Pass',
   '不通过': 'Fail',
   '成员异常。若目标站点未登录，请打开登录页后点击恢复成员。': 'Person error. If the target site is not signed in, open the login page and then click restore.',
+  '编辑名字和头像': 'Edit name and avatar',
   '查看提示词': 'View prompt',
   '关闭提示词详情': 'Close prompt details',
   '未填写提示词': 'No prompt provided',

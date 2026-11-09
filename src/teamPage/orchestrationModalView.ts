@@ -5,6 +5,7 @@ import { DEFAULT_ORCHESTRATION_MAX_NODE_EXECUTIONS, DEFAULT_ORCHESTRATION_REVIEW
 import { arrangeOrchestrationGraph, createOrchestrationCanvas, type LoadX6, type OrchestrationCanvas } from './orchestrationCanvas'
 import { runCommandWithReconnect } from './sendWithReconnect'
 import { createIcon } from './icons'
+import { paintRoleAvatar } from './viewHelpers'
 
 export interface OrchestrationModalDependencies {
   openOrchestrationEl: HTMLButtonElement
@@ -183,8 +184,7 @@ export function createOrchestrationModalView(deps: OrchestrationModalDependencie
         event.dataTransfer?.setData('application/x-openteam-role-id', role.id)
       })
       const avatar = document.createElement('span')
-      avatar.className = `orchestration-person-avatar ${roleToneClass(role.id)}`
-      avatar.textContent = roleInitial(role.name)
+      paintRoleAvatar(avatar, 'orchestration-person-avatar', role)
       const body = document.createElement('div')
       body.className = 'orchestration-person-body'
       // The name gets the whole first line; the model and the description share the second. (How
@@ -1206,16 +1206,6 @@ function readMaxNodeExecutionsInput(input: HTMLInputElement): number {
 function clampReviewAttempts(value: number): number {
   if (!Number.isFinite(value)) return DEFAULT_ORCHESTRATION_REVIEW_MAX_ATTEMPTS
   return Math.min(50, Math.max(1, Math.trunc(value)))
-}
-
-function roleInitial(name: string): string {
-  return name.trim().slice(0, 1).toUpperCase() || '员'
-}
-
-function roleToneClass(seed: string): string {
-  const tones = ['tone-blue', 'tone-green', 'tone-purple', 'tone-orange']
-  const total = [...seed].reduce((sum, char) => sum + char.charCodeAt(0), 0)
-  return tones[total % tones.length]
 }
 
 function roleModelDisplay(role: Pick<GroupRole, 'modelSource' | 'externalModelId' | 'chatSite'>, store: OpenTeamStore): { label: string; className: string } {

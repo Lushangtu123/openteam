@@ -1,6 +1,6 @@
 // Takes the same set of OpenTeam screenshots every time, so two builds can be compared pixel for
 // pixel (scripts/visual/compare.mjs) after a change that should not move anything on screen, such as
-// a stylesheet cleanup. Both styles, both themes, 29 screens, and three window widths: 136 images.
+// a stylesheet cleanup. Both styles, both themes, 30 screens, and three window widths: 144 images.
 // Animations, clocks and the caret are frozen; members answer from a local mock API. Each screen is
 // also checked for accessibility problems with axe-core (WCAG 2.2 A and AA, and its best practices),
 // listed in a11y.txt.
@@ -182,6 +182,8 @@ try {
   }
   const click = sel => evaluate(`(() => { const el = document.querySelector(${JSON.stringify(sel)}); if (!el) return 'missing'; el.click(); return 'ok' })()`)
   const closeAll = () => evaluate(`(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); document.querySelectorAll('.modal-close').forEach(b => b.offsetParent && b.click()); document.body.click(); return 'ok' })()`)
+  // The first member's name and avatar window, opened from its card menu.
+  const openMemberProfile = async () => { await click('#toggle-people-drawer'); await sleep(200); await click('.role-more-btn'); await click('.role-edit-profile') }
   const theme = async (name, style) => {
     await evaluate(`(() => { localStorage.setItem('openteam.theme', '${name}'); localStorage.setItem('openteam.uiStyle', '${style}'); location.reload() })()`)
     await sleep(2200)
@@ -319,6 +321,7 @@ try {
     ['more-menu', async () => { await click('#open-more-menu') }],
     ['members', async () => { await click('#toggle-people-drawer') }],
     ['member-menu', async () => { await click('#toggle-people-drawer'); await sleep(200); await click('.role-more-btn') }],
+    ['member-profile', async () => { await openMemberProfile() }],
     ['new-chat', async () => { await click('#quick-create-chat') }],
     ['new-chat-blank', async () => { await click('#quick-create-chat'); await click('#open-blank-chat') }],
     ['settings', async () => { await click('#settings-button') }],
@@ -336,6 +339,8 @@ try {
     ['search', async () => { await click('#open-message-search'); await sleep(300); await evaluate(`(() => { const i = document.querySelector('.message-search-input, .message-search input'); if (i) { i.value = 'Go'; i.dispatchEvent(new Event('input', { bubbles: true })) } })()`) }],
     ['reply-hover', async () => {
       await evaluate(`document.querySelector('#messages').scrollTo(0, 0)`)
+      // After a reload the chat can take a moment to draw its replies.
+      for (let tries = 0; tries < 50 && (await evaluate(`Boolean(document.querySelector('.message-row.assistant'))`)) !== true; tries += 1) await sleep(100)
       const point = JSON.parse(await evaluate(`JSON.stringify((() => { const r = document.querySelector('.message-row.assistant').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + 30 } })())`))
       await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: point.x, y: point.y }, sessionId)
     }],
@@ -367,6 +372,7 @@ try {
       await shot(`chat-${width}-${name}-${style}`)
       await audit(`chat-${width}-${name}-${style}`)
       if (width <= 720) { await click('#open-chat-list'); await sleep(350); await shot(`chat-list-${width}-${name}-${style}`); await audit(`chat-list-${width}-${name}-${style}`); await closeAll() }
+      if (width === 390) { await openMemberProfile(); await sleep(350); await shot(`member-profile-${width}-${name}-${style}`); await audit(`member-profile-${width}-${name}-${style}`); await closeAll(); await sleep(250); await evaluate('location.reload()'); await sleep(1600) }
     }
     await size(1440, 900)
   }

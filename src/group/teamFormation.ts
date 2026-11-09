@@ -1,6 +1,6 @@
 import { roleMentionLabel, roleModelLabel, roleMentionLabelOptionsFromSettings } from './mentionParser'
 import { collectReplies, type ComparedReplyStatus } from './replyComparison'
-import { ROLE_NAME_MAX_CHARACTERS } from './roleTemplates'
+import { isReservedRoleName, readAvatarTone, readStoredAvatar, ROLE_NAME_MAX_CHARACTERS, rolePositionBesideName } from './roleProfile'
 import { chatSiteFromText, isChatSite } from './chatSites'
 import type { GroupChat, GroupMessage, GroupRole, OpenTeamLanguage, OpenTeamStore, TeamFormation, TeamTemplate, TeamTemplateMember } from './types'
 
@@ -421,14 +421,24 @@ export function buildTeamBrief(position: string, claim: TeamClaim | undefined, l
   }
 }
 
+// What the kickoff, the project plan and the flow planner are told a member does. A member the user
+// named keeps its name, so its position comes first.
+export function teamMemberResponsibility(role: Pick<GroupRole, 'name' | 'userNamed' | 'teamPosition'>, responsibility: string | undefined, language: OpenTeamLanguage): string | undefined {
+  const position = rolePositionBesideName(role)
+  if (!position) return responsibility
+  if (!responsibility || samePosition(responsibility, position)) return position
+  return `${position}${language === 'en' ? ': ' : '：'}${responsibility}`
+}
+
 // Member names after the positions are confirmed: the position without spaces or "@" (names cannot
-// hold them), kept unique and within the limit.
-export function teamMemberNames(positions: Array<{ roleId: string; position: string }>): Record<string, string> {
+// hold them), kept unique and within the limit. Taken names are the names the user gave members, which
+// stay as they are.
+export function teamMemberNames(positions: Array<{ roleId: string; position: string }>, takenNames: string[] = []): Record<string, string> {
   const names: Record<string, string> = {}
-  const used = new Set<string>()
+  const used = new Set<string>(takenNames.map(normalizePosition))
   for (const { roleId, position } of positions) {
     const cleaned = [...position.replace(/[\s@]+/g, '')].slice(0, ROLE_NAME_MAX_CHARACTERS - 3).join('')
-    const base = cleaned && cleaned.toLowerCase() !== 'all' ? cleaned : 'member'
+    const base = cleaned && !isReservedRoleName(cleaned) ? cleaned : 'member'
     let name = base
     for (let index = 2; used.has(normalizePosition(name)); index += 1) name = `${base}${index}`
     used.add(normalizePosition(name))
@@ -524,6 +534,10 @@ export function teamTemplateFromChat(store: OpenTeamStore, chat: GroupChat, name
       ...(role.systemPrompt ? { systemPrompt: role.systemPrompt } : {}),
       modelSource: role.modelSource === 'external' ? 'external' as const : 'site' as const,
       ...(role.modelSource === 'external' ? { externalModelId: role.externalModelId } : { chatSite: role.chatSite ?? store.settings.defaultChatSite }),
+      ...(readAvatarTone(role.avatarColor) !== undefined ? { avatarColor: role.avatarColor } : {}),
+      ...readStoredAvatar({ avatarText: role.avatarText, avatarImage: role.avatarImage }),
+      ...(role.userNamed ? { userNamed: true } : {}),
+      ...(role.teamPosition ? { teamPosition: role.teamPosition } : {}),
     }]
   })
   return { id, name: name.trim() || chat.name, task: chat.teamFormation?.task ?? '', members, createdAt: now }
@@ -547,6 +561,9 @@ export function normalizeTeamTemplates(raw: unknown): TeamTemplate[] {
         ...(typeof member.systemPrompt === 'string' && member.systemPrompt.trim() ? { systemPrompt: member.systemPrompt.trim() } : {}),
         modelSource: external ? 'external' : 'site',
         ...(external ? { externalModelId: member.externalModelId as string } : { chatSite: member.chatSite as TeamTemplateMember['chatSite'] }),
+        ...readStoredAvatar(member),
+        ...(member.userNamed === true ? { userNamed: true } : {}),
+        ...(typeof member.teamPosition === 'string' && member.teamPosition.trim() ? { teamPosition: member.teamPosition.trim() } : {}),
       }]
     })
     if (members.length < TEAM_MIN_MEMBERS) return []

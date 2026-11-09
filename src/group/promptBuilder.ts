@@ -2,6 +2,7 @@ import { formatContextMessage, type UnsyncedContextResult } from './contextSync'
 import { formatAttachedFilesForPrompt } from './messageUploads'
 import { PROMPT_I18N, normalizeLanguage } from '../shared/i18n'
 import type { GroupChat, GroupMessage, GroupRole, MessageReference, OpenTeamLanguage } from './types'
+import { rolePositionBesideName } from './roleProfile'
 
 export interface BuildPromptInput {
   chat: GroupChat
@@ -98,7 +99,11 @@ export function roleUsesChatGptGptsPersona(role: GroupRole): boolean {
 
 export function buildMemberList(roles: GroupRole[], languageInput?: OpenTeamLanguage): string {
   const language = normalizeLanguage(languageInput)
-  const members = roles.map(role => `- ${role.name}${role.description ? `${language === 'en' ? ': ' : '：'}${role.description}` : ''}`).join('\n')
+  const members = roles.map(role => {
+    const position = rolePositionBesideName(role)
+    const description = role.description && role.description !== position ? role.description : undefined
+    return `- ${role.name}${position ? (language === 'en' ? ` (${position})` : `（${position}）`) : ''}${description ? `${language === 'en' ? ': ' : '：'}${description}` : ''}`
+  }).join('\n')
   return language === 'en' ? `Group chat members:\n${members}` : `群聊成员：\n${members}`
 }
 

@@ -427,6 +427,11 @@ function createTeamFromTemplate(store: OpenTeamStore, message: RuntimeMessage, t
     modelSource: member.modelSource,
     ...(member.chatSite ? { chatSite: member.chatSite } : {}),
     ...(member.externalModelId ? { externalModelId: member.externalModelId } : {}),
+    ...(member.avatarColor ? { avatarColor: member.avatarColor } : {}),
+    ...(member.avatarText ? { avatarText: member.avatarText } : {}),
+    ...(member.avatarImage ? { avatarImage: member.avatarImage } : {}),
+    ...(member.userNamed ? { userNamed: true } : {}),
+    ...(member.teamPosition ? { teamPosition: member.teamPosition } : {}),
   })), () => deps.newId('role'), deps.now())
   chat.teamFormation = readTeamFormation({
     task,
@@ -527,6 +532,10 @@ export function duplicateChat(store: OpenTeamStore, sourceChatId: unknown, deps:
       ...(sourceRole.description ? { description: sourceRole.description } : {}),
       ...(sourceRole.systemPrompt ? { systemPrompt: sourceRole.systemPrompt } : {}),
       ...(sourceRole.avatarColor ? { avatarColor: sourceRole.avatarColor } : {}),
+      ...(sourceRole.avatarText ? { avatarText: sourceRole.avatarText } : {}),
+      ...(sourceRole.avatarImage ? { avatarImage: sourceRole.avatarImage } : {}),
+      ...(sourceRole.userNamed ? { userNamed: true } : {}),
+      ...(sourceRole.teamPosition ? { teamPosition: sourceRole.teamPosition } : {}),
       modelSource: effectiveModelSource,
       ...(effectiveChatSite ? { chatSite: effectiveChatSite } : {}),
       ...(effectiveExternalModelId ? { externalModelId: effectiveExternalModelId } : {}),

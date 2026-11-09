@@ -44,6 +44,7 @@ describe('background role handlers', () => {
       'GROUP_ROLE_CREATE',
       'GROUP_ROLES_CREATE_BATCH',
       'GROUP_ROLE_UPDATE',
+      'GROUP_ROLE_PROFILE_UPDATE',
       'GROUP_ROLE_DELETE',
       'GROUP_ROLE_RECOVER',
       'GROUP_ROLE_REINITIALIZE',

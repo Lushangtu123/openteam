@@ -66,8 +66,6 @@ describe('team page role panel view boundary', () => {
         card.textContent = `${title}${body}`
         return card
       },
-      roleToneClass: () => 'role-tone-0',
-      roleAvatarLabel: name => name?.slice(0, 1) ?? '',
       insertMention: vi.fn(),
       refreshCurrentChat: vi.fn(async () => undefined),
       focusRoleFrame: vi.fn(),
@@ -109,8 +107,6 @@ describe('team page role panel view boundary', () => {
       getCurrentChat: () => store.chatsById['chat-1'],
       getCurrentRoles: () => [store.rolesById['role-1']],
       emptyCard: () => document.createElement('div'),
-      roleToneClass: () => 'role-tone-0',
-      roleAvatarLabel: name => name?.slice(0, 1) ?? '',
       insertMention: vi.fn(),
       refreshCurrentChat: vi.fn(async () => undefined),
       focusRoleFrame: vi.fn(),
@@ -170,8 +166,6 @@ describe('team page role panel view boundary', () => {
         card.textContent = `${title}${body}`
         return card
       },
-      roleToneClass: () => 'role-tone-0',
-      roleAvatarLabel: name => name?.slice(0, 1) ?? '',
       insertMention: vi.fn(),
       refreshCurrentChat: vi.fn(async () => undefined),
       focusRoleFrame: vi.fn(),
@@ -182,7 +176,7 @@ describe('team page role panel view boundary', () => {
     view.renderRolePanel()
     roleListEl.querySelector<HTMLButtonElement>('[data-role-more="role-1"]')?.click()
     const items = [...roleListEl.querySelectorAll<HTMLButtonElement>('.role-action-menu [role="menuitem"]')]
-    expect(items.map(item => item.textContent)).toEqual(['查看提示词', '刷新网页', '查看网页', '移出群聊'])
+    expect(items.map(item => item.textContent)).toEqual(['编辑名字和头像', '查看提示词', '刷新网页', '查看网页', '移出群聊'])
     const remove = roleListEl.querySelector<HTMLButtonElement>('[data-role-delete="role-1"]')
     expect(items[items.length - 1]).toBe(remove)
     expect(remove?.querySelector('svg')).not.toBeNull()
@@ -218,8 +212,6 @@ describe('team page role panel view boundary', () => {
         card.textContent = `${title}${body}`
         return card
       },
-      roleToneClass: () => 'role-tone-0',
-      roleAvatarLabel: name => name?.slice(0, 1) ?? '',
       insertMention: vi.fn(),
       refreshCurrentChat: vi.fn(async () => undefined),
       focusRoleFrame: vi.fn(),
@@ -243,6 +235,53 @@ describe('team page role panel view boundary', () => {
 
     modal?.querySelector<HTMLButtonElement>('.role-prompt-close')?.click()
     expect(document.querySelector('.role-prompt-modal')).toBeNull()
+  })
+
+  it('opens the name and avatar window from the card menu, draws the chosen avatar, and returns focus after', async () => {
+    const store = makeStoreWithRole()
+    Object.assign(store.rolesById['role-1'], { avatarColor: 'tone-3', avatarText: '产品' })
+    const rolePanelEl = document.createElement('aside')
+    const roleSummaryEl = document.createElement('p')
+    const roleListEl = document.createElement('div')
+    rolePanelEl.append(roleSummaryEl, roleListEl)
+    document.body.append(rolePanelEl)
+    const runCommand = vi.fn(async () => undefined)
+    const view = createRolePanelView({
+      state: createTeamPageState(),
+      getStore: () => store,
+      rolePanelEl,
+      roleSummaryEl,
+      roleListEl,
+      iframeHost: { recoverRole: vi.fn() },
+      getCurrentChat: () => store.chatsById['chat-1'],
+      getCurrentRoles: () => [store.rolesById['role-1']],
+      emptyCard: () => document.createElement('div'),
+      insertMention: vi.fn(),
+      refreshCurrentChat: vi.fn(async () => undefined),
+      focusRoleFrame: vi.fn(),
+      runCommand,
+      showError: vi.fn(),
+    })
+
+    view.renderRolePanel()
+    const avatar = roleListEl.querySelector('.role-avatar')!
+    expect(avatar.className).toContain('role-tone-3')
+    expect(avatar.querySelector('.avatar-text-pair')?.textContent).toBe('产品')
+
+    roleListEl.querySelector<HTMLButtonElement>('[data-role-more="role-1"]')?.click()
+    const edit = roleListEl.querySelector<HTMLButtonElement>('[data-role-edit-profile="role-1"]')!
+    expect(edit.getAttribute('aria-label')).toBe('编辑名字和头像：产品经理')
+    expect(edit.querySelector('svg')).not.toBeNull()
+    edit.click()
+
+    const name = document.querySelector<HTMLInputElement>('#role-profile-name')!
+    expect(name.value).toBe('产品经理')
+    name.value = '小P'
+    name.dispatchEvent(new Event('input'))
+    document.querySelector<HTMLFormElement>('.role-profile-form')!.requestSubmit()
+    await vi.waitFor(() => expect(document.querySelector('.role-profile-modal')).toBeNull())
+    expect(runCommand).toHaveBeenCalledWith('GROUP_ROLE_PROFILE_UPDATE', { roleId: 'role-1', patch: { name: '小P' } })
+    expect(document.activeElement).toBe(roleListEl.querySelector('[data-role-more="role-1"]'))
   })
 
   it('renders the latest AI page health detail on the member card', () => {
@@ -274,8 +313,6 @@ describe('team page role panel view boundary', () => {
         card.textContent = `${title}${body}`
         return card
       },
-      roleToneClass: () => 'role-tone-0',
-      roleAvatarLabel: name => name?.slice(0, 1) ?? '',
       insertMention: vi.fn(),
       refreshCurrentChat: vi.fn(async () => undefined),
       focusRoleFrame: vi.fn(),

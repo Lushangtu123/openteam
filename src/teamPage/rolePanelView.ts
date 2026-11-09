@@ -4,6 +4,8 @@ import type { ChatSite, ExternalModelConfig, GroupRole, OpenTeamStore, RoleModel
 import { normalizeLanguage, translateUi } from '../shared/i18n'
 import type { TeamPageState } from './appState'
 import { createIcon } from './icons'
+import { paintRoleAvatar } from './viewHelpers'
+import { openRoleProfileDialog } from './roleProfileDialog'
 import { PROBLEM_HEALTH_STATUSES, rolePageHealthLabel, type RolePageHealth } from './roleHealth'
 
 const VISIBLE_CHAT_SITES = CHAT_SITES
@@ -22,8 +24,6 @@ export interface RolePanelViewDependencies {
   getCurrentChat(): unknown
   getCurrentRoles(): GroupRole[]
   emptyCard(title: string, body: string): HTMLElement
-  roleToneClass(seed: string | undefined): string
-  roleAvatarLabel(name: string | undefined): string
   insertMention(role: GroupRole): void
   refreshCurrentChat(): Promise<void>
   focusRoleFrame(chatId: string, roleId: string | undefined): void
@@ -67,8 +67,7 @@ export function createRolePanelView(deps: RolePanelViewDependencies): RolePanelV
     })
 
     const avatar = document.createElement('div')
-    avatar.className = `role-avatar ${deps.roleToneClass(role.name)}`
-    avatar.textContent = deps.roleAvatarLabel(role.name)
+    paintRoleAvatar(avatar, 'role-avatar', role)
     wireMentionShortcut(avatar, role)
 
     const main = document.createElement('div')
@@ -138,7 +137,7 @@ export function createRolePanelView(deps: RolePanelViewDependencies): RolePanelV
     menu.setAttribute('role', 'menu')
     menu.addEventListener('click', event => event.stopPropagation())
     const web = role.modelSource !== 'external'
-    menu.append(rolePromptDetailButton(role))
+    menu.append(roleProfileButton(role), rolePromptDetailButton(role))
     if (web) menu.append(roleRefreshButton(role), roleJumpButton(role))
     menu.append(roleDeleteButton(role))
     menu.addEventListener('keydown', event => {
@@ -177,6 +176,20 @@ export function createRolePanelView(deps: RolePanelViewDependencies): RolePanelV
       deps.state.roleActionMenuRoleId = undefined
       run()
     })
+    return button
+  }
+
+  // First in the menu: rename the member and change its avatar.
+  function roleProfileButton(role: GroupRole): HTMLButtonElement {
+    const button = roleMenuItem('role-edit-profile', 'edit', '编辑名字和头像', role.name, () => {
+      renderRolePanel()
+      openRoleProfileDialog(role, {
+        getStore: deps.getStore,
+        runCommand: deps.runCommand,
+        onClose: () => [...deps.roleListEl.querySelectorAll<HTMLButtonElement>('[data-role-more]')].find(button => button.dataset.roleMore === role.id)?.focus(),
+      })
+    })
+    button.dataset.roleEditProfile = role.id
     return button
   }
 

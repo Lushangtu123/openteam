@@ -2,6 +2,7 @@ import { isChatSite } from '../group/chatSites'
 import { getDefaultChatSiteUrlForRole, normalizeSupportedChatConversationUrl } from '../group/conversationUrl'
 import { buildRoleTemplatePersonaPrompt, parseGeneratedPersonDraft } from '../group/personaGeneration'
 import { buildReinitPrompt, roleUsesChatGptGptsPersona } from '../group/promptBuilder'
+import { updateGroupRoleProfile } from '../group/roleProfile'
 import {
   createGroupRole,
   createGroupRolesBatch,
@@ -28,6 +29,7 @@ export const ROLE_ROUTE_TYPES = [
   'GROUP_ROLE_CREATE',
   'GROUP_ROLES_CREATE_BATCH',
   'GROUP_ROLE_UPDATE',
+  'GROUP_ROLE_PROFILE_UPDATE',
   'GROUP_ROLE_DELETE',
   'GROUP_ROLE_RECOVER',
   'GROUP_ROLE_REINITIALIZE',
@@ -179,6 +181,7 @@ export function createRoleHandlers(deps: RoleHandlersDependencies): BackgroundMe
         externalModelId: readOptionalString(patch.externalModelId),
         chatGptGptsUrl: readOptionalString(patch.chatGptGptsUrl),
         grokProjectUrl: readOptionalString(patch.grokProjectUrl),
+        teamPosition: readPatchString(patch.teamPosition),
       }, deps.now())
       const siteChanged = previousChatSite !== updatedRole.chatSite
       if (siteChanged) deps.runtimeFrames.removeRole(updatedRole.chatId, updatedRole.id)
@@ -186,6 +189,21 @@ export function createRoleHandlers(deps: RoleHandlersDependencies): BackgroundMe
     })
     await deps.broadcastStoreUpdated(store)
     return { ok: true, role: result.role, siteChanged: result.siteChanged, store }
+  }
+
+  // The user's own edit of a member's name and avatar. An empty string clears an avatar field.
+  const handleRoleProfileUpdate = async (message: RuntimeMessage) => {
+    const roleId = requireString(message.roleId, '缺少成员 ID')
+    const patch = isRecord(message.patch) ? message.patch : {}
+    const { store, result } = await mutateStore(store => updateGroupRoleProfile(store, roleId, {
+      name: readPatchString(patch.name),
+      avatarText: readPatchString(patch.avatarText),
+      avatarColor: readPatchString(patch.avatarColor),
+      avatarImage: readPatchString(patch.avatarImage),
+    }, deps.now()))
+    deps.log.info('role-profile:update', { roleId, patchKeys: Object.keys(patch), hasImage: Boolean(result.avatarImage) })
+    await deps.broadcastStoreUpdated(store)
+    return { ok: true, role: result, store }
   }
 
   const handleRoleDelete = async (message: RuntimeMessage) => {
@@ -289,6 +307,7 @@ export function createRoleHandlers(deps: RoleHandlersDependencies): BackgroundMe
     { type: 'GROUP_ROLE_CREATE', handler: handleRoleCreate },
     { type: 'GROUP_ROLES_CREATE_BATCH', handler: handleRolesCreateBatch },
     { type: 'GROUP_ROLE_UPDATE', handler: handleRoleUpdate },
+    { type: 'GROUP_ROLE_PROFILE_UPDATE', handler: handleRoleProfileUpdate },
     { type: 'GROUP_ROLE_DELETE', handler: handleRoleDelete },
     { type: 'GROUP_ROLE_RECOVER', handler: handleRoleRecover },
     { type: 'GROUP_ROLE_REINITIALIZE', handler: handleRoleReinitialize },
@@ -353,6 +372,11 @@ function readModelSource(value: unknown): 'site' | 'external' | undefined {
 
 function readOptionalString(value: unknown): string | undefined {
   return typeof value === 'string' ? value.trim() || undefined : undefined
+}
+
+// Keeps an empty string, which clears the field.
+function readPatchString(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined
 }
 
 function requireString(value: unknown, error: string): string {

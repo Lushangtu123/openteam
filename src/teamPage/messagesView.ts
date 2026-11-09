@@ -7,6 +7,7 @@ import { DEFAULT_MESSAGE_HIGHLIGHT_COLOR, MESSAGE_HIGHLIGHT_COLORS, messageHighl
 import { roleMentionLabel, roleMentionLabelOptionsFromSettings, roleModelLabel } from '../group/mentionParser'
 import type { GroupChat, GroupMessage, GroupRole, MessageFileAttachment, MessageHighlight, MessageImageAttachment, MessageReference, OpenTeamStore, OrchestrationReviewResult } from '../group/types'
 import { formatBytes } from './composerAttachments'
+import { paintRoleAvatar, roleAvatarSignature } from './viewHelpers'
 import { renderMarkdownInto } from './markdownRender'
 import { countRepliesByQuestion } from '../group/replyComparison'
 import { hasRoundSummary, isKeyPointsHeading, isOpenTeamRequest } from '../group/roundSummary'
@@ -36,8 +37,6 @@ export interface MessagesViewDependencies {
   openAddPersonDialog(): void
   // Starts a group: forming a team around a task, from a template, or blank.
   startNewChat?(kind: 'team' | 'template' | 'blank'): void
-  roleToneClass(seed: string | undefined): string
-  roleAvatarLabel(name: string | undefined): string
   messageTitle(message: GroupMessage): string
   focusRoleFrame(chatId: string, roleId: string | undefined): void
   insertMention(role: GroupRole): void
@@ -274,8 +273,7 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     inner.className = 'message-inner'
 
     const avatar = document.createElement('div')
-    avatar.className = `message-avatar ${messageToneClass(message)}`
-    avatar.textContent = messageAvatarLabel(message)
+    paintMessageAvatar(avatar, message)
     avatar.hidden = !showAvatar
     wireMentionShortcut(avatar, roleForMessage(message))
 
@@ -298,9 +296,10 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
       }
       const title = document.createElement('span')
       title.className = 'message-name-text'
-      title.textContent = deps.messageTitle(message)
-      name.append(title)
+      // A member still in the chat goes by the name it has now.
       const role = roleForMessage(message)
+      title.textContent = role?.name ?? deps.messageTitle(message)
+      name.append(title)
       if (role) {
         name.append(siteBadge(role))
         const jumpButton = siteJumpButton(message.chatId, role)
@@ -1102,6 +1101,8 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
       roleId: message.roleId,
       roleName: message.roleName,
       roleSite: roleForMessage(message)?.chatSite,
+      roleCurrentName: roleForMessage(message)?.name,
+      roleAvatar: roleAvatarSignature(roleForMessage(message)),
       content: message.content,
       contentFormat: message.contentFormat,
       // File text can be large; its id, name and size identify it well enough.
@@ -1228,8 +1229,7 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     const inner = document.createElement('div')
     inner.className = 'message-inner'
     const avatar = document.createElement('div')
-    avatar.className = `message-avatar ${deps.roleToneClass(role.name)}`
-    avatar.textContent = deps.roleAvatarLabel(role.name)
+    paintRoleAvatar(avatar, 'message-avatar', role)
     avatar.hidden = !showAvatar
     wireMentionShortcut(avatar, role)
     const stack = document.createElement('div')
@@ -1302,14 +1302,14 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     return wrapper
   }
 
-  function messageAvatarLabel(message: GroupMessage): string {
-    if (message.type === 'user') return '你'
-    return deps.roleAvatarLabel(message.roleName)
-  }
-
-  function messageToneClass(message: GroupMessage): string {
-    if (message.type === 'user') return 'role-tone-5'
-    return deps.roleToneClass(message.roleName)
+  // The user's own messages carry 你; a member's carry its avatar as it is now.
+  function paintMessageAvatar(avatar: HTMLElement, message: GroupMessage): void {
+    if (message.type === 'user') {
+      avatar.className = 'message-avatar role-tone-5'
+      avatar.textContent = '你'
+      return
+    }
+    paintRoleAvatar(avatar, 'message-avatar', roleForMessage(message), message.roleName)
   }
 
   function truncate(value: string, maxLength: number): string {

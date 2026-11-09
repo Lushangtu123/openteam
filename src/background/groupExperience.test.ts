@@ -1705,6 +1705,48 @@ describe('team formation in the background', () => {
     expect(await harness.invoke({ type: 'GROUP_TEAM_CREATE', templateId: 'missing' })).toMatchObject({ ok: false, error: '找不到这个团队' })
   })
 
+  it('renames a member and changes its avatar: mentions, prompts, history, saved teams and copies follow', async () => {
+    const png = 'data:image/png;base64,iVBORw0KGgo='
+    const store = makeStore()
+    store.currentChatId = 'chat-1'
+    store.chatsById['chat-1'] = { ...makeChat('chat-1', ['role-1', 'role-2']), mode: 'collaborative', teamFormation: { task: '记账', requiredPositions: [], status: 'confirmed', rounds: [['role-1', 'role-2']], nextRound: 1, invitationIds: [], createdAt: 1 } }
+    store.chatOrder = ['chat-1']
+    store.rolesById['role-1'] = makeRole('chat-1', 'role-1', 'DeepSeek', { chatSite: 'gemini' })
+    store.rolesById['role-2'] = makeRole('chat-1', 'role-2', 'Kimi', { chatSite: 'kimi' })
+    store.messagesById.old = { id: 'old', chatId: 'chat-1', seq: 1, type: 'assistant', roleId: 'role-1', roleName: 'DeepSeek', content: '旧回复', status: 'received', createdAt: 1 }
+    store.chatsById['chat-1'].messageIds = ['old']
+    store.chatsById['chat-1'].nextMessageSeq = 2
+    const harness = await setupBackground(store)
+    await harness.invoke(
+      { type: 'TEAM_FRAME_ROLE_READY', chatId: 'chat-1', roleId: 'role-1', hostTabId: 900, conversationId: '__default__', conversationUrl: 'https://gemini.google.com/' },
+      { tab: { id: 101 } as chrome.tabs.Tab, frameId: 7, url: 'https://gemini.google.com/' },
+    )
+
+    expect(await harness.invoke({ type: 'GROUP_ROLE_PROFILE_UPDATE', roleId: 'role-1', patch: { name: 'Kimi' } })).toMatchObject({ ok: false, error: '这个群里已经有叫「Kimi」的成员' })
+    expect(await harness.invoke({ type: 'GROUP_ROLE_PROFILE_UPDATE', roleId: 'role-1', patch: { name: '小D', avatarColor: 'tone-2', avatarText: 'D', avatarImage: png } })).toMatchObject({ ok: true })
+    let current = await harness.getStore()
+    expect(current.rolesById['role-1']).toMatchObject({ name: '小D', userNamed: true, avatarColor: 'tone-2', avatarText: 'D', avatarImage: png })
+    expect(current.messagesById.old.roleName).toBe('小D')
+
+    // The new name is how the member is mentioned and how its next prompt names it.
+    harness.tabsSendMessage.mockClear()
+    const sent = await harness.invoke({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@小D 你好' }) as { ok: boolean; message: GroupMessage }
+    expect(sent.ok).toBe(true)
+    expect(sent.message.targetRoleIds).toEqual(['role-1'])
+    const prompt = harness.tabsSendMessage.mock.calls.map(call => call[1]).find(message => message?.type === 'TEAM_SEND_PROMPT')
+    expect(prompt?.content).toContain('Your identity is "小D".')
+    expect(prompt?.content).toContain('Group chat members:\n- 小D\n- Kimi')
+
+    const saved = await harness.invoke({ type: 'GROUP_TEAM_TEMPLATE_SAVE', chatId: 'chat-1', name: '小队' }) as { template: { id: string } }
+    const created = await harness.invoke({ type: 'GROUP_TEAM_CREATE', templateId: saved.template.id, task: '新项目' }) as { chat: GroupChat }
+    current = await harness.getStore()
+    expect(current.rolesById[current.chatsById[created.chat.id].roleIds[0]]).toMatchObject({ name: '小D', userNamed: true, avatarColor: 'tone-2', avatarText: 'D', avatarImage: png })
+
+    const copy = await harness.invoke({ type: 'GROUP_CHAT_DUPLICATE', chatId: 'chat-1' }) as { chat: GroupChat }
+    current = await harness.getStore()
+    expect(current.rolesById[current.chatsById[copy.chat.id].roleIds[0]]).toMatchObject({ name: '小D', userNamed: true, avatarText: 'D', avatarImage: png })
+  })
+
   it('records each round of invitations once, and resends personas when asked', async () => {
     const store = makeStore()
     store.currentChatId = 'chat-1'
