@@ -150,6 +150,7 @@ export function createChatGptAdapter(options: ChatGptAdapterOptions = {}): ChatS
     readResponseTextFromCopy: node => readResponseTextFromCopy(node, clipboardTimeoutMs, clipboardPollMs),
     readResponseMarkdown: extractMarkdownFromDom,
     findResponseContainer,
+    readResponseId: readChatGptResponseId,
     isGenerating: isChatGptGenerating,
     checkStatus: checkChatGptStatus,
     findEditor: findChatGptEditor,
@@ -233,6 +234,20 @@ function collectPromptDiagnostics(): Record<string, unknown> {
 
 function extractCleanText(node: Node): string {
   return extractCleanTextFromDom(node, { skipTags: SKIP_TAGS })
+}
+
+// Each ChatGPT reply carries its message id (a UUID). ChatGPT keeps only the last few turns of a
+// long conversation on the page.
+const CHATGPT_MESSAGE_ID_ATTRIBUTES = ['data-chatgpt-selection-message-id', 'data-message-id'] as const
+
+export function readChatGptResponseId(element: Element): string | undefined {
+  const selector = CHATGPT_MESSAGE_ID_ATTRIBUTES.map(name => `[${name}]`).join(', ')
+  const holder = element.closest(selector) ?? element.querySelector(selector)
+  for (const name of CHATGPT_MESSAGE_ID_ATTRIBUTES) {
+    const id = holder?.getAttribute(name)
+    if (id) return id
+  }
+  return undefined
 }
 
 function findResponseContainer(element: Element | null): Element | null {

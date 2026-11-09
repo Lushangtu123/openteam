@@ -821,6 +821,73 @@ describe('createReplyObserver', () => {
     vi.useRealTimers()
   })
 
+  it('reports a reply with the same text as an earlier one when the site keeps only the last turns', async () => {
+    vi.useFakeTimers()
+    document.body.innerHTML = `
+      <message-content data-id="a">第一轮的回答</message-content>
+      <message-content data-id="b">第二轮的回答</message-content>
+      <message-content data-id="c">收到</message-content>
+    `
+    const sentMessages: RoleToBackgroundMessage[] = []
+    const roleSession = createFakeRoleSession()
+    const observer = createReplyObserver({
+      siteAdapter: createFakeAdapter({ isGenerating: () => false, readResponseId: element => element.getAttribute('data-id') ?? undefined }),
+      roleSession,
+      log: createFakeLog(),
+      sendRuntimeMessage: async message => {
+        sentMessages.push(message)
+        return { ok: true } as never
+      },
+      reportRoleError: vi.fn(),
+    })
+
+    observer.capturePromptReplyBaseline('msg-1')
+    roleSession.startPrompt('msg-1', 'attempt-1')
+    // Like ChatGPT: the oldest turn leaves the page as the new one arrives, so the count stays the same.
+    document.querySelector('[data-id="a"]')!.remove()
+    document.body.insertAdjacentHTML('beforeend', '<message-content data-id="d">收到</message-content>')
+    observer.startReplyPolling('msg-1', 'attempt-1')
+    await vi.advanceTimersByTimeAsync(12_000)
+
+    expect(sentMessages).toContainEqual(expect.objectContaining({ type: 'TEAM_ROLE_REPLY', messageId: 'msg-1', content: '收到' }))
+    observer.clearReplyPolling()
+    vi.useRealTimers()
+  })
+
+  it('does not take an earlier reply drawn again for a new one when the site names its replies', async () => {
+    vi.useFakeTimers()
+    document.body.innerHTML = `
+      <message-content data-id="a">第一轮的回答</message-content>
+      <message-content data-id="b">收到</message-content>
+    `
+    const sentMessages: RoleToBackgroundMessage[] = []
+    const roleSession = createFakeRoleSession()
+    const observer = createReplyObserver({
+      siteAdapter: createFakeAdapter({ isGenerating: () => false, readResponseId: element => element.getAttribute('data-id') ?? undefined }),
+      roleSession,
+      log: createFakeLog(),
+      sendRuntimeMessage: async message => {
+        sentMessages.push(message)
+        return { ok: true } as never
+      },
+      reportRoleError: vi.fn(),
+    })
+
+    observer.capturePromptReplyBaseline('msg-1')
+    roleSession.startPrompt('msg-1', 'attempt-1')
+    // The page draws its turns again: new elements, same replies.
+    document.body.innerHTML = `
+      <message-content data-id="a">第一轮的回答</message-content>
+      <message-content data-id="b">收到</message-content>
+    `
+    observer.startReplyPolling('msg-1', 'attempt-1')
+    await vi.advanceTimersByTimeAsync(12_000)
+
+    expect(sentMessages).not.toContainEqual(expect.objectContaining({ type: 'TEAM_ROLE_REPLY' }))
+    observer.clearReplyPolling()
+    vi.useRealTimers()
+  })
+
   it('waits for DeepSeek long streaming replies to finish before reporting', async () => {
     vi.useFakeTimers()
     document.body.innerHTML = `

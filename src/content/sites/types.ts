@@ -25,6 +25,10 @@ export interface ChatSiteAdapter {
   readResponseTextFromCopy?(node: Node): Promise<string | undefined>
   readResponseMarkdown?(node: Node): string
   findResponseContainer(element: Element | null): Element | null
+  // The reply's own id on the page, for sites that give one. It tells a new reply from an older one
+  // with the same text even where the site keeps only the last few turns on the page, so counting
+  // replies does not show that one was added.
+  readResponseId?(element: Element): string | undefined
   isGenerating(): boolean
   checkStatus?(context: SiteHealthContext): SiteStatusInfo
   // The site's prompt input box, where attached files are pasted.

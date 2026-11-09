@@ -47,6 +47,8 @@ export function createReplyObserver(options: {
   let promptBaselineReplies = new Set<string>()
   let promptBaselineContainerCount = 0
   let promptBaselinePromptId = ''
+  // The ids of the replies on the page when the prompt was sent, when the site gives every reply one.
+  let promptBaselineResponseIds: Set<string> | undefined
   let replyPollingTimer: number | null = null
   let replyPollingInFlight = false
   // When polling last saw the reply's text change.
@@ -112,6 +114,8 @@ export function createReplyObserver(options: {
     promptBaselineReplies = new Set(snapshots.map(snapshot => snapshot.key))
     promptBaselineContainerCount = countResponseContainers(containers)
     promptBaselinePromptId = messageId ?? ''
+    const baselineIds = siteAdapter.readResponseId ? containers.map(container => siteAdapter.readResponseId?.(container)) : []
+    promptBaselineResponseIds = siteAdapter.readResponseId && baselineIds.every(Boolean) ? new Set(baselineIds as string[]) : undefined
     replyTracker.seed(getConversationId(), replies)
     log.debug('reply-baseline:captured', {
       messageId,
@@ -129,6 +133,7 @@ export function createReplyObserver(options: {
     promptBaselineReplies.clear()
     promptBaselineContainerCount = 0
     promptBaselinePromptId = ''
+    promptBaselineResponseIds = undefined
   }
 
   function seedStoredRoleReplies(replies: string[] | undefined): void {
@@ -143,6 +148,11 @@ export function createReplyObserver(options: {
     const elementIndex = currentContainers.indexOf(element)
     const snapshot = readReplySnapshot(element, text)
     if (!hasReplySnapshot(snapshot)) return true
+
+    // The site names its replies: a reply is old exactly when it was on the page before the prompt,
+    // whatever its text ("收到" twice in a row is two replies).
+    const responseId = promptBaselineResponseIds ? siteAdapter.readResponseId?.(element) : undefined
+    if (promptBaselineResponseIds && responseId) return promptBaselineResponseIds.has(responseId)
 
     let matchingBaselineContainer: Element | undefined
     let matchingBaselineKey: string | undefined

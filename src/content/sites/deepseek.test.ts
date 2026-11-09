@@ -13,6 +13,16 @@ describe('DeepSeek site adapter', () => {
     })
   })
 
+  it('names each reply by its number in the conversation', () => {
+    document.body.innerHTML = `
+      <div data-virtual-list-item-key="21"><div class="ds-message"><div class="ds-markdown"><p>收到。</p></div></div></div>
+      <div data-virtual-list-item-key="23"><div class="ds-message"><div class="ds-markdown"><p>收到。</p></div></div></div>
+    `
+
+    const adapter = createDeepSeekAdapter()
+    expect(adapter.getResponseContainers().map(reply => adapter.readResponseId?.(reply))).toEqual(['21', '23'])
+  })
+
   it('does not report non-DeepSeek urls', () => {
     const adapter = createDeepSeekAdapter({ href: 'https://chat.deepseek.com.evil.example/a/chat/s/abc-123' })
 

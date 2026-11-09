@@ -75,6 +75,9 @@ export function createDeepSeekAdapter(options: DeepSeekAdapterOptions = {}): Cha
     readResponseText: extractCleanText,
     readResponseMarkdown: extractMarkdownFromDom,
     findResponseContainer,
+    // DeepSeek numbers each message in the conversation (data-virtual-list-item-key) and keeps only
+    // a few of them on the page.
+    readResponseId: element => element.closest(DEEPSEEK_SELECTORS.responseContainer)?.getAttribute('data-virtual-list-item-key') || undefined,
     isGenerating: isDeepSeekGenerating,
     findEditor: () => document.querySelector<HTMLElement>(DEEPSEEK_SELECTORS.editor),
     checkStatus: context => checkSiteHealth({

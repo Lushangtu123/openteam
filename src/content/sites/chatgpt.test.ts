@@ -26,6 +26,22 @@ describe('ChatGPT site adapter', () => {
     expect(adapter.findResponseContainer(document.querySelector('button'))).toBeNull()
   })
 
+  it('names each reply by its message id, so two replies with the same text stay two', () => {
+    document.body.innerHTML = `
+      <div data-content-search-unit-key="turn-4:2:assistant">
+        <div data-chatgpt-selection-message-id="6aeff59d-0001"><div data-markdown-text-style="assistant-message"><p>收到</p></div></div>
+      </div>
+      <div data-content-search-unit-key="turn-5:2:assistant">
+        <div data-chatgpt-selection-message-id="6aeff59d-0002"><div data-markdown-text-style="assistant-message"><p>收到</p></div></div>
+      </div>
+      <div data-message-author-role="assistant" data-message-id="older-layout-id"><p>旧版页面的回答</p></div>
+    `
+
+    const adapter = createChatGptAdapter()
+    const replies = adapter.getResponseContainers()
+    expect(replies.map(reply => adapter.readResponseId?.(reply))).toEqual(expect.arrayContaining(['6aeff59d-0001', '6aeff59d-0002', 'older-layout-id']))
+  })
+
   it('extracts ChatGPT conversation ids and normalized safe urls', () => {
     const adapter = createChatGptAdapter({ href: 'https://chatgpt.com/c/abc-123?model=gpt-5' })
 
