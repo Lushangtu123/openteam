@@ -24,7 +24,7 @@ describe('extension security configuration', () => {
     expect(extensionIdFromManifestKey(manifest.key!)).toBe('cnccbifloajlkjglmiojkpimjciamlpe')
   })
 
-  it('scopes host permissions to supported AI chat sites and external API origins', () => {
+  it('requires host access only to the supported AI chat sites, their image hosts and this computer', () => {
     const manifest = JSON.parse(readFileSync(resolve(process.cwd(), 'public/manifest.json'), 'utf8')) as {
       host_permissions?: string[]
     }
@@ -42,10 +42,26 @@ describe('extension security configuration', () => {
       'wss://grok.com/*',
       'https://chat.qwen.ai/*',
       'https://www.kimi.com/*',
-      'https://*/*',
-      'http://*/*',
+      // Reply images the background downloads: Gemini's and ChatGPT's image hosts.
+      'https://*.googleusercontent.com/*',
+      'https://*.oaiusercontent.com/*',
+      'https://*.openai.com/*',
+      // The local daemon and local models.
+      'http://127.0.0.1/*',
     ])
     expect(manifest.host_permissions).not.toContain('<all_urls>')
+    for (const pattern of manifest.host_permissions ?? []) expect(pattern).not.toMatch(/^(\*|https?):\/\/\*\//)
+  })
+
+  it('asks for an API model\'s address only when the user adds it', () => {
+    const manifest = JSON.parse(readFileSync(resolve(process.cwd(), 'public/manifest.json'), 'utf8')) as {
+      optional_host_permissions?: string[]
+      content_security_policy: { extension_pages: string }
+    }
+
+    expect(manifest.optional_host_permissions).toEqual(['https://*/*'])
+    // The only plain-http address the pages may connect to is this computer.
+    expect(manifest.content_security_policy.extension_pages).toMatch(/connect-src 'self' https:\/\/\* http:\/\/127\.0\.0\.1:\* ws:\/\/127\.0\.0\.1:\*;/)
   })
 
   it('does not declare page-world bridge scripts in release manifest', () => {

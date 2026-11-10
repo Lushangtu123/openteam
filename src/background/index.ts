@@ -20,6 +20,7 @@ import {
 import { createMessageRouter } from './messageRouter'
 import { classifyRuntimeSender, isRuntimeMessageAllowed, responseForSender } from './senderPolicy'
 import { createExternalModelHandlers } from './externalModelHandlers'
+import { requireApiModelAccess } from './apiModelAccess'
 import { createExternalModelClient, type ExternalModelClient } from './externalModelClient'
 import { createLocalAgentApprovals } from './localAgentApprovals'
 import { createLocalAgentClient } from './localAgentClient'
@@ -50,7 +51,8 @@ const sendPrompt = createPromptSender({
   loadImages: async ids => (await imageAttachments.loadUploads(ids)).map(({ fileName, mimeType, data }) => ({ fileName, mimeType, data })),
 })
 const promptDeliveryLimiter = createSitePromptDeliveryLimiter({ log })
-const apiModelClient = createExternalModelClient()
+// Each API address is allowed by the user on its own; without that the call is refused, with why.
+const apiModelClient = requireApiModelAccess(createExternalModelClient())
 // Questions local agent members wait on (run this task? allow this action?), answered on the page.
 const localAgentApprovals = createLocalAgentApprovals({
   newId,

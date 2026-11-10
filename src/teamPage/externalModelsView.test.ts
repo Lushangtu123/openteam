@@ -67,9 +67,8 @@ describe('external models view', () => {
     testButton.click()
     expect(testButton.disabled).toBe(true)
     expect(testButton.textContent).toBe('测试中')
-    await Promise.resolve()
+    await vi.waitFor(() => expect(testExternalModel).toHaveBeenCalledWith('external-model-1'))
 
-    expect(testExternalModel).toHaveBeenCalledWith('external-model-1')
     expect(runCommand).not.toHaveBeenCalled()
     expect(showError).not.toHaveBeenCalled()
   })
@@ -137,6 +136,126 @@ describe('external models view', () => {
     const editButton = [...document.querySelectorAll<HTMLButtonElement>('#external-models-list button')].find(button => button.textContent === '编辑')!
     editButton.click()
     expect([$('#external-model-form').hidden, $('#external-model-form-title').textContent, $<HTMLInputElement>('#external-model-name').value]).toEqual([false, '修改「DeepSeek」', 'DeepSeek'])
+  })
+
+  function accessSetup(options: { allowed: boolean; grants: boolean }) {
+    const store = createDefaultStore()
+    store.settings.language = 'zh-CN'
+    store.settings.externalModelOrder = ['external-model-1']
+    store.settings.externalModelsById['external-model-1'] = { id: 'external-model-1', name: 'DeepSeek API', format: 'openai', baseUrl: 'https://api.deepseek.com/v1', apiKey: 'sk-test', modelName: 'deepseek-chat', createdAt: 1, updatedAt: 1 }
+    document.body.innerHTML = `
+      <button id="settings-button"></button>
+      <div id="settings-menu"></div>
+      <button id="open-external-models"></button>
+      <button id="close-external-models"></button>
+      <div id="external-models-modal"></div>
+      <div id="external-models-list"></div>
+      <form id="external-model-form"></form>
+      <input id="external-model-id" />
+      <input id="external-model-name" />
+      <select id="external-model-format"><option value="openai">OpenAI</option></select>
+      <input id="external-model-base-url" />
+      <input id="external-model-api-key" />
+      <input id="external-model-model-name" />
+      <button id="reset-external-model-form"></button>
+    `
+    const $ = <T extends HTMLElement>(selector: string) => document.querySelector<T>(selector)!
+    let allowed = options.allowed
+    const requestHostAccess = vi.fn(async () => {
+      if (options.grants) allowed = true
+      return allowed
+    })
+    const runCommand = vi.fn(async () => undefined)
+    const testExternalModel = vi.fn(async () => undefined)
+    const showError = vi.fn()
+    const view = createExternalModelsView({
+      getStore: () => store,
+      settingsButtonEl: $('#settings-button'),
+      settingsMenuEl: $('#settings-menu'),
+      openExternalModelsEl: $('#open-external-models'),
+      closeExternalModelsEl: $('#close-external-models'),
+      externalModelsModalEl: $('#external-models-modal'),
+      externalModelsListEl: $('#external-models-list'),
+      externalModelFormEl: $('#external-model-form'),
+      externalModelIdEl: $('#external-model-id'),
+      externalModelNameEl: $('#external-model-name'),
+      externalModelFormatEl: $('#external-model-format'),
+      externalModelBaseUrlEl: $('#external-model-base-url'),
+      externalModelApiKeyEl: $('#external-model-api-key'),
+      externalModelModelNameEl: $('#external-model-model-name'),
+      resetExternalModelFormEl: $('#reset-external-model-form'),
+      runCommand,
+      testExternalModel,
+      hasHostAccess: async () => allowed,
+      requestHostAccess,
+      showError,
+    })
+    view.registerExternalModelsEvents()
+    const button = (text: string) => [...document.querySelectorAll<HTMLButtonElement>('#external-models-list button')].find(candidate => candidate.textContent === text)
+    return { view, $, button, requestHostAccess, runCommand, testExternalModel, showError }
+  }
+
+  it('asks to reach a new model\'s address when it is saved, and does not save it when that is refused', async () => {
+    const { $, requestHostAccess, runCommand, showError } = accessSetup({ allowed: false, grants: false })
+    $<HTMLInputElement>('#external-model-name').value = 'OpenRouter'
+    $<HTMLInputElement>('#external-model-base-url').value = 'https://openrouter.ai/api/v1'
+    $<HTMLInputElement>('#external-model-api-key').value = 'sk-test'
+    $<HTMLInputElement>('#external-model-model-name').value = 'some-model'
+
+    $<HTMLFormElement>('#external-model-form').dispatchEvent(new Event('submit', { cancelable: true }))
+    await vi.waitFor(() => expect(showError).toHaveBeenCalledWith('需要你允许 OpenTeam 访问 openrouter.ai，才能使用这个模型。'))
+
+    expect(requestHostAccess).toHaveBeenCalledWith('https://openrouter.ai/api/v1')
+    expect(runCommand).not.toHaveBeenCalled()
+  })
+
+  it('saves the model once its address is allowed', async () => {
+    const { $, runCommand, showError } = accessSetup({ allowed: false, grants: true })
+    $<HTMLInputElement>('#external-model-name').value = 'OpenRouter'
+    $<HTMLInputElement>('#external-model-base-url').value = 'https://openrouter.ai/api/v1'
+
+    $<HTMLFormElement>('#external-model-form').dispatchEvent(new Event('submit', { cancelable: true }))
+    await vi.waitFor(() => expect(runCommand).toHaveBeenCalledWith('EXTERNAL_MODEL_CREATE', expect.objectContaining({ baseUrl: 'https://openrouter.ai/api/v1' })))
+
+    expect(showError).not.toHaveBeenCalled()
+  })
+
+  it('refuses an address that is not a web address before asking anything', async () => {
+    const { $, requestHostAccess, runCommand, showError } = accessSetup({ allowed: false, grants: true })
+    $<HTMLInputElement>('#external-model-base-url').value = 'api.deepseek.com/v1'
+
+    $<HTMLFormElement>('#external-model-form').dispatchEvent(new Event('submit', { cancelable: true }))
+    await vi.waitFor(() => expect(showError).toHaveBeenCalledWith('模型地址需要以 https:// 或 http:// 开头'))
+
+    expect(requestHostAccess).not.toHaveBeenCalled()
+    expect(runCommand).not.toHaveBeenCalled()
+  })
+
+  it('marks a saved model whose address is not allowed yet, with a button that allows it', async () => {
+    const { view, button, requestHostAccess } = accessSetup({ allowed: false, grants: true })
+
+    view.renderExternalModels()
+    await vi.waitFor(() => expect(button('允许访问')).toBeTruthy())
+    expect(document.querySelector('.model-access-needed')?.textContent).toBe('还没有允许 OpenTeam 访问 api.deepseek.com，这个模型暂时不能回答。')
+
+    button('允许访问')!.click()
+    await vi.waitFor(() => expect(document.querySelector('.model-access-needed')).toBeNull())
+    expect(requestHostAccess).toHaveBeenCalledWith('https://api.deepseek.com/v1')
+    expect(button('允许访问')).toBeUndefined()
+  })
+
+  it('shows no notice for a model whose address is allowed, and does not test one that is refused', async () => {
+    const allowed = accessSetup({ allowed: true, grants: true })
+    allowed.view.renderExternalModels()
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(document.querySelector('.model-access-needed')).toBeNull()
+
+    const refused = accessSetup({ allowed: false, grants: false })
+    refused.view.renderExternalModels()
+    refused.button('测试')!.click()
+    await vi.waitFor(() => expect(refused.showError).toHaveBeenCalledWith('需要你允许 OpenTeam 访问 api.deepseek.com，才能使用这个模型。'))
+    expect(refused.testExternalModel).not.toHaveBeenCalled()
   })
 
   it('renders external model actions in English mode', () => {

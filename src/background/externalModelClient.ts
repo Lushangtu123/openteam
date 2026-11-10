@@ -10,6 +10,8 @@ export class ExternalModelError extends Error {
   }
 
   get friendlyMessage(): string {
+    // Says what to do itself (OpenTeam was not allowed to reach the address).
+    if (this.code === 'host_access') return this.message
     if (this.status === 401 || this.status === 403) return 'API Key 无效或权限不足，请检查配置'
     if (this.status === 429) return '请求过于频繁，请稍后再试 (Rate Limit)'
     if (this.status === 404) return '模型名称不正确或端点路径错误'

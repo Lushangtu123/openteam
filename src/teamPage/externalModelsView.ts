@@ -1,4 +1,5 @@
 import type { ExternalModelConfig, ExternalModelFormat, OpenTeamStore } from '../group/types'
+import { hasHostAccess, hostAccessLabel, hostAccessPattern, requestHostAccess } from '../shared/hostAccess'
 import { normalizeLanguage, translateUi } from '../shared/i18n'
 import type { LocalAgentInfo } from '../shared/localControlProtocol'
 
@@ -22,6 +23,10 @@ export interface ExternalModelsViewDependencies {
   testExternalModel(modelId: string): Promise<void>
   // The local agents the daemon offers (for a 本机智能体 model).
   listLocalAgents?(): Promise<LocalAgentInfo[]>
+  // Whether OpenTeam may reach an API address, and asking the user to allow it (the browser's own
+  // prompt, shown only from a click).
+  hasHostAccess?(baseUrl: string): Promise<boolean>
+  requestHostAccess?(baseUrl: string): Promise<boolean>
   showError(message: string): void
 }
 
@@ -42,6 +47,8 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
   const addButtonEl = form.ownerDocument.querySelector<HTMLButtonElement>('#add-external-model')
   const formTitleEl = form.querySelector<HTMLElement>('#external-model-form-title')
   let localAgents: LocalAgentInfo[] = []
+  const hasAccess = deps.hasHostAccess ?? hasHostAccess
+  const requestAccess = deps.requestHostAccess ?? requestHostAccess
 
   // The window lists the models; the form opens only to add one or change one, and closes on save or
   // cancel. With no models yet, the form is open from the start.
@@ -169,7 +176,35 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
     remove.addEventListener('click', () => deleteModel(model))
     actions.append(test, edit, remove)
     card.append(body, actions)
+    if (model.format !== 'local-agent') void showAccessNeeded(model, body, actions)
     return card
+  }
+
+  // A model whose address OpenTeam may not reach yet (restored from a backup, or added before access
+  // was asked per address) says so, with a button to allow it.
+  async function showAccessNeeded(model: ExternalModelConfig, body: HTMLElement, actions: HTMLElement): Promise<void> {
+    if (await hasAccess(model.baseUrl)) return
+    const host = hostAccessLabel(model.baseUrl)
+    const notice = document.createElement('div')
+    notice.className = 'template-description model-access-needed'
+    notice.textContent = language() === 'en' ? `OpenTeam is not allowed to reach ${host} yet, so this model cannot answer.` : `还没有允许 OpenTeam 访问 ${host}，这个模型暂时不能回答。`
+    const allow = document.createElement('button')
+    allow.type = 'button'
+    allow.className = 'btn btn-primary model-allow-access'
+    allow.textContent = ui('允许访问')
+    allow.addEventListener('click', () => {
+      allowAccess(model.baseUrl).then(renderExternalModels).catch(error => deps.showError(error instanceof Error ? error.message : String(error)))
+    })
+    body.append(notice)
+    actions.prepend(allow)
+  }
+
+  // Asks for this address alone. Called straight from a click, as the browser requires.
+  async function allowAccess(baseUrl: string): Promise<void> {
+    if (!hostAccessPattern(baseUrl)) throw new Error(language() === 'en' ? 'The model address must start with https:// or http://' : '模型地址需要以 https:// 或 http:// 开头')
+    if (await requestAccess(baseUrl)) return
+    const host = hostAccessLabel(baseUrl)
+    throw new Error(language() === 'en' ? `OpenTeam needs your permission to reach ${host} before it can use this model.` : `需要你允许 OpenTeam 访问 ${host}，才能使用这个模型。`)
   }
 
   async function saveModel(): Promise<void> {
@@ -184,6 +219,7 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
           apiKey: deps.externalModelApiKeyEl.value.trim(),
           modelName: deps.externalModelModelNameEl.value.trim(),
         }
+    if (format !== 'local-agent') await allowAccess(deps.externalModelBaseUrlEl.value)
     await deps.runCommand(modelId ? 'EXTERNAL_MODEL_UPDATE' : 'EXTERNAL_MODEL_CREATE', modelId ? { modelId, ...payload } : payload)
     renderExternalModels()
     hideForm()
@@ -205,6 +241,7 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
     button.disabled = true
     button.textContent = ui('测试中')
     try {
+      if (model.format !== 'local-agent') await allowAccess(model.baseUrl)
       await deps.testExternalModel(model.id)
       button.textContent = ui('测试通过')
     } catch (error: any) {

@@ -489,6 +489,7 @@ const UI_TRANSLATIONS: Record<string, string> = {
   '删除': 'Delete',
   '测试中': 'Testing',
   '测试通过': 'Test passed',
+  '允许访问': 'Allow access',
   '琥珀': 'Amber',
   '蓝色': 'Blue',
   '绿色': 'Green',

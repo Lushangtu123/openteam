@@ -799,6 +799,15 @@
   color: #ff8a82;
 }
 
+/* An API model whose address OpenTeam may not reach yet: the same reds, which pass AA on the card. */
+:root[data-theme] .template-description.model-access-needed {
+  color: #cf2e23;
+}
+
+:root[data-theme="dark"] .template-description.model-access-needed {
+  color: #ff8a82;
+}
+
 /* People lists: rows as tall as their text (the list stretched them to fill its height). */
 :root[data-theme] #people-library-list,
 :root[data-theme] #add-library-people-list {
