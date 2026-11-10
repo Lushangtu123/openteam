@@ -10,6 +10,13 @@ function reply(html: string): HTMLElement {
 }
 
 describe('extractMarkdownFromDom', () => {
+  it('reads a line break once when the page\'s source goes on a new line after it', () => {
+    // Grok writes key points as the lines of one paragraph: "<br>", then a newline in the source.
+    const root = reply('<p><strong>要点</strong><br>\n海水咸味来自溶解的矿物质。<br>\n  河流带入盐分。</p><p>河流从陆地岩石中溶解矿物质。<br>\n完毕</p><ul><li>第一行<br>\n第二行</li></ul>')
+
+    expect(extractMarkdownFromDom(root)).toBe('**要点**\n海水咸味来自溶解的矿物质。\n河流带入盐分。\n\n河流从陆地岩石中溶解矿物质。\n完毕\n\n- 第一行\n第二行')
+  })
+
   it('reads a DeepSeek code block without its toolbar, naming the language', () => {
     const root = reply(`
       <div class="md-code-block md-code-block-light">

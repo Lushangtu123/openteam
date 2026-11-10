@@ -23,6 +23,8 @@ export const QWEN_SELECTORS = {
   assistantMessage: '.qwen-chat-message-assistant',
   answer: '.response-message-content',
   // Parts of an assistant turn that are not the answer.
+  // A paragraph of the answer: a <div>, with nothing between it and the next block.
+  paragraph: 'div.qwen-markdown-paragraph',
   notAnswer: '.qwen-chat-thinking-tool-status-card-wraper, .qwen-chat-status-card, .qwen-chat-tool-status-card, .response-message-footer, .message-hoc-container, .qwen-markdown-code-header-wrapper',
   copyButton: '.response-message-footer button[aria-label="Copy"], .response-message-footer button[aria-label="复制"]',
   // Ant Design modals; closed ones are removed or hidden with display: none on their wrapper.
@@ -117,8 +119,10 @@ function readQwenResponseMarkdown(node: Node): string {
   return answer ? extractMarkdownFromDom(answer) : ''
 }
 
-// A detached copy of the answer, without the thinking card, footer and code block headers, and with
-// each Monaco code block turned back into a plain <pre><code> (Monaco draws one element per line).
+// A detached copy of the answer, without the thinking card, footer and code block headers, with
+// each Monaco code block turned back into a plain <pre><code> (Monaco draws one element per line),
+// and with Qwen's paragraphs as <p>, so they are read as paragraphs: apart from each other and from
+// the lists around them, and with their bold text kept.
 function answerCopy(node: Node): HTMLElement | undefined {
   if (node.nodeType !== Node.ELEMENT_NODE) return undefined
   const turn = node as Element
@@ -133,6 +137,11 @@ function answerCopy(node: Node): HTMLElement | undefined {
     const copy = part.cloneNode(true) as Element
     copy.querySelectorAll(QWEN_SELECTORS.codeBlock).forEach(block => block.replaceWith(plainCodeBlock(block)))
     copy.querySelectorAll(QWEN_SELECTORS.notAnswer).forEach(element => element.remove())
+    copy.querySelectorAll(QWEN_SELECTORS.paragraph).forEach(element => {
+      const paragraph = document.createElement('p')
+      paragraph.append(...element.childNodes)
+      element.replaceWith(paragraph)
+    })
     root.append(copy)
   }
   return root

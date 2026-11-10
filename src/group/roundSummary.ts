@@ -18,8 +18,8 @@ export function isKeyPointsHeading(text: string): boolean {
 
 export function keyPointsInstruction(languageInput: OpenTeamLanguage | undefined): string {
   return normalizeLanguage(languageInput) === 'en'
-    ? 'Start your reply with a line "**Key points**" followed by 1–3 short bullet points with your main conclusions (each under 25 words). Then leave a blank line and give the details.'
-    : '回复开头先单独写一行「**要点**」，下面用 1–3 条短句列出你的核心结论（每条不超过 40 字），空一行后再写详细内容。'
+    ? 'The very first line of your reply is "**Key points**", with nothing before it, followed by a list of 1–3 short points with your main conclusions, each on its own line starting with "- " (each under 25 words). Then leave a blank line and give the details.'
+    : '回复的第一行单独写「**要点**」，前面不要有任何内容；下面用列表写 1–3 条核心结论，每条单独一行、以「- 」开头（每条不超过 40 字）；空一行后再写详细内容。'
 }
 
 // Members are asked for key points when a message goes to two or more of them, so the round is

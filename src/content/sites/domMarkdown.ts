@@ -74,14 +74,23 @@ function inline(node: Node): string {
 }
 
 function inlineChildren(element: Element): string {
-  return [...element.childNodes].map(inline).join('')
+  return inlineNodes([...element.childNodes])
+}
+
+// A page may go on a new line in its source after a <br> (Grok: "<br>\n下一行"). The browser shows
+// one line break there, so the newline that follows the <br> is dropped; kept, the two would read
+// as a blank line and split the paragraph.
+function inlineNodes(nodes: Node[]): string {
+  return nodes.map((node, index) => {
+    const text = inline(node)
+    const afterBreak = node.nodeType === Node.TEXT_NODE && (nodes[index - 1] as Element | undefined)?.tagName === 'BR'
+    return afterBreak ? text.replace(/^[ \t]*\n\s*/, '') : text
+  }).join('')
 }
 
 function listItemText(element: Element, depth: number): string {
-  const inlinePart = [...element.childNodes]
-    .filter(child => child.nodeType !== Node.ELEMENT_NODE || !['UL', 'OL'].includes((child as Element).tagName))
-    .map(inline)
-    .join('')
+  const inlinePart = inlineNodes([...element.childNodes]
+    .filter(child => child.nodeType !== Node.ELEMENT_NODE || !['UL', 'OL'].includes((child as Element).tagName)))
     .trim()
   const nestedPart = [...element.children]
     .filter(child => child.tagName === 'UL' || child.tagName === 'OL')

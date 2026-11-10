@@ -25,6 +25,12 @@ const MARK_MENU_FALLBACK_HEIGHT_PX = 148
 const MARK_MENU_SELECTION_SETTLE_DELAY_MS = 80
 // A reply with key points folds to them when the rest is longer than this.
 const KEY_POINTS_FOLD_MIN_CHARS = 280
+// An opening line a member may put before its key points is no longer than this.
+const KEY_POINTS_OPENING_MAX_CHARS = 40
+// Key points written as paragraphs of their own: at most this many, each this short (members are
+// asked for 1–3 points of up to 40 characters).
+const KEY_POINT_PARAGRAPHS_MAX = 3
+const KEY_POINT_PARAGRAPH_MAX_CHARS = 60
 
 export interface MessagesViewDependencies {
   state: TeamPageState
@@ -451,21 +457,44 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     return toggle
   }
 
-  // Marks a reply's key points and says how many leading elements they take. Members write them as
-  // a heading and a list, a heading and lines, or the heading and lines in one paragraph.
+  // Marks a reply's key points and says how many leading elements they and anything before them
+  // take. They start the reply, or follow one short opening line (Gemini says who it is first).
   function keyPointsParts(children: Element[]): number | undefined {
-    const [first, second] = children
+    const atStart = keyPointsAt(children, 0)
+    if (atStart) return atStart
+    const opening = children[0]
+    if (opening?.tagName !== 'P' || (opening.textContent ?? '').trim().length > KEY_POINTS_OPENING_MAX_CHARS) return undefined
+    return keyPointsAt(children, 1)
+  }
+
+  // Key points that start at the given element: marks them and returns the position after them.
+  // Members write them as a heading and a list, a heading and lines, the heading and lines in one
+  // paragraph, or a heading and a few short paragraphs, one per point.
+  function keyPointsAt(children: Element[], start: number): number | undefined {
+    const first = children[start]
     if (!first) return undefined
     const isLines = (element: Element | undefined) => element?.tagName === 'P' && Boolean(element.querySelector('br'))
     if (isKeyPointsHeading(first.textContent ?? '')) {
-      if (!second || !(second.tagName === 'UL' || second.tagName === 'OL' || isLines(second))) return undefined
+      const second = children[start + 1]
+      if (second && (second.tagName === 'UL' || second.tagName === 'OL' || isLines(second))) {
+        first.classList.add('key-points-heading')
+        second.classList.add('key-points-list')
+        return start + 2
+      }
+      const points: Element[] = []
+      for (const element of children.slice(start + 1, start + 1 + KEY_POINT_PARAGRAPHS_MAX)) {
+        const length = (element.textContent ?? '').trim().length
+        if (element.tagName !== 'P' || length === 0 || length > KEY_POINT_PARAGRAPH_MAX_CHARS) break
+        points.push(element)
+      }
+      if (points.length === 0) return undefined
       first.classList.add('key-points-heading')
-      second.classList.add('key-points-list')
-      return 2
+      for (const point of points) point.classList.add('key-points-list')
+      return start + 1 + points.length
     }
     if (isLines(first) && isKeyPointsHeading(firstLineText(first))) {
       first.classList.add('key-points-list', 'key-points-block')
-      return 1
+      return start + 1
     }
     return undefined
   }

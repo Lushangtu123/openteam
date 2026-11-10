@@ -266,6 +266,35 @@ describe('team page messages view boundary', () => {
     expect(messagesEl.querySelector('[data-message-id="heading-and-lines"] .message-body.folded')).not.toBeNull()
   })
 
+  it('finds key points after a short opening line, and key points written as short paragraphs', () => {
+    const { messagesEl, messages, view } = createLongChatView(0)
+    const long = '详细说明。'.repeat(80)
+    messages.push(
+      // Gemini says who it is first.
+      { ...makeLongChatMessage(1, `我是「实测Gemini」。\n\n**要点**\n\n- 选方案 A\n- 成本更低\n\n${long}`), id: 'intro' },
+      // Grok replies read before its line breaks were read correctly: one paragraph per point.
+      { ...makeLongChatMessage(3, `**要点**\n\n海水咸味来自溶解的矿物质。\n\n河流长期冲刷岩石带入盐分。\n\n蒸发使盐分不断浓缩积累。\n\n${long}\n\n完毕`), id: 'paragraphs' },
+      // Not key points: the heading is followed by ordinary text, or comes after a long opening.
+      { ...makeLongChatMessage(5, `**要点**\n\n${long}`), id: 'heading-then-text' },
+      { ...makeLongChatMessage(7, `${long}\n\n**要点**\n\n- 选方案 A\n\n${long}`), id: 'late' },
+    )
+
+    view.renderMessages()
+    const body = (id: string) => messagesEl.querySelector<HTMLElement>(`[data-message-id="${id}"] .message-body`)!
+
+    expect(body('intro').classList.contains('folded')).toBe(true)
+    expect(body('intro').querySelector('.key-points-heading')?.textContent).toBe('要点')
+    expect(body('intro').querySelector('.key-points-list')?.textContent).toContain('选方案 A')
+    // The opening line is not part of the key points; folded, it is hidden with the rest.
+    expect(body('intro').firstElementChild?.className).toBe('')
+
+    expect(body('paragraphs').classList.contains('folded')).toBe(true)
+    expect([...body('paragraphs').querySelectorAll('.key-points-list')].map(element => element.textContent)).toEqual(['海水咸味来自溶解的矿物质。', '河流长期冲刷岩石带入盐分。', '蒸发使盐分不断浓缩积累。'])
+
+    expect(body('heading-then-text').classList.contains('has-key-points')).toBe(false)
+    expect(body('late').classList.contains('has-key-points')).toBe(false)
+  })
+
   it('shows a round summary as a card, its request as a notice, and offers to summarize other rounds', () => {
     const { messagesEl, messages, view, deps } = createLongChatView(0)
     const runCommand = vi.fn(async () => undefined)

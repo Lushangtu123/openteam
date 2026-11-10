@@ -982,6 +982,18 @@
   background: var(--gb-accent-soft);
 }
 
+/* Key points written as paragraphs of their own, one per point: all of them in that one box. */
+:root[data-theme] .message-body.has-key-points > p.key-points-list + p.key-points-list {
+  border-radius: 0 0 12px 12px;
+  padding-top: 4px;
+}
+
+:root[data-theme] .message-body.has-key-points > p.key-points-list:has(+ p.key-points-list) {
+  margin-bottom: 0;
+  border-radius: 0;
+  padding-bottom: 0;
+}
+
 /* Member panel header: the heading keeps its room in every language. */
 :root[data-theme] .role-panel-heading {
   flex: 1 1 auto;

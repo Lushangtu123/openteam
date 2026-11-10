@@ -117,6 +117,26 @@ describe('Qwen site adapter', () => {
     expect(adapter.getAllAssistantReplies()).toEqual([text])
   })
 
+  it('reads Qwen\'s paragraphs as paragraphs, so a reply keeps its blank lines and bold text', () => {
+    // As chat.qwen.ai draws it: a paragraph is a <div>, and nothing separates the blocks in the source.
+    const text = (value: string) => `<span class="qwen-markdown-text"><span class="qwen-markdown-text-node">${value}</span></span>`
+    const paragraph = (inner: string) => `<div class="qwen-markdown-paragraph" dir="ltr">${inner}</div>`
+    document.body.innerHTML = COMPOSER + `<div class="qwen-chat-message qwen-chat-message-assistant"><div class="response-message-content t2t phase-answer"><div class="custom-qwen-markdown"><div class="qwen-markdown qwen-markdown-loose">${[
+      paragraph(`<strong class="qwen-markdown-strong">${text('要点')}</strong>`),
+      `<ul class="qwen-markdown-list" dir="ltr"><li class="qwen-markdown-list-item">${text('盐分来自岩石风化。')}</li><li class="qwen-markdown-list-item">${text('蒸发把盐留在海里。')}</li></ul>`,
+      '<div class="qwen-markdown-space"></div>',
+      paragraph(text('海水中的盐分主要来自陆地岩石。')),
+      '<div class="qwen-markdown-space"></div>',
+      paragraph(text('完毕')),
+    ].join('')}</div></div></div></div>`
+    const adapter = createQwenAdapter()
+    const [turn] = adapter.getResponseContainers()
+
+    expect(adapter.readResponseMarkdown?.(turn)).toBe('**要点**\n\n- 盐分来自岩石风化。\n- 蒸发把盐留在海里。\n\n海水中的盐分主要来自陆地岩石。\n\n完毕')
+    // The page itself is left as it was.
+    expect(turn.querySelectorAll('.qwen-markdown-paragraph')).toHaveLength(3)
+  })
+
   it('reports nothing for a turn that is still thinking', () => {
     document.body.innerHTML = COMPOSER + THINKING_TURN
     const adapter = createQwenAdapter()

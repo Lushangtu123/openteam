@@ -29,6 +29,9 @@ describe('key points', () => {
     for (const heading of ['要点在于成本', '背景', '']) expect(isKeyPointsHeading(heading)).toBe(false)
     expect(keyPointsInstruction('zh-CN')).toContain('「**要点**」')
     expect(keyPointsInstruction('en')).toContain('"**Key points**"')
+    // The points are a list, and nothing comes before the heading: that is what the page folds to.
+    expect(keyPointsInstruction('zh-CN')).toMatch(/第一行.*「\*\*要点\*\*」.*「- 」开头/)
+    expect(keyPointsInstruction('en')).toMatch(/very first line.*"\*\*Key points\*\*".*starting with "- "/)
   })
 
   it('asks for key points only when a message goes to two or more members', () => {
