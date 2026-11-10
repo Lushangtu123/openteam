@@ -36,6 +36,7 @@ import { createLogger } from '../shared/logger'
 import type { BackgroundToRoleMessage } from '../group/runtimeProtocol'
 import { createControlActionExecutor } from './controlHandlers'
 import { createControlClient } from './controlClient'
+import { createTeamPageShower } from './teamPageTab'
 import { createImageAttachmentService } from './imageAttachments'
 import { createWebSocketCookieSync } from './websocketCookies'
 import { chatIdFromNotificationId, createReplyNotifier } from './replyNotifications'
@@ -239,7 +240,7 @@ const executeControlCommand = createControlActionExecutor({
     return Promise.resolve(routeMessage(message, {}))
   },
   runtimeFrames,
-  openTeamPage,
+  openTeamPage: createTeamPageShower(chrome.tabs, chrome.runtime.getURL('team.html')),
   waitFor(ms) {
     return new Promise(resolve => globalThis.setTimeout(resolve, ms))
   },
