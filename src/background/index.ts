@@ -21,6 +21,7 @@ import { createMessageRouter } from './messageRouter'
 import { classifyRuntimeSender, isRuntimeMessageAllowed, responseForSender } from './senderPolicy'
 import { createExternalModelHandlers } from './externalModelHandlers'
 import { ALL_SITES_DROPPED_AT_KEY, dropAllSitesAccess } from './allSitesAccess'
+import { restrictStorageToExtension } from './storageAccess'
 import { requireApiModelAccess } from './apiModelAccess'
 import { createExternalModelClient, type ExternalModelClient } from './externalModelClient'
 import { createLocalAgentApprovals } from './localAgentApprovals'
@@ -481,6 +482,9 @@ chrome.tabs.onRemoved.addListener(tabId => {
     logBackgroundFailure('tab-removed:failed', error, { tabId })
   }
 })
+
+// The extension's storage is for its own pages and background only (see storageAccess.ts).
+if (chrome.storage) void restrictStorageToExtension({ local: chrome.storage.local, sync: chrome.storage.sync, session: chrome.storage.session }, log)
 
 initializeControlClient()
 
