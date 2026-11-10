@@ -20,6 +20,7 @@ import {
 import { createMessageRouter } from './messageRouter'
 import { classifyRuntimeSender, isRuntimeMessageAllowed, responseForSender } from './senderPolicy'
 import { createExternalModelHandlers } from './externalModelHandlers'
+import { ALL_SITES_DROPPED_AT_KEY, dropAllSitesAccess } from './allSitesAccess'
 import { requireApiModelAccess } from './apiModelAccess'
 import { createExternalModelClient, type ExternalModelClient } from './externalModelClient'
 import { createLocalAgentApprovals } from './localAgentApprovals'
@@ -482,3 +483,16 @@ chrome.tabs.onRemoved.addListener(tabId => {
 })
 
 initializeControlClient()
+
+// An install that was updated from a version requiring every website gives that access back, once
+// (see allSitesAccess.ts). Skipped where the browser has no way to remove a permission.
+if (chrome.permissions) {
+  void dropAllSitesAccess({
+    permissions: chrome.permissions,
+    readDroppedAt: async () => Number((await chrome.storage.local.get(ALL_SITES_DROPPED_AT_KEY))[ALL_SITES_DROPPED_AT_KEY]) || 0,
+    writeDroppedAt: timestamp => chrome.storage.local.set({ [ALL_SITES_DROPPED_AT_KEY]: timestamp }),
+    reload: () => chrome.runtime.reload(),
+    now,
+    log,
+  })
+}

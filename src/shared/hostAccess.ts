@@ -7,15 +7,21 @@ interface PermissionsApi {
   request(permissions: { origins: string[] }): Promise<boolean>
 }
 
+// What earlier versions required, and what the manifest now lists as optional so that single
+// addresses can be asked for. It is never asked for as a whole.
+export const ALL_SITES_PATTERN = 'https://*/*'
+
 function permissionsApi(): PermissionsApi | undefined {
   return (globalThis as { chrome?: { permissions?: PermissionsApi } }).chrome?.permissions
 }
 
-// The match pattern covering an API address: its scheme and host, any port and path.
+// The match pattern covering an API address: its scheme and host, any port and path. None for an
+// address whose host has a wildcard: that would ask for a whole family of sites, or all of them.
 export function hostAccessPattern(baseUrl: string): string | undefined {
   try {
     const url = new URL(baseUrl.trim())
     if (url.protocol !== 'https:' && url.protocol !== 'http:') return undefined
+    if (!url.hostname || url.hostname.includes('*')) return undefined
     return `${url.protocol}//${url.hostname}/*`
   } catch {
     return undefined

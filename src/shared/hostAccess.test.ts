@@ -15,6 +15,15 @@ describe('host access for API addresses', () => {
     expect(hostAccessPattern('')).toBeUndefined()
   })
 
+  it('has no pattern for an address with a wildcard host, which would cover many sites or all of them', async () => {
+    expect(hostAccessPattern('https://*/v1')).toBeUndefined()
+    expect(hostAccessPattern('https://*.example.com/v1')).toBeUndefined()
+
+    const api = { contains: vi.fn(async () => false), request: vi.fn(async () => true) }
+    expect(await requestHostAccess('https://*/v1', api)).toBe(false)
+    expect(api.request).not.toHaveBeenCalled()
+  })
+
   it('asks the browser only for that address, and only when it is not allowed yet', async () => {
     const api = { contains: vi.fn(async () => false), request: vi.fn(async () => true) }
 
