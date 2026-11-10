@@ -318,11 +318,13 @@ export function createMessageHandlers(baseDeps: MessageHandlersDependencies): Ba
         role.updatedAt = timestamp
       }
       for (const role of unavailable) {
-        const keepActiveThinking = role.status === 'thinking' && !isStaleThinkingRole(role, timestamp)
-        if (!keepActiveThinking) role.status = 'error'
+        // A member still waiting for an earlier reply is left as it is, its time too: being skipped
+        // must not start that wait over (see isStaleThinkingRole).
+        if (role.status === 'thinking' && !isStaleThinkingRole(role, timestamp)) continue
+        role.status = 'error'
         role.updatedAt = timestamp
         if (role.lastPromptMessageId === userMessage.id) delete role.lastPromptMessageId
-        if (!keepActiveThinking) delete role.replyAttemptId
+        delete role.replyAttemptId
       }
 
       return { message: userMessage, deliveries, externalDeliveries }
@@ -1045,8 +1047,10 @@ export function createMessageHandlers(baseDeps: MessageHandlersDependencies): Ba
       } else {
         updateConversation(role, conversationUrl, readOptionalString(message.conversationId))
       }
-      role.updatedAt = deps.now()
-      chat.updatedAt = role.updatedAt
+      const timestamp = deps.now()
+      // Where the page is says nothing about a reply the member is waiting for (see isStaleThinkingRole).
+      if (role.status !== 'thinking') role.updatedAt = timestamp
+      chat.updatedAt = timestamp
       return { role, lostConversationUrl }
     })
     if (result.lostConversationUrl) deps.log.warn('conversation:lost', { ...identity, lostConversationUrl: result.lostConversationUrl, pageUrl: readOptionalString(message.conversationUrl) })
@@ -1153,7 +1157,9 @@ export function createMessageHandlers(baseDeps: MessageHandlersDependencies): Ba
         ...(detail ? { detail } : {}),
         updatedAt: timestamp,
       }
-      role.updatedAt = timestamp
+      // For a member waiting for a reply, only a page that is generating is a sign of that reply
+      // (see isStaleThinkingRole); a page that loaded, or is blocked, is not.
+      if (role.status !== 'thinking' || status === 'generating') role.updatedAt = timestamp
       chat.updatedAt = timestamp
       return role
     })
@@ -2264,6 +2270,11 @@ function externalModelRunKey(chatId: string, roleId: string, replyAttemptId: str
   return `${chatId}:${roleId}:${replyAttemptId}`
 }
 
+// A member waiting for a reply counts as stuck once nothing has moved that reply for two minutes,
+// and can then be sent to again. role.updatedAt is the clock: while the member waits, only signs
+// of the reply set it (the prompt going out, text arriving, the page saying it is generating).
+// Other news about the member (its page loaded, the chat was closed, a message skipped it) leaves
+// it alone, or a member that never answers would look busy for as long as the group is in use.
 function isStaleThinkingRole(role: GroupRole, timestamp: number): boolean {
   return role.status === 'thinking' && timestamp - role.updatedAt >= STALE_THINKING_MS
 }

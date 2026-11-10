@@ -131,4 +131,38 @@ describe('background chat handlers', () => {
       chatSite: 'deepseek',
     })))
   })
+
+  it('closing a chat leaves a member that is waiting for a reply as it is, time included', async () => {
+    vi.resetModules()
+    const store = createDefaultStore()
+    store.chatsById['chat-1'] = { id: 'chat-1', name: '架构评审', mode: 'independent', roleIds: ['role-1', 'role-2'], messageIds: [], nextMessageSeq: 1, status: 'running', createdAt: 0, updatedAt: 0 }
+    store.rolesById['role-1'] = { id: 'role-1', chatId: 'chat-1', name: '工程师', systemPrompt: '', status: 'ready', contextCursor: 0, createdAt: 0, updatedAt: 10 }
+    // Asked at 40; how long it has been waiting is counted from then.
+    store.rolesById['role-2'] = { id: 'role-2', chatId: 'chat-1', name: '产品经理', systemPrompt: '', status: 'thinking', lastPromptMessageId: 'msg-1', contextCursor: 0, createdAt: 0, updatedAt: 40 }
+    vi.doMock('./storeAccess', async importOriginal => {
+      const actual = await importOriginal<typeof import('./storeAccess')>()
+      return {
+        ...actual,
+        mutateStore: async (mutator: (store: OpenTeamStore) => unknown) => ({ store, result: await mutator(store) }),
+      }
+    })
+
+    const { createChatHandlers } = await import('./chatHandlers')
+    const removeRole = vi.fn()
+    const routes = createChatHandlers({
+      broadcastStoreUpdated: vi.fn(),
+      getChatStatusFromRoles: () => 'running',
+      log: { info: vi.fn(), warn: vi.fn() },
+      newId: vi.fn(),
+      now: vi.fn(() => 100),
+      runtimeFrames: { removeRole },
+    })
+
+    const response = await routes.find(route => route.type === 'GROUP_CHAT_CLOSE')!.handler({ type: 'GROUP_CHAT_CLOSE', chatId: 'chat-1' }, {})
+
+    expect(response).toMatchObject({ ok: true })
+    expect(removeRole).toHaveBeenCalledTimes(2)
+    expect(store.rolesById['role-1']).toMatchObject({ status: 'loading', updatedAt: 100 })
+    expect(store.rolesById['role-2']).toMatchObject({ status: 'thinking', lastPromptMessageId: 'msg-1', updatedAt: 40 })
+  })
 })

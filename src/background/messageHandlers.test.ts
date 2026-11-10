@@ -106,6 +106,105 @@ describe('background message handlers', () => {
     expect(role).toMatchObject({ status: 'thinking', lastPromptMessageId: 'msg-1', replyAttemptId: 'attempt-1' })
   })
 
+  it('counts a wait for a reply as stuck from when the reply last moved, whatever else the page reports', async () => {
+    vi.resetModules()
+    const store = createStoreWithReadyRole()
+    const role = store.rolesById['role-1']
+    const saved = 'https://chatgpt.com/c/6aec2ed9-a14c-83e8-98bb-cff4d37e0c07'
+    // Asked hours ago; the reply never came.
+    Object.assign(role, { chatSite: 'chatgpt', geminiConversationUrl: saved, status: 'thinking', lastPromptMessageId: 'msg-old', replyAttemptId: 'attempt-old', updatedAt: 1_000 })
+    vi.doMock('./storeAccess', async importOriginal => {
+      const actual = await importOriginal<typeof import('./storeAccess')>()
+      return {
+        ...actual,
+        mutateStore: async (mutator: (store: OpenTeamStore) => unknown) => ({ store, result: await mutator(store) }),
+      }
+    })
+
+    const { createMessageHandlers } = await import('./messageHandlers')
+    let time = 10 * 3_600_000
+    const binding: RuntimeFrameBinding = { chatId: 'chat-1', roleId: 'role-1', tabId: 101, frameId: 7, ready: true, lastSeenAt: 0 }
+    const sendPrompt = vi.fn()
+    const routes = createMessageHandlers({
+      broadcastStoreUpdated: vi.fn(),
+      getChatStatusFromRoles: () => 'running',
+      log: { debug: vi.fn(), info: vi.fn(), warn: vi.fn() },
+      newId: vi.fn((prefix: string) => `${prefix}-new`),
+      now: () => time,
+      runtimeFrames: { bind: vi.fn(), getByAddress: vi.fn(() => binding), getByRole: vi.fn(() => binding) },
+      sendRoleMessage: vi.fn(),
+      sendError: vi.fn(),
+      sendPrompt,
+    })
+    const sender = { tab: { id: 101 } as chrome.tabs.Tab, frameId: 7, url: saved }
+    const report = (type: string, fields: Record<string, unknown> = {}) => routes.find(route => route.type === type)!.handler({ type, chatId: 'chat-1', roleId: 'role-1', ...fields }, sender)
+
+    // The group is opened again: the member's page loads and reports itself.
+    await report('TEAM_FRAME_ROLE_READY', { conversationUrl: saved })
+    await report('TEAM_SITE_STATUS_UPDATE', { siteId: 'chatgpt', status: 'ready' })
+    await report('TEAM_ROLE_CONVERSATION_UPDATED', { conversationUrl: saved })
+    expect(role).toMatchObject({ status: 'thinking', updatedAt: 1_000, siteHealth: { status: 'ready', updatedAt: time } })
+
+    // So a message sent half a minute later reaches it, instead of finding it busy.
+    time += 30_000
+    const response = await routes.find(route => route.type === 'GROUP_MESSAGE_SEND')!.handler({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@all 还在吗' }, {})
+    expect(response).toMatchObject({ ok: true, message: { deliveryStatus: { 'role-1': 'pending' } } })
+    expect(sendPrompt).toHaveBeenCalledTimes(1)
+    expect(role).toMatchObject({ status: 'thinking', lastPromptMessageId: 'msg-new', updatedAt: time })
+
+    // A page that says it is still generating is a sign of life, and does count.
+    time += 100_000
+    await report('TEAM_SITE_STATUS_UPDATE', { siteId: 'chatgpt', status: 'generating' })
+    expect(role.updatedAt).toBe(time)
+  })
+
+  it('does not start a member’s wait over when a message has to skip it', async () => {
+    vi.resetModules()
+    const store = createStoreWithReadyRole()
+    store.chatsById['chat-1'].roleIds = ['role-1', 'role-2']
+    const start = 10 * 3_600_000
+    // 产品经理 was asked 100 seconds ago and has not answered.
+    store.rolesById['role-2'] = { ...store.rolesById['role-1'], id: 'role-2', name: '产品经理', status: 'thinking', lastPromptMessageId: 'msg-old', replyAttemptId: 'attempt-old', updatedAt: start - 100_000 }
+    vi.doMock('./storeAccess', async importOriginal => {
+      const actual = await importOriginal<typeof import('./storeAccess')>()
+      return {
+        ...actual,
+        mutateStore: async (mutator: (store: OpenTeamStore) => unknown) => ({ store, result: await mutator(store) }),
+      }
+    })
+
+    const { createMessageHandlers } = await import('./messageHandlers')
+    let time = start
+    let ids = 0
+    const sendPrompt = vi.fn()
+    const routes = createMessageHandlers({
+      broadcastStoreUpdated: vi.fn(),
+      getChatStatusFromRoles: () => 'running',
+      log: { debug: vi.fn(), info: vi.fn(), warn: vi.fn() },
+      newId: vi.fn((prefix: string) => `${prefix}-${ids += 1}`),
+      now: () => time,
+      runtimeFrames: {
+        bind: vi.fn(),
+        getByAddress: vi.fn(),
+        getByRole: vi.fn((chatId: string, roleId: string): RuntimeFrameBinding => ({ chatId, roleId, tabId: 101, frameId: roleId === 'role-1' ? 7 : 8, ready: true, lastSeenAt: 0 })),
+      },
+      sendRoleMessage: vi.fn(),
+      sendError: vi.fn(),
+      sendPrompt,
+    })
+    const send = (raw: string) => routes.find(route => route.type === 'GROUP_MESSAGE_SEND')!.handler({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw }, {})
+
+    // A message for everyone goes to 工程师 alone; 产品经理 is still waiting, and stays so.
+    expect(await send('@all 第一条')).toMatchObject({ ok: true, message: { deliveryStatus: { 'role-1': 'pending', 'role-2': 'error' } } })
+    expect(sendPrompt.mock.calls.map(call => call[0].roleId)).toEqual(['role-1'])
+    expect(store.rolesById['role-2']).toMatchObject({ status: 'thinking', lastPromptMessageId: 'msg-old', updatedAt: start - 100_000 })
+
+    // Half a minute later 产品经理 has been silent for over two minutes: the next message reaches it.
+    time += 30_000
+    expect(await send('@all 第二条')).toMatchObject({ ok: true, message: { deliveryStatus: { 'role-2': 'pending' } } })
+    expect(sendPrompt.mock.calls.map(call => call[0].roleId)).toEqual(['role-1', 'role-2'])
+  })
+
   it('forgets a conversation its site sent the member away from, and gives it the chat again', async () => {
     vi.resetModules()
     const store = createStoreWithReadyRole()

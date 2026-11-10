@@ -264,7 +264,10 @@ export function createChatHandlers(deps: ChatHandlersDependencies): BackgroundMe
         const role = store.rolesById[roleId]
         if (!role) continue
         deps.runtimeFrames.removeRole(chat.id, role.id)
-        if (role.status !== 'thinking') role.status = 'loading'
+        // A member waiting for a reply stays so, and keeps its time: how long it has waited decides
+        // when it may be sent to again.
+        if (role.status === 'thinking') continue
+        role.status = 'loading'
         role.updatedAt = timestamp
       }
       chat.status = deps.getChatStatusFromRoles(store, chat)
