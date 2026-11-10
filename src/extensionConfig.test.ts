@@ -41,6 +41,10 @@ describe('extension security configuration', () => {
       'https://*.grok.com/*',
       'wss://grok.com/*',
       'https://chat.qwen.ai/*',
+      // Qwen signs in through auth.qwen.ai. A member page is a frame inside the OpenTeam page, and
+      // the browser sends its sign-in cookies only to hosts OpenTeam may reach; without this the
+      // page loads signed out and nothing sent to it is answered.
+      'https://*.qwen.ai/*',
       'https://www.kimi.com/*',
       // Reply images the background downloads: Gemini's and ChatGPT's image hosts.
       'https://*.googleusercontent.com/*',

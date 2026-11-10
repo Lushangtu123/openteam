@@ -35,6 +35,7 @@
     "https://*.grok.com/*",
     "wss://grok.com/*",
     "https://chat.qwen.ai/*",
+    "https://*.qwen.ai/*",
     "https://www.kimi.com/*",
     "https://*.googleusercontent.com/*",
     "https://*.oaiusercontent.com/*",
