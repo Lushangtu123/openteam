@@ -1,0 +1,39 @@
+name: Checks
+
+# Every push and pull request runs what `npm run verify` runs: the strict typecheck, the unit tests
+# and the extension build. Each is its own step, so a failure says which.
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A newer push to the same branch or pull request replaces a run that is still going.
+concurrency:
+  group: checks-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Unit tests
+        run: npm test
+      - name: Build
+        run: npm run build
+      # The build writes only to dist/, which is not tracked: a tracked file it changed would mean
+      # a source file is generated, and the commit is out of date.
+      - name: Build left tracked files alone
+        run: git diff --exit-code
