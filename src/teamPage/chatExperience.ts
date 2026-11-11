@@ -1,7 +1,9 @@
+import { REPLY_STUCK_AFTER_MS } from '../group/replyTiming'
 import { isOpenTeamRequest } from '../group/roundSummary'
 import type { GroupChat, GroupMessage, GroupRole } from '../group/types'
 
-export const THINKING_TIMEOUT_MS = 120_000
+// How long a member is shown as replying with no sign of its reply (see ../group/replyTiming).
+export const THINKING_TIMEOUT_MS = REPLY_STUCK_AFTER_MS
 const MESSAGE_TIME_GAP_MS = 5 * 60_000
 
 export type KeyboardShortcutEvent = Pick<KeyboardEvent, 'ctrlKey' | 'key' | 'metaKey' | 'shiftKey'> & Partial<Pick<KeyboardEvent, 'isComposing'>>

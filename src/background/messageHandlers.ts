@@ -5,6 +5,9 @@ import { hasRoundSummary, isOpenTeamRequest, pickSummarizer, readSummarizableRou
 import { crossReviewRequestText, wantsCrossReview } from '../group/collaboration'
 import { misreadReplyReason } from '../group/misreadReply'
 import { isProjectActive } from '../group/project'
+import { REPLY_STUCK_AFTER_MS } from '../group/replyTiming'
+import { updateUserMessageDeliveryStatus } from '../group/deliveryStatus'
+import { settleInterruptedReplies, type InterruptedReplyScope } from './interruptedReplies'
 import { createProjectRunner } from './projectRunner'
 import { chooseNextSpeaker, discussionMaxTurns, discussionTranscript, discussionTurnRequestText, DISCUSSION_MAX_FAILED_TURNS, isDiscussionRunning, startsDiscussion, turnCountsOf } from '../group/discussion'
 import type { LoadedUpload, UploadedImage } from './imageAttachments'
@@ -24,7 +27,7 @@ import type { SitePromptDeliveryLimiter } from './sitePromptDeliveryLimiter'
 import { getChatMessages, getChatRoles, mutateStore, requireChat, requireRole } from './storeAccess'
 import { markOrchestrationRoleError, maybeAdvanceOrchestrationRun, startOrchestrationRun } from './orchestrationRuntime'
 
-const STALE_THINKING_MS = 120_000
+const STALE_THINKING_MS = REPLY_STUCK_AFTER_MS
 const DEFAULT_EXTERNAL_MODEL_RETRY_DELAYS_MS = [2_000, 2_000, 4_000, 8_000, 15_000] as const
 // API members of one model replying at the same time.
 const EXTERNAL_MODEL_CONCURRENCY = 2
@@ -70,6 +73,8 @@ export const MESSAGE_ROUTE_TYPES = [
   'TEAM_ROLE_REPLY_PROGRESS',
   'TEAM_ROLE_REPLY_RESYNC',
   'TEAM_ROLE_ERROR',
+  // From the background itself: see interruptedReplies.ts.
+  'GROUP_REPLIES_INTERRUPTED',
 ] as const
 
 // A request OpenTeam sent one member, with its prepared delivery.
@@ -1346,6 +1351,12 @@ export function createMessageHandlers(baseDeps: MessageHandlersDependencies): Ba
         assistantMessage.contentFormat = contentFormat
         assistantMessage.attachments = attachments.length > 0 ? attachments : undefined
         assistantMessage.status = 'received'
+        // A reply that had not been read (it was interrupted) counts as received once read in full.
+        const question = assistantMessage.sourceMessageId ? store.messagesById[assistantMessage.sourceMessageId] : undefined
+        if (question?.deliveryStatus?.[role.id] === 'error') {
+          question.deliveryStatus[role.id] = 'received'
+          updateUserMessageDeliveryStatus(question)
+        }
         chat.updatedAt = timestamp
         return { message: assistantMessage, previousAttachmentIds }
       })
@@ -1359,6 +1370,29 @@ export function createMessageHandlers(baseDeps: MessageHandlersDependencies): Ba
     deps.log.info('role-reply-resync:stored', { chatId: result.message.chatId, roleId: result.message.roleId, replyMessageId: result.message.id })
     await deps.broadcastStoreUpdated(store)
     return { ok: true, message: result.message, store }
+  }
+
+  // Ends the replies their members can no longer give (see interruptedReplies.ts), and lets what
+  // waits for them go on, as when a member reports that its reply failed.
+  const handleRepliesInterrupted = async (message: RuntimeMessage) => {
+    const scope: InterruptedReplyScope = {
+      siteMembers: message.siteMembers === true,
+      apiMembers: message.apiMembers === true,
+      ...(typeof message.quietSince === 'number' ? { quietSince: message.quietSince } : {}),
+    }
+    const { store, result: settled } = await mutateStore(store => settleInterruptedReplies(store, { ...scope, timestamp: deps.now(), newId: deps.newId, getChatStatusFromRoles: deps.getChatStatusFromRoles }))
+    if (settled.length === 0) return { ok: true, settled }
+
+    deps.log.warn('replies-interrupted', { scope, settled })
+    await deps.broadcastStoreUpdated(store)
+    for (const { chatId, roleId, promptMessageId } of settled) {
+      if (!promptMessageId) continue
+      reportPromptSettled(deps, store, chatId, promptMessageId)
+      clearRoleErrorRetryCount(roleErrorRetryCounts, chatId, roleId, promptMessageId)
+      await deps.promptDeliveryLimiter?.complete(chatId, promptMessageId, roleId)
+      await markOrchestrationRoleError(deps, { chatId, roleId, promptMessageId, error: '回复中断' })
+    }
+    return { ok: true, settled }
   }
 
   const handleRoleError = async (message: RuntimeMessage, sender: chrome.runtime.MessageSender) => {
@@ -1451,6 +1485,7 @@ export function createMessageHandlers(baseDeps: MessageHandlersDependencies): Ba
     { type: 'TEAM_ROLE_REPLY_PROGRESS', handler: handleRoleReplyProgress },
     { type: 'TEAM_ROLE_REPLY_RESYNC', handler: handleRoleReplyResync },
     { type: 'TEAM_ROLE_ERROR', handler: handleRoleError },
+    { type: 'GROUP_REPLIES_INTERRUPTED', handler: handleRepliesInterrupted },
   ]
 }
 
@@ -1569,24 +1604,6 @@ async function markDeliveryError(deps: MessageHandlersDependencies, chatId: stri
   // The member is done with this message (it never got it), like a member that failed to reply.
   reportPromptSettled(deps, store, chatId, messageId)
   return store
-}
-
-function updateUserMessageDeliveryStatus(message: GroupMessage): void {
-  const statuses = Object.values(message.deliveryStatus ?? {})
-  if (statuses.length === 0) return
-  if (statuses.every(status => status === 'error')) {
-    message.status = 'error'
-    return
-  }
-  if (statuses.every(status => status === 'received' || status === 'error')) {
-    message.status = 'received'
-    return
-  }
-  if (statuses.every(status => status === 'sent' || status === 'received' || status === 'error')) {
-    message.status = 'sent'
-    return
-  }
-  message.status = 'pending'
 }
 
 type PreparedRoleErrorRetry = {
@@ -2270,8 +2287,8 @@ function externalModelRunKey(chatId: string, roleId: string, replyAttemptId: str
   return `${chatId}:${roleId}:${replyAttemptId}`
 }
 
-// A member waiting for a reply counts as stuck once nothing has moved that reply for two minutes,
-// and can then be sent to again. role.updatedAt is the clock: while the member waits, only signs
+// A member waiting for a reply counts as stuck once nothing has moved that reply for a while (see
+// ../group/replyTiming), and can then be sent to again. role.updatedAt is the clock: while the member waits, only signs
 // of the reply set it (the prompt going out, text arriving, the page saying it is generating).
 // Other news about the member (its page loaded, the chat was closed, a message skipped it) leaves
 // it alone, or a member that never answers would look busy for as long as the group is in use.

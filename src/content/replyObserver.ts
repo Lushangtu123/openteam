@@ -1,3 +1,4 @@
+import { REPLY_SIGNAL_INTERVAL_MS } from '../group/replyTiming'
 import type { RoleToBackgroundMessage } from '../group/runtimeProtocol'
 import type { ReplyImageSource } from '../group/types'
 import { createReplyTimeout } from './replyTimeout'
@@ -14,7 +15,7 @@ type ReplySource = 'observer' | 'timeout-compensation' | 'polling-compensation'
 const RESPONSE_DEBOUNCE_MS = 2500
 const RESPONSE_FINAL_SETTLE_MS = 1500
 const REPLY_POLL_INTERVAL_MS = 2000
-const REPLY_TIMEOUT_MS = 120000
+const REPLY_TIMEOUT_MS = REPLY_SIGNAL_INTERVAL_MS
 // Polling reports a reply once its text has stayed the same for two polls; a change more recent
 // than this is still settling.
 const REPLY_RECENT_CHANGE_MS = 2 * REPLY_POLL_INTERVAL_MS + RESPONSE_FINAL_SETTLE_MS

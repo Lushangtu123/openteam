@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { REPLY_STUCK_AFTER_MS } from '../group/replyTiming'
 import { createDefaultStore } from '../group/store'
 import type { GroupChat, GroupMessage, GroupRole, OpenTeamStore, OrchestrationFlow, RuntimeFrameBinding } from '../group/types'
 
@@ -163,8 +164,9 @@ describe('background message handlers', () => {
     const store = createStoreWithReadyRole()
     store.chatsById['chat-1'].roleIds = ['role-1', 'role-2']
     const start = 10 * 3_600_000
-    // 产品经理 was asked 100 seconds ago and has not answered.
-    store.rolesById['role-2'] = { ...store.rolesById['role-1'], id: 'role-2', name: '产品经理', status: 'thinking', lastPromptMessageId: 'msg-old', replyAttemptId: 'attempt-old', updatedAt: start - 100_000 }
+    // 产品经理 was asked a while ago, 20 seconds short of counting as stuck, and has not answered.
+    const askedAt = start - (REPLY_STUCK_AFTER_MS - 20_000)
+    store.rolesById['role-2'] = { ...store.rolesById['role-1'], id: 'role-2', name: '产品经理', status: 'thinking', lastPromptMessageId: 'msg-old', replyAttemptId: 'attempt-old', updatedAt: askedAt }
     vi.doMock('./storeAccess', async importOriginal => {
       const actual = await importOriginal<typeof import('./storeAccess')>()
       return {
@@ -197,12 +199,70 @@ describe('background message handlers', () => {
     // A message for everyone goes to 工程师 alone; 产品经理 is still waiting, and stays so.
     expect(await send('@all 第一条')).toMatchObject({ ok: true, message: { deliveryStatus: { 'role-1': 'pending', 'role-2': 'error' } } })
     expect(sendPrompt.mock.calls.map(call => call[0].roleId)).toEqual(['role-1'])
-    expect(store.rolesById['role-2']).toMatchObject({ status: 'thinking', lastPromptMessageId: 'msg-old', updatedAt: start - 100_000 })
+    expect(store.rolesById['role-2']).toMatchObject({ status: 'thinking', lastPromptMessageId: 'msg-old', updatedAt: askedAt })
 
-    // Half a minute later 产品经理 has been silent for over two minutes: the next message reaches it.
+    // Half a minute later 产品经理 counts as stuck: the next message reaches it.
     time += 30_000
     expect(await send('@all 第二条')).toMatchObject({ ok: true, message: { deliveryStatus: { 'role-2': 'pending' } } })
     expect(sendPrompt.mock.calls.map(call => call[0].roleId)).toEqual(['role-1', 'role-2'])
+  })
+
+  it('ends a web member\'s reply nobody can read any more, lets what waits for it go on, and takes it back once read again', async () => {
+    vi.resetModules()
+    const store = createStoreWithReadyRole()
+    const role = store.rolesById['role-1']
+    Object.assign(role, { chatSite: 'chatgpt', status: 'thinking', lastPromptMessageId: 'msg-q', replyAttemptId: 'attempt-1', liveReply: { promptMessageId: 'msg-q', content: '写到一半', updatedAt: 50 }, updatedAt: 50 })
+    store.messagesById['msg-q'] = { id: 'msg-q', chatId: 'chat-1', seq: 1, type: 'user', content: '选哪个', targetRoleIds: ['role-1'], createdAt: 40, status: 'sent', deliveryStatus: { 'role-1': 'sent' } }
+    Object.assign(store.chatsById['chat-1'], { messageIds: ['msg-q'], nextMessageSeq: 2, status: 'running' })
+    vi.doMock('./storeAccess', async importOriginal => {
+      const actual = await importOriginal<typeof import('./storeAccess')>()
+      return {
+        ...actual,
+        mutateStore: async (mutator: (store: OpenTeamStore) => unknown) => ({ store, result: await mutator(store) }),
+      }
+    })
+
+    const { createMessageHandlers } = await import('./messageHandlers')
+    const binding: RuntimeFrameBinding = { chatId: 'chat-1', roleId: 'role-1', tabId: 101, frameId: 7, ready: true, lastSeenAt: 0 }
+    const onPromptSettled = vi.fn()
+    const complete = vi.fn(async () => undefined)
+    const broadcastStoreUpdated = vi.fn()
+    const routes = createMessageHandlers({
+      broadcastStoreUpdated,
+      getChatStatusFromRoles: () => 'loading' as GroupChat['status'],
+      log: { debug: vi.fn(), info: vi.fn(), warn: vi.fn() },
+      newId: vi.fn((prefix: string) => `${prefix}-new`),
+      now: () => 1_000,
+      onPromptSettled,
+      promptDeliveryLimiter: { complete } as never,
+      runtimeFrames: { bind: vi.fn(), getByAddress: vi.fn(() => binding), getByRole: vi.fn(() => binding) },
+      sendRoleMessage: vi.fn(),
+      sendError: vi.fn(),
+      sendPrompt: vi.fn(),
+    })
+    const route = (type: string) => routes.find(candidate => candidate.type === type)!
+
+    // The last OpenTeam page was closed while the member was replying.
+    const response = await route('GROUP_REPLIES_INTERRUPTED').handler({ type: 'GROUP_REPLIES_INTERRUPTED', siteMembers: true, apiMembers: false }, {})
+
+    expect(response).toMatchObject({ ok: true, settled: [{ chatId: 'chat-1', roleId: 'role-1', promptMessageId: 'msg-q' }] })
+    expect(role).toMatchObject({ status: 'loading', updatedAt: 1_000 })
+    const reply = store.messagesById['msg-new']
+    expect(reply).toMatchObject({ type: 'assistant', roleId: 'role-1', sourceMessageId: 'msg-q', status: 'received' })
+    expect(reply.content).toMatch(/^写到一半\n\n.*重新同步完整回复/s)
+    expect(store.messagesById['msg-q']).toMatchObject({ status: 'error', deliveryStatus: { 'role-1': 'error' } })
+    expect(broadcastStoreUpdated).toHaveBeenCalledWith(store)
+    // What waits for the reply (a round, a discussion, a project) hears that it is over.
+    expect(onPromptSettled).toHaveBeenCalledWith(store, 'chat-1', 'msg-q')
+    expect(complete).toHaveBeenCalledWith('chat-1', 'msg-q', 'role-1')
+
+    // Nothing more to end the next time.
+    expect(await route('GROUP_REPLIES_INTERRUPTED').handler({ type: 'GROUP_REPLIES_INTERRUPTED', siteMembers: true, apiMembers: true }, {})).toEqual({ ok: true, settled: [] })
+
+    // The group is opened again and the reply is read from the site in full.
+    await route('TEAM_ROLE_REPLY_RESYNC').handler({ type: 'TEAM_ROLE_REPLY_RESYNC', chatId: 'chat-1', roleId: 'role-1', messageId: 'msg-new', content: '写到一半，后面也写完了。' }, { tab: { id: 101 } as chrome.tabs.Tab, frameId: 7 })
+    expect(store.messagesById['msg-new']).toMatchObject({ status: 'received', content: '写到一半，后面也写完了。' })
+    expect(store.messagesById['msg-q']).toMatchObject({ status: 'received', deliveryStatus: { 'role-1': 'received' } })
   })
 
   it('forgets a conversation its site sent the member away from, and gives it the chat again', async () => {
@@ -318,6 +378,7 @@ describe('background message handlers', () => {
       'TEAM_ROLE_REPLY_PROGRESS',
       'TEAM_ROLE_REPLY_RESYNC',
       'TEAM_ROLE_ERROR',
+      'GROUP_REPLIES_INTERRUPTED',
     ])
     expect(routes.map(route => route.type)).toEqual(MESSAGE_ROUTE_TYPES)
 

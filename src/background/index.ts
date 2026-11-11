@@ -22,6 +22,7 @@ import { classifyRuntimeSender, isRuntimeMessageAllowed, responseForSender } fro
 import { createExternalModelHandlers } from './externalModelHandlers'
 import { ALL_SITES_DROPPED_AT_KEY, dropAllSitesAccess } from './allSitesAccess'
 import { restrictStorageToExtension } from './storageAccess'
+import { createInterruptedReplySweeper } from './interruptedReplies'
 import { requireApiModelAccess } from './apiModelAccess'
 import { createExternalModelClient, type ExternalModelClient } from './externalModelClient'
 import { createLocalAgentApprovals } from './localAgentApprovals'
@@ -235,6 +236,19 @@ const routeMessage = createMessageRouter([
   ...createOrchestrationHandlers({ broadcastStoreUpdated, broadcastAutoGenerateStream, externalModelClient, getChatStatusFromRoles, log, newId, now, promptDeliveryLimiter, requestRoleRecovery, runtimeFrames, sendPrompt }),
   ...createMessageHandlers({ broadcastStoreUpdated, externalModelClient, getChatStatusFromRoles, imageAttachments, log, newId, now, onPromptSettled: notifyWhenAnswered, promptDeliveryLimiter, requestRoleRecovery, runtimeFrames, sendError, sendPrompt, sendRoleMessage }),
 ])
+
+// Replies their members can no longer give, ended at these moments (see interruptedReplies.ts).
+const interruptedReplies = createInterruptedReplySweeper({
+  tabs: { query: queryInfo => chrome.tabs.query(queryInfo) },
+  teamPageUrl: chrome.runtime.getURL('team.html'),
+  sessionStorage: chrome.storage?.session,
+  async settle(scope) {
+    const response = await routeMessage({ type: 'GROUP_REPLIES_INTERRUPTED', ...scope }, {}) as { settled?: unknown[] } | undefined
+    return response?.settled?.length ?? 0
+  },
+  now,
+  log,
+})
 
 const executeControlCommand = createControlActionExecutor({
   loadStore,
@@ -477,6 +491,7 @@ chrome.tabs.onRemoved.addListener(tabId => {
       }
     })
       .then(({ store }) => broadcastStoreUpdated(store))
+      .then(() => interruptedReplies.afterTabClosed())
       .catch(error => logBackgroundFailure('tab-removed:update-failed', error, { tabId }))
   } catch (error) {
     logBackgroundFailure('tab-removed:failed', error, { tabId })
@@ -487,6 +502,7 @@ chrome.tabs.onRemoved.addListener(tabId => {
 if (chrome.storage) void restrictStorageToExtension({ local: chrome.storage.local, sync: chrome.storage.sync, session: chrome.storage.session }, log)
 
 initializeControlClient()
+void interruptedReplies.atBackgroundStart()
 
 // An install that was updated from a version requiring every website gives that access back, once
 // (see allSitesAccess.ts). Skipped where the browser has no way to remove a permission.
