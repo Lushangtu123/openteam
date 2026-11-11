@@ -82,6 +82,9 @@ export function readSummarizableRound(store: OpenTeamStore, chat: GroupChat, que
     const message = store.messagesById[id]
     if (!message || message.type !== 'assistant' || message.sourceMessageId !== question.id || !message.roleId) continue
     if (message.status !== 'received' || !message.content.trim()) continue
+    // A member whose reply failed has not answered, whatever was kept of it (a reply cut off when
+    // its page closed is kept as received text with a note, to be read again in full).
+    if (question.deliveryStatus?.[message.roleId] === 'error') continue
     const previous = latestByRole.get(message.roleId)
     if (!previous || message.seq > previous.seq) latestByRole.set(message.roleId, message)
   }

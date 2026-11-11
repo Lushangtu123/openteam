@@ -69,6 +69,22 @@ describe('round summaries', () => {
     expect(readSummarizableRound(store, chat, question)).toBeUndefined()
   })
 
+  it('leaves out a reply that was cut off, kept with its note, until it is read again in full', () => {
+    const { store, chat, add } = setup()
+    // The OpenTeam page was closed while 设计师 and 产品 were writing: their replies were ended.
+    const question = add({ id: 'q1', type: 'user', content: '选哪个？', targetRoleIds: ['a', 'b', 'c'], deliveryStatus: { a: 'received', b: 'error', c: 'error' } })
+    add({ id: 'r1', type: 'assistant', content: 'A 更稳', roleId: 'a', sourceMessageId: 'q1' })
+    add({ id: 'r2', type: 'assistant', content: '写到一半\n\n⚠️ 这条回复还没有读完', roleId: 'b', sourceMessageId: 'q1' })
+    add({ id: 'r3', type: 'assistant', content: '⚠️ 这条回复还没有读完', roleId: 'c', sourceMessageId: 'q1' })
+
+    expect(readSummarizableRound(store, chat, question)).toBeUndefined()
+
+    // 设计师's reply is read again in full.
+    store.messagesById.r2.content = 'B 更省'
+    question.deliveryStatus = { a: 'received', b: 'received', c: 'error' }
+    expect(readSummarizableRound(store, chat, question)?.replies.map(reply => reply.message.content)).toEqual(['A 更稳', 'B 更省'])
+  })
+
   it('picks an API member first, then whoever answered first', () => {
     const { store, chat, add } = setup()
     add({ id: 'q1', type: 'user', content: '?', targetRoleIds: ['a', 'b'], deliveryStatus: { a: 'received', b: 'received' } })
