@@ -225,6 +225,7 @@ describe('background message handlers', () => {
     const { createMessageHandlers } = await import('./messageHandlers')
     const binding: RuntimeFrameBinding = { chatId: 'chat-1', roleId: 'role-1', tabId: 101, frameId: 7, ready: true, lastSeenAt: 0 }
     const onPromptSettled = vi.fn()
+    const sendRoleMessage = vi.fn()
     const complete = vi.fn(async () => undefined)
     const broadcastStoreUpdated = vi.fn()
     const routes = createMessageHandlers({
@@ -236,7 +237,7 @@ describe('background message handlers', () => {
       onPromptSettled,
       promptDeliveryLimiter: { complete } as never,
       runtimeFrames: { bind: vi.fn(), getByAddress: vi.fn(() => binding), getByRole: vi.fn(() => binding) },
-      sendRoleMessage: vi.fn(),
+      sendRoleMessage,
       sendError: vi.fn(),
       sendPrompt: vi.fn(),
     })
@@ -259,7 +260,10 @@ describe('background message handlers', () => {
     // Nothing more to end the next time.
     expect(await route('GROUP_REPLIES_INTERRUPTED').handler({ type: 'GROUP_REPLIES_INTERRUPTED', siteMembers: true, apiMembers: true }, {})).toEqual({ ok: true, settled: [] })
 
-    // The group is opened again and the reply is read from the site in full.
+    // The group is opened again and the reply is read from the site in full: the page looks for
+    // the reply that goes on from what had been read, not for the note.
+    await route('GROUP_MESSAGE_RESYNC_REPLY').handler({ type: 'GROUP_MESSAGE_RESYNC_REPLY', chatId: 'chat-1', roleId: 'role-1', messageId: 'msg-new' }, {})
+    expect(sendRoleMessage).toHaveBeenCalledWith(101, 7, expect.objectContaining({ type: 'TEAM_RESYNC_REPLY', messageId: 'msg-new', currentContent: '写到一半' }))
     await route('TEAM_ROLE_REPLY_RESYNC').handler({ type: 'TEAM_ROLE_REPLY_RESYNC', chatId: 'chat-1', roleId: 'role-1', messageId: 'msg-new', content: '写到一半，后面也写完了。' }, { tab: { id: 101 } as chrome.tabs.Tab, frameId: 7 })
     expect(store.messagesById['msg-new']).toMatchObject({ status: 'received', content: '写到一半，后面也写完了。' })
     expect(store.messagesById['msg-q']).toMatchObject({ status: 'received', deliveryStatus: { 'role-1': 'received' } })

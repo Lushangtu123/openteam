@@ -15,6 +15,7 @@ import type { SiteStatusInfo } from './sites/types'
 import { createSiteProblemTracker } from './siteProblem'
 import { chatSiteForHostname, chatSiteLabel } from '../group/chatSites'
 import { requestTypingTurn, watchPromptInBox } from './typingTurn'
+import { waitUntilSiteIsDone } from './siteBusy'
 
 const OPEN_TEAM_LOADED_KEY = '__OPENTEAM_LOADED__'
 
@@ -23,6 +24,8 @@ const siteAdapter = getActiveChatSiteAdapter()
 let replyObserver: ReplyObserverController | undefined
 let conversationMonitor: ConversationMonitor | undefined
 let lastReportedStatus: { key: string; status: SiteStatusInfo } | undefined
+// A prompt that waits for the site to finish the reply it is writing (see siteBusy.ts).
+let promptWaitingForSite: { messageId: string; stopped: boolean } | undefined
 const siteProblems = createSiteProblemTracker(chatSiteLabel(chatSiteForHostname(location.hostname)))
 const pageStartedAt = Date.now()
 
@@ -235,6 +238,8 @@ function handleResyncReplyMessage(message: Extract<BackgroundToRoleMessage, { ty
 }
 
 function handleStopGenerationMessage(message: Extract<BackgroundToRoleMessage, { type: 'TEAM_STOP_GENERATION' }>, sendResponse: (response?: unknown) => void): void {
+  // A prompt still waiting for the site is not sent once its reply is stopped.
+  if (promptWaitingForSite && (!message.messageId || message.messageId === promptWaitingForSite.messageId)) promptWaitingForSite.stopped = true
   const activePrompt = roleSession.getActivePrompt()
   log.info('message:stop-generation', {
     chatId: message.chatId,
@@ -307,27 +312,45 @@ function handleSendPromptMessage(message: Extract<BackgroundToRoleMessage, { typ
     }
   }
 
-  replyObserver?.capturePromptReplyBaseline(message.messageId)
-  roleSession.startPrompt(message.messageId, message.replyAttemptId)
+  // The same prompt again while it waits for the site (see siteBusy.ts): it is on its way.
+  if (promptWaitingForSite?.messageId === message.messageId) {
+    sendResponse({ ok: true, messageId: message.messageId, skipped: true })
+    return
+  }
+
+  const waiting = { messageId: message.messageId, stopped: false }
   sendBackgroundMessage(promptStatusMessage('sending', promptChatId, promptRoleId))
     .then(() => {
       log.info('message:send-prompt:delay-before-input', { messageId: message.messageId, delayMs: PROMPT_INPUT_DELAY_MS })
       return waitBeforePromptInput()
     })
-    .then(() => inTypingTurn(message.content, () => attachPromptFiles(message.files).then(() => fillAndSend(message.content, message.autoSend !== false))))
     .then(() => {
-      conversationMonitor?.reportConversationUpdate()
-      if (promptChatId && promptRoleId) {
-        sendBackgroundMessage({ type: 'TEAM_SEND_ACK', chatId: promptChatId, roleId: promptRoleId, messageId: message.messageId }).catch(error =>
-          log.warn('message:send-prompt:ack-failed', { messageId: message.messageId, error: error instanceof Error ? error.message : String(error) }),
-        )
-      }
+      promptWaitingForSite = waiting
+      return waitUntilSiteIsDone({
+        isGenerating: () => siteAdapter.isGenerating(),
+        isStopped: () => waiting.stopped,
+        heartbeat: () => {
+          log.warn('message:send-prompt:site-still-writing', { messageId: message.messageId })
+          sendBackgroundMessage(promptStatusMessage('sending', promptChatId, promptRoleId)).catch(() => undefined)
+        },
+      })
     })
-    .then(() => sendBackgroundMessage(promptStatusMessage('generating', promptChatId, promptRoleId)))
-    .then(() => {
-      replyObserver?.startReplyPolling(message.messageId, message.replyAttemptId)
-      log.info('message:send-prompt:ok', { messageId: message.messageId })
-      sendResponse({ ok: true, messageId: message.messageId })
+    .finally(() => {
+      if (promptWaitingForSite === waiting) promptWaitingForSite = undefined
+    })
+    .then(async outcome => {
+      if (outcome === 'stopped') {
+        // Stopped while it waited: the member is stopped already, and the prompt never went in.
+        log.warn('message:send-prompt:stopped-before-sending', { messageId: message.messageId })
+        sendResponse({ ok: true, messageId: message.messageId, skipped: true })
+        return
+      }
+      // From here the prompt is this page's: what is on the page now, the reply the site may just
+      // have finished included, is not its reply.
+      replyObserver?.capturePromptReplyBaseline(message.messageId)
+      roleSession.startPrompt(message.messageId, message.replyAttemptId)
+      await inTypingTurn(message.content, () => attachPromptFiles(message.files).then(() => fillAndSend(message.content, message.autoSend !== false)))
+      await sendPromptOnItsWay()
     })
     .catch(error => {
       const reason = error instanceof Error ? error.message : String(error)
@@ -339,6 +362,25 @@ function handleSendPromptMessage(message: Extract<BackgroundToRoleMessage, { typ
       sendBackgroundMessage(promptStatusMessage('error', promptChatId, promptRoleId, reason)).catch(() => undefined)
       sendResponse({ ok: false, messageId: message.messageId, error: reason })
     })
+
+  // The prompt is in and sent: tell the background, and watch for its reply.
+  function sendPromptOnItsWay(): Promise<void> {
+    return Promise.resolve()
+      .then(() => {
+        conversationMonitor?.reportConversationUpdate()
+        if (promptChatId && promptRoleId) {
+          sendBackgroundMessage({ type: 'TEAM_SEND_ACK', chatId: promptChatId, roleId: promptRoleId, messageId: message.messageId }).catch(error =>
+            log.warn('message:send-prompt:ack-failed', { messageId: message.messageId, error: error instanceof Error ? error.message : String(error) }),
+          )
+        }
+      })
+      .then(() => sendBackgroundMessage(promptStatusMessage('generating', promptChatId, promptRoleId)))
+      .then(() => {
+        replyObserver?.startReplyPolling(message.messageId, message.replyAttemptId)
+        log.info('message:send-prompt:ok', { messageId: message.messageId })
+        sendResponse({ ok: true, messageId: message.messageId })
+      })
+  }
 }
 
 // Typing a prompt takes the keyboard focus into this page. Inside OpenTeam it waits for a turn (the

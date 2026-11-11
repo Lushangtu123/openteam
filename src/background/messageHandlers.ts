@@ -7,7 +7,7 @@ import { misreadReplyReason } from '../group/misreadReply'
 import { isProjectActive } from '../group/project'
 import { REPLY_STUCK_AFTER_MS } from '../group/replyTiming'
 import { updateUserMessageDeliveryStatus } from '../group/deliveryStatus'
-import { settleInterruptedReplies, type InterruptedReplyScope } from './interruptedReplies'
+import { settleInterruptedReplies, textReadBeforeInterruption, type InterruptedReplyScope } from './interruptedReplies'
 import { createProjectRunner } from './projectRunner'
 import { chooseNextSpeaker, discussionMaxTurns, discussionTranscript, discussionTurnRequestText, DISCUSSION_MAX_FAILED_TURNS, isDiscussionRunning, startsDiscussion, turnCountsOf } from '../group/discussion'
 import type { LoadedUpload, UploadedImage } from './imageAttachments'
@@ -969,7 +969,7 @@ export function createMessageHandlers(baseDeps: MessageHandlersDependencies): Ba
       const role = requireRole(store, chat.id, roleId)
       const assistantMessage = store.messagesById[messageId]
       if (!isAssistantMessageForRole(assistantMessage, chat, role)) throw new Error('该回复不属于这位成员')
-      return { currentContent: assistantMessage.content }
+      return { currentContent: textReadBeforeInterruption(assistantMessage.content) }
     })
 
     deps.log.warn('message-resync-reply:request', { chatId, roleId, messageId, tabId: binding.tabId, frameId: binding.frameId, currentContentLength: result.currentContent.length })

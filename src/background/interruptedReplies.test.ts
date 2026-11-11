@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createDefaultStore } from '../group/store'
 import type { GroupMessage, GroupRole, OpenTeamStore } from '../group/types'
-import { BACKGROUND_STARTED_KEY, createInterruptedReplySweeper, settleInterruptedReplies, type InterruptedReplyScope } from './interruptedReplies'
+import { BACKGROUND_STARTED_KEY, createInterruptedReplySweeper, settleInterruptedReplies, textReadBeforeInterruption, type InterruptedReplyScope } from './interruptedReplies'
 
 // A group asked one question: a site member and an API member are still replying (the API member
 // has written some of it), and a third member has answered.
@@ -78,6 +78,21 @@ describe('replies that were under way when their member could no longer answer',
 
     expect(settleInterruptedReplies(store, { ...options, siteMembers: true, apiMembers: true, quietSince: 900 }).map(item => item.roleId)).toEqual(['site'])
     expect(store.rolesById.api).toMatchObject({ status: 'thinking', lastPromptMessageId: 'q' })
+  })
+
+  it('reads a kept web reply again by the text that had been read, not the note', () => {
+    const store = storeWithRepliesUnderWay()
+    settleInterruptedReplies(store, { ...options, siteMembers: true, apiMembers: false })
+
+    expect(textReadBeforeInterruption(repliesOf(store, 'site')[0].content)).toBe('写到一半')
+    // Nothing had been read: no text to look for.
+    store.rolesById.site = { ...store.rolesById.site, status: 'thinking', lastPromptMessageId: 'q' }
+    delete store.rolesById.site.liveReply
+    store.chatsById['chat-1'].messageIds = store.chatsById['chat-1'].messageIds.filter(id => id !== 'msg-new')
+    settleInterruptedReplies(store, { ...options, newId: () => 'msg-empty', siteMembers: true, apiMembers: false })
+    expect(textReadBeforeInterruption(store.messagesById['msg-empty'].content)).toBe('')
+    // Any other reply is as it is.
+    expect(textReadBeforeInterruption('普通回复')).toBe('普通回复')
   })
 
   it('changes nothing when no reply is under way', () => {

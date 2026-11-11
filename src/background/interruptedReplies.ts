@@ -16,6 +16,14 @@ import { isExternalModelRole } from './rolePromptDelivery'
 const SITE_REPLY_NOTICE = '⚠️ 这条回复还没有读完，成员页面就关闭了（OpenTeam 页面或浏览器被关闭）。站点上可能已经写完。\n\n可以点击下方的重新同步完整回复按钮把它读回来。'
 const API_REPLY_NOTICE = '⚠️ 回复中断了：扩展的后台重新启动，这条回复没有写完。\n\n可以点击下方的重新回复按钮再试一次。'
 
+// What had been read of a web member's reply that was ended here, without the note: the text the
+// member's page looks for on the site when the reply is read again (重新同步完整回复).
+export function textReadBeforeInterruption(content: string): string {
+  if (content === SITE_REPLY_NOTICE) return ''
+  const suffix = `\n\n${SITE_REPLY_NOTICE}`
+  return content.endsWith(suffix) ? content.slice(0, -suffix.length) : content
+}
+
 export interface InterruptedReply {
   chatId: string
   roleId: string
