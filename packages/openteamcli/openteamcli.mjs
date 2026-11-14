@@ -5,6 +5,7 @@ import { homedir } from 'node:os'
 import { delimiter, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { DEFAULT_AGENT_CONFIG_PATH, DEFAULT_PORT, DEFAULT_TOKEN_PATH, readOrCreateToken } from './openteam-daemon.mjs'
+import { chooseNodePath, createLaunchAgent, daemonEnvironment, describeLaunchAgent, nodeFileSystem, runLaunchctl } from './launch-agent.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const DAEMON_SCRIPT = resolve(__dirname, 'openteam-daemon.mjs')
@@ -23,6 +24,9 @@ export function buildCliRequest(argv) {
     if (subcommand === 'stop') return { kind: 'daemon-stop' }
     if (subcommand === 'restart') return { kind: 'daemon-restart' }
     if (subcommand === 'logs') return { kind: 'daemon-logs' }
+    // macOS: a LaunchAgent starts the daemon at login and again after a crash.
+    if (subcommand === 'install') return { kind: 'daemon-install' }
+    if (subcommand === 'uninstall') return { kind: 'daemon-uninstall' }
   }
 
   if (group === 'chat') {
@@ -133,12 +137,16 @@ async function main(argv) {
 async function runRequest(request) {
   if (request.kind === 'help') return help()
   if (request.kind === 'daemon-start') return startDaemon()
-  if (request.kind === 'daemon-status') return getDaemonStatus()
+  if (request.kind === 'daemon-status') return daemonStatusReport()
   if (request.kind === 'daemon-stop') return stopDaemon()
   if (request.kind === 'daemon-restart') {
     await stopDaemon().catch(() => undefined)
+    // Otherwise the one on its way out still answers, and the start below does nothing.
+    await waitForDaemonDown()
     return startDaemon()
   }
+  if (request.kind === 'daemon-install') return launchAgent().install()
+  if (request.kind === 'daemon-uninstall') return launchAgent().uninstall()
   if (request.kind === 'daemon-logs') return daemonFetch('/logs')
   if (request.kind === 'doctor') return doctor()
   if (request.kind === 'agent-add') {
@@ -178,6 +186,7 @@ async function doctor() {
       port: status.port,
       pid: status.pid,
     },
+    launchAgent: describeLaunchAgent(launchAgent().status(), status.pid),
     extension: {
       connected: Boolean(status.extensionConnected),
       version: status.extensionVersion,
@@ -202,6 +211,16 @@ async function startDaemon() {
     const status = await getDaemonStatus()
     return { ok: true, alreadyRunning: true, status }
   } catch {
+    // Installed with `daemon install`: started by launchd, so it is the one that comes back after a
+    // crash. If launchd's does not answer, one is started directly as before.
+    if (launchAgent().kickstart()) {
+      try {
+        await waitForDaemon(5_000)
+        return { ok: true, started: true, launchAgent: true, status: await getDaemonStatus() }
+      } catch {
+        // Started below.
+      }
+    }
     const child = spawn(process.execPath, [DAEMON_SCRIPT, `--port=${controlPort()}`], {
       detached: true,
       stdio: 'ignore',
@@ -228,6 +247,59 @@ async function waitForDaemon(timeoutMs = 2_000) {
     }
   }
   throw new Error('本地守护进程启动超时')
+}
+
+async function waitForDaemonDown(timeoutMs = 3_000) {
+  const start = Date.now()
+  while (Date.now() - start < timeoutMs) {
+    try {
+      await getDaemonStatus()
+    } catch {
+      return
+    }
+    await new Promise(resolve => setTimeout(resolve, 80))
+  }
+}
+
+// `daemon status`: the daemon's own status and the LaunchAgent's, also when the daemon is not running.
+async function daemonStatusReport() {
+  const agent = launchAgent().status()
+  try {
+    const status = await getDaemonStatus()
+    return { ...status, launchAgent: describeLaunchAgent(agent, status.pid) }
+  } catch (error) {
+    process.exitCode = 1
+    return {
+      ok: false,
+      running: false,
+      error: {
+        code: 'daemon_unreachable',
+        message: `端口 ${controlPort()} 上没有守护进程响应：${error instanceof Error ? error.message : String(error)}`,
+      },
+      launchAgent: describeLaunchAgent(agent),
+    }
+  }
+}
+
+function launchAgent() {
+  const nodePath = chooseNodePath(process.execPath, process.env.PATH)
+  return createLaunchAgent({
+    platform: process.platform,
+    uid: process.getuid?.(),
+    home: homedir(),
+    port: controlPort(),
+    nodePath,
+    daemonScript: realpathSync(DAEMON_SCRIPT),
+    environment: daemonEnvironment(process.env, nodePath),
+    fs: nodeFileSystem,
+    launchctl: runLaunchctl,
+    daemon: {
+      status: () => getDaemonStatus().catch(() => undefined),
+      shutdown: () => stopDaemon(),
+    },
+    kill: (pid, signal) => process.kill(pid, signal),
+    sleep: ms => new Promise(resolve => setTimeout(resolve, ms)),
+  })
 }
 
 async function getDaemonStatus() {
@@ -442,6 +514,7 @@ export function help() {
     commands: [
       'openteamcli doctor',
       'openteamcli daemon start|status|stop|restart|logs',
+      'openteamcli daemon install|uninstall',
       'openteamcli chat list|get|create|activate|initialize',
       'openteamcli chat create --name <name> [--mode collaborative|independent] [--style review|turns|parallel] [--reply-all]',
       'openteamcli role batch-add --chat <chatId> --file roles.json',

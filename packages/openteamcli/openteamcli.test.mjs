@@ -13,6 +13,8 @@ describe('openteamcli command builder', () => {
     expect(buildCliRequest(['doctor'])).toEqual({ kind: 'doctor' })
     expect(buildCliRequest(['daemon', 'status'])).toEqual({ kind: 'daemon-status' })
     expect(buildCliRequest(['daemon', 'stop'])).toEqual({ kind: 'daemon-stop' })
+    expect(buildCliRequest(['daemon', 'install'])).toEqual({ kind: 'daemon-install' })
+    expect(buildCliRequest(['daemon', 'uninstall'])).toEqual({ kind: 'daemon-uninstall' })
   })
 
   it('builds chat, role, task, and run control commands', () => {
@@ -67,6 +69,7 @@ describe('openteamcli command builder', () => {
       commands: [
         'openteamcli doctor',
         'openteamcli daemon start|status|stop|restart|logs',
+        'openteamcli daemon install|uninstall',
         'openteamcli chat list|get|create|activate|initialize',
         'openteamcli chat create --name <name> [--mode collaborative|independent] [--style review|turns|parallel] [--reply-all]',
         'openteamcli role batch-add --chat <chatId> --file roles.json',

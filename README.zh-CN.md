@@ -118,6 +118,8 @@ npx skills add . --skill openteam-control
 
 安装完成后，打开 OpenTeam 扩展页面，并在设置里开启本机智能体控制。更多 CLI 说明见 [OpenTeam CLI](packages/openteamcli/README.zh-CN.md)。
 
+电脑重启后守护进程不会自己启动。在 macOS 上运行 `openteamcli daemon install` 可以把它装成 LaunchAgent：登录时自动启动，崩溃后自动重启；`openteamcli daemon uninstall` 可以去掉它。它写入了什么，见[登录时自动启动](packages/openteamcli/README.zh-CN.md#登录时自动启动macos)。
+
 ## 🛠️ 从源码开发
 
 ```bash

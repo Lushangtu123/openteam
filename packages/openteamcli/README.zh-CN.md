@@ -83,6 +83,29 @@ OPENTEAM_EXTENSION_ORIGINS=chrome-extension://<你的扩展ID> openteamcli daemo
 
 守护进程在后台运行，没有输出。它的经过记在 `~/.openteam/daemon.log`（只有你能读；满 1 MB 后旧文件保留为 `daemon.log.1`）：何时启动、何时结束以及原因（收到信号、崩溃、`daemon stop`），扩展的连接和断开，本地智能体的运行。提示词和令牌不会写进去。如果上一次运行没有写下结束记录（被强制结束或电脑断电），下次启动时会补记一条。`openteamcli daemon status` 会显示这个文件的位置。
 
+## 登录时自动启动（macOS）
+
+Mac 重启后守护进程不会自己启动，本机智能体成员和 CLI 控制都要等有人运行 `openteamcli daemon start` 才能用。在 macOS 上可以把它装成 LaunchAgent：
+
+```bash
+openteamcli daemon install
+```
+
+它会写入 `~/Library/LaunchAgents/io.github.afumu.openteam.daemon.plist`，并用 `launchctl bootstrap gui/$UID` 加载。之后 launchd 会在你登录时运行守护进程（`node openteam-daemon.mjs --port=<端口>`，端口取 `OPENTEAM_DAEMON_PORT`，默认 19305，即 `RunAtLoad`），并在它异常结束（比如崩溃）时再启动它（`KeepAlive` 里 `SuccessfulExit` 为 false）。端口上已经在运行的守护进程会先被停掉，免得两个抢同一个端口。没有变化时再运行一次 `install` 什么也不改；移动或重新安装 openteamcli 后请再运行一次。
+
+- **Node**：就是运行 `openteamcli` 的那个 Node；如果 `PATH` 上有一条路径指向同一个程序，就用那条路径。比如用 `/opt/homebrew/bin/node`，而不是某个版本的 Cellar 文件夹（`brew upgrade` 会删掉它）。
+- **环境变量**：launchd 给程序的 `PATH` 只有系统文件夹，所以守护进程会拿到运行 `install` 时的 `PATH`（本机智能体用 `npx` 启动），以及设置了的 `OPENTEAM_EXTENSION_ORIGINS`。shell 里的其他变量都不会带过去：智能体需要的变量请用 `agent add --env` 设置；`OPENTEAM_EXTENSION_ORIGINS` 请在运行 `install` 时设置，而不是在 `daemon restart` 时。
+- **停止和启动**：`daemon stop` 让守护进程以退出码 0 结束，launchd 不会再启动它，所以它会一直停着，直到下次登录或运行 `daemon start`。LaunchAgent 已加载时，`daemon start` 和 `daemon restart` 都通过 launchd 启动，这样在运行的始终是崩溃后会被拉起来的那一个。
+- **状态**：`daemon status` 和 `doctor` 的结果里有 `launchAgent`：是否已安装、是否已加载，launchd 看到的状态、pid 和上次退出码，端口上的守护进程是不是 launchd 运行的那个（`managed`），需要处理时还有 `hint`（比如它要运行的 Node 已经不在了）。
+- **登录项**：macOS 可能会提示添加了一个后台项目（`node`）。请在“系统设置 › 通用 › 登录项”里保持允许；关掉后 launchd 不会运行守护进程。
+- 请从全局安装（`npm install -g @afumu/openteamcli`）或一个不会移动的 checkout 运行 `install`。用 `npx` 运行的命令放在 npm 的缓存里，npm 清理缓存后就没了。
+
+```bash
+openteamcli daemon uninstall
+```
+
+它会卸载 LaunchAgent（同时停掉它启动的守护进程）并删除这个文件。之后 `daemon start` 仍然可以照旧启动守护进程。这两个命令在其他系统上会拒绝运行。
+
 ## 发布检查
 
 发布新的 CLI 版本前，先更新 `packages/openteamcli/package.json` 里的版本号；npm 不允许重复发布已经存在的版本。

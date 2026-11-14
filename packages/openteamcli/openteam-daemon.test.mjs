@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { connect } from 'node:net'
 import { createServer, request as httpRequest } from 'node:http'
 import { createHash } from 'node:crypto'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { tmpdir } from 'node:os'
@@ -590,6 +590,48 @@ describe('the daemon process', () => {
         'daemon:previous-run-ended-without-record', 'daemon:start', 'daemon:signal', 'daemon:exit',
       ])
     } finally {
+      rmSync(home, { recursive: true, force: true })
+    }
+  }, 20_000)
+
+  it('ends with exit code 0 when asked to stop and 1 when it cannot listen, run from a folder with a space', async () => {
+    // The LaunchAgent's KeepAlive starts it again after an exit that is not 0 and leaves it
+    // stopped after 0. Its own home (token, log) in a temporary folder, the program in a folder
+    // whose file URL spells the space differently from the path launchd passes.
+    const home = mkdtempSync(join(tmpdir(), 'ot-daemon-home-'))
+    const folder = join(home, 'Open Team')
+    mkdirSync(folder)
+    for (const file of ['openteam-daemon.mjs', 'acp-stdio.mjs', 'daemon-log.mjs']) {
+      copyFileSync(fileURLToPath(new URL(`./${file}`, import.meta.url)), join(folder, file))
+    }
+    const run = port => spawn(process.execPath, [join(folder, 'openteam-daemon.mjs'), `--port=${port}`], { env: { ...process.env, HOME: home }, stdio: ['ignore', 'ignore', 'pipe'] })
+    const exitCode = child => new Promise(resolveExit => child.once('exit', code => resolveExit(code)))
+    const taken = createServer()
+    try {
+      const child = run(0)
+      const exited = exitCode(child)
+      const port = await new Promise((resolveListen, rejectListen) => {
+        child.stderr.on('data', chunk => {
+          const match = /listening on 127\.0\.0\.1:(\d+)/.exec(String(chunk))
+          if (match) resolveListen(Number(match[1]))
+        })
+        exited.then(code => rejectListen(new Error(`daemon ended at start (${code})`)))
+      })
+      const token = readFileSync(join(home, '.openteam/control-token'), 'utf8').trim()
+      const response = await fetch(`http://127.0.0.1:${port}/shutdown`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-OpenTeam': '1', Authorization: `Bearer ${token}` },
+        body: '{}',
+      })
+      expect(response.status).toBe(200)
+      expect(await exited).toBe(0)
+
+      // The port is taken (by another program, or a daemon `daemon start` ran).
+      await new Promise(resolveListen => taken.listen(0, '127.0.0.1', () => resolveListen(undefined)))
+      expect(await exitCode(run(taken.address().port))).toBe(1)
+      expect(readFileSync(join(home, '.openteam/daemon.log'), 'utf8')).toContain('daemon:start-failed')
+    } finally {
+      await closeServer(taken)
       rmSync(home, { recursive: true, force: true })
     }
   }, 20_000)

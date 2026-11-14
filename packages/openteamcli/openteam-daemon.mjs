@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from
 import { homedir } from 'node:os'
 import { dirname, resolve } from 'node:path'
 import { createServer } from 'node:http'
+import { fileURLToPath } from 'node:url'
 import { runStdioAcpAgent } from './acp-stdio.mjs'
 import { createDaemonLogFile, endedWithoutRecord } from './daemon-log.mjs'
 
@@ -837,7 +838,18 @@ function sendFrame(socket, data, opcode = 1) {
   socket.write(Buffer.concat([header, payload]))
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+// Run as a program (by `daemon start`, or by launchd from the LaunchAgent), not imported. Compared as
+// real paths: a file URL spells a space or an accent differently from the path on the command line.
+function isMainModule() {
+  if (!process.argv[1]) return false
+  try {
+    return realpathSync(fileURLToPath(import.meta.url)) === realpathSync(process.argv[1])
+  } catch {
+    return false
+  }
+}
+
+if (isMainModule()) {
   const portArg = process.argv.find(arg => arg.startsWith('--port='))
   const port = portArg ? Number(portArg.slice('--port='.length)) : DEFAULT_PORT
   // Started detached with its output thrown away: what happens to it goes to the log file.

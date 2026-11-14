@@ -118,6 +118,8 @@ npx skills add . --skill openteam-control
 
 After installation, open the OpenTeam extension page and enable local agent control in settings. See [OpenTeam CLI](packages/openteamcli/README.md) for more CLI details.
 
+The daemon does not start by itself after a restart. On macOS, `openteamcli daemon install` adds it as a LaunchAgent, so it starts when you log in and comes back if it crashes; `openteamcli daemon uninstall` removes it. See [Start at Login](packages/openteamcli/README.md#start-at-login-macos) for what it writes.
+
 ## 🛠️ Development From Source
 
 ```bash

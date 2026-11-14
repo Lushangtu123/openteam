@@ -55,6 +55,8 @@ openteamcli daemon restart
 openteamcli doctor
 ```
 
+在 macOS 上，如果 `doctor` 里 `launchAgent.installed` 是 `false`，可以建议用户运行 `openteamcli daemon install`，让 daemon 在登录时自动启动、崩溃后自动重启（`openteamcli daemon uninstall` 可以去掉）。它会改动用户的登录项，所以不要自行运行，先问用户。`launchAgent.hint` 不为空时，把它转告用户。
+
 ## 推荐的新任务流程
 
 新任务优先使用“一次性创建群聊、添加角色、发布任务、等待回复”的流程。这样最适合外部 Agent 或 CLI 调用。
@@ -151,6 +153,8 @@ openteamcli daemon start
 openteamcli doctor
 openteamcli daemon status
 openteamcli daemon restart
+openteamcli daemon install
+openteamcli daemon uninstall
 openteamcli chat list
 openteamcli chat get <chatId>
 openteamcli chat create --name "群聊名" --mode independent
