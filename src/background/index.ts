@@ -250,13 +250,16 @@ const interruptedReplies = createInterruptedReplySweeper({
   log,
 })
 
+// The OpenTeam page, reused when it is open (see teamPageTab.ts).
+const showTeamPage = createTeamPageShower(chrome.tabs, chrome.runtime.getURL('team.html'), chrome.windows)
+
 const executeControlCommand = createControlActionExecutor({
   loadStore,
   routeRuntimeMessage(message) {
     return Promise.resolve(routeMessage(message, {}))
   },
   runtimeFrames,
-  openTeamPage: createTeamPageShower(chrome.tabs, chrome.runtime.getURL('team.html')),
+  openTeamPage: () => showTeamPage(),
   waitFor(ms) {
     return new Promise(resolve => globalThis.setTimeout(resolve, ms))
   },
@@ -373,17 +376,7 @@ async function showTeamPageChat(chatId: string): Promise<void> {
     if (store.chatsById[chatId]) store.currentChatId = chatId
   })
   await broadcastStoreUpdated(store)
-  const [tab] = await teamPageTabs()
-  if (!tab?.id) {
-    await openTeamPage()
-    return
-  }
-  await chrome.tabs.update(tab.id, { active: true })
-  await chrome.windows.update(tab.windowId, { focused: true })
-}
-
-async function openTeamPage(): Promise<void> {
-  await chrome.tabs.create({ url: chrome.runtime.getURL('team.html'), active: true })
+  await showTeamPage({ focusWindow: true })
 }
 
 chrome.runtime.onInstalled.addListener(() => {
@@ -440,9 +433,10 @@ chrome.runtime.onMessage.addListener((message: RuntimeMessage, sender, sendRespo
   return true
 })
 
-chrome.action.onClicked.addListener(() => {
+// The toolbar icon: the OpenTeam tab already open, preferably in this window, or a new one here.
+chrome.action.onClicked.addListener(tab => {
   try {
-    chrome.tabs.create({ url: chrome.runtime.getURL('team.html'), active: true }).catch(error => {
+    showTeamPage({ fromWindowId: tab.windowId, focusWindow: true }).catch(error => {
       logBackgroundFailure('open-team-page:failed', error)
     })
   } catch (error) {
