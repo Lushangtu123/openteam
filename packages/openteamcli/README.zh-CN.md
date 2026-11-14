@@ -81,6 +81,8 @@ npx skills add . --skill openteam-control
 OPENTEAM_EXTENSION_ORIGINS=chrome-extension://<你的扩展ID> openteamcli daemon restart
 ```
 
+守护进程在后台运行，没有输出。它的经过记在 `~/.openteam/daemon.log`（只有你能读；满 1 MB 后旧文件保留为 `daemon.log.1`）：何时启动、何时结束以及原因（收到信号、崩溃、`daemon stop`），扩展的连接和断开，本地智能体的运行。提示词和令牌不会写进去。如果上一次运行没有写下结束记录（被强制结束或电脑断电），下次启动时会补记一条。`openteamcli daemon status` 会显示这个文件的位置。
+
 ## 发布检查
 
 发布新的 CLI 版本前，先更新 `packages/openteamcli/package.json` 里的版本号；npm 不允许重复发布已经存在的版本。

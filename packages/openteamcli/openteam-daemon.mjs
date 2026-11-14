@@ -5,6 +5,7 @@ import { homedir } from 'node:os'
 import { dirname, resolve } from 'node:path'
 import { createServer } from 'node:http'
 import { runStdioAcpAgent } from './acp-stdio.mjs'
+import { createDaemonLogFile, endedWithoutRecord } from './daemon-log.mjs'
 
 export const DEFAULT_PORT = 19305
 export const DEFAULT_TOKEN_PATH = resolve(homedir(), '.openteam/control-token')
@@ -41,6 +42,7 @@ export async function createControlDaemon(options = {}) {
     logs.push(entry)
     if (logs.length > 300) logs.shift()
     if (logToConsole) console.error(`[openteam-daemon] ${event}`, details)
+    options.onLog?.(event, details)
   }
 
   const server = createServer(async (request, response) => {
@@ -71,6 +73,7 @@ export async function createControlDaemon(options = {}) {
           writeJson(response, 401, permissionDenied())
           return
         }
+        log('daemon:shutdown-requested')
         writeJson(response, 200, { ok: true })
         setTimeout(() => daemon.close(), 0)
         return
@@ -173,6 +176,7 @@ export async function createControlDaemon(options = {}) {
       agentCapabilities: AGENT_CAPABILITIES,
       pending: pending.size,
       port: daemon.port,
+      ...(options.logFilePath ? { logFile: options.logFilePath } : {}),
     }
   }
 
@@ -836,11 +840,34 @@ function sendFrame(socket, data, opcode = 1) {
 if (import.meta.url === `file://${process.argv[1]}`) {
   const portArg = process.argv.find(arg => arg.startsWith('--port='))
   const port = portArg ? Number(portArg.slice('--port='.length)) : DEFAULT_PORT
-  createControlDaemon({ port })
+  // Started detached with its output thrown away: what happens to it goes to the log file.
+  const logFile = createDaemonLogFile()
+  const previous = logFile.lastLine()
+  if (endedWithoutRecord(previous)) logFile.write('daemon:previous-run-ended-without-record', { lastLine: previous.slice(0, 300) })
+  logFile.write('daemon:start', { pid: process.pid, port, node: process.version })
+  process.on('exit', code => logFile.write('daemon:exit', { code }))
+  process.on('uncaughtException', error => {
+    logFile.write('daemon:crash', { error: error instanceof Error ? error.stack : String(error) })
+    process.exit(1)
+  })
+  // A promise nobody waited for failed: worth knowing, not worth ending the daemon for.
+  process.on('unhandledRejection', reason => {
+    logFile.write('daemon:unhandled-rejection', { reason: reason instanceof Error ? reason.stack : String(reason) })
+  })
+  let running
+  for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP']) {
+    process.on(signal, () => {
+      logFile.write('daemon:signal', { signal })
+      Promise.resolve(running?.close()).catch(() => undefined).finally(() => process.exit(0))
+    })
+  }
+  createControlDaemon({ port, onLog: (event, details) => logFile.write(event, details), logFilePath: logFile.path })
     .then(daemon => {
+      running = daemon
       console.error(`[openteam-daemon] listening on 127.0.0.1:${daemon.port}`)
     })
     .catch(error => {
+      logFile.write('daemon:start-failed', { error: error instanceof Error ? error.message : String(error) })
       console.error(error instanceof Error ? error.message : String(error))
       process.exitCode = 1
     })

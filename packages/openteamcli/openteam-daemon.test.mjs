@@ -2,7 +2,9 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { connect } from 'node:net'
 import { createServer, request as httpRequest } from 'node:http'
 import { createHash } from 'node:crypto'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { spawn } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DEFAULT_EXTENSION_ORIGINS, DEFAULT_PORT, createControlDaemon, isLoopbackHostHeader } from './openteam-daemon.mjs'
@@ -557,3 +559,39 @@ function serverFrame(data) {
     ? Buffer.concat([Buffer.from([0x81, payload.length]), payload])
     : Buffer.concat([Buffer.from([0x81, 126, payload.length >> 8, payload.length & 0xff]), payload])
 }
+
+describe('the daemon process', () => {
+  it('writes why it ended to its log file, and notices a run that ended without saying so', async () => {
+    // A daemon of its own: its home (token, log) in a temporary folder, on a free port.
+    const home = mkdtempSync(join(tmpdir(), 'ot-daemon-home-'))
+    const script = fileURLToPath(new URL('./openteam-daemon.mjs', import.meta.url))
+    const start = () => new Promise((resolveStart, rejectStart) => {
+      const child = spawn(process.execPath, [script, '--port=0'], { env: { ...process.env, HOME: home }, stdio: ['ignore', 'ignore', 'pipe'] })
+      child.stderr.on('data', chunk => { if (String(chunk).includes('listening on')) resolveStart(child) })
+      child.once('exit', code => rejectStart(new Error(`daemon ended at start (${code})`)))
+    })
+    const stop = (child, signal) => new Promise(resolveStop => {
+      child.once('exit', resolveStop)
+      child.kill(signal)
+    })
+    const events = () => readFileSync(join(home, '.openteam/daemon.log'), 'utf8').trim().split('\n').map(line => line.split(' ')[1])
+    try {
+      // Stopped by a signal (as the system does at shut down).
+      await stop(await start(), 'SIGTERM')
+      expect(events()).toEqual(['daemon:start', 'daemon:signal', 'daemon:exit'])
+      expect(readFileSync(join(home, '.openteam/daemon.log'), 'utf8')).toContain('daemon:signal {"signal":"SIGTERM"}')
+
+      // Killed outright: nothing more is written, and the next start says so.
+      await stop(await start(), 'SIGKILL')
+      await stop(await start(), 'SIGTERM')
+      expect(events()).toEqual([
+        'daemon:start', 'daemon:signal', 'daemon:exit',
+        'daemon:start',
+        'daemon:previous-run-ended-without-record', 'daemon:start', 'daemon:signal', 'daemon:exit',
+      ])
+    } finally {
+      rmSync(home, { recursive: true, force: true })
+    }
+  }, 20_000)
+})
+

@@ -83,6 +83,14 @@ export async function runStdioAcpAgent(agent, input) {
     for (const entry of pending.values()) entry.reject(exitError)
     pending.clear()
   })
+  // The agent stopped reading (it quit or closed its input) while something was being written to
+  // it: the write fails with EPIPE. Unhandled, that error would end the whole daemon; here it ends
+  // this run, as the agent leaving does.
+  child.stdin.on('error', error => {
+    exitError ??= new AcpError(`本地智能体不再接收消息（${error.code ?? error.message}）${stderrTail.trim() ? `：${stderrTail.trim().slice(-400)}` : ''}`)
+    for (const entry of pending.values()) entry.reject(exitError)
+    pending.clear()
+  })
   child.stderr.setEncoding('utf8')
   child.stderr.on('data', chunk => {
     stderrTail = `${stderrTail}${chunk}`.slice(-STDERR_TAIL_CHARS)

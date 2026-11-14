@@ -81,6 +81,8 @@ The daemon only accepts requests whose `Host` is `127.0.0.1`/`localhost`, and on
 OPENTEAM_EXTENSION_ORIGINS=chrome-extension://<your-extension-id> openteamcli daemon restart
 ```
 
+The daemon runs in the background with no output. What happens to it is kept in `~/.openteam/daemon.log` (readable only by you; the previous file is kept as `daemon.log.1` once it reaches 1 MB): when it started and ended and why (a signal, a crash, `daemon stop`), the extension connecting and leaving, and local agent runs. Prompts and the token are never written there. A run that ended without writing its end (killed outright, or the computer lost power) is noted at the next start. `openteamcli daemon status` shows the file's path.
+
 ## Publish Checklist
 
 Before publishing a new CLI release, bump `packages/openteamcli/package.json`; npm does not allow republishing an existing version.

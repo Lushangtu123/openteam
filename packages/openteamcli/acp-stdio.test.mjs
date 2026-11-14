@@ -74,6 +74,29 @@ describe('ACP over stdio', () => {
       .rejects.toThrow('本机智能体不能用你的账号：可能还没有登录，或者账号/订阅暂时不能用。在终端里直接用一次这个智能体就能看到具体原因（例如 Claude Code：运行 claude -p "hi"）。登录方式：Log in with Claude Code：Run `claude /login` in the terminal。')
   })
 
+  it('fails the run, and nothing else, when the agent leaves while a long prompt is being written to it', async () => {
+    // Answers the handshake, then quits as soon as a prompt starts to arrive: the rest of a prompt
+    // longer than the pipe holds can no longer be written (EPIPE). Unhandled, that ended the daemon.
+    const leavesMidPrompt = {
+      command: process.execPath,
+      args: ['-e', `let buffer = ''
+        const reply = (id, result) => process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id, result }) + '\\n')
+        process.stdin.on('data', chunk => {
+          buffer += chunk
+          if (buffer.includes('"session/prompt"')) process.exit(0)
+          let end
+          while ((end = buffer.indexOf('\\n')) >= 0) {
+            const message = JSON.parse(buffer.slice(0, end))
+            buffer = buffer.slice(end + 1)
+            if (message.method === 'initialize') reply(message.id, { protocolVersion: 1, agentCapabilities: {} })
+            else if (message.method === 'session/new') reply(message.id, { sessionId: 's1' })
+          }
+        })`],
+    }
+
+    await expect(runStdioAcpAgent(leavesMidPrompt, { prompt: '很长的群聊上下文。'.repeat(40_000), cwd: workspace(), timeoutMs: 10_000 })).rejects.toThrow(/本地智能体/)
+  })
+
   it('explains an agent that cannot start', async () => {
     await expect(runStdioAcpAgent({ command: '/nonexistent/agent' }, { prompt: 'x', cwd: workspace(), timeoutMs: 5_000 })).rejects.toThrow('无法启动本地智能体')
   })

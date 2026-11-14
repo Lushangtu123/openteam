@@ -40,6 +40,22 @@ describe('openteamcli install configuration', () => {
     ]))
   })
 
+  it('publishes every module the published files load', () => {
+    const pkg = JSON.parse(readFileSync(resolve(packageRoot, 'package.json'), 'utf8'))
+    // From the command and the daemon, every local module they import, and what those import.
+    const seen = new Set()
+    const visit = file => {
+      if (seen.has(file)) return
+      seen.add(file)
+      const source = readFileSync(resolve(packageRoot, file), 'utf8')
+      for (const [, imported] of source.matchAll(/from '\.\/([^']+)'/g)) visit(imported)
+    }
+    visit(pkg.bin.openteamcli)
+
+    expect([...seen].sort()).toEqual(expect.arrayContaining(['openteam-daemon.mjs']))
+    for (const file of seen) expect(pkg.files, `${file} is loaded but not published`).toContain(file)
+  })
+
   it('documents the installed openteamcli command in the skill', () => {
     const skill = readFileSync(resolve(packageRoot, 'skills/openteam-control/SKILL.md'), 'utf8')
 

@@ -13,6 +13,7 @@
     "openteamcli.mjs",
     "openteam-daemon.mjs",
     "acp-stdio.mjs",
+    "daemon-log.mjs",
     "skills"
   ],
   "engines": {
