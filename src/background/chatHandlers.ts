@@ -1,4 +1,5 @@
 import { forgetMemorySent } from '../group/memoryPrompt'
+import { copyMemoryForChat, deleteMemoryForChat } from '../group/memoryStore'
 import { chatSiteLabel, isChatSite } from '../group/chatSites'
 import { MAX_TEAM_HANDBOOKS, readTeamHandbook } from '../group/teamHandbooks'
 import { createGroupRole, createGroupRolesBatch, type GroupRoleBatchInput } from '../group/roleTemplates'
@@ -189,6 +190,8 @@ export function createChatHandlers(deps: ChatHandlersDependencies): BackgroundMe
         deps.runtimeFrames.removeRole(chat.id, roleId)
       }
       for (const messageId of messageIds) delete store.messagesById[messageId]
+      // The group's memory items and its members' go with it; items for every group stay.
+      const memoryItemCount = deleteMemoryForChat(store, chat.id, roleIds)
 
       store.chatOrder = store.chatOrder.filter(id => id !== chat.id)
       delete store.chatsById[chat.id]
@@ -196,7 +199,7 @@ export function createChatHandlers(deps: ChatHandlersDependencies): BackgroundMe
       if (store.viewState?.chatReadSeqById) delete store.viewState.chatReadSeqById[chat.id]
       if (store.viewState?.chatHasNewMessageById) delete store.viewState.chatHasNewMessageById[chat.id]
 
-      return { chatId: chat.id, roleIds, messageIds }
+      return { chatId: chat.id, roleIds, messageIds, memoryItemCount }
     })
     try {
       await deps.imageAttachments?.deleteByChatId(result.chatId)
@@ -206,7 +209,7 @@ export function createChatHandlers(deps: ChatHandlersDependencies): BackgroundMe
         error: error instanceof Error ? error.message : String(error),
       })
     }
-    deps.log.info('chat-delete:stored', { chatId: result.chatId, roleCount: result.roleIds.length, messageCount: result.messageIds.length })
+    deps.log.info('chat-delete:stored', { chatId: result.chatId, roleCount: result.roleIds.length, messageCount: result.messageIds.length, memoryItemCount: result.memoryItemCount })
     await deps.broadcastStoreUpdated(store)
     return { ok: true, chatId: result.chatId, store }
   }
@@ -507,6 +510,7 @@ export function duplicateChat(store: OpenTeamStore, sourceChatId: unknown, deps:
     requireManualMention: sourceChat.requireManualMention,
     ...(sourceChat.discussionMode ? { discussionMode: true } : {}),
     ...(sourceChat.crossReview ? { crossReview: true } : {}),
+    ...(sourceChat.memoryDisabled ? { memoryDisabled: true } : {}),
     createdAt: timestamp,
     updatedAt: timestamp,
   }
@@ -570,6 +574,9 @@ export function duplicateChat(store: OpenTeamStore, sourceChatId: unknown, deps:
     }
     store.orchestrationFlowOrderByChatId[chat.id] = newFlowIds
   }
+
+  // The group's memory items and its members', for the new group and its members.
+  copyMemoryForChat(store, { fromChatId: sourceChat.id, toChatId: chat.id, roleIds: roleIdMap, now: timestamp })
 
   return { chat, roles }
 }

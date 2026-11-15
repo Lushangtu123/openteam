@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { BACKUP_FORMAT, BACKUP_VERSION, createBackup, parseBackup, referencedImageIds, restoreBackup, summarizeBackup } from './backup'
 import { createDefaultStore } from './store'
-import type { GroupMessage, OpenTeamStore } from './types'
+import type { GroupMessage, MemoryItem, OpenTeamStore } from './types'
 
 function addChat(store: OpenTeamStore, chatId: string, messageCount = 2): void {
   const roleId = `${chatId}-role`
@@ -163,5 +163,64 @@ describe('backup', () => {
     const { store } = restoreBackup(current, backupStore, 'merge')
 
     expect(store.settings.teamTemplates?.map(template => template.name)).toEqual(['已有', '新的'])
+  })
+
+  describe('memory items', () => {
+    const item = (id: string, fields: Partial<MemoryItem> = {}): MemoryItem => ({ id, scope: 'global', kind: 'fact', content: `content of ${id}`, source: { origin: 'user' }, createdAt: 1, updatedAt: 1, ...fields })
+    function withMemory(store: OpenTeamStore, items: MemoryItem[]): OpenTeamStore {
+      store.memoryItemsById = Object.fromEntries(items.map(entry => [entry.id, entry]))
+      store.memoryOrder = items.map(entry => entry.id)
+      return store
+    }
+
+    it('are written into a backup and come back whole when everything is replaced', () => {
+      const store = createDefaultStore()
+      addChat(store, 'chat-1')
+      withMemory(store, [item('everywhere'), item('group', { scope: 'chat', scopeId: 'chat-1', pinned: true }), item('member', { scope: 'role', scopeId: 'chat-1-role' })])
+
+      const restored = restoreBackup(createDefaultStore(), roundTrip(store).backup.store, 'replace').store
+
+      expect(restored.memoryOrder).toEqual(['everywhere', 'group', 'member'])
+      expect(restored.memoryItemsById?.group).toMatchObject({ scope: 'chat', scopeId: 'chat-1', pinned: true, content: 'content of group' })
+    })
+
+    it('come with the chats a merge adds, and not with the chats it skips', () => {
+      const backup = createDefaultStore()
+      addChat(backup, 'chat-new')
+      addChat(backup, 'chat-here')
+      withMemory(backup, [
+        item('new-group', { scope: 'chat', scopeId: 'chat-new' }),
+        item('new-member', { scope: 'role', scopeId: 'chat-new-role' }),
+        item('here-group', { scope: 'chat', scopeId: 'chat-here', content: 'the backup\'s text' }),
+        item('here-member', { scope: 'role', scopeId: 'chat-here-role' }),
+      ])
+      const current = createDefaultStore()
+      addChat(current, 'chat-here')
+      withMemory(current, [item('here-group', { scope: 'chat', scopeId: 'chat-here', content: 'the text here' }), item('mine')])
+
+      const restored = restoreBackup(current, roundTrip(backup).backup.store, 'merge').store
+
+      expect(restored.memoryOrder).toEqual(['here-group', 'mine', 'new-group', 'new-member'])
+      expect(restored.memoryItemsById?.['here-group'].content).toBe('the text here')
+    })
+
+    it('for every group are merged unless the same text is already kept for every group', () => {
+      const backup = withMemory(createDefaultStore(), [
+        item('b1', { content: '回答用中文，先给结论。', kind: 'preference', pinned: true }),
+        item('b2', { content: '项目的后端用 Go 写。' }),
+        item('same-id', { content: 'the backup\'s text' }),
+      ])
+      const current = withMemory(createDefaultStore(), [
+        item('c1', { content: '  回答用中文，先给结论。 ' }),
+        item('same-id', { content: 'the text here' }),
+        // The same words kept for one group only are another item.
+        item('c2', { scope: 'chat', scopeId: 'chat-x', content: '项目的后端用 Go 写。' }),
+      ])
+
+      const restored = restoreBackup(current, roundTrip(backup).backup.store, 'merge').store
+
+      expect(restored.memoryOrder).toEqual(['c1', 'same-id', 'c2', 'b2'])
+      expect(restored.memoryItemsById?.['same-id'].content).toBe('the text here')
+    })
   })
 })

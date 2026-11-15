@@ -4,7 +4,11 @@ import {
   MAX_MEMORY_ITEMS,
   MAX_MEMORY_TAGS,
   addMemoryItem,
+  copyMemoryForChat,
+  deleteMemoryForChat,
+  deleteMemoryForRole,
   deleteMemoryItem,
+  importMemoryItems,
   listMemoryItems,
   normalizeMemoryState,
   readMemoryItem,
@@ -241,6 +245,96 @@ describe('memory store', () => {
       expect(Object.keys(state.memoryItemsById)).toHaveLength(MAX_MEMORY_ITEMS)
       expect(state.memoryItemsById['memory-0']).toBeUndefined()
     })
+  })
+})
+
+describe('memory items and the groups and members they belong to', () => {
+  // Group chat-1 with alice and bob, and another group with carol.
+  function withItems(): OpenTeamStore {
+    const store = createDefaultStore()
+    const items: MemoryItem[] = [
+      { ...storedItem('everywhere'), scope: 'global' },
+      { ...storedItem('group'), scope: 'chat', scopeId: 'chat-1' },
+      { ...storedItem('group-from-bob'), scope: 'chat', scopeId: 'chat-1', pinned: true, tags: ['plan'], source: { origin: 'member', roleId: 'bob', chatId: 'chat-1', messageId: 'm9' } },
+      { ...storedItem('alice-own'), scope: 'role', scopeId: 'alice' },
+      { ...storedItem('bob-own'), scope: 'role', scopeId: 'bob' },
+      { ...storedItem('other-group'), scope: 'chat', scopeId: 'chat-2' },
+      { ...storedItem('carol-own'), scope: 'role', scopeId: 'carol' },
+    ]
+    store.memoryItemsById = Object.fromEntries(items.map(item => [item.id, item]))
+    store.memoryOrder = items.map(item => item.id)
+    return store
+  }
+
+  it('removes a deleted group\'s items and its members\' items, and nothing else', () => {
+    const store = withItems()
+
+    expect(deleteMemoryForChat(store, 'chat-1', ['alice', 'bob'])).toBe(4)
+    expect(store.memoryOrder).toEqual(['everywhere', 'other-group', 'carol-own'])
+    expect(Object.keys(store.memoryItemsById ?? {}).sort()).toEqual(['carol-own', 'everywhere', 'other-group'])
+    // A group that has none.
+    expect(deleteMemoryForChat(store, 'chat-9', [])).toBe(0)
+  })
+
+  it('removes a deleted member\'s own items only', () => {
+    const store = withItems()
+
+    expect(deleteMemoryForRole(store, 'bob')).toBe(1)
+    expect(store.memoryOrder).toEqual(['everywhere', 'group', 'group-from-bob', 'alice-own', 'other-group', 'carol-own'])
+    // What bob wrote and the user saved for the group stays the group's.
+    expect(store.memoryItemsById?.['group-from-bob']).toBeDefined()
+  })
+
+  it('copies a duplicated group\'s items to the new group and its new members', () => {
+    const store = withItems()
+    let next = 0
+    const copied = copyMemoryForChat(store, { fromChatId: 'chat-1', toChatId: 'chat-1b', roleIds: new Map([['alice', 'alice-b'], ['bob', 'bob-b']]), newId: () => `copy-${next += 1}`, now: 50 })
+
+    expect(copied).toBe(4)
+    expect(listMemoryItems(store)).toHaveLength(11)
+    const copies = listMemoryItems(store).filter(item => item.id.startsWith('copy-'))
+    expect(copies.map(item => [item.scope, item.scopeId, item.content])).toEqual([
+      ['chat', 'chat-1b', 'content of group'],
+      ['chat', 'chat-1b', 'content of group-from-bob'],
+      ['role', 'alice-b', 'content of alice-own'],
+      ['role', 'bob-b', 'content of bob-own'],
+    ])
+    // Who wrote it is the new group's member of the same place; the message was not copied.
+    expect(copies[1]).toMatchObject({ pinned: true, tags: ['plan'], source: { origin: 'member', roleId: 'bob-b', chatId: 'chat-1b' }, createdAt: 50, updatedAt: 50 })
+    expect(copies[1].source.messageId).toBeUndefined()
+    // The originals are as they were.
+    expect(store.memoryItemsById?.group).toMatchObject({ scopeId: 'chat-1', updatedAt: 2 })
+  })
+
+  it('copies what fits when the store is nearly full', () => {
+    const store = withItems()
+    for (let index = 0; index < MAX_MEMORY_ITEMS - 9; index += 1) {
+      const filler = storedItem(`filler-${index}`)
+      store.memoryItemsById![filler.id] = filler
+      store.memoryOrder!.push(filler.id)
+    }
+    let next = 0
+
+    expect(copyMemoryForChat(store, { fromChatId: 'chat-1', toChatId: 'chat-1b', roleIds: new Map([['alice', 'alice-b'], ['bob', 'bob-b']]), newId: () => `copy-${next += 1}`, now: 50 })).toBe(2)
+    expect(listMemoryItems(store)).toHaveLength(MAX_MEMORY_ITEMS)
+  })
+
+  it('takes in items from a backup: not the ones already here, not past the limit', () => {
+    const store = withItems()
+    const incoming: MemoryItem[] = [
+      { ...storedItem('group'), content: 'a newer text in the backup' },
+      { ...storedItem('from-backup'), scope: 'chat', scopeId: 'chat-3' },
+      { id: 'broken' } as MemoryItem,
+    ]
+
+    expect(importMemoryItems(store, incoming)).toEqual({ added: 1, skipped: 2 })
+    expect(store.memoryOrder?.slice(-1)).toEqual(['from-backup'])
+    // The item already here keeps its text.
+    expect(store.memoryItemsById?.group.content).toBe('content of group')
+
+    for (let index = 0; index < MAX_MEMORY_ITEMS; index += 1) importMemoryItems(store, [storedItem(`more-${index}`)])
+    expect(listMemoryItems(store)).toHaveLength(MAX_MEMORY_ITEMS)
+    expect(importMemoryItems(store, [storedItem('one-too-many')])).toEqual({ added: 0, skipped: 1 })
   })
 })
 

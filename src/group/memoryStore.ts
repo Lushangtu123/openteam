@@ -179,6 +179,89 @@ export function deleteMemoryItem(store: OpenTeamStore, id: string): boolean {
   return true
 }
 
+// What happens to items when the group or member they belong to goes or is copied
+// (docs/MEMORY_STORE.zh-CN.md, section 7). Items kept for every group are never touched here.
+
+// A deleted group takes its own items and its members' items with it. Returns how many went.
+export function deleteMemoryForChat(store: OpenTeamStore, chatId: string, roleIds: Iterable<string>): number {
+  const members = new Set(roleIds)
+  return removeMemoryItems(store, item => (item.scope === 'chat' && item.scopeId === chatId) || (item.scope === 'role' && members.has(item.scopeId ?? '')))
+}
+
+// A deleted member takes its own items with it. What it wrote and the user saved for the group
+// or for every group stays.
+export function deleteMemoryForRole(store: OpenTeamStore, roleId: string): number {
+  return removeMemoryItems(store, item => item.scope === 'role' && item.scopeId === roleId)
+}
+
+export interface CopyMemoryForChatInput {
+  fromChatId: string
+  toChatId: string
+  // The source group's member ids, each with the id of its copy.
+  roleIds: ReadonlyMap<string, string>
+  newId?(): string
+  now?: number
+}
+
+// A duplicated group gets copies of the group's items and of its members' items, for the new group
+// and the new members. An item a member wrote names the copy of that member as its writer, so the
+// new group's members are kept apart the same way; the message it came from is not copied, so it
+// is not named. Stops at the item limit. Returns how many were copied.
+export function copyMemoryForChat(store: OpenTeamStore, input: CopyMemoryForChatInput): number {
+  const now = input.now ?? Date.now()
+  const copies: MemoryItem[] = []
+  for (const item of listMemoryItems(store)) {
+    const scopeId = item.scope === 'chat' && item.scopeId === input.fromChatId
+      ? input.toChatId
+      : item.scope === 'role' && item.scopeId ? input.roleIds.get(item.scopeId) : undefined
+    if (!scopeId) continue
+    const { messageId: _messageId, ...source } = item.source
+    const writer = source.roleId ? input.roleIds.get(source.roleId) : undefined
+    copies.push({
+      ...item,
+      id: input.newId?.() ?? createMemoryId(),
+      scopeId,
+      ...(item.tags ? { tags: [...item.tags] } : {}),
+      source: { ...source, ...(writer ? { roleId: writer } : {}), ...(source.chatId === input.fromChatId ? { chatId: input.toChatId } : {}) },
+      createdAt: now,
+      updatedAt: now,
+    })
+  }
+  return appendMemoryItems(store, copies)
+}
+
+// Items from a backup, with the ids they have there. An id already here keeps what is here; an
+// item that does not read, or does not fit under the limit, is left out.
+export function importMemoryItems(store: OpenTeamStore, items: Iterable<unknown>): { added: number; skipped: number } {
+  const readable: MemoryItem[] = []
+  let offered = 0
+  for (const raw of items) {
+    offered += 1
+    const item = readMemoryItem(raw)
+    if (item && !store.memoryItemsById?.[item.id] && !readable.some(other => other.id === item.id)) readable.push(item)
+  }
+  const added = appendMemoryItems(store, readable)
+  return { added, skipped: offered - added }
+}
+
+function removeMemoryItems(store: OpenTeamStore, shouldRemove: (item: MemoryItem) => boolean): number {
+  const removed = new Set(listMemoryItems(store).filter(shouldRemove).map(item => item.id))
+  if (removed.size === 0) return 0
+  store.memoryItemsById = Object.fromEntries(Object.entries(store.memoryItemsById ?? {}).filter(([id]) => !removed.has(id)))
+  store.memoryOrder = (store.memoryOrder ?? []).filter(id => !removed.has(id))
+  return removed.size
+}
+
+// Added after the items already here, as many as fit under the limit.
+function appendMemoryItems(store: OpenTeamStore, items: MemoryItem[]): number {
+  const current = listMemoryItems(store)
+  const fitting = items.slice(0, Math.max(0, MAX_MEMORY_ITEMS - current.length))
+  if (fitting.length === 0) return 0
+  store.memoryItemsById = { ...(store.memoryItemsById ?? {}), ...Object.fromEntries(fitting.map(item => [item.id, item])) }
+  store.memoryOrder = [...current.map(item => item.id), ...fitting.map(item => item.id)]
+  return fitting.length
+}
+
 // Trimmed tags without repeats (compared without case). Tags that are too long are dropped.
 export function normalizeMemoryTags(raw: unknown): string[] {
   if (!Array.isArray(raw)) return []

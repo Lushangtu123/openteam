@@ -1,4 +1,5 @@
 import { normalizeStoreData } from './store'
+import { importMemoryItems, listMemoryItems } from './memoryStore'
 import { MAX_TEAM_HANDBOOKS } from './teamHandbooks'
 import type { OpenTeamStore } from './types'
 
@@ -110,7 +111,7 @@ export function referencedImageIds(store: OpenTeamStore): string[] {
 
 // 'replace' makes the backup the whole data set, except that external models configured here are
 // kept (a backup usually has no API keys). 'merge' adds the backup's chats (with their people,
-// messages, notes, highlights, flows and runs), custom people and external models that the current
+// messages, notes, highlights, memory items, flows and runs), custom people and external models that the current
 // data does not have, and keeps everything else, including settings, as it is.
 export function restoreBackup(current: OpenTeamStore, backupStore: OpenTeamStore, mode: RestoreMode): RestoreResult {
   const backupChatIds = backupStore.chatOrder.filter(chatId => backupStore.chatsById[chatId])
@@ -165,6 +166,10 @@ export function restoreBackup(current: OpenTeamStore, backupStore: OpenTeamStore
     const handbooks = store.settings.teamHandbooks ?? []
     if (!handbooks.some(existing => existing.id === handbook.id) && handbooks.length < MAX_TEAM_HANDBOOKS) store.settings.teamHandbooks = [...handbooks, handbook]
   }
+  // Memory items kept for every group: the ones whose text is not kept for every group here yet.
+  const keptForEveryGroup = new Set(listMemoryItems(store).filter(item => item.scope === 'global').map(item => item.content.trim()))
+  importMemoryItems(store, listMemoryItems(source).filter(item => item.scope === 'global' && !keptForEveryGroup.has(item.content.trim())))
+
   if (!store.currentChatId && addedChatIds.length > 0) store.currentChatId = addedChatIds[0]
   return { store, addedChatIds, skippedChatIds }
 }
@@ -190,6 +195,9 @@ function addChat(store: OpenTeamStore, source: OpenTeamStore, chatId: string): v
     const highlights = source.messageHighlightsById?.[messageId]
     if (highlights) (store.messageHighlightsById ??= {})[messageId] = highlights
   }
+
+  // The chat's memory items and its people's.
+  importMemoryItems(store, listMemoryItems(source).filter(item => (item.scope === 'chat' && item.scopeId === chatId) || (item.scope === 'role' && roleIds.has(item.scopeId ?? ''))))
 
   const note = source.chatNotesById?.[chatId]
   if (note) (store.chatNotesById ??= {})[chatId] = note

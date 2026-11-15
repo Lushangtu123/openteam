@@ -300,6 +300,20 @@ describe('role template utilities', () => {
     expect(role.status).toBe('pending')
   })
 
+  it('removes a deleted person\'s own memory items, and keeps what was saved for the group', () => {
+    const store = createDefaultStore()
+    store.chatsById['chat-1'] = makeChat('chat-1')
+    createGroupRole(store, { chatId: 'chat-1', name: '法务', systemPrompt: '从法务角度分析' }, 'role-1', 1)
+    const item = (id: string, scope: 'chat' | 'role', scopeId: string) => ({ id, scope, scopeId, kind: 'fact' as const, content: id, source: { origin: 'member' as const, roleId: 'role-1' }, createdAt: 1, updatedAt: 1 })
+    store.memoryItemsById = { own: item('own', 'role', 'role-1'), group: item('group', 'chat', 'chat-1') }
+    store.memoryOrder = ['own', 'group']
+
+    deleteGroupRole(store, 'role-1', 2)
+
+    expect(store.memoryOrder).toEqual(['group'])
+    expect(store.memoryItemsById.own).toBeUndefined()
+  })
+
   it('removes a group person while keeping historical messages', () => {
     const store = createDefaultStore()
     const chat = makeChat('chat-1')

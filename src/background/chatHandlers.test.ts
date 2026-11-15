@@ -167,6 +167,51 @@ describe('background chat handlers', () => {
     expect(store.memoryOrder).toEqual(['item'])
   })
 
+  it('deleting a chat removes its memory items and its members\', and duplicating one copies them', async () => {
+    vi.resetModules()
+    const store = createDefaultStore()
+    store.chatOrder = ['chat-1']
+    store.chatsById['chat-1'] = { id: 'chat-1', name: '架构评审', mode: 'independent', roleIds: ['role-1'], messageIds: [], nextMessageSeq: 1, status: 'ready', memoryDisabled: true, createdAt: 0, updatedAt: 0 }
+    store.rolesById['role-1'] = { id: 'role-1', chatId: 'chat-1', name: '工程师', systemPrompt: '', chatSite: 'chatgpt', status: 'ready', contextCursor: 0, createdAt: 0, updatedAt: 0 }
+    const item = (id: string, scope: 'global' | 'chat' | 'role', scopeId?: string) => ({ id, scope, ...(scopeId ? { scopeId } : {}), kind: 'fact' as const, content: `内容 ${id}`, source: { origin: 'user' as const }, createdAt: 1, updatedAt: 1 })
+    store.memoryItemsById = { everywhere: item('everywhere', 'global'), group: item('group', 'chat', 'chat-1'), own: item('own', 'role', 'role-1') }
+    store.memoryOrder = ['everywhere', 'group', 'own']
+    vi.doMock('./storeAccess', async importOriginal => {
+      const actual = await importOriginal<typeof import('./storeAccess')>()
+      return {
+        ...actual,
+        mutateStore: async (mutator: (store: OpenTeamStore) => unknown) => ({ store, result: await mutator(store) }),
+      }
+    })
+
+    const { createChatHandlers } = await import('./chatHandlers')
+    const counters: Record<string, number> = {}
+    const routes = createChatHandlers({
+      broadcastStoreUpdated: vi.fn(),
+      getChatStatusFromRoles: () => 'ready',
+      log: { info: vi.fn(), warn: vi.fn() },
+      newId: vi.fn((prefix: string) => `${prefix}-copy-${counters[prefix] = (counters[prefix] ?? 0) + 1}`),
+      now: vi.fn(() => 100),
+      runtimeFrames: { removeRole: vi.fn() },
+    })
+    const run = (type: string, chatId: string) => routes.find(route => route.type === type)!.handler({ type, chatId }, {})
+    const items = () => (store.memoryOrder ?? []).map(id => store.memoryItemsById![id])
+
+    await run('GROUP_CHAT_DUPLICATE', 'chat-1')
+    expect(store.chatsById['chat-copy-1']).toMatchObject({ memoryDisabled: true, roleIds: ['role-copy-1'] })
+    expect(items().map(entry => [entry.scope, entry.scopeId, entry.content])).toEqual([
+      ['global', undefined, '内容 everywhere'],
+      ['chat', 'chat-1', '内容 group'],
+      ['role', 'role-1', '内容 own'],
+      ['chat', 'chat-copy-1', '内容 group'],
+      ['role', 'role-copy-1', '内容 own'],
+    ])
+
+    // Deleting the original leaves the copy's items and the one kept for every group.
+    await run('GROUP_CHAT_DELETE', 'chat-1')
+    expect(items().map(entry => [entry.scope, entry.scopeId])).toEqual([['global', undefined], ['chat', 'chat-copy-1'], ['role', 'role-copy-1']])
+  })
+
   it('closing a chat leaves a member that is waiting for a reply as it is, time included', async () => {
     vi.resetModules()
     const store = createDefaultStore()

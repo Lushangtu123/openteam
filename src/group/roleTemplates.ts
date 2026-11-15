@@ -1,4 +1,5 @@
 import { forgetMemorySent } from './memoryPrompt'
+import { deleteMemoryForRole } from './memoryStore'
 import { normalizeChatGptGptsUrl, normalizeGrokProjectUrl } from './conversationUrl'
 import { BUILTIN_ROLE_TEMPLATES, getBuiltinRoleTemplate, isBuiltinRoleTemplateId } from './builtinRoleTemplates'
 import type { ChatSite, GroupChat, GroupRole, OpenTeamStore, RoleModelSource, RoleTemplate } from './types'
@@ -376,6 +377,8 @@ export function deleteGroupRole(store: OpenTeamStore, roleId: string, now: numbe
     chat.updatedAt = now
   }
   delete store.rolesById[roleId]
+  // Its own memory items go with it.
+  deleteMemoryForRole(store, roleId)
 }
 
 export function createGroupRolesBatch(
