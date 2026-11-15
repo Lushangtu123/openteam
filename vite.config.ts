@@ -110,6 +110,7 @@ export default defineConfig(({ mode }) => ({
     }
   },
   test: {
-    exclude: [...configDefaults.exclude, '**/.worktrees/**'],
+    // Other checkouts of this repository kept inside it: their tests are not this checkout's.
+    exclude: [...configDefaults.exclude, '**/.worktrees/**', '**/.claude/**'],
   }
 }))
