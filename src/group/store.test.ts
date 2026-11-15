@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   CURRENT_STORE_VERSION,
+  MEMORY_STORE_KEY,
   MESSAGE_CHUNK_SIZE,
   META_STORE_KEY,
   STORE_KEY,
@@ -15,7 +16,7 @@ import { duplicateChat } from '../background/chatHandlers'
 import { BUILTIN_ROLE_TEMPLATES } from './builtinRoleTemplates'
 import { DEFAULT_CUSTOM_ROLE_TEMPLATES } from './defaultCustomRoleTemplates'
 import { defaultLanguageForEnvironment } from '../shared/i18n'
-import type { GroupMessage, GroupRole, OpenTeamStore, RoomMode } from './types'
+import type { GroupMessage, GroupRole, MemoryItem, OpenTeamStore, RoomMode } from './types'
 
 describe('group store', () => {
   let stored: Record<string, unknown>
@@ -68,6 +69,8 @@ describe('group store', () => {
       messageHighlightsById: {},
       externalRoleMemoriesById: {},
       externalChatMemoriesById: {},
+      memoryItemsById: {},
+      memoryOrder: [],
       settings: {
         defaultMode: 'independent',
         maxContextChars: 6000,
@@ -721,6 +724,73 @@ describe('group store', () => {
     expect(loaded.orchestrationFlowOrderByChatId['chat-1']).toEqual(['flow-no-graph'])
   })
 
+  it('keeps memory items under their own key, outside the meta document', async () => {
+    const store = createDefaultStore()
+    store.memoryItemsById = { 'memory-1': makeMemoryItem('memory-1'), 'memory-2': makeMemoryItem('memory-2') }
+    store.memoryOrder = ['memory-2', 'memory-1']
+
+    await saveStore(store)
+
+    expect(stored[MEMORY_STORE_KEY]).toEqual({
+      version: 1,
+      order: ['memory-2', 'memory-1'],
+      itemsById: store.memoryItemsById,
+    })
+    const meta = stored[META_STORE_KEY] as Record<string, unknown>
+    expect(meta.version).toBe(CURRENT_STORE_VERSION)
+    expect(meta).not.toHaveProperty('memoryItemsById')
+    expect(meta).not.toHaveProperty('memoryOrder')
+    expect(JSON.stringify(meta)).not.toContain('memory-1')
+
+    const loaded = await loadStore()
+    expect(loaded.memoryOrder).toEqual(['memory-2', 'memory-1'])
+    expect(loaded.memoryItemsById).toEqual(store.memoryItemsById)
+  })
+
+  it('loads a store saved before the memory store existed with no memory items', async () => {
+    await saveStore(createDefaultStore())
+    expect(stored[MEMORY_STORE_KEY]).toBeUndefined()
+
+    const loaded = await loadStore()
+    expect(loaded.version).toBe(CURRENT_STORE_VERSION)
+    expect(loaded.memoryItemsById).toEqual({})
+    expect(loaded.memoryOrder).toEqual([])
+  })
+
+  it('removes the memory key once the last memory item is deleted', async () => {
+    const store = createDefaultStore()
+    store.memoryItemsById = { 'memory-1': makeMemoryItem('memory-1') }
+    store.memoryOrder = ['memory-1']
+    await saveStore(store)
+    expect(stored[MEMORY_STORE_KEY]).toBeDefined()
+
+    const draft = await loadStore()
+    draft.memoryItemsById = {}
+    draft.memoryOrder = []
+    await saveStore(draft)
+
+    expect(stored[MEMORY_STORE_KEY]).toBeUndefined()
+    expect((await loadStore()).memoryItemsById).toEqual({})
+  })
+
+  it('drops stored memory items that do not read', async () => {
+    await saveStore(createDefaultStore())
+    stored[MEMORY_STORE_KEY] = {
+      version: 1,
+      order: ['missing', 'memory-1', 'memory-1'],
+      itemsById: {
+        'memory-1': makeMemoryItem('memory-1'),
+        'no-content': { ...makeMemoryItem('no-content'), content: '  ' },
+        'no-scope-id': { ...makeMemoryItem('no-scope-id'), scope: 'chat' },
+        'bad-kind': { ...makeMemoryItem('bad-kind'), kind: 'rumour' },
+      },
+    }
+
+    const loaded = await loadStore()
+    expect(loaded.memoryOrder).toEqual(['memory-1'])
+    expect(Object.keys(loaded.memoryItemsById ?? {})).toEqual(['memory-1'])
+  })
+
   it('removes stale split-storage keys after a chat is deleted', async () => {
     const store = createDefaultStore()
     store.chatOrder = ['chat-1', 'chat-2']
@@ -849,6 +919,18 @@ function makeChat(id: string, messageIds: string[] = []): OpenTeamStore['chatsBy
     messageIds,
     nextMessageSeq: messageIds.length + 1,
     status: 'ready',
+    createdAt: 1,
+    updatedAt: 1,
+  }
+}
+
+function makeMemoryItem(id: string): MemoryItem {
+  return {
+    id,
+    scope: 'global',
+    kind: 'fact',
+    content: `content of ${id}`,
+    source: { origin: 'user' },
     createdAt: 1,
     updatedAt: 1,
   }

@@ -1,6 +1,7 @@
 import { readNewChatCollaboration } from './collaboration'
 import { normalizeTeamTemplates } from './teamFormation'
 import { normalizeTeamHandbooks } from './teamHandbooks'
+import { normalizeMemoryState } from './memoryStore'
 import { isChatSite } from './chatSites'
 import {
   DEFAULT_ORCHESTRATION_MAX_NODE_EXECUTIONS,
@@ -11,7 +12,7 @@ import {
 } from './types'
 import { OPENTEAM_CONTROL_DEFAULT_PORT, OPENTEAM_CONTROL_LEGACY_DEFAULT_PORT } from '../shared/localControlProtocol'
 import { defaultLanguageForEnvironment, normalizeLanguage } from '../shared/i18n'
-import type { ExternalModelConfig, GroupChat, GroupMessage, GroupRole, MessageHighlight, OpenTeamSettings, OpenTeamStore, OpenTeamViewState, OrchestrationFlow, OrchestrationRun, RichNoteDocument, RoleTemplate } from './types'
+import type { ExternalModelConfig, GroupChat, GroupMessage, GroupRole, MemoryItem, MessageHighlight, OpenTeamSettings, OpenTeamStore, OpenTeamViewState, OrchestrationFlow, OrchestrationRun, RichNoteDocument, RoleTemplate } from './types'
 import { normalizeMessageHighlightColor } from './highlightColors'
 import { DEFAULT_CUSTOM_ROLE_TEMPLATES } from './defaultCustomRoleTemplates'
 
@@ -19,6 +20,10 @@ export const STORE_KEY = 'openteam.groupStore'
 export const META_STORE_KEY = 'openteam.meta.v2'
 export const CHAT_KEY_PREFIX = 'openteam.chat.'
 export const MESSAGE_CHUNK_KEY_PREFIX = 'openteam.messages.'
+// The memory store has a key of its own, so it is rewritten only when a memory item changes. The
+// key is absent while there are no items.
+export const MEMORY_STORE_KEY = 'openteam.memory.v1'
+export const MEMORY_DOCUMENT_VERSION = 1
 export const STORE_WRITER_KEY = 'openteam.storeWriter'
 export const CURRENT_STORE_VERSION = 7
 export const MESSAGE_CHUNK_SIZE = 100
@@ -40,6 +45,12 @@ interface OpenTeamMetaStore {
   externalChatMemoriesById?: NonNullable<OpenTeamStore['externalChatMemoriesById']>
   settings: OpenTeamSettings
   viewState?: OpenTeamViewState
+}
+
+interface MemoryDocument {
+  version: number
+  order: string[]
+  itemsById: Record<string, MemoryItem>
 }
 
 interface ChatDocument {
@@ -107,6 +118,8 @@ export function createDefaultStore(): OpenTeamStore {
     messageHighlightsById: {},
     externalRoleMemoriesById: {},
     externalChatMemoriesById: {},
+    memoryItemsById: {},
+    memoryOrder: [],
     settings: defaultSettings(),
     viewState: {
       chatReadSeqById: {},
@@ -123,9 +136,9 @@ export async function loadStore(): Promise<OpenTeamStore> {
   }
 
   const generation = snapshotGeneration
-  const metaResult = await chrome.storage.local.get(META_STORE_KEY)
+  const metaResult = await chrome.storage.local.get([META_STORE_KEY, MEMORY_STORE_KEY])
   if (metaResult[META_STORE_KEY]) {
-    const items = await readV2Items(metaResult[META_STORE_KEY])
+    const items = await readV2Items(metaResult[META_STORE_KEY], metaResult[MEMORY_STORE_KEY])
     if (caching && generation === snapshotGeneration) {
       snapshot = { area: chrome.storage.local, items: structuredClone(items), scanned: false }
     }
@@ -227,6 +240,7 @@ function normalizeStore(raw: unknown): OpenTeamStore {
     messageHighlightsById: readHighlightsRecord(raw.messageHighlightsById),
     externalRoleMemoriesById: readExternalRoleMemoryRecord(raw.externalRoleMemoriesById),
     externalChatMemoriesById: readExternalChatMemoryRecord(raw.externalChatMemoriesById),
+    ...normalizeMemoryState(raw.memoryItemsById, raw.memoryOrder),
     settings: normalizeSettings(raw.settings, storedVersion),
     viewState: normalizeViewState(raw.viewState),
   }
@@ -246,8 +260,9 @@ function normalizeStore(raw: unknown): OpenTeamStore {
 }
 
 // Reads the meta document plus every chat document and message chunk it references.
-async function readV2Items(rawMeta: unknown): Promise<Map<string, unknown>> {
+async function readV2Items(rawMeta: unknown, rawMemory: unknown): Promise<Map<string, unknown>> {
   const items = new Map<string, unknown>([[META_STORE_KEY, rawMeta]])
+  if (rawMemory !== undefined) items.set(MEMORY_STORE_KEY, rawMemory)
   const chatKeys = normalizeMetaStore(rawMeta).chatOrder.map(chatStorageKey)
   const chatResult = await chrome.storage.local.get(chatKeys)
   const chatDocuments: ChatDocument[] = []
@@ -288,6 +303,11 @@ function assembleV2Store(items: Map<string, unknown>): OpenTeamStore {
   store.messageHighlightsById = { ...(meta.messageHighlightsById ?? {}) }
   store.externalRoleMemoriesById = { ...(meta.externalRoleMemoriesById ?? {}) }
   store.externalChatMemoriesById = { ...(meta.externalChatMemoriesById ?? {}) }
+  const memory = items.get(MEMORY_STORE_KEY)
+  if (isRecord(memory)) {
+    store.memoryItemsById = readRecord(memory.itemsById)
+    store.memoryOrder = readStringArray(memory.order, [])
+  }
   store.settings = normalizeSettings(meta.settings)
   store.viewState = normalizeViewState(meta.viewState)
 
@@ -334,6 +354,11 @@ function buildStorageItems(store: OpenTeamStore): Record<string, unknown> {
     viewState: normalizeViewState(store.viewState),
   }
   const items: Record<string, unknown> = { [META_STORE_KEY]: meta }
+  const memory = normalizeMemoryState(store.memoryItemsById, store.memoryOrder)
+  if (memory.memoryOrder.length > 0) {
+    const memoryDocument: MemoryDocument = { version: MEMORY_DOCUMENT_VERSION, order: memory.memoryOrder, itemsById: memory.memoryItemsById }
+    items[MEMORY_STORE_KEY] = memoryDocument
+  }
   const messagesByChatId = groupMessagesByChat(store)
 
   for (const chatId of chatIds) {
@@ -377,6 +402,7 @@ function buildStorageItems(store: OpenTeamStore): Record<string, unknown> {
 async function findStaleStorageKeys(activeKeys: Set<string>): Promise<string[]> {
   return (await listStorageKeys()).filter(key => (
     key === STORE_KEY
+    || key === MEMORY_STORE_KEY
     || key.startsWith(CHAT_KEY_PREFIX)
     || key.startsWith(MESSAGE_CHUNK_KEY_PREFIX)
   ) && !activeKeys.has(key))
@@ -426,6 +452,7 @@ function handleStorageChanged(changes: StorageChanges, areaName: string): void {
 
 function isStoreStorageKey(key: string): boolean {
   return key === META_STORE_KEY
+    || key === MEMORY_STORE_KEY
     || key === STORE_KEY
     || key === STORE_WRITER_KEY
     || key.startsWith(CHAT_KEY_PREFIX)

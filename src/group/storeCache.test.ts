@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { GroupMessage, OpenTeamStore } from './types'
+import type { GroupMessage, MemoryItem, OpenTeamStore } from './types'
 
 type StoreModule = typeof import('./store')
 type ChangeListener = (changes: Record<string, chrome.storage.StorageChange>, areaName: string) => void
@@ -164,6 +164,49 @@ describe('group store cache', () => {
     expect(reloaded.chatsById['chat-1']).toBeUndefined()
   })
 
+  it('rewrites the memory key only when a memory item changes', async () => {
+    const { loadStore, saveStore, messageChunkStorageKey, MEMORY_STORE_KEY, STORE_WRITER_KEY } = storeModule
+    const store = storeWithChats(3)
+    store.memoryItemsById = { 'memory-1': makeMemoryItem('memory-1', 'Reply in Chinese') }
+    store.memoryOrder = ['memory-1']
+    await saveStore(store)
+    await storage.settle()
+    storage.local.set.mockClear()
+
+    const draft = await loadStore()
+    draft.messagesById['chat-1-msg-1'].content = 'edited'
+    await saveStore(draft)
+    await storage.settle()
+    expect(Object.keys(storage.local.set.mock.calls[0][0]).sort()).toEqual([
+      STORE_WRITER_KEY,
+      messageChunkStorageKey('chat-1', '000001'),
+    ].sort())
+    storage.local.set.mockClear()
+
+    const next = await loadStore()
+    next.memoryItemsById!['memory-1'].content = 'Reply in English'
+    await saveStore(next)
+    await storage.settle()
+    expect(storage.local.set).toHaveBeenCalledTimes(1)
+    expect(Object.keys(storage.local.set.mock.calls[0][0]).sort()).toEqual([MEMORY_STORE_KEY, STORE_WRITER_KEY].sort())
+    expect((await loadStore()).memoryItemsById?.['memory-1'].content).toBe('Reply in English')
+  })
+
+  it('reloads from storage after another context writes a memory item', async () => {
+    const { loadStore, saveStore, MEMORY_STORE_KEY, STORE_WRITER_KEY } = storeModule
+    await saveStore(storeWithChats(3))
+    await loadStore()
+    await storage.settle()
+
+    await storage.local.set({
+      [MEMORY_STORE_KEY]: { version: 1, order: ['memory-1'], itemsById: { 'memory-1': makeMemoryItem('memory-1', 'Saved on the team page') } },
+      [STORE_WRITER_KEY]: { id: 'team-page', revision: 1 },
+    })
+    await storage.settle()
+
+    expect((await loadStore()).memoryItemsById?.['memory-1']?.content).toBe('Saved on the team page')
+  })
+
   it('treats a write without a writer token as coming from another context', async () => {
     const { loadStore, saveStore, META_STORE_KEY } = storeModule
     await saveStore(storeWithChats(3))
@@ -251,5 +294,17 @@ function makeMessage(chatId: string, id: string, seq: number): GroupMessage {
     content: `message-${seq}`,
     createdAt: seq,
     status: 'sent',
+  }
+}
+
+function makeMemoryItem(id: string, content: string): MemoryItem {
+  return {
+    id,
+    scope: 'global',
+    kind: 'fact',
+    content,
+    source: { origin: 'user' },
+    createdAt: 1,
+    updatedAt: 1,
   }
 }

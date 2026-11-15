@@ -43,6 +43,10 @@ export interface OpenTeamStore {
   messageHighlightsById?: Record<string, MessageHighlight[]>
   externalRoleMemoriesById?: Record<string, ExternalRoleMemory>
   externalChatMemoriesById?: Record<string, ExternalChatMemory>
+  // The memory store: long-term knowledge the user saved. Kept under its own storage key.
+  memoryItemsById?: Record<string, MemoryItem>
+  // Item ids, newest first.
+  memoryOrder?: string[]
   settings: OpenTeamSettings
   viewState?: OpenTeamViewState
 }
@@ -152,6 +156,38 @@ export interface ExternalChatMemory {
   summary?: string
   summarizedThroughSeq: number
   updatedAt: number
+}
+
+// Who can read a memory item: every member of every group, the members of one group, or one member
+// of one group. A member belongs to a single group, so 'role' never reaches another group.
+export type MemoryScope = 'global' | 'chat' | 'role'
+
+export type MemoryKind = 'fact' | 'decision' | 'preference' | 'note'
+
+// Who wrote the text. Every item is saved by the user; this records where the content came from.
+export interface MemorySource {
+  origin: 'user' | 'member'
+  roleId?: string
+  chatId?: string
+  messageId?: string
+}
+
+export interface MemoryItem {
+  id: string
+  scope: MemoryScope
+  // The chat id for 'chat', the role id for 'role', absent for 'global'.
+  scopeId?: string
+  kind: MemoryKind
+  content: string
+  tags?: string[]
+  // Sent every time without being searched for, within the budget.
+  pinned?: boolean
+  source: MemorySource
+  createdAt: number
+  // When the text a member receives (content or kind) last changed.
+  updatedAt: number
+  // Switched off by the user for now.
+  disabled?: boolean
 }
 
 export const DEFAULT_ORCHESTRATION_MAX_NODE_EXECUTIONS = 50
@@ -303,6 +339,8 @@ export interface GroupChat {
   discussion?: DiscussionRun
   // The group's latest 项目 (a coordinator plans tasks for the members and checks the results).
   project?: ProjectRun
+  // No memory items are sent to this group's members.
+  memoryDisabled?: boolean
   createdAt: number
   updatedAt: number
 }
@@ -460,6 +498,9 @@ export interface GroupRole {
   siteHealth?: RoleSiteHealth
   // What a web member has written so far, while it is still replying.
   liveReply?: RoleLiveReply
+  // Memory items a web member already received in its current site conversation: item id to the
+  // item's updatedAt at that time.
+  memorySent?: Record<string, number>
   createdAt: number
   updatedAt: number
 }
