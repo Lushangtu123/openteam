@@ -38,17 +38,24 @@ describe('memory retrieval', () => {
       return visibleMemoryItems(store, chat, store.rolesById[roleId]).map(item => item.id)
     }
 
-    it('shows a member of an independent group the global items, the group items the user wrote, and its own', () => {
-      expect(visibleIds('independent', 'alice')).toEqual(['global-user', 'global-member', 'chat-user', 'alice-own', 'alice-own-from-reply'])
-      expect(visibleIds('independent', 'bob')).toEqual(['global-user', 'global-member', 'chat-user', 'bob-own'])
+    it('shows a member of an independent group what the user wrote, what it wrote itself, and its own items', () => {
+      expect(visibleIds('independent', 'alice')).toEqual(['global-user', 'chat-user', 'chat-from-alice', 'alice-own', 'alice-own-from-reply'])
+      expect(visibleIds('independent', 'bob')).toEqual(['global-user', 'global-member', 'chat-user', 'chat-from-bob', 'bob-own'])
     })
 
-    it('hides group items that came from a member in an independent group', () => {
+    it('hides what another member of an independent group wrote, whatever scope it was saved with', () => {
       const ids = visibleIds('independent', 'alice')
+      // Bob's reply saved for the group, and Bob's reply saved for every group.
       expect(ids).not.toContain('chat-from-bob')
-      // Section 3 lists only the user's group items for 独立 mode, so the member's own reply saved
-      // for the group is left out as well.
-      expect(ids).not.toContain('chat-from-alice')
+      expect(ids).not.toContain('global-member')
+      // A reply whose author is not recorded is taken to be another member's.
+      const unknown = makeStore([makeItem('unknown-author', { scope: 'chat', scopeId: 'chat-1', source: { origin: 'member' } })], 'independent')
+      expect(visibleMemoryItems(unknown, unknown.chatsById['chat-1'], unknown.rolesById.alice)).toEqual([])
+    })
+
+    it('shows a member\'s reply saved for every group to the members of other groups, independent or not', () => {
+      // Carol's group never saw Bob's reply as a member's answer: there is no view to keep apart.
+      for (const mode of ['independent', 'collaborative'] as const) expect(visibleIds(mode, 'carol', 'chat-2')).toContain('global-member')
     })
 
     it('shows every group item in a collaborative group', () => {

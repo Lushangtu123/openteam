@@ -283,10 +283,15 @@ describe('role template utilities', () => {
     role.lastReplyAt = 10
     role.contextCursor = 3
     role.status = 'ready'
+    role.memorySent = { item: 1 }
+    role.memoryPending = { messageId: 'msg-1', sent: { other: 1 } }
 
     updateGroupRole(store, 'role-1', { chatSite: 'chatgpt' }, 2)
 
     expect(role.chatSite).toBe('chatgpt')
+    // The new site's conversation has been sent no memory items.
+    expect(role.memorySent).toBeUndefined()
+    expect(role.memoryPending).toBeUndefined()
     expect(role.geminiConversationId).toBeUndefined()
     expect(role.geminiConversationUrl).toBeUndefined()
     expect(role.lastPromptMessageId).toBeUndefined()

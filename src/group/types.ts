@@ -501,6 +501,8 @@ export interface GroupRole {
   // Memory items a web member already received in its current site conversation: item id to the
   // item's updatedAt at that time.
   memorySent?: Record<string, number>
+  // The items the prompt for this message carries; they join memorySent once it is confirmed sent.
+  memoryPending?: { messageId: string; sent: Record<string, number> }
   createdAt: number
   updatedAt: number
 }

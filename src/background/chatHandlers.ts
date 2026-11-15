@@ -1,3 +1,4 @@
+import { forgetMemorySent } from '../group/memoryPrompt'
 import { chatSiteLabel, isChatSite } from '../group/chatSites'
 import { MAX_TEAM_HANDBOOKS, readTeamHandbook } from '../group/teamHandbooks'
 import { createGroupRole, createGroupRolesBatch, type GroupRoleBatchInput } from '../group/roleTemplates'
@@ -229,6 +230,8 @@ export function createChatHandlers(deps: ChatHandlersDependencies): BackgroundMe
         deps.runtimeFrames.removeRole(chat.id, role.id)
         role.status = 'loading'
         role.contextCursor = 0
+        // Its site conversation starts over: it holds no memory items any more.
+        forgetMemorySent(role)
         role.updatedAt = timestamp
         delete role.geminiConversationId
         delete role.geminiConversationUrl

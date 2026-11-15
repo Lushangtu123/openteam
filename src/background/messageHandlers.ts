@@ -7,6 +7,7 @@ import { misreadReplyReason } from '../group/misreadReply'
 import { isProjectActive } from '../group/project'
 import { REPLY_STUCK_AFTER_MS } from '../group/replyTiming'
 import { updateUserMessageDeliveryStatus } from '../group/deliveryStatus'
+import { confirmMemorySent, forgetMemorySent } from '../group/memoryPrompt'
 import { settleInterruptedReplies, textReadBeforeInterruption, type InterruptedReplyScope } from './interruptedReplies'
 import { createProjectRunner } from './projectRunner'
 import { chooseNextSpeaker, discussionMaxTurns, discussionTranscript, discussionTurnRequestText, DISCUSSION_MAX_FAILED_TURNS, isDiscussionRunning, startsDiscussion, turnCountsOf } from '../group/discussion'
@@ -1049,6 +1050,7 @@ export function createMessageHandlers(baseDeps: MessageHandlersDependencies): Ba
         delete role.geminiConversationUrl
         delete role.geminiConversationId
         role.contextCursor = 0
+        forgetMemorySent(role)
       } else {
         updateConversation(role, conversationUrl, readOptionalString(message.conversationId))
       }
@@ -1076,6 +1078,8 @@ export function createMessageHandlers(baseDeps: MessageHandlersDependencies): Ba
         updateUserMessageDeliveryStatus(userMessage)
       }
       if (userMessage) role.contextCursor = Math.max(role.contextCursor, userMessage.seq)
+      // The site has the prompt, and with it the memory items it carried.
+      confirmMemorySent(role, messageId)
       role.updatedAt = deps.now()
       chat.updatedAt = role.updatedAt
     })

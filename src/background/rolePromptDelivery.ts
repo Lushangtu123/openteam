@@ -8,6 +8,7 @@ import { buildRoundSummaryPrompt, keyPointsInstruction, readSummarizableRound, w
 import { buildCrossReviewPrompt } from '../group/collaboration'
 import { buildDiscussionTurnPrompt, discussionTranscript } from '../group/discussion'
 import { buildProjectPrompt } from '../group/project'
+import { memoryItemsForPrompt, noteMemoryPending, withMemoryBlock } from '../group/memoryPrompt'
 import { withTeamHandbook } from '../group/teamHandbooks'
 import type { ExternalModelConfig, GroupChat, GroupMessage, GroupRole, MessageReference, OpenTeamStore } from '../group/types'
 import type { PromptDelivery } from './promptDelivery'
@@ -63,6 +64,11 @@ export function prepareRolePromptDelivery(input: PrepareRolePromptDeliveryInput)
   const maxContextChars = contextCharBudgetForRole(input.store, input.role)
   const imageAttachmentIds = uploadedImageIds(discussionImagesSource(input) ?? input.userMessage)
   const images = imageAttachmentIds.length > 0 ? { imageAttachmentIds } : {}
+  // What the user saved in the memory store and this request brings up. Added after the context
+  // budget, with a budget of its own, and before the handbook, whose last line starts the task.
+  const language = input.store.settings.language
+  const memoryItems = memoryItemsForPrompt({ store: input.store, chat: input.chat, role: input.role, message: input.userMessage, reference: input.reference })
+  const withAdditions = (prompt: string) => withTeamHandbook(withMemoryBlock(prompt, memoryItems, language), input.chat, language)
 
   if (isExternalModelRole(input.role)) {
     const model = requireExternalModelForRole(input.store, input.role)
@@ -81,7 +87,7 @@ export function prepareRolePromptDelivery(input: PrepareRolePromptDeliveryInput)
         messageId: input.userMessage.id,
         replyAttemptId,
         model,
-        prompt: withTeamHandbook(prompt.content, input.chat, input.store.settings.language),
+        prompt: withAdditions(prompt.content),
         ...images,
       },
     }
@@ -89,6 +95,8 @@ export function prepareRolePromptDelivery(input: PrepareRolePromptDeliveryInput)
 
   const binding = input.runtimeFrames.getByRole(input.chat.id, input.role.id)
   if (!binding?.ready) throw new Error('成员 iframe 尚未就绪，请先恢复成员')
+  // A web member's site conversation keeps what it is sent: see memoryPrompt.ts.
+  noteMemoryPending(input.role, input.userMessage.id, memoryItems)
   const unsyncedContext = buildUnsyncedContext(input.chat, input.role, input.messages, input.userMessage, maxContextChars, input.store.settings.language)
   const content = summary ?? buildPrompt({
     chat: input.chat,
@@ -118,7 +126,7 @@ export function prepareRolePromptDelivery(input: PrepareRolePromptDeliveryInput)
         roleId: input.role.id,
         messageId: input.userMessage.id,
         replyAttemptId,
-        content: withTeamHandbook(content, input.chat, input.store.settings.language),
+        content: withAdditions(content),
         includesPersona,
       },
       ...images,

@@ -269,6 +269,48 @@ describe('background message handlers', () => {
     expect(store.messagesById['msg-q']).toMatchObject({ status: 'received', deliveryStatus: { 'role-1': 'received' } })
   })
 
+  it('counts memory items as sent to a web member when its prompt is confirmed, and forgets them with its conversation', async () => {
+    vi.resetModules()
+    const store = createStoreWithReadyRole()
+    const role = store.rolesById['role-1']
+    const saved = 'https://chatgpt.com/c/6aec2ed9-a14c-83e8-98bb-cff4d37e0c07'
+    Object.assign(role, { chatSite: 'chatgpt', geminiConversationUrl: saved, memorySent: { old: 1 }, memoryPending: { messageId: 'msg-q', sent: { db: 4 } } })
+    store.messagesById['msg-q'] = { id: 'msg-q', chatId: 'chat-1', seq: 1, type: 'user', content: '问题', targetRoleIds: ['role-1'], createdAt: 1, status: 'pending', deliveryStatus: { 'role-1': 'pending' } }
+    vi.doMock('./storeAccess', async importOriginal => {
+      const actual = await importOriginal<typeof import('./storeAccess')>()
+      return {
+        ...actual,
+        mutateStore: async (mutator: (store: OpenTeamStore) => unknown) => ({ store, result: await mutator(store) }),
+      }
+    })
+
+    const { createMessageHandlers } = await import('./messageHandlers')
+    const routes = createMessageHandlers({
+      broadcastStoreUpdated: vi.fn(),
+      getChatStatusFromRoles: () => 'ready',
+      log: { debug: vi.fn(), info: vi.fn(), warn: vi.fn() },
+      newId: vi.fn(),
+      now: () => 100,
+      runtimeFrames: { bind: vi.fn(), getByAddress: vi.fn(), getByRole: vi.fn() },
+      sendRoleMessage: vi.fn(),
+      sendError: vi.fn(),
+      sendPrompt: vi.fn(),
+    })
+    const send = (type: string, fields: Record<string, unknown>) => routes.find(route => route.type === type)!.handler({ type, chatId: 'chat-1', roleId: 'role-1', ...fields }, {})
+
+    // A confirmation for another prompt leaves them waiting.
+    await send('TEAM_SEND_ACK', { messageId: 'msg-other' })
+    expect(role.memorySent).toEqual({ old: 1 })
+    await send('TEAM_SEND_ACK', { messageId: 'msg-q' })
+    expect(role.memorySent).toEqual({ old: 1, db: 4 })
+    expect(role.memoryPending).toBeUndefined()
+
+    // The site opened its start page instead of the conversation: a new chat, which holds nothing.
+    await send('TEAM_ROLE_CONVERSATION_UPDATED', { conversationUrl: 'https://chatgpt.com/' })
+    expect(role.geminiConversationUrl).toBeUndefined()
+    expect(role.memorySent).toBeUndefined()
+  })
+
   it('forgets a conversation its site sent the member away from, and gives it the chat again', async () => {
     vi.resetModules()
     const store = createStoreWithReadyRole()

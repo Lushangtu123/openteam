@@ -58,13 +58,16 @@ export function memoryModeForChat(chat: GroupChat, projectRequest = false): Room
 }
 
 // Whether `role`, a member of `chat`, may read `item`. Isolation in 独立 mode follows who wrote the
-// text, not the scope: group items the user wrote are readable, group items that came from a
-// member's reply are not. Another member's own items are never readable.
+// text, not the scope it was saved with: a member does not read what another member of its group
+// wrote, whether that was saved for the group or for every group. What the user wrote and what
+// the member wrote itself are readable. Another member's own items are never readable.
 export function isMemoryItemVisible(item: MemoryItem, chat: GroupChat, role: GroupRole, mode: RoomMode = memoryModeForChat(chat)): boolean {
   if (item.disabled || chat.memoryDisabled || role.chatId !== chat.id) return false
-  if (item.scope === 'global') return true
-  if (item.scope === 'chat') return item.scopeId === chat.id && (mode === 'collaborative' || item.source.origin === 'user')
-  return item.scopeId === role.id
+  if (item.scope === 'role') return item.scopeId === role.id
+  if (item.scope === 'chat' && item.scopeId !== chat.id) return false
+  if (mode === 'collaborative' || item.source.origin === 'user' || item.source.roleId === role.id) return true
+  // A member's reply saved for every group: from another group it is material like any other.
+  return item.scope === 'global' && item.source.chatId !== undefined && item.source.chatId !== chat.id
 }
 
 export function visibleMemoryItems(store: Pick<OpenTeamStore, 'memoryItemsById' | 'memoryOrder'>, chat: GroupChat, role: GroupRole, mode: RoomMode = memoryModeForChat(chat)): MemoryItem[] {

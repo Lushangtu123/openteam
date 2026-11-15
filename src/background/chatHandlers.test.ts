@@ -132,6 +132,41 @@ describe('background chat handlers', () => {
     })))
   })
 
+  it('clearing a chat\'s messages starts its members\' site conversations over, memory items included', async () => {
+    vi.resetModules()
+    const store = createDefaultStore()
+    store.chatsById['chat-1'] = { id: 'chat-1', name: '架构评审', mode: 'independent', roleIds: ['role-1'], messageIds: ['m1'], nextMessageSeq: 2, status: 'ready', createdAt: 0, updatedAt: 0 }
+    store.rolesById['role-1'] = { id: 'role-1', chatId: 'chat-1', name: '工程师', systemPrompt: '', chatSite: 'chatgpt', status: 'ready', contextCursor: 1, geminiConversationUrl: 'https://chatgpt.com/c/1', memorySent: { item: 1 }, memoryPending: { messageId: 'm1', sent: { other: 1 } }, createdAt: 0, updatedAt: 10 }
+    store.messagesById.m1 = { id: 'm1', chatId: 'chat-1', seq: 1, type: 'user', content: '问题', createdAt: 1, status: 'received' }
+    // The memory items themselves are kept.
+    store.memoryItemsById = { item: { id: 'item', scope: 'chat', scopeId: 'chat-1', kind: 'fact', content: '事实', source: { origin: 'user' }, createdAt: 1, updatedAt: 1 } }
+    store.memoryOrder = ['item']
+    vi.doMock('./storeAccess', async importOriginal => {
+      const actual = await importOriginal<typeof import('./storeAccess')>()
+      return {
+        ...actual,
+        mutateStore: async (mutator: (store: OpenTeamStore) => unknown) => ({ store, result: await mutator(store) }),
+      }
+    })
+
+    const { createChatHandlers } = await import('./chatHandlers')
+    const routes = createChatHandlers({
+      broadcastStoreUpdated: vi.fn(),
+      getChatStatusFromRoles: () => 'ready',
+      log: { info: vi.fn(), warn: vi.fn() },
+      newId: vi.fn(),
+      now: vi.fn(() => 100),
+      runtimeFrames: { removeRole: vi.fn() },
+    })
+
+    await routes.find(route => route.type === 'GROUP_CHAT_CLEAR_MESSAGES')!.handler({ type: 'GROUP_CHAT_CLEAR_MESSAGES', chatId: 'chat-1' }, {})
+
+    expect(store.rolesById['role-1']).toMatchObject({ contextCursor: 0, status: 'loading' })
+    expect(store.rolesById['role-1'].memorySent).toBeUndefined()
+    expect(store.rolesById['role-1'].memoryPending).toBeUndefined()
+    expect(store.memoryOrder).toEqual(['item'])
+  })
+
   it('closing a chat leaves a member that is waiting for a reply as it is, time included', async () => {
     vi.resetModules()
     const store = createDefaultStore()

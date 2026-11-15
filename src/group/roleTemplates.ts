@@ -1,3 +1,4 @@
+import { forgetMemorySent } from './memoryPrompt'
 import { normalizeChatGptGptsUrl, normalizeGrokProjectUrl } from './conversationUrl'
 import { BUILTIN_ROLE_TEMPLATES, getBuiltinRoleTemplate, isBuiltinRoleTemplateId } from './builtinRoleTemplates'
 import type { ChatSite, GroupChat, GroupRole, OpenTeamStore, RoleModelSource, RoleTemplate } from './types'
@@ -316,6 +317,8 @@ export function updateGroupRole(
       delete role.externalModelId
     }
     role.contextCursor = 0
+    // Another model or site: a conversation that has been sent nothing.
+    forgetMemorySent(role)
     role.status = 'pending'
     delete role.geminiConversationId
     delete role.geminiConversationUrl
