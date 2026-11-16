@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createDefaultStore } from '../group/store'
-import type { GroupMessage, GroupRole, OpenTeamStore } from '../group/types'
+import type { GroupMessage, GroupRole, MemoryItem, OpenTeamStore } from '../group/types'
 import { createControlActionExecutor, readTaskResult } from './controlHandlers'
 import type { RuntimeMessage } from './runtimeClient'
 
@@ -185,6 +185,103 @@ describe('background control handlers', () => {
         { messageId: 'msg-pm', roleId: 'role-pm', content: '产品可行' },
       ],
     })
+  })
+})
+
+describe('memory through the control interface', () => {
+  // An independent group with two members, and a second group.
+  function setup(enabled = true) {
+    const store = createDefaultStore()
+    store.settings.agentControlEnabled = enabled
+    store.chatsById['chat-1'] = { id: 'chat-1', name: '选型', mode: 'independent', roleIds: ['role-be', 'role-fe'], messageIds: [], nextMessageSeq: 1, status: 'ready', createdAt: 1, updatedAt: 1 }
+    store.chatsById['chat-2'] = { id: 'chat-2', name: '别的群', mode: 'collaborative', roleIds: ['role-x'], messageIds: [], nextMessageSeq: 1, status: 'ready', createdAt: 1, updatedAt: 1 }
+    store.rolesById = { 'role-be': makeRole('chat-1', 'role-be', '后端'), 'role-fe': makeRole('chat-1', 'role-fe', '前端'), 'role-x': makeRole('chat-2', 'role-x', '后端') }
+    const item = (id: string, patch: Partial<MemoryItem>): MemoryItem => ({ id, scope: 'global', kind: 'fact', content: id, source: { origin: 'user' }, createdAt: 1, updatedAt: 1, ...patch })
+    const items = [
+      item('lang', { kind: 'preference', content: '回答用中文，先给结论。', pinned: true }),
+      item('db', { scope: 'chat', scopeId: 'chat-1', kind: 'decision', content: '数据库用 PostgreSQL 15。', tags: ['数据库'] }),
+      // The front-end member's own words, saved for the group: in an independent group, others do not read it.
+      item('fe-said', { scope: 'chat', scopeId: 'chat-1', content: '数据库连接池开到 50。', source: { origin: 'member', roleId: 'role-fe', chatId: 'chat-1' } }),
+      item('be-only', { scope: 'role', scopeId: 'role-be', content: '后端只用 Go 1.22。' }),
+      item('other', { scope: 'chat', scopeId: 'chat-2', content: '另一个群的数据库。' }),
+      item('off', { content: '停用的数据库条目', disabled: true }),
+    ]
+    store.memoryItemsById = Object.fromEntries(items.map(entry => [entry.id, entry]))
+    store.memoryOrder = items.map(entry => entry.id)
+    const routeRuntimeMessage = vi.fn(async (message: RuntimeMessage): Promise<unknown> => {
+      if (message.type !== 'GROUP_MEMORY_ADD') throw new Error(`unexpected route ${message.type}`)
+      const input = message.item as Record<string, unknown>
+      return { ok: true, item: { id: 'memory-new', ...input, source: { origin: 'user' }, createdAt: 5, updatedAt: 5 }, store }
+    })
+    const executor = createControlActionExecutor({ loadStore: async () => store, routeRuntimeMessage, runtimeFrames: { list: () => [] }, openTeamPage: vi.fn(), waitFor: async () => undefined, now: () => 10 })
+    const run = async (action: string, payload: Record<string, unknown>) => executor({ id: 'cmd', action, payload } as never) as Promise<{ ok: boolean; data?: Record<string, unknown>; error?: { message: string } }>
+    return { store, run, routeRuntimeMessage }
+  }
+
+  it('lists what one member may read: its own and the user\'s items, not another member\'s words or another group\'s', async () => {
+    const { run } = setup()
+    const result = await run('memory.search', { chatId: 'chat-1', roleName: '后端' })
+    expect(result.ok).toBe(true)
+    expect(result.data).toMatchObject({ chatId: 'chat-1', roleId: 'role-be', roleName: '后端', memoryDisabled: false, visibleCount: 3 })
+    expect((result.data!.items as Array<{ id: string }>).map(entry => entry.id)).toEqual(['lang', 'db', 'be-only'])
+    expect(result.data!.pinned).toEqual([{ id: 'lang', scope: 'global', kind: 'preference', content: '回答用中文，先给结论。', pinned: true, source: 'user' }])
+
+    const front = await run('memory.search', { chatId: 'chat-1', roleId: 'role-fe' })
+    expect((front.data!.items as Array<{ id: string }>).map(entry => entry.id)).toEqual(['lang', 'db', 'fe-said'])
+  })
+
+  it('finds what a query brings up, best first, with its score', async () => {
+    const { run } = setup()
+    const result = await run('memory.search', { chatId: 'chat-1', roleName: '后端', query: '数据库怎么选' })
+    const items = result.data!.items as Array<{ id: string; score: number; tags?: string[] }>
+    expect(items.map(entry => entry.id)).toEqual(['db'])
+    expect(items[0].score).toBeGreaterThan(0)
+    expect(items[0].tags).toEqual(['数据库'])
+  })
+
+  it('finds nothing in a group with memory switched off', async () => {
+    const { store, run } = setup()
+    store.chatsById['chat-1'].memoryDisabled = true
+    const result = await run('memory.search', { chatId: 'chat-1', roleName: '后端' })
+    expect(result.data).toMatchObject({ memoryDisabled: true, visibleCount: 0, items: [], pinned: [] })
+  })
+
+  it('says which group or member it could not find', async () => {
+    const { store, run } = setup()
+    expect((await run('memory.search', { chatId: 'gone', roleName: '后端' })).error?.message).toBe('找不到群聊：gone')
+    expect((await run('memory.search', { chatId: 'chat-1', roleName: '设计' })).error?.message).toBe('群聊里没有叫「设计」的成员')
+    // A member of another group is not this group's, even by id.
+    expect((await run('memory.search', { chatId: 'chat-1', roleId: 'role-x' })).error?.message).toBe('群聊里没有这位成员：role-x')
+    expect((await run('memory.search', { chatId: 'chat-1' })).error?.message).toBe('缺少成员：用 roleId 或 roleName 指定')
+    store.rolesById['role-fe'].name = '后端'
+    expect((await run('memory.search', { chatId: 'chat-1', roleName: '后端' })).error?.message).toBe('群聊里有 2 位叫「后端」的成员，请改用 roleId')
+  })
+
+  it('saves as the user for every group, a group, or one member, resolving the member in that group', async () => {
+    const { run, routeRuntimeMessage } = setup()
+    await run('memory.add', { scope: 'global', kind: 'preference', content: '回答简短。', pinned: true })
+    await run('memory.add', { scope: 'chat', chatId: 'chat-1', content: '上线日期是 11 月 20 日。', tags: ['上线'] })
+    const forMember = await run('memory.add', { scope: 'role', chatId: 'chat-1', roleName: '前端', kind: 'note', content: '前端用 Vue 3。' })
+    expect(routeRuntimeMessage.mock.calls.map(([message]) => message.item)).toEqual([
+      { scope: 'global', kind: 'preference', content: '回答简短。', pinned: true },
+      { scope: 'chat', scopeId: 'chat-1', kind: 'fact', content: '上线日期是 11 月 20 日。', tags: ['上线'] },
+      { scope: 'role', scopeId: 'role-fe', kind: 'note', content: '前端用 Vue 3。' },
+    ])
+    // The answer is the item alone, not the whole store.
+    expect(forMember.data).toEqual({ item: { id: 'memory-new', scope: 'role', scopeId: 'role-fe', kind: 'note', content: '前端用 Vue 3。', source: 'user' } })
+  })
+
+  it('needs a scope, and the group for a group or member item', async () => {
+    const { run, routeRuntimeMessage } = setup()
+    expect((await run('memory.add', { content: '内容' })).error?.message).toBe('缺少记忆范围：global（全部群聊）、chat（本群）或 role（本群的一位成员）')
+    expect((await run('memory.add', { scope: 'chat', content: '内容' })).error?.message).toBe('缺少群聊 ID')
+    expect((await run('memory.add', { scope: 'role', chatId: 'chat-1', content: '内容' })).error?.message).toBe('缺少成员：用 roleId 或 roleName 指定')
+    expect(routeRuntimeMessage).not.toHaveBeenCalled()
+  })
+
+  it('does nothing while local control is switched off', async () => {
+    const { run } = setup(false)
+    expect((await run('memory.search', { chatId: 'chat-1', roleName: '后端' })).ok).toBe(false)
   })
 })
 

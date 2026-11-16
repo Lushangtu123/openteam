@@ -165,7 +165,21 @@ openteamcli role batch-add --chat <chatId> --file roles.json
 openteamcli task post --chat <chatId> --target all --content "任务"
 openteamcli task wait --chat <chatId> --message <messageId> --timeout 300000
 openteamcli task read --chat <chatId> --message <messageId>
+openteamcli memory search --chat <chatId> --role name:<成员名> --query "问题"
+openteamcli memory add --scope chat --chat <chatId> --kind decision --content "要记住的一句话"
 ```
+
+## 记忆库
+
+`memory search` 按某个群里某位成员能看到的范围查记忆库，结果和这位成员在提示词里会读到的一致：`pinned` 是每次都带的条目，`items` 是查询找到的条目（不给 `--query` 时列出它能看到的全部）。群聊关掉了记忆时结果为空，`memoryDisabled` 为 `true`。
+
+`memory add` 以用户的身份保存，所以**只在用户明确要求记住某件事时使用**，不要自己决定把回复、结论或推测存进去。`--scope` 决定谁会读到：
+
+- `global`：所有群聊的所有成员，包括 ChatGPT、Gemini 等第三方站点上的成员和本机智能体。用之前先向用户确认。
+- `chat`：`--chat` 指定的群的成员。
+- `role`：`--chat` 群里 `--role` 指定的那一位成员。
+
+`--kind` 是 `fact`、`decision`、`preference` 或 `note`，默认 `fact`；`preference` 默认常驻。内容不超过 500 字，记忆库最多 500 条。
 
 `roles.json` 可以是数组：
 

@@ -1,7 +1,8 @@
 import { OPENTEAM_CONTROL_CAPABILITIES, controlFailure, controlSuccess, isRecord, type ControlHttpCommand, type ControlHttpResult } from '../shared/localControlProtocol'
-import type { GroupChat, GroupMessage, GroupRole, OpenTeamStore, RoomMode, RuntimeFrameBinding } from '../group/types'
+import type { GroupChat, GroupMessage, GroupRole, MemoryItem, OpenTeamStore, RoomMode, RuntimeFrameBinding } from '../group/types'
 import type { RuntimeMessage } from './runtimeClient'
 import { readNewChatCollaboration } from '../group/collaboration'
+import { MEMORY_MAX_RETRIEVED, memoryModeForChat, pinnedMemoryItems, searchMemoryItems, visibleMemoryItems } from '../group/memoryRetrieval'
 
 export interface ControlActionExecutorDependencies {
   loadStore(): Promise<OpenTeamStore>
@@ -93,6 +94,10 @@ async function executeEnabledCommand(command: ControlHttpCommand, initialStore: 
       return waitForTask(command.payload, deps)
     case 'run.createAndPost':
       return createAndPost(command.payload, initialStore, deps)
+    case 'memory.search':
+      return searchMemory(command.payload, initialStore)
+    case 'memory.add':
+      return addMemory(command.payload, initialStore, deps)
     default:
       throw new Error(`不支持的控制命令：${command.action}`)
   }
@@ -292,6 +297,95 @@ function inferRepliesAfterTask(store: OpenTeamStore, chat: GroupChat, taskMessag
     if (message.type === 'assistant' && message.roleId && targetSet.has(message.roleId)) replies.push(message)
   }
   return replies
+}
+
+// The memory store as one member of one group sees it (docs/MEMORY_STORE.zh-CN.md, sections 3
+// and 10): the items it may read, its pinned ones, and those a query brings up. This is so a tool
+// sees what the member sees; it is no barrier, since the same token reads the whole store.
+const MAX_MEMORY_SEARCH_LIMIT = 50
+
+function searchMemory(payload: unknown, store: OpenTeamStore): unknown {
+  const input = requireRecord(payload, '缺少记忆查询参数')
+  const chat = requireChatIn(store, requireString(input.chatId, '缺少群聊 ID'))
+  const role = requireRoleIn(store, chat, input)
+  const visible = visibleMemoryItems(store, chat, role, memoryModeForChat(chat))
+  const query = readString(input.query)
+  const limit = Math.min(readPositiveNumber(input.limit) ?? (query ? MEMORY_MAX_RETRIEVED : MAX_MEMORY_SEARCH_LIMIT), MAX_MEMORY_SEARCH_LIMIT)
+  return {
+    chatId: chat.id,
+    roleId: role.id,
+    roleName: role.name,
+    memoryDisabled: chat.memoryDisabled === true,
+    visibleCount: visible.length,
+    // Sent with every prompt, whatever it asks.
+    pinned: pinnedMemoryItems(visible).map(item => memorySummary(item)),
+    // With a query: the items it brings up, best first. Without one: every item the member may read.
+    items: query
+      ? searchMemoryItems(visible, query, limit).map(found => memorySummary(found.item, found.score))
+      : visible.slice(0, limit).map(item => memorySummary(item)),
+  }
+}
+
+// Saves an item as the user's: whoever holds the control token acts for the user. --scope says who
+// gets it, as in the save window: every group, one group, or one member of one group.
+async function addMemory(payload: unknown, store: OpenTeamStore, deps: ControlActionExecutorDependencies): Promise<unknown> {
+  const input = requireRecord(payload, '缺少记忆参数')
+  const scope = readString(input.scope)
+  if (scope !== 'global' && scope !== 'chat' && scope !== 'role') throw new Error('缺少记忆范围：global（全部群聊）、chat（本群）或 role（本群的一位成员）')
+  let scopeId: string | undefined
+  if (scope !== 'global') {
+    const chat = requireChatIn(store, requireString(input.chatId, '缺少群聊 ID'))
+    scopeId = scope === 'chat' ? chat.id : requireRoleIn(store, chat, input).id
+  }
+  const response = await routeOk(deps, {
+    type: 'GROUP_MEMORY_ADD',
+    item: {
+      scope,
+      ...(scopeId ? { scopeId } : {}),
+      kind: readString(input.kind) ?? 'fact',
+      content: typeof input.content === 'string' ? input.content : '',
+      ...(Array.isArray(input.tags) ? { tags: input.tags } : {}),
+      ...(typeof input.pinned === 'boolean' ? { pinned: input.pinned } : {}),
+    },
+  })
+  return { item: isRecord(response.item) ? memorySummary(response.item as unknown as MemoryItem) : response.item }
+}
+
+function memorySummary(item: MemoryItem, score?: number): Record<string, unknown> {
+  return {
+    id: item.id,
+    scope: item.scope,
+    ...(item.scopeId ? { scopeId: item.scopeId } : {}),
+    kind: item.kind,
+    content: item.content,
+    ...(item.tags?.length ? { tags: item.tags } : {}),
+    ...(item.pinned ? { pinned: true } : {}),
+    source: item.source.origin,
+    ...(score === undefined ? {} : { score: Math.round(score * 1000) / 1000 }),
+  }
+}
+
+function requireChatIn(store: OpenTeamStore, chatId: string): GroupChat {
+  const chat = store.chatsById[chatId]
+  if (!chat) throw new Error(`找不到群聊：${chatId}`)
+  return chat
+}
+
+// The member named by roleId, or by roleName within the group (a name two members share is refused).
+function requireRoleIn(store: OpenTeamStore, chat: GroupChat, input: Record<string, unknown>): GroupRole {
+  const members = chat.roleIds.map(id => store.rolesById[id]).filter((role): role is GroupRole => Boolean(role))
+  const roleId = readString(input.roleId)
+  if (roleId) {
+    const role = members.find(member => member.id === roleId)
+    if (!role) throw new Error(`群聊里没有这位成员：${roleId}`)
+    return role
+  }
+  const roleName = readString(input.roleName)
+  if (!roleName) throw new Error('缺少成员：用 roleId 或 roleName 指定')
+  const matches = members.filter(member => member.name === roleName)
+  if (matches.length === 0) throw new Error(`群聊里没有叫「${roleName}」的成员`)
+  if (matches.length > 1) throw new Error(`群聊里有 ${matches.length} 位叫「${roleName}」的成员，请改用 roleId`)
+  return matches[0]
 }
 
 function buildTaskRaw(store: OpenTeamStore, chatId: string, target: unknown, content: string): string {

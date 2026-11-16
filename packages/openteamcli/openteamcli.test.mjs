@@ -40,6 +40,21 @@ describe('openteamcli command builder', () => {
       kind: 'command',
       command: { action: 'task.post', payload: { chatId: 'chat-1', target: 'all', content: '请评估' } },
     })
+    expect(buildCliRequest(['memory', 'search', '--chat', 'chat-1', '--role', 'name:后端', '--query', '数据库'])).toMatchObject({
+      kind: 'command',
+      command: { action: 'memory.search', payload: { chatId: 'chat-1', roleName: '后端', query: '数据库' } },
+    })
+    expect(buildCliRequest(['memory', 'search', '数据库', '--chat', 'chat-1', '--role', 'role:role-be', '--limit', '3'])).toMatchObject({
+      command: { action: 'memory.search', payload: { chatId: 'chat-1', roleId: 'role-be', query: '数据库', limit: 3 } },
+    })
+    expect(buildCliRequest(['memory', 'add', '--scope', 'chat', '--chat', 'chat-1', '--kind', 'decision', '--content', '数据库用 PostgreSQL', '--tags', '数据库，后端', '--pinned'])).toMatchObject({
+      command: { action: 'memory.add', payload: { scope: 'chat', chatId: 'chat-1', kind: 'decision', content: '数据库用 PostgreSQL', tags: ['数据库', '后端'], pinned: true } },
+    })
+    expect(buildCliRequest(['memory', 'add', '--scope', 'global', '--content', '回答简短'])).toMatchObject({
+      command: { action: 'memory.add', payload: { scope: 'global', kind: 'fact', content: '回答简短' } },
+    })
+    expect(() => buildCliRequest(['memory', 'add', '--content', '回答简短'])).toThrow('缺少 --scope')
+    expect(() => buildCliRequest(['memory', 'search', '--chat', 'chat-1'])).toThrow('缺少 --role')
     expect(buildCliRequest(['run', 'create-and-post', '--file', 'task.json', '--wait'])).toMatchObject({
       kind: 'file-command',
       action: 'run.createAndPost',
@@ -75,6 +90,8 @@ describe('openteamcli command builder', () => {
         'openteamcli role batch-add --chat <chatId> --file roles.json',
         'openteamcli task post|wait|read',
         'openteamcli run create-and-post --file task.json --wait',
+        'openteamcli memory search --chat <chatId> --role name:<name>|role:<id> [--query <text>] [--limit <n>]',
+        'openteamcli memory add --scope global|chat|role [--chat <chatId>] [--role name:<name>|role:<id>] [--kind fact|decision|preference|note] --content <text> [--tags a,b] [--pinned]',
         'openteamcli agent list|run --agent <id> --content <prompt> --cwd <path>',
         'openteamcli agent add --preset claude-code|codex|gemini --cwd <folder>[,<folder>] [--id <id>] [--name <name>] [--env KEY=VALUE,...] [--mode <session mode>]',
         'openteamcli agent add --id <id> --name <name> --command "<command and arguments>" --cwd <folder>[,<folder>]',

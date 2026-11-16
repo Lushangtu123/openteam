@@ -106,6 +106,17 @@ openteamcli daemon uninstall
 
 它会卸载 LaunchAgent（同时停掉它启动的守护进程）并删除这个文件。之后 `daemon start` 仍然可以照旧启动守护进程。这两个命令在其他系统上会拒绝运行。
 
+## 记忆库
+
+```bash
+openteamcli memory search --chat <chatId> --role name:<成员名> [--query "问题"] [--limit 5]
+openteamcli memory add --scope global|chat|role [--chat <chatId>] [--role name:<成员名>|role:<成员ID>] [--kind fact|decision|preference|note] --content "内容" [--tags 标签1,标签2] [--pinned]
+```
+
+`memory search` 返回某个群里某位成员能看到的记忆：常驻的条目（`pinned`），以及 `--query` 找到的条目（不给时列出全部）。可见范围和成员在提示词里读到的一致，比如独立模式的群里，成员读不到其他成员的回复里存下的内容。这只是为了和成员看到的一致：持有令牌的程序本来就能用 `store.get` 读到全部数据。
+
+`memory add` 以你的身份保存一条记忆，和在 OpenTeam 页面里保存一样。`--scope global` 的条目会发给所有群聊的所有成员，包括第三方站点上的成员和本机智能体。
+
 ## 发布检查
 
 发布新的 CLI 版本前，先更新 `packages/openteamcli/package.json` 里的版本号；npm 不允许重复发布已经存在的版本。

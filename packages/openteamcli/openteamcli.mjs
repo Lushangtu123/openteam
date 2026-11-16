@@ -80,6 +80,28 @@ export function buildCliRequest(argv) {
     })
   }
 
+  // The memory store as one member sees it, and saving to it (as the user, who holds the token).
+  if (group === 'memory') {
+    if (subcommand === 'search') return command('memory.search', {
+      chatId: requireOption(options, 'chat'),
+      ...parseRole(requireOption(options, 'role')),
+      ...(typeof options.query === 'string' ? { query: options.query } : positional(rest, 0) ? { query: positional(rest, 0) } : {}),
+      ...(numberOption(options.limit) ? { limit: numberOption(options.limit) } : {}),
+    })
+    if (subcommand === 'add') {
+      const scope = requireOption(options, 'scope')
+      return command('memory.add', {
+        scope,
+        ...(typeof options.chat === 'string' ? { chatId: options.chat } : {}),
+        ...(typeof options.role === 'string' ? parseRole(options.role) : {}),
+        kind: typeof options.kind === 'string' ? options.kind : 'fact',
+        content: requireOption(options, 'content'),
+        ...(typeof options.tags === 'string' ? { tags: options.tags.split(/[,，]/).map(tag => tag.trim()).filter(Boolean) } : {}),
+        ...(options.pinned === true ? { pinned: true } : {}),
+      })
+    }
+  }
+
   if (group === 'run' && subcommand === 'create-and-post') {
     return {
       kind: 'file-command',
@@ -348,6 +370,14 @@ function parseTarget(value) {
   return value
 }
 
+// --role name:<name> or role:<id>, as --target takes them; a bare value is an id.
+function parseRole(value) {
+  const text = String(value)
+  if (text.startsWith('name:')) return { roleName: text.slice('name:'.length) }
+  if (text.startsWith('role:')) return { roleId: text.slice('role:'.length) }
+  return { roleId: text }
+}
+
 function parseOptions(args) {
   const options = {}
   for (let index = 0; index < args.length; index += 1) {
@@ -520,6 +550,8 @@ export function help() {
       'openteamcli role batch-add --chat <chatId> --file roles.json',
       'openteamcli task post|wait|read',
       'openteamcli run create-and-post --file task.json --wait',
+      'openteamcli memory search --chat <chatId> --role name:<name>|role:<id> [--query <text>] [--limit <n>]',
+      'openteamcli memory add --scope global|chat|role [--chat <chatId>] [--role name:<name>|role:<id>] [--kind fact|decision|preference|note] --content <text> [--tags a,b] [--pinned]',
       'openteamcli agent list|run --agent <id> --content <prompt> --cwd <path>',
       'openteamcli agent add --preset claude-code|codex|gemini --cwd <folder>[,<folder>] [--id <id>] [--name <name>] [--env KEY=VALUE,...] [--mode <session mode>]',
       'openteamcli agent add --id <id> --name <name> --command "<command and arguments>" --cwd <folder>[,<folder>]',

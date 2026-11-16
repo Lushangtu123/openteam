@@ -23,6 +23,8 @@ export const OPENTEAM_CONTROL_CAPABILITIES = [
   'task.wait',
   'task.read',
   'run.createAndPost',
+  'memory.search',
+  'memory.add',
   'agent.list',
   'agent.run',
   'agent.cancel',

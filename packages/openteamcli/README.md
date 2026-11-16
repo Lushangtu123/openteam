@@ -126,6 +126,17 @@ For a beta release:
 npm publish --tag beta --access public
 ```
 
+## Memory
+
+```bash
+openteamcli memory search --chat <chatId> --role name:<member name> [--query "question"] [--limit 5]
+openteamcli memory add --scope global|chat|role [--chat <chatId>] [--role name:<member name>|role:<member id>] [--kind fact|decision|preference|note] --content "text" [--tags tag1,tag2] [--pinned]
+```
+
+`memory search` returns the memory items one member of one group can read: the pinned ones (`pinned`), and those `--query` brings up (all of them without a query). What it may read is what it reads in its prompts; in an independent group, for example, a member does not read what was saved from another member's reply. This only mirrors what the member sees: a program holding the token can read everything with `store.get` anyway.
+
+`memory add` saves an item as you, as saving it on the OpenTeam page does. An item with `--scope global` goes to every member of every group, including members on third-party sites and local agents.
+
 ## Local agents in OpenTeam groups
 
 Add a local ACP agent, then pick it in OpenTeam under 添加大模型 → 本机智能体（ACP）:
