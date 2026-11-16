@@ -18,6 +18,8 @@ import { createExternalModelsView } from './externalModelsView'
 import type { LocalAgentInfo } from '../shared/localControlProtocol'
 import { createAiPagesView } from './aiPagesView'
 import { createMemberFocusGuard } from './memberFocusGuard'
+import { openMemoryDialog } from './memoryDialog'
+import { openMemoryPanel } from './memoryPanel'
 import { createIframeHost } from './iframeHost'
 import { applyTeamLanguage, createLanguageSettingsController } from './languageController'
 import { createMessageSearchView } from './messageSearchView'
@@ -503,6 +505,7 @@ const messagesView = createMessagesView({
   insertMention,
   setReference,
   editAndResend: message => composerView.editMessage(message),
+  rememberMessage: (message, opener) => openMemoryDialog({ message, chatId: message.chatId }, { getStore: () => store, runCommand, onClose: () => { if (opener.isConnected) opener.focus() } }),
   answerChoice: (role, choice) => {
     composerView.sendToRole(role, replyChoiceAnswer(choice, store.settings.language === 'en' ? 'en' : 'zh-CN'))
       .catch(error => showError(error instanceof Error ? error.message : String(error)))
@@ -869,6 +872,12 @@ async function boot(): Promise<void> {
   uiStyleController.registerStyleEvents()
   aiPagesView.registerAiPagesControls()
   registerSettingsWindow({ windowEl: settingsMenuEl, settingsButtonEl })
+  // The memory store's list takes the settings window's place, as the models window does.
+  teamDomRefs.openMemoryPanelEl.addEventListener('click', () => {
+    settingsMenuEl.hidden = true
+    settingsButtonEl.setAttribute('aria-expanded', 'false')
+    openMemoryPanel({ getStore: () => store, runCommand, getCurrentChatId: () => getCurrentChat()?.id, onClose: () => settingsButtonEl.focus() })
+  })
   registerHeaderMenus(teamDomRefs.chatHeaderEl)
   registerHeaderMenus(teamDomRefs.composerModesEl)
   registerChatListDrawer({

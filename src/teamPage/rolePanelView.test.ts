@@ -189,6 +189,53 @@ describe('team page role panel view boundary', () => {
     confirm.mockRestore()
   })
 
+  it('says how many memory items go with a removed member, in the page\'s language', async () => {
+    const remove = async (language: 'zh-CN' | 'en', count: number): Promise<string> => {
+      const store = makeStoreWithRole()
+      store.settings.language = language
+      const items = Array.from({ length: count }, (_, index) => ({ id: `mem-${index}`, scope: 'role' as const, scopeId: 'role-1', kind: 'fact' as const, content: `第 ${index} 条`, source: { origin: 'user' as const }, createdAt: 1, updatedAt: 1 }))
+      // Kept for the group, not for this member: stays, and is not counted.
+      const groupItem = { id: 'mem-group', scope: 'chat' as const, scopeId: 'chat-1', kind: 'fact' as const, content: '群的', source: { origin: 'member' as const, roleId: 'role-1' }, createdAt: 1, updatedAt: 1 }
+      store.memoryItemsById = Object.fromEntries([...items, groupItem].map(item => [item.id, item]))
+      store.memoryOrder = Object.keys(store.memoryItemsById)
+      const rolePanelEl = document.createElement('aside')
+      const roleSummaryEl = document.createElement('p')
+      const roleListEl = document.createElement('div')
+      rolePanelEl.append(roleSummaryEl, roleListEl)
+      const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+      const runCommand = vi.fn(async () => undefined)
+      const view = createRolePanelView({
+        state: createTeamPageState(),
+        getStore: () => store,
+        rolePanelEl,
+        roleSummaryEl,
+        roleListEl,
+        iframeHost: { recoverRole: vi.fn() },
+        getCurrentChat: () => store.chatsById['chat-1'],
+        getCurrentRoles: () => [store.rolesById['role-1']],
+        emptyCard: () => document.createElement('div'),
+        insertMention: vi.fn(),
+        refreshCurrentChat: vi.fn(async () => undefined),
+        focusRoleFrame: vi.fn(),
+        runCommand,
+        showError: vi.fn(),
+      })
+      view.renderRolePanel()
+      roleListEl.querySelector<HTMLButtonElement>('[data-role-more="role-1"]')?.click()
+      roleListEl.querySelector<HTMLButtonElement>('[data-role-delete="role-1"]')?.click()
+      await Promise.resolve()
+      const question = confirm.mock.calls[0][0] as string
+      // Refused: nothing is removed.
+      expect(runCommand).not.toHaveBeenCalled()
+      confirm.mockRestore()
+      return question
+    }
+
+    expect(await remove('zh-CN', 2)).toBe('确定将「产品经理」移出当前群聊吗？历史聊天记录会保留。只为这位成员保存的 2 条记忆会一并删除。')
+    expect(await remove('en', 1)).toBe('Remove "产品经理" from this group? The chat history stays. The 1 memory item saved for this member alone will be deleted.')
+    expect(await remove('en', 0)).toBe('Remove "产品经理" from this group? The chat history stays.')
+  })
+
   it('opens a member prompt detail dialog from the member card', () => {
     const store = makeStoreWithRole()
     store.rolesById['role-1'].description = '拆解需求和验收标准'

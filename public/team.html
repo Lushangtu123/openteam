@@ -387,6 +387,7 @@
             <button class="settings-nav-item" type="button" role="tab" data-settings-tab="general" aria-selected="true">通用</button>
             <button class="settings-nav-item" type="button" role="tab" data-settings-tab="models" aria-selected="false">模型</button>
             <button class="settings-nav-item" type="button" role="tab" data-settings-tab="replies" aria-selected="false">群聊回复</button>
+            <button class="settings-nav-item" type="button" role="tab" data-settings-tab="memory" aria-selected="false">记忆库</button>
             <button class="settings-nav-item" type="button" role="tab" data-settings-tab="pages" aria-selected="false">AI 网页</button>
             <button class="settings-nav-item" type="button" role="tab" data-settings-tab="agent" aria-selected="false">本机智能体</button>
             <button class="settings-nav-item" type="button" role="tab" data-settings-tab="data" aria-selected="false">数据备份</button>
@@ -445,6 +446,15 @@
                   <p class="settings-row-hint">OpenTeam 不在前台时，成员都回复完会弹出桌面通知。</p>
                 </div>
                 <button id="reply-notifications-toggle" class="settings-switch" type="button" role="switch" aria-labelledby="reply-notifications-title" aria-checked="true"></button>
+              </div>
+            </section>
+            <section class="settings-panel" role="tabpanel" data-settings-panel="memory" aria-label="记忆库" hidden>
+              <div class="settings-row">
+                <div class="settings-row-text">
+                  <div class="settings-row-title">保存的记忆</div>
+                  <p class="settings-row-hint">你保存的事实、决定和偏好，只存在这台电脑的浏览器里。成员在相关的问题里会读到；在消息下面点“记住这条”保存，在这里查看、编辑、停用和删除。</p>
+                </div>
+                <button id="open-memory-panel" class="btn settings-action" type="button">管理记忆</button>
               </div>
             </section>
             <section class="settings-panel" role="tabpanel" data-settings-panel="pages" aria-label="AI 网页" hidden>

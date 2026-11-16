@@ -167,6 +167,36 @@ describe('background chat handlers', () => {
     expect(store.memoryOrder).toEqual(['item'])
   })
 
+  it('switches a chat\'s memory off and back on', async () => {
+    vi.resetModules()
+    const store = createDefaultStore()
+    store.chatsById['chat-1'] = { id: 'chat-1', name: '架构评审', mode: 'independent', roleIds: [], messageIds: [], nextMessageSeq: 1, status: 'ready', createdAt: 0, updatedAt: 0 }
+    vi.doMock('./storeAccess', async importOriginal => {
+      const actual = await importOriginal<typeof import('./storeAccess')>()
+      return {
+        ...actual,
+        mutateStore: async (mutator: (store: OpenTeamStore) => unknown) => ({ store, result: await mutator(store) }),
+      }
+    })
+
+    const { createChatHandlers } = await import('./chatHandlers')
+    const routes = createChatHandlers({
+      broadcastStoreUpdated: vi.fn(),
+      getChatStatusFromRoles: () => 'ready',
+      log: { info: vi.fn(), warn: vi.fn() },
+      newId: vi.fn(),
+      now: vi.fn(() => 100),
+      runtimeFrames: { removeRole: vi.fn() },
+    })
+    const update = (memoryDisabled: boolean) => routes.find(route => route.type === 'GROUP_CHAT_UPDATE')!.handler({ type: 'GROUP_CHAT_UPDATE', chatId: 'chat-1', patch: { memoryDisabled } }, {})
+
+    await update(true)
+    expect(store.chatsById['chat-1'].memoryDisabled).toBe(true)
+    await update(false)
+    // Left out when on, as in a chat that never had it switched off.
+    expect('memoryDisabled' in store.chatsById['chat-1']).toBe(false)
+  })
+
   it('deleting a chat removes its memory items and its members\', and duplicating one copies them', async () => {
     vi.resetModules()
     const store = createDefaultStore()

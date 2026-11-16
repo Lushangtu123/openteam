@@ -1,3 +1,4 @@
+import { countMemoryForChat, deleteMemoryForChat } from '../group/memoryStore'
 import { createDefaultStore, loadStore, saveStore } from '../group/store'
 import type { GroupChat, GroupRole, OpenTeamStore, RoleTemplate } from '../group/types'
 import { normalizeLanguage, translateUi } from '../shared/i18n'
@@ -206,6 +207,17 @@ export function createChatListView(deps: ChatListViewDependencies): ChatListView
       renderChatList()
       exportChatRecord(chat)
     })
+    // Stops this group's members being sent memory items, without deleting any.
+    const memory = document.createElement('button')
+    memory.type = 'button'
+    memory.className = 'btn btn-ghost'
+    memory.dataset.chatMemoryToggle = chat.id
+    memory.textContent = chat.memoryDisabled ? ui('开启本群记忆') : ui('关闭本群记忆')
+    memory.addEventListener('click', () => {
+      deps.state.chatMenuChatId = undefined
+      renderChatList()
+      deps.runCommand('GROUP_CHAT_UPDATE', { chatId: chat.id, patch: { memoryDisabled: !chat.memoryDisabled } }).catch(error => deps.showError(error.message))
+    })
     const clearMessages = document.createElement('button')
     clearMessages.type = 'button'
     clearMessages.className = 'btn btn-ghost'
@@ -232,10 +244,15 @@ export function createChatListView(deps: ChatListViewDependencies): ChatListView
     remove.addEventListener('click', () => {
       deps.state.chatMenuChatId = undefined
       renderChatList()
-      if (!window.confirm(`确定删除「${chat.name}」吗？删除后这个群聊的消息和角色都会移除。`)) return
+      // The group's memory items go with it; say how many before the user agrees.
+      const memoryCount = countMemoryForChat(deps.getStore(), chat.id, chat.roleIds)
+      const question = language() === 'en'
+        ? `Delete "${chat.name}"? Its messages and members are removed.${memoryCount ? ` The ${memoryCount} memory ${memoryCount === 1 ? 'item' : 'items'} saved for this group and its members will be deleted too.` : ''}`
+        : `确定删除「${chat.name}」吗？删除后这个群聊的消息和角色都会移除。${memoryCount ? `为这个群和它的成员保存的 ${memoryCount} 条记忆也会一并删除。` : ''}`
+      if (!window.confirm(question)) return
       deleteChat(chat.id).catch(error => deps.showError(error.message))
     })
-    menu.append(pin, rename, duplicate, exportRecord, clearMessages, closeFrames, remove)
+    menu.append(pin, rename, duplicate, exportRecord, memory, clearMessages, closeFrames, remove)
     return menu
   }
 
@@ -299,6 +316,7 @@ export function createChatListView(deps: ChatListViewDependencies): ChatListView
     const chat = nextStore.chatsById[chatId]
     if (!chat) throw new Error(`找不到群聊：${chatId}`)
 
+    deleteMemoryForChat(nextStore, chat.id, chat.roleIds)
     for (const roleId of chat.roleIds) delete nextStore.rolesById[roleId]
     for (const messageId of chat.messageIds) delete nextStore.messagesById[messageId]
     nextStore.chatOrder = nextStore.chatOrder.filter(id => id !== chat.id)

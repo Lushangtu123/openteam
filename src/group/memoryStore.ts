@@ -184,8 +184,22 @@ export function deleteMemoryItem(store: OpenTeamStore, id: string): boolean {
 
 // A deleted group takes its own items and its members' items with it. Returns how many went.
 export function deleteMemoryForChat(store: OpenTeamStore, chatId: string, roleIds: Iterable<string>): number {
+  return removeMemoryItems(store, belongsToChat(chatId, roleIds))
+}
+
+// How many items deleting the group would take with it: said before the user confirms.
+export function countMemoryForChat(store: Pick<OpenTeamStore, 'memoryItemsById' | 'memoryOrder'>, chatId: string, roleIds: Iterable<string>): number {
+  return listMemoryItems(store).filter(belongsToChat(chatId, roleIds)).length
+}
+
+// How many items removing the member would take with it.
+export function countMemoryForRole(store: Pick<OpenTeamStore, 'memoryItemsById' | 'memoryOrder'>, roleId: string): number {
+  return listMemoryItems(store).filter(item => item.scope === 'role' && item.scopeId === roleId).length
+}
+
+function belongsToChat(chatId: string, roleIds: Iterable<string>): (item: MemoryItem) => boolean {
   const members = new Set(roleIds)
-  return removeMemoryItems(store, item => (item.scope === 'chat' && item.scopeId === chatId) || (item.scope === 'role' && members.has(item.scopeId ?? '')))
+  return item => (item.scope === 'chat' && item.scopeId === chatId) || (item.scope === 'role' && members.has(item.scopeId ?? ''))
 }
 
 // A deleted member takes its own items with it. What it wrote and the user saved for the group

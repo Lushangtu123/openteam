@@ -5,6 +5,8 @@ import {
   MAX_MEMORY_TAGS,
   addMemoryItem,
   copyMemoryForChat,
+  countMemoryForChat,
+  countMemoryForRole,
   deleteMemoryForChat,
   deleteMemoryForRole,
   deleteMemoryItem,
@@ -274,6 +276,19 @@ describe('memory items and the groups and members they belong to', () => {
     expect(Object.keys(store.memoryItemsById ?? {}).sort()).toEqual(['carol-own', 'everywhere', 'other-group'])
     // A group that has none.
     expect(deleteMemoryForChat(store, 'chat-9', [])).toBe(0)
+  })
+
+  it('counts what deleting a group or a member would take, without taking it', () => {
+    const store = withItems()
+
+    expect(countMemoryForChat(store, 'chat-1', ['alice', 'bob'])).toBe(4)
+    expect(countMemoryForChat(store, 'chat-9', [])).toBe(0)
+    expect(countMemoryForRole(store, 'bob')).toBe(1)
+    expect(countMemoryForRole(store, 'nobody')).toBe(0)
+    expect(store.memoryOrder).toHaveLength(7)
+    // The counts are the numbers the deletions then report.
+    expect(deleteMemoryForRole(store, 'bob')).toBe(1)
+    expect(deleteMemoryForChat(store, 'chat-1', ['alice', 'bob'])).toBe(3)
   })
 
   it('removes a deleted member\'s own items only', () => {

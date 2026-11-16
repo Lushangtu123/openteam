@@ -23,6 +23,7 @@ import { createExternalModelHandlers } from './externalModelHandlers'
 import { ALL_SITES_DROPPED_AT_KEY, dropAllSitesAccess } from './allSitesAccess'
 import { restrictStorageToExtension } from './storageAccess'
 import { createInterruptedReplySweeper } from './interruptedReplies'
+import { createMemoryHandlers } from './memoryHandlers'
 import { requireApiModelAccess } from './apiModelAccess'
 import { createExternalModelClient, type ExternalModelClient } from './externalModelClient'
 import { createLocalAgentApprovals } from './localAgentApprovals'
@@ -218,6 +219,7 @@ const routeMessage = createMessageRouter([
   ...createChatHandlers({ broadcastStoreUpdated, getChatStatusFromRoles, imageAttachments: imageAttachmentRepository, log, newId, now, runtimeFrames }),
   { type: 'GROUP_SETTINGS_UPDATE', handler: handleSettingsUpdate },
   ...createBackupHandlers({ broadcastStoreUpdated, log, imageAttachments: imageAttachmentRepository }),
+  ...createMemoryHandlers({ broadcastStoreUpdated, log, now }),
   ...createExternalModelHandlers({ broadcastStoreUpdated, externalModelClient, checkLocalAgent, newId, now }),
   { type: 'LOCAL_AGENT_LIST', handler: async () => ({ ok: true, agents: await listLocalAgents() }) },
   {

@@ -64,6 +64,7 @@ describe('team page dom refs', () => {
       <button id="settings-ui-style-grok"></button>
       <button id="open-all-notes"></button>
       <button id="open-external-models"></button>
+      <button id="open-memory-panel"></button>
       <button id="open-orchestration"></button>
       <button id="close-orchestration"></button>
       <div id="orchestration-modal"></div>

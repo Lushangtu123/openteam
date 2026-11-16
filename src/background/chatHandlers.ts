@@ -150,6 +150,13 @@ export function createChatHandlers(deps: ChatHandlersDependencies): BackgroundMe
         patchKeys.push('pinned')
       }
 
+      // No memory items are sent to this chat's members.
+      if (patch.memoryDisabled !== undefined) {
+        if (patch.memoryDisabled) chat.memoryDisabled = true
+        else delete chat.memoryDisabled
+        patchKeys.push('memoryDisabled')
+      }
+
       // How members answer a message to several of them; 轮流讨论 and 互相审 are never both on.
       if (isCollaborationStyle(patch.collaborationStyle)) {
         applyCollaborationStyle(chat, patch.collaborationStyle)

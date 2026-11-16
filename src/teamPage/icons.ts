@@ -1,6 +1,6 @@
 // Line icons for buttons built in code, drawn like the ones in team.html (24-unit box, stroked with
 // the text color). Buttons use these instead of symbol characters such as × or ↻.
-export type IconName = 'close' | 'refresh' | 'external' | 'more' | 'prompt' | 'trash' | 'plus' | 'minus' | 'copy' | 'quote' | 'check' | 'stop' | 'retry' | 'edit' | 'download' | 'compare' | 'flag' | 'summary'
+export type IconName = 'close' | 'refresh' | 'external' | 'more' | 'prompt' | 'trash' | 'plus' | 'minus' | 'copy' | 'quote' | 'check' | 'stop' | 'retry' | 'edit' | 'download' | 'compare' | 'flag' | 'summary' | 'memory'
 
 const PATHS: Record<IconName, string[]> = {
   close: ['M6.5 6.5l11 11', 'M17.5 6.5l-11 11'],
@@ -21,6 +21,7 @@ const PATHS: Record<IconName, string[]> = {
   compare: ['M7 7.5h11', 'M15 4.5l3 3-3 3', 'M17 16.5H6', 'M9 13.5l-3 3 3 3'],
   flag: ['M6 20.5V4.5', 'M6 5h10.5l-2 3.5 2 3.5H6'],
   summary: ['M5 6.5h14', 'M5 11h14', 'M5 15.5h9', 'M5 20h5'],
+  memory: ['M7.5 4.5h9A1.5 1.5 0 0 1 18 6v13.5l-6-4-6 4V6a1.5 1.5 0 0 1 1.5-1.5Z'],
 }
 
 const SVG_NS = 'http://www.w3.org/2000/svg'

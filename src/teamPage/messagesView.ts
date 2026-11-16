@@ -15,7 +15,7 @@ import type { ImageAttachmentBlobRecord } from '../shared/imageAttachmentReposit
 import type { TeamPageState } from './appState'
 import { buildChatRenderItems, getChatStartupNotice, getStoppedReplyRoles, getVisibleThinkingRoles, THINKING_TIMEOUT_MS } from './chatExperience'
 
-type MessageActionIcon = 'copy' | 'quote' | 'jump' | 'check' | 'stop' | 'retry' | 'download' | 'edit'
+type MessageActionIcon = 'copy' | 'quote' | 'jump' | 'check' | 'stop' | 'retry' | 'download' | 'edit' | 'memory'
 
 const MAX_CACHED_MESSAGE_NODES = 400
 const COPY_FEEDBACK_MS = 1200
@@ -49,6 +49,8 @@ export interface MessagesViewDependencies {
   setReference(message: GroupMessage): void
   // Puts one of the user's messages back in the input box to be sent again.
   editAndResend?(message: GroupMessage): void
+  // Opens the window that saves a message's text to the memory store.
+  rememberMessage?(message: GroupMessage, opener: HTMLElement): void
   // Answers a choice at the end of a member's reply.
   answerChoice?(role: GroupRole, choice: ReplyChoice): void
   insertTextIntoActiveNote?(text: string): void
@@ -391,14 +393,17 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
       if (message.content.trim()) {
         tools.append(createMessageIconButton('引用回复', 'quote', () => deps.setReference(message)))
         tools.append(createMessageIconButton('复制回复', 'copy', button => handleCopyMessage(button, message)))
+        // A finished reply only: one still being written or one that failed is not worth keeping.
+        if (deps.rememberMessage && message.status === 'received') tools.append(createMessageIconButton('记住这条', 'memory', button => deps.rememberMessage?.(message, button)))
       }
       bubble.append(tools)
     }
 
-    if (message.type === 'user' && deps.editAndResend && !message.orchestrationKind && message.content.trim()) {
+    if (message.type === 'user' && !message.orchestrationKind && message.content.trim() && (deps.editAndResend || deps.rememberMessage)) {
       const tools = document.createElement('div')
       tools.className = 'message-tools'
-      tools.append(createMessageIconButton('编辑后重新发送', 'edit', () => deps.editAndResend?.(message)))
+      if (deps.editAndResend) tools.append(createMessageIconButton('编辑后重新发送', 'edit', () => deps.editAndResend?.(message)))
+      if (deps.rememberMessage) tools.append(createMessageIconButton('记住这条', 'memory', button => deps.rememberMessage?.(message, button)))
       bubble.append(tools)
     }
 

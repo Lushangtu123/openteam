@@ -1,5 +1,6 @@
 import { CHAT_SITES, chatSiteLabel, isChatSite } from '../group/chatSites'
 import { roleMentionLabel, roleMentionLabelOptionsFromSettings } from '../group/mentionParser'
+import { countMemoryForRole } from '../group/memoryStore'
 import type { ChatSite, ExternalModelConfig, GroupRole, OpenTeamStore, RoleModelSource, RoleStatus } from '../group/types'
 import { normalizeLanguage, translateUi } from '../shared/i18n'
 import type { TeamPageState } from './appState'
@@ -372,7 +373,12 @@ export function createRolePanelView(deps: RolePanelViewDependencies): RolePanelV
   }
 
   async function kickRoleFromChat(role: GroupRole): Promise<void> {
-    if (!window.confirm(`确定将「${role.name}」移出当前群聊吗？历史聊天记录会保留。`)) {
+    // The items kept for this member alone go with it; say how many before the user agrees.
+    const memoryCount = countMemoryForRole(deps.getStore(), role.id)
+    const question = language() === 'en'
+      ? `Remove "${role.name}" from this group? The chat history stays.${memoryCount ? ` The ${memoryCount} memory ${memoryCount === 1 ? 'item' : 'items'} saved for this member alone will be deleted.` : ''}`
+      : `确定将「${role.name}」移出当前群聊吗？历史聊天记录会保留。${memoryCount ? `只为这位成员保存的 ${memoryCount} 条记忆会一并删除。` : ''}`
+    if (!window.confirm(question)) {
       renderRolePanel()
       return
     }
