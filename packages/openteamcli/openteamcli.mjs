@@ -85,7 +85,8 @@ export function buildCliRequest(argv) {
     if (subcommand === 'search') return command('memory.search', {
       chatId: requireOption(options, 'chat'),
       ...parseRole(requireOption(options, 'role')),
-      ...(typeof options.query === 'string' ? { query: options.query } : positional(rest, 0) ? { query: positional(rest, 0) } : {}),
+      // Only --query: positional() would take an option's value (the chat id) for the query.
+      ...(typeof options.query === 'string' ? { query: options.query } : {}),
       ...(numberOption(options.limit) ? { limit: numberOption(options.limit) } : {}),
     })
     if (subcommand === 'add') {

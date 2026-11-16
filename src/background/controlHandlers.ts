@@ -303,6 +303,7 @@ function inferRepliesAfterTask(store: OpenTeamStore, chat: GroupChat, taskMessag
 // and 10): the items it may read, its pinned ones, and those a query brings up. This is so a tool
 // sees what the member sees; it is no barrier, since the same token reads the whole store.
 const MAX_MEMORY_SEARCH_LIMIT = 50
+const MEMORY_KINDS = ['fact', 'decision', 'preference', 'note']
 
 function searchMemory(payload: unknown, store: OpenTeamStore): unknown {
   const input = requireRecord(payload, '缺少记忆查询参数')
@@ -332,6 +333,8 @@ async function addMemory(payload: unknown, store: OpenTeamStore, deps: ControlAc
   const input = requireRecord(payload, '缺少记忆参数')
   const scope = readString(input.scope)
   if (scope !== 'global' && scope !== 'chat' && scope !== 'role') throw new Error('缺少记忆范围：global（全部群聊）、chat（本群）或 role（本群的一位成员）')
+  const kind = readString(input.kind) ?? 'fact'
+  if (!MEMORY_KINDS.includes(kind)) throw new Error(`记忆类型只能是 ${MEMORY_KINDS.join('、')}，不是「${kind}」`)
   let scopeId: string | undefined
   if (scope !== 'global') {
     const chat = requireChatIn(store, requireString(input.chatId, '缺少群聊 ID'))
@@ -342,7 +345,7 @@ async function addMemory(payload: unknown, store: OpenTeamStore, deps: ControlAc
     item: {
       scope,
       ...(scopeId ? { scopeId } : {}),
-      kind: readString(input.kind) ?? 'fact',
+      kind,
       content: typeof input.content === 'string' ? input.content : '',
       ...(Array.isArray(input.tags) ? { tags: input.tags } : {}),
       ...(typeof input.pinned === 'boolean' ? { pinned: input.pinned } : {}),

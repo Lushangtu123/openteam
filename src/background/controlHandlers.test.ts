@@ -276,6 +276,7 @@ describe('memory through the control interface', () => {
     expect((await run('memory.add', { content: '内容' })).error?.message).toBe('缺少记忆范围：global（全部群聊）、chat（本群）或 role（本群的一位成员）')
     expect((await run('memory.add', { scope: 'chat', content: '内容' })).error?.message).toBe('缺少群聊 ID')
     expect((await run('memory.add', { scope: 'role', chatId: 'chat-1', content: '内容' })).error?.message).toBe('缺少成员：用 roleId 或 roleName 指定')
+    expect((await run('memory.add', { scope: 'global', kind: '想法', content: '内容' })).error?.message).toBe('记忆类型只能是 fact、decision、preference、note，不是「想法」')
     expect(routeRuntimeMessage).not.toHaveBeenCalled()
   })
 

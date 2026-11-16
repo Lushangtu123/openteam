@@ -44,9 +44,11 @@ describe('openteamcli command builder', () => {
       kind: 'command',
       command: { action: 'memory.search', payload: { chatId: 'chat-1', roleName: '后端', query: '数据库' } },
     })
-    expect(buildCliRequest(['memory', 'search', '数据库', '--chat', 'chat-1', '--role', 'role:role-be', '--limit', '3'])).toMatchObject({
-      command: { action: 'memory.search', payload: { chatId: 'chat-1', roleId: 'role-be', query: '数据库', limit: 3 } },
+    expect(buildCliRequest(['memory', 'search', '--chat', 'chat-1', '--role', 'role:role-be', '--limit', '3'])).toMatchObject({
+      command: { action: 'memory.search', payload: { chatId: 'chat-1', roleId: 'role-be', limit: 3 } },
     })
+    // Without --query nothing else is taken for one, not the chat id either.
+    expect(buildCliRequest(['memory', 'search', '--chat', 'chat-1', '--role', 'name:后端']).command.payload).toEqual({ chatId: 'chat-1', roleName: '后端' })
     expect(buildCliRequest(['memory', 'add', '--scope', 'chat', '--chat', 'chat-1', '--kind', 'decision', '--content', '数据库用 PostgreSQL', '--tags', '数据库，后端', '--pinned'])).toMatchObject({
       command: { action: 'memory.add', payload: { scope: 'chat', chatId: 'chat-1', kind: 'decision', content: '数据库用 PostgreSQL', tags: ['数据库', '后端'], pinned: true } },
     })
