@@ -3,6 +3,7 @@
 // ever saved on its own (docs/MEMORY_STORE.zh-CN.md, section 6).
 import { MAX_MEMORY_CONTENT_CHARS, MAX_MEMORY_ITEMS, MAX_MEMORY_TAGS, addMemoryItem, deleteMemoryItem, updateMemoryItem, type MemoryItemPatch, type MemoryWriteError } from '../group/memoryStore'
 import { resolveMemoryProposal } from '../group/memoryProposals'
+import { isRoundSummaryMessage } from '../group/roundSummary'
 import type { MemoryKind, MemoryScope, MemorySource, OpenTeamStore } from '../group/types'
 import type { BackgroundMessageRoute } from './messageRouter'
 import type { RuntimeMessage } from './runtimeClient'
@@ -38,7 +39,7 @@ export function createMemoryHandlers(deps: MemoryHandlersDependencies): Backgrou
         content: typeof input.content === 'string' ? input.content : '',
         ...(Array.isArray(input.tags) ? { tags: input.tags as string[] } : {}),
         ...(typeof input.pinned === 'boolean' ? { pinned: input.pinned } : {}),
-        source: sourceOf(store, input.messageId),
+        source: sourceOf(store, input.messageId, input.adopted === true),
       }, deps.now())
       if (!saved.ok) throw new Error(WRITE_ERRORS[saved.error])
       // Saved from a member's proposal: the proposal is answered and leaves its message.
@@ -95,11 +96,13 @@ export function createMemoryHandlers(deps: MemoryHandlersDependencies): Backgrou
 
 // Who wrote the text: read from the message the item is saved from, not taken from the page's
 // word, since it decides which members of an 独立 group may read the item. An item that comes
-// from no message is the user's own.
-function sourceOf(store: OpenTeamStore, messageId: unknown): MemorySource {
+// from no message is the user's own. So is a round's summary the user adopts as a decision: it
+// is meant for every member, and it is the user who decides; any other reply stays its member's.
+function sourceOf(store: OpenTeamStore, messageId: unknown, adopted: boolean): MemorySource {
   if (typeof messageId !== 'string' || !messageId) return { origin: 'user' }
   const message = store.messagesById[messageId]
   if (!message) throw new Error('找不到这条消息，可能已被删除')
+  if (adopted && isRoundSummaryMessage(message, id => store.messagesById[id])) return { origin: 'user', chatId: message.chatId, messageId }
   if (message.type === 'assistant') return { origin: 'member', ...(message.roleId ? { roleId: message.roleId } : {}), chatId: message.chatId, messageId }
   return { origin: 'user', chatId: message.chatId, messageId }
 }

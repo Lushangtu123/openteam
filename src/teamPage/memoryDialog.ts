@@ -4,6 +4,7 @@
 import { MAX_MEMORY_CONTENT_CHARS, MAX_MEMORY_TAGS, memoryContentLength } from '../group/memoryStore'
 import type { GroupChat, GroupMessage, MemoryItem, MemoryKind, MemoryProposal, MemoryScope, MemorySource, OpenTeamStore } from '../group/types'
 import { normalizeLanguage, translateUi } from '../shared/i18n'
+import { adoptedSummaryText } from '../group/roundSummary'
 import { createIcon } from './icons'
 
 export interface MemoryDialogDependencies {
@@ -19,6 +20,9 @@ export interface MemoryDialogInput {
   // Saving what the member proposed at the end of that message: the proposal's text and kind are
   // offered instead of the whole reply, and saving answers the proposal.
   proposal?: MemoryProposal
+  // Adopting this round summary as a decision: its agreed points are offered, and the item is the
+  // user's, so every member of the group gets it.
+  adopt?: boolean
   // Editing this item.
   item?: MemoryItem
   // The group the window was opened in, offered as "this group".
@@ -79,14 +83,19 @@ export function openMemoryDialog(input: MemoryDialogInput, deps: MemoryDialogDep
   const itemChatId = editing?.scope === 'chat' ? editing.scopeId : editing?.scope === 'role' ? store.rolesById[editing.scopeId ?? '']?.chatId : undefined
   const chat = store.chatsById[itemChatId ?? input.message?.chatId ?? input.chatId ?? '']
   const members = chat ? chat.roleIds.map(id => store.rolesById[id]).filter(Boolean) : []
+  const adopting = Boolean(input.adopt && input.message && !editing)
   const source: Pick<MemorySource, 'origin' | 'roleId'> = editing?.source
-    ?? (input.message?.type === 'assistant' ? { origin: 'member', roleId: input.message.roleId } : { origin: 'user' })
-  const offered = [...(input.proposal?.content ?? input.message?.content.trim() ?? '')]
+    ?? (input.message?.type === 'assistant' && !adopting ? { origin: 'member', roleId: input.message.roleId } : { origin: 'user' })
+  const summaryRequest = adopting ? store.messagesById[input.message?.sourceMessageId ?? ''] : undefined
+  const asked = summaryRequest?.roundSummaryOf ? store.messagesById[summaryRequest.roundSummaryOf] : undefined
+  const offered = [...(adopting
+    ? adoptedSummaryText(asked?.content, input.message?.content ?? '', store.settings.language)
+    : input.proposal?.content ?? input.message?.content.trim() ?? '')]
   const cut = offered.length > MAX_MEMORY_CONTENT_CHARS
 
   const draft = {
     content: editing?.content ?? offered.slice(0, MAX_MEMORY_CONTENT_CHARS).join(''),
-    kind: editing?.kind ?? input.proposal?.kind ?? 'fact' as MemoryKind,
+    kind: editing?.kind ?? input.proposal?.kind ?? (adopting ? 'decision' : 'fact') as MemoryKind,
     scope: editing?.scope ?? (chat ? 'chat' : 'global') as MemoryScope,
     roleId: (editing?.scope === 'role' ? editing.scopeId : undefined) ?? (input.message?.type === 'assistant' ? input.message.roleId : undefined) ?? members[0]?.id,
     pinned: editing ? Boolean(editing.pinned) : false,
@@ -107,9 +116,11 @@ export function openMemoryDialog(input: MemoryDialogInput, deps: MemoryDialogDep
 
   const header = element('div', 'modal-header')
   const heading = element('div')
-  const title = element('h2', '', editing ? t('编辑记忆', 'Edit memory') : t('保存到记忆库', 'Save to memory'))
+  const title = element('h2', '', editing ? t('编辑记忆', 'Edit memory') : adopting ? t('采纳为决定', 'Adopt as a decision') : t('保存到记忆库', 'Save to memory'))
   title.id = 'memory-dialog-title'
-  heading.append(title, element('p', 'tiny', t('成员在相关的问题里会读到它。只有你保存的内容才会进记忆库。', 'Members read it when a question brings it up. Only what you save goes into memory.')))
+  heading.append(title, element('p', 'tiny', adopting
+    ? t('把汇总里大家同意的结论存成你的决定，成员在相关的问题里会读到它。分歧要你来定的，可以直接改写下面的内容。', 'Save what everyone agreed on as your decision; members read it when a question brings it up. Where they disagreed and it is yours to decide, rewrite the text below.')
+    : t('成员在相关的问题里会读到它。只有你保存的内容才会进记忆库。', 'Members read it when a question brings it up. Only what you save goes into memory.')))
   const closeButton = element('button', 'icon-btn modal-close')
   closeButton.type = 'button'
   closeButton.setAttribute('aria-label', t('关闭', 'Close'))
@@ -275,7 +286,7 @@ export function openMemoryDialog(input: MemoryDialogInput, deps: MemoryDialogDep
         const patch = changedFields(editing, fields)
         if (Object.keys(patch).length > 0) await deps.runCommand('GROUP_MEMORY_UPDATE', { itemId: editing.id, patch })
       } else {
-        await deps.runCommand('GROUP_MEMORY_ADD', { item: { ...fields, ...(input.message ? { messageId: input.message.id } : {}), ...(input.message && input.proposal ? { proposalId: input.proposal.id } : {}) } })
+        await deps.runCommand('GROUP_MEMORY_ADD', { item: { ...fields, ...(input.message ? { messageId: input.message.id } : {}), ...(input.message && input.proposal ? { proposalId: input.proposal.id } : {}), ...(adopting ? { adopted: true } : {}) } })
       }
       close(true)
     } catch (caught) {

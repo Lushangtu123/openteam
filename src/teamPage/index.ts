@@ -508,6 +508,7 @@ const messagesView = createMessagesView({
   setReference,
   editAndResend: message => composerView.editMessage(message),
   rememberMessage: (message, opener) => openMemoryDialog({ message, chatId: message.chatId }, { getStore: () => store, runCommand, onClose: () => { if (opener.isConnected) opener.focus() } }),
+  adoptSummary: (message, opener) => openMemoryDialog({ message, adopt: true, chatId: message.chatId }, { getStore: () => store, runCommand, onClose: () => { if (opener.isConnected) opener.focus() } }),
   rememberProposal: (message, proposal, opener) => openMemoryDialog({ message, proposal, chatId: message.chatId }, { getStore: () => store, runCommand, onClose: () => { if (opener.isConnected) opener.focus() } }),
   answerChoice: (role, choice) => {
     composerView.sendToRole(role, replyChoiceAnswer(choice, store.settings.language === 'en' ? 'en' : 'zh-CN'))

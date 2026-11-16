@@ -122,6 +122,8 @@ const UI_TRANSLATIONS: Record<string, string> = {
   '连不上成员的网页（它可能已关闭或刷新）。请在成员卡片的菜单里点「刷新网页」后再试。': 'Cannot reach the member\'s page (it may have been closed or reloaded). Choose Reload page in the member card\'s menu, then try again.',
   'OpenTeam 后台暂时没有响应（扩展可能刚重新加载）。请刷新本页后再试。': 'OpenTeam\'s background is not responding (the extension may have just been reloaded). Reload this page, then try again.',
   '记住这条': 'Remember this',
+  '采纳为决定': 'Adopt as a decision',
+  '采纳': 'Adopt',
   '关闭本群记忆': 'Switch off memory here',
   '开启本群记忆': 'Switch on memory here',
   '记忆内容不能为空': 'The memory item has no text',

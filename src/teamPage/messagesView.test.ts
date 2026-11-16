@@ -1504,6 +1504,50 @@ describe('team page messages view boundary', () => {
     expect(messagesEl.querySelector('.memory-proposals')?.textContent).toBe('Save to memory?Decision数据库用 PostgreSQL 15。Save…Dismiss')
   })
 
+  it('offers to adopt a round summary as a decision, and only a summary', () => {
+    const now = Date.now()
+    const chat: GroupChat = { id: 'chat-1', name: '群聊', mode: 'collaborative', roleIds: [], messageIds: ['q', 'a', 'sq', 's'], nextMessageSeq: 5, status: 'ready', createdAt: now, updatedAt: now }
+    const messages: GroupMessage[] = [
+      { id: 'q', chatId: chat.id, seq: 1, type: 'user', content: '数据库怎么选？', createdAt: now, status: 'received' },
+      { id: 'a', chatId: chat.id, seq: 2, type: 'assistant', roleName: 'Kimi', content: '用 PostgreSQL', sourceMessageId: 'q', createdAt: now, status: 'received' },
+      { id: 'sq', chatId: chat.id, seq: 3, type: 'user', content: '汇总本轮回复', roundSummaryOf: 'q', targetRoleIds: [], createdAt: now, status: 'received' },
+      { id: 's', chatId: chat.id, seq: 4, type: 'assistant', roleName: 'Kimi', content: '**共识**\n- 用 PostgreSQL', sourceMessageId: 'sq', createdAt: now, status: 'received' },
+    ]
+    const store: OpenTeamStore = { ...createDefaultStore(), currentChatId: chat.id, chatOrder: [chat.id], chatsById: { [chat.id]: chat }, messagesById: Object.fromEntries(messages.map(message => [message.id, message])) }
+    const adoptSummary = vi.fn()
+    const messagesEl = document.createElement('section')
+    const view = createMessagesView({
+      state: createTeamPageState(),
+      getStore: () => store,
+      messagesEl,
+      getCurrentChat: () => chat,
+      getCurrentRoles: () => [],
+      getCurrentMessages: () => messages,
+      emptyCard: () => document.createElement('div'),
+      openAddPersonDialog: vi.fn(),
+      messageTitle: message => message.roleName ?? '你',
+      focusRoleFrame: vi.fn(),
+      insertMention: vi.fn(),
+      setReference: vi.fn(),
+      adoptSummary,
+      resyncMessageReply: vi.fn(async () => undefined),
+      retryRoleReply: vi.fn(async () => undefined),
+      stopRoleReply: vi.fn(async () => undefined),
+      runCommand: vi.fn(async () => undefined),
+      render: vi.fn(),
+      showError: vi.fn(),
+      showSuccess: vi.fn(),
+      log: { warn: vi.fn() },
+    })
+
+    view.renderMessages()
+    const buttons = [...messagesEl.querySelectorAll<HTMLButtonElement>('[aria-label="采纳为决定"]')]
+    expect(buttons).toHaveLength(1)
+    expect(buttons[0].textContent).toBe('采纳')
+    buttons[0].click()
+    expect(adoptSummary).toHaveBeenCalledWith(messages[3], buttons[0])
+  })
+
   it("shows a web member's reply as it is written in its replying row", () => {
     // Shown at once: these check what is shown, not how it flows in (see streamingReveal.test.ts).
     vi.stubGlobal('matchMedia', () => ({ matches: true }))

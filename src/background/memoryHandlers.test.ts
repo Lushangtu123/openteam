@@ -44,6 +44,21 @@ describe('background memory handlers', () => {
     expect(broadcastStoreUpdated).toHaveBeenCalledTimes(3)
   })
 
+  it('saves a summary the user adopts as the user\'s, and any other reply as its member\'s', async () => {
+    const { run, items, store } = await setup()
+    store.messagesById.sq = { id: 'sq', chatId: 'chat-1', seq: 3, type: 'user', content: '汇总本轮回复', roundSummaryOf: 'q', targetRoleIds: ['role-1'], createdAt: 3, status: 'received' }
+    store.messagesById.s = { id: 's', chatId: 'chat-1', seq: 4, type: 'assistant', content: '**共识**\n- 用 Go', roleId: 'role-1', roleName: '工程师', sourceMessageId: 'sq', createdAt: 4, status: 'received' }
+
+    await run('GROUP_MEMORY_ADD', { item: { scope: 'chat', scopeId: 'chat-1', kind: 'decision', content: '关于「后端用什么写？」：用 Go。', messageId: 's', adopted: true } })
+    expect(items()[0].source).toEqual({ origin: 'user', chatId: 'chat-1', messageId: 's' })
+    // Not adopted: the summary is its writer's, like any reply.
+    await run('GROUP_MEMORY_ADD', { item: { scope: 'chat', scopeId: 'chat-1', kind: 'note', content: '汇总原文', messageId: 's' } })
+    expect(items()[0].source).toEqual({ origin: 'member', roleId: 'role-1', chatId: 'chat-1', messageId: 's' })
+    // An ordinary reply cannot be made the user's by saying so.
+    await run('GROUP_MEMORY_ADD', { item: { scope: 'chat', scopeId: 'chat-1', kind: 'fact', content: '用 Go，数据库 PostgreSQL 15。', messageId: 'a', adopted: true } })
+    expect(items()[0].source).toEqual({ origin: 'member', roleId: 'role-1', chatId: 'chat-1', messageId: 'a' })
+  })
+
   it('says what is wrong with an item it does not save', async () => {
     const { run, items } = await setup()
     const add = (item: Record<string, unknown>) => run('GROUP_MEMORY_ADD', { item })

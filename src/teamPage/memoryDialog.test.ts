@@ -129,6 +129,23 @@ describe('save-to-memory window', () => {
     }))
   })
 
+  it('adopts a round summary: its agreed points, as a decision, the user\'s, for every member', async () => {
+    const store = makeStore('zh-CN', 'independent')
+    store.messagesById.q = { id: 'q', chatId: 'c1', seq: 3, type: 'user', content: '数据库怎么选？', createdAt: 3, status: 'received' } as GroupMessage
+    store.messagesById.sq = { id: 'sq', chatId: 'c1', seq: 4, type: 'user', content: '汇总本轮回复', roundSummaryOf: 'q', createdAt: 4, status: 'received' } as GroupMessage
+    store.messagesById.s = { id: 's', chatId: 'c1', seq: 5, type: 'assistant', roleId: 'r2', content: '**共识**\n- 用 PostgreSQL 15\n**分歧**\n- 无明显分歧', sourceMessageId: 'sq', createdAt: 5, status: 'received' } as GroupMessage
+    const { $, save, runCommand } = open({ message: store.messagesById.s, adopt: true, chatId: 'c1' }, store)
+    expect($('#memory-dialog-title').textContent).toBe('采纳为决定')
+    expect($<HTMLTextAreaElement>('#memory-content').value).toBe('关于「数据库怎么选？」：用 PostgreSQL 15。')
+    expect($<HTMLSelectElement>('#memory-kind').value).toBe('decision')
+    // The user's, so in this independent group every member gets it, not only the summarizer.
+    expect($('.memory-dialog-recipients').textContent).toBe('会发给：「选型群」的成员：「DeepSeek」、「Kimi」。')
+    save()
+    await vi.waitFor(() => expect(runCommand).toHaveBeenCalledWith('GROUP_MEMORY_ADD', {
+      item: { scope: 'chat', scopeId: 'c1', kind: 'decision', content: '关于「数据库怎么选？」：用 PostgreSQL 15。', tags: [], pinned: false, messageId: 's', adopted: true },
+    }))
+  })
+
   it('offers the member who wrote the reply when the item is for one member', () => {
     const store = makeStore()
     const { $, pickScope } = open({ message: store.messagesById.m2 }, store)

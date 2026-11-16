@@ -196,6 +196,38 @@ export function buildRoundSummaryPrompt(input: {
   ].join('\n\n')
 }
 
+// Adopting a summary's conclusions as a decision the members remember (the memory store).
+// The summary is asked for in a set form; its "agreed" section is the part to keep.
+const SUMMARY_HEADING = /^\s*(?:#{1,6}\s*)?(?:\*\*|__)?\s*(共识|分歧|待定问题|建议下一步|Agreed|Disagreements|Open questions|Suggested next step)\s*(?:\*\*|__)?\s*[:：]?\s*$/i
+const NOTHING = /^(无|没有|暂无|none|nothing|n\/a)[。.]?$/i
+
+// The points under the summary's "agreed" heading, without list marks and markdown.
+export function summaryConsensus(content: string): string[] {
+  const lines = content.replace(/\r\n?/g, '\n').split('\n')
+  const start = lines.findIndex(line => /^(共识|agreed)$/i.test(SUMMARY_HEADING.exec(line)?.[1] ?? ''))
+  if (start < 0) return []
+  const points: string[] = []
+  for (const line of lines.slice(start + 1)) {
+    if (SUMMARY_HEADING.test(line)) break
+    const point = line.replace(/^\s*(?:[-*+]|\d+[.)、])\s+/, '').replace(/\*\*(.+?)\*\*/g, '$1').replace(/`([^`]+)`/g, '$1').trim()
+    if (point && !NOTHING.test(point)) points.push(point)
+  }
+  return points
+}
+
+// The decision text offered when the user adopts a summary: what was asked, and what everyone agreed
+// on; the whole summary when it has no agreed points.
+export function adoptedSummaryText(question: string | undefined, summary: string, languageInput: OpenTeamLanguage | undefined): string {
+  const en = normalizeLanguage(languageInput) === 'en'
+  const points = summaryConsensus(summary)
+  const topic = (question ?? '').replace(/\s+/g, ' ').trim()
+  const shortTopic = [...topic].length > 60 ? `${[...topic].slice(0, 60).join('')}…` : topic
+  if (points.length === 0) return summary.trim()
+  const joined = points.map(point => point.replace(/[。.；;]+$/, '')).join(en ? '; ' : '；')
+  if (!shortTopic) return en ? `${joined}.` : `${joined}。`
+  return en ? `On "${shortTopic}": ${joined}.` : `关于「${shortTopic}」：${joined}。`
+}
+
 export function trimRoundReply(content: string, maxChars: number, en: boolean): string {
   const text = content.trim()
   if (text.length <= maxChars) return text

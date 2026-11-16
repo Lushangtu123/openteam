@@ -54,6 +54,8 @@ export interface MessagesViewDependencies {
   rememberMessage?(message: GroupMessage, opener: HTMLElement): void
   // Opens that window on something the member proposed to remember at the end of this reply.
   rememberProposal?(message: GroupMessage, proposal: MemoryProposal, opener: HTMLElement): void
+  // Opens that window on a round summary's agreed points, to keep them as the user's decision.
+  adoptSummary?(message: GroupMessage, opener: HTMLElement): void
   // Answers a choice at the end of a member's reply.
   answerChoice?(role: GroupRole, choice: ReplyChoice): void
   insertTextIntoActiveNote?(text: string): void
@@ -398,6 +400,10 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
         tools.append(createMessageIconButton('复制回复', 'copy', button => handleCopyMessage(button, message)))
         // A finished reply only: one still being written or one that failed is not worth keeping.
         if (deps.rememberMessage && message.status === 'received') tools.append(createMessageIconButton('记住这条', 'memory', button => deps.rememberMessage?.(message, button)))
+        // A round's summary can be kept as a decision every member of the group gets.
+        if (deps.adoptSummary && message.status === 'received' && isRoundSummaryReply(message)) {
+          tools.append(createMessageIconButton('采纳为决定', 'check', button => deps.adoptSummary?.(message, button), { text: '采纳' }))
+        }
       }
       bubble.append(tools)
     }

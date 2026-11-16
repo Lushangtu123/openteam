@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { getUnsyncedMessagesForRole } from './contextSync'
-import { buildRoundSummaryPrompt, hasRoundSummary, isKeyPointsHeading, isRoundSummaryMessage, keyPointsInstruction, pickSummarizer, readSummarizableRound, wantsKeyPoints } from './roundSummary'
+import { buildRoundSummaryPrompt, hasRoundSummary, isKeyPointsHeading, isRoundSummaryMessage, keyPointsInstruction, pickSummarizer, readSummarizableRound, wantsKeyPoints, adoptedSummaryText, summaryConsensus } from './roundSummary'
 import { createDefaultStore } from './store'
 import type { GroupChat, GroupMessage, GroupRole, OpenTeamStore } from './types'
 
@@ -135,5 +135,43 @@ describe('round summaries', () => {
     // 产品 was not asked the first question; 设计师 was, and sees everything but the summary.
     expect(getUnsyncedMessagesForRole(chat, store.rolesById.c, messages, next).map(message => message.id)).toEqual(['r1', 'r2'])
     expect(getUnsyncedMessagesForRole(chat, store.rolesById.b, messages, next).map(message => message.id)).toEqual(['q1', 'r1'])
+  })
+})
+
+describe('adopting a summary as a decision', () => {
+  const summary = [
+    '**共识**',
+    '- 普通年份能被 4 整除即为闰年。',
+    '- 世纪年份必须能被 **400** 整除才是闰年；',
+    '',
+    '**分歧**',
+    '- 无明显分歧',
+    '**待定问题**',
+    '- 无',
+    '**建议下一步**',
+    '- 写成口诀方便记忆',
+  ].join('\n')
+
+  it('reads the agreed points only, without list marks or markdown', () => {
+    expect(summaryConsensus(summary)).toEqual(['普通年份能被 4 整除即为闰年。', '世纪年份必须能被 400 整除才是闰年；'])
+    // The ways sites write the headings.
+    expect(summaryConsensus('### 共识：\n1. 用 PostgreSQL\n2) 主键用 UUID\n### 分歧\n- 甲：MySQL')).toEqual(['用 PostgreSQL', '主键用 UUID'])
+    expect(summaryConsensus('**Agreed**\n- Ship on Friday\n**Disagreements**\n- None')).toEqual(['Ship on Friday'])
+    // Nothing agreed, or no such section.
+    expect(summaryConsensus('**共识**\n- 无\n**分歧**\n- 甲和乙意见相反')).toEqual([])
+    expect(summaryConsensus('大家说法不一。')).toEqual([])
+  })
+
+  it('offers what was asked and what everyone agreed on, as one sentence', () => {
+    expect(adoptedSummaryText('闰年怎么规定？', summary, 'zh-CN')).toBe('关于「闰年怎么规定？」：普通年份能被 4 整除即为闰年；世纪年份必须能被 400 整除才是闰年。')
+    expect(adoptedSummaryText('When do we ship?', '**Agreed**\n- Ship on Friday.\n- Freeze on Wednesday', 'en')).toBe('On "When do we ship?": Ship on Friday; Freeze on Wednesday.')
+    // A long question is cut; no question, no prefix.
+    expect(adoptedSummaryText('问'.repeat(80), summary, 'zh-CN')).toMatch(/^关于「问{60}…」：/)
+    expect(adoptedSummaryText(undefined, summary, 'zh-CN')).toBe('普通年份能被 4 整除即为闰年；世纪年份必须能被 400 整除才是闰年。')
+  })
+
+  it('offers the whole summary when nothing was agreed, for the user to cut down', () => {
+    const disputed = '**共识**\n- 无\n**分歧**\n- 甲：先做 A；乙：先做 B'
+    expect(adoptedSummaryText('先做哪个？', disputed, 'zh-CN')).toBe(disputed)
   })
 })
