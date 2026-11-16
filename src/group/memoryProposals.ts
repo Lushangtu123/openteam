@@ -29,8 +29,8 @@ export function wantsMemoryProposals(settings: Pick<OpenTeamSettings, 'memoryPro
 
 export function memoryProposalInstruction(languageInput: OpenTeamLanguage | undefined): string {
   return normalizeLanguage(languageInput) === 'en'
-    ? `If this reply reaches something worth keeping for later work (a fact, a decision, or a preference of the user's), you may end the reply with a line of its own: "Memory proposal (fact): one sentence". The kind is fact, decision, preference or note; at most ${MAX_MEMORY_PROPOSALS} such lines, each under 60 words. The user decides whether to save it. Write none when there is nothing worth keeping.`
-    : `如果这次回复里有值得长期记住的内容（事实、决定，或用户的偏好），可以在回复的最后另起一行写「记忆提议（事实）：一句话内容」。类型写 事实、决定、偏好 或 备注；最多 ${MAX_MEMORY_PROPOSALS} 行，每行不超过 100 字。是否保存由用户决定。没有值得记的就不要写。`
+    ? `If this reply reaches something worth keeping for later work (a fact, a decision, or a preference of the user's), you may end the reply with a line of its own: "Memory proposal (fact): one sentence". The kind is fact, decision, preference or note; at most ${MAX_MEMORY_PROPOSALS} such lines, each under 60 words. The user decides whether to save it. Do not propose what the memory store already holds, and write none when there is nothing worth keeping.`
+    : `如果这次回复里有值得长期记住的内容（事实、决定，或用户的偏好），可以在回复的最后另起一行写「记忆提议（事实）：一句话内容」。类型写 事实、决定、偏好 或 备注；最多 ${MAX_MEMORY_PROPOSALS} 行，每行不超过 100 字。是否保存由用户决定。记忆库里已经有的不要再提；没有值得记的就不要写。`
 }
 
 export function withMemoryProposalInstruction(prompt: string, wanted: boolean, language: OpenTeamLanguage | undefined): string {

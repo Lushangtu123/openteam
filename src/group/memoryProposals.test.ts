@@ -85,6 +85,9 @@ describe('which requests ask for proposals', () => {
     expect(withMemoryProposalInstruction('提示词', true, 'zh-CN')).toBe(`提示词\n\n${memoryProposalInstruction('zh-CN')}`)
     expect(memoryProposalInstruction('zh-CN')).toContain('记忆提议（事实）：')
     expect(memoryProposalInstruction('en')).toContain('Memory proposal (fact):')
+    // A member that was sent an item should not hand it back in other words.
+    expect(memoryProposalInstruction('zh-CN')).toContain('记忆库里已经有的不要再提')
+    expect(memoryProposalInstruction('en')).toContain('Do not propose what the memory store already holds')
     // What the instruction shows is what the reader accepts.
     expect(extractMemoryProposals('ok\n记忆提议（事实）：一句话内容').proposals).toHaveLength(1)
     expect(extractMemoryProposals('ok\nMemory proposal (fact): one sentence').proposals).toHaveLength(1)
