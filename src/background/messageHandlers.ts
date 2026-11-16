@@ -8,6 +8,7 @@ import { isProjectActive } from '../group/project'
 import { REPLY_STUCK_AFTER_MS } from '../group/replyTiming'
 import { updateUserMessageDeliveryStatus } from '../group/deliveryStatus'
 import { confirmMemorySent, forgetMemorySent } from '../group/memoryPrompt'
+import { extractMemoryProposals, takeMemoryProposals } from '../group/memoryProposals'
 import { settleInterruptedReplies, textReadBeforeInterruption, type InterruptedReplyScope } from './interruptedReplies'
 import { createProjectRunner } from './projectRunner'
 import { chooseNextSpeaker, discussionMaxTurns, discussionTranscript, discussionTurnRequestText, DISCUSSION_MAX_FAILED_TURNS, isDiscussionRunning, startsDiscussion, turnCountsOf } from '../group/discussion'
@@ -1206,7 +1207,10 @@ export function createMessageHandlers(baseDeps: MessageHandlersDependencies): Ba
         // Read from the wrong place on the page: not taken as the reply, which fails instead, so it
         // can be synced again.
         const previousReply = [...chat.messageIds].reverse().map(id => store.messagesById[id]).find(item => item?.type === 'assistant' && item.roleId === role.id && item.status === 'received')
-        const misread = promptMessageId && images.length === 0 ? misreadReplyReason(content, previousReply?.content) : undefined
+        // The previous reply is kept without its memory proposals, so the text is compared that way too.
+        const misread = promptMessageId && images.length === 0
+          ? misreadReplyReason(content, previousReply?.content) ?? misreadReplyReason(extractMemoryProposals(content).content, previousReply?.content)
+          : undefined
         if (misread && promptMessageId) {
           const reason = `没有读到它真正的回复（${misread}），可以点「重新同步完整回复」再读一次`
           upsertFailedAssistantAfterPrompt(store, chat, role, promptMessageId, reason, timestamp, deps.newId)
@@ -1242,6 +1246,8 @@ export function createMessageHandlers(baseDeps: MessageHandlersDependencies): Ba
           status: 'received',
         }
         store.messagesById[reply.id] = reply
+        // What the member proposed to remember leaves the reply's text and waits beside it.
+        takeMemoryProposals(store, chat, reply, deps.newId)
         chat.messageIds.push(reply.id)
         chat.nextMessageSeq += 1
         markChatHasNewMessage(store, chat)
@@ -1355,6 +1361,7 @@ export function createMessageHandlers(baseDeps: MessageHandlersDependencies): Ba
         assistantMessage.contentFormat = contentFormat
         assistantMessage.attachments = attachments.length > 0 ? attachments : undefined
         assistantMessage.status = 'received'
+        takeMemoryProposals(store, chat, assistantMessage, deps.newId)
         // A reply that had not been read (it was interrupted) counts as received once read in full.
         const question = assistantMessage.sourceMessageId ? store.messagesById[assistantMessage.sourceMessageId] : undefined
         if (question?.deliveryStatus?.[role.id] === 'error') {
@@ -2000,6 +2007,7 @@ async function finishExternalAssistantReply(
       if (!isAssistantMessageForRole(reply, chat, role)) return { ignored: true as const, reason: 'reply-message-not-found' }
       reply.content = content
       reply.status = 'received'
+      takeMemoryProposals(store, chat, reply, deps.newId)
       delete reply.retry
       if (usage) reply.usage = usage
       markChatHasNewMessage(store, chat)

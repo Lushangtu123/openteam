@@ -817,6 +817,7 @@ function normalizeSettings(raw: unknown, storedVersion = CURRENT_STORE_VERSION):
     ...(teamHandbooks.length ? { teamHandbooks } : {}),
     ...(raw.replyNotifications === false ? { replyNotifications: false } : {}),
     ...(raw.replyKeyPoints === false ? { replyKeyPoints: false } : {}),
+    ...(raw.memoryProposals === true ? { memoryProposals: true } : {}),
     ...(raw.roundSummary === false ? { roundSummary: false } : {}),
     ...newChatCollaborationSetting(raw.newChatCollaboration),
   }

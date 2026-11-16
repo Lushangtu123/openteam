@@ -1442,6 +1442,63 @@ describe('background message handlers', () => {
     expect(complete).toHaveBeenCalledTimes(3)
   })
 
+  it('takes what API members propose to remember off their replies, so a round\'s summary does not carry it', async () => {
+    vi.resetModules()
+    const startingStore = createStoreWithTwoApiRoles()
+    startingStore.settings.memoryProposals = true
+    let currentStore = structuredClone(startingStore)
+    vi.doMock('./storeAccess', async importOriginal => {
+      const actual = await importOriginal<typeof import('./storeAccess')>()
+      return {
+        ...actual,
+        mutateStore: vi.fn(async (mutator: (store: OpenTeamStore) => unknown) => {
+          const result = await mutator(currentStore)
+          currentStore = structuredClone(currentStore)
+          return { store: currentStore, result }
+        }),
+      }
+    })
+
+    const { createMessageHandlers } = await import('./messageHandlers')
+    let answered = 0
+    const complete = vi.fn(async (input: { prompt: string }): Promise<{ content: string }> => ({
+      content: input.prompt.includes('汇总人') ? '**共识**\n- 用方案 A\n记忆提议（决定）：汇总里写的不算' : `方案 A 更稳。\n\n记忆提议（决定）：采用方案 ${++answered === 1 ? 'A' : 'A，下周上线'}。`,
+    }))
+    let messageIdSeq = 0
+    const routes = createMessageHandlers({
+      broadcastStoreUpdated: vi.fn(),
+      externalModelClient: { complete },
+      getChatStatusFromRoles: () => 'ready',
+      log: { debug: vi.fn(), info: vi.fn(), warn: vi.fn() },
+      newId: vi.fn((prefix: string) => `${prefix}-${++messageIdSeq}`),
+      now: vi.fn(() => 100),
+      onPromptSettled: vi.fn(),
+      runtimeFrames: { bind: vi.fn(), getByAddress: vi.fn(), getByRole: vi.fn(() => undefined) },
+      sendRoleMessage: vi.fn(),
+      sendError: vi.fn(),
+      sendPrompt: vi.fn(),
+      waitForRetry: vi.fn(async () => {}),
+    })
+
+    await routes.find(route => route.type === 'GROUP_MESSAGE_SEND')?.handler({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@all 选哪个方案？' }, {})
+    await vi.waitFor(() => expect(complete).toHaveBeenCalledTimes(3))
+    await vi.waitFor(() => expect(Object.values(currentStore.messagesById).some(message => message.content.startsWith('**共识**'))).toBe(true))
+
+    const prompts = complete.mock.calls.map(([input]: [{ prompt: string }]) => input.prompt)
+    expect(prompts[0]).toContain('记忆提议（事实）：一句话内容')
+    // The summary request does not ask for proposals and does not see the members' ones.
+    expect(prompts[2]).toContain('汇总人')
+    expect(prompts[2]).toContain('方案 A 更稳。')
+    expect(prompts[2]).not.toContain('记忆提议')
+
+    const replies = Object.values(currentStore.messagesById).filter(message => message.type === 'assistant').sort((a, b) => a.seq - b.seq)
+    expect(replies.slice(0, 2).map(reply => reply.content)).toEqual(['方案 A 更稳。', '方案 A 更稳。'])
+    expect(replies.slice(0, 2).map(reply => reply.memoryProposals?.map(proposal => proposal.content))).toEqual([['采用方案 A。'], ['采用方案 A，下周上线。']])
+    // The summary was not asked for proposals: its text is left as written.
+    expect(replies[2].content).toContain('记忆提议（决定）：汇总里写的不算')
+    expect(replies[2].memoryProposals).toBeUndefined()
+  })
+
   it('has members review each other once all have answered (互相审), then summarizes the reviews', async () => {
     vi.resetModules()
     const startingStore = createStoreWithTwoApiRoles()

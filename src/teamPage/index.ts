@@ -506,6 +506,7 @@ const messagesView = createMessagesView({
   setReference,
   editAndResend: message => composerView.editMessage(message),
   rememberMessage: (message, opener) => openMemoryDialog({ message, chatId: message.chatId }, { getStore: () => store, runCommand, onClose: () => { if (opener.isConnected) opener.focus() } }),
+  rememberProposal: (message, proposal, opener) => openMemoryDialog({ message, proposal, chatId: message.chatId }, { getStore: () => store, runCommand, onClose: () => { if (opener.isConnected) opener.focus() } }),
   answerChoice: (role, choice) => {
     composerView.sendToRole(role, replyChoiceAnswer(choice, store.settings.language === 'en' ? 'en' : 'zh-CN'))
       .catch(error => showError(error instanceof Error ? error.message : String(error)))
@@ -668,6 +669,8 @@ const REPLY_SETTING_TOGGLES = [
 
 function renderReplyNotificationSettings(): void {
   for (const toggle of REPLY_SETTING_TOGGLES) renderSettingSwitch(toggle.element(), store.settings[toggle.key] !== false)
+  // Off unless switched on, unlike the ones above.
+  renderSettingSwitch(teamDomRefs.memoryProposalsToggleEl, store.settings.memoryProposals === true)
 }
 
 // A switch in the settings window; its row's title names it.
@@ -683,6 +686,13 @@ function registerReplyNotificationSettings(): void {
       }).catch(error => showError(error instanceof Error ? error.message : String(error)))
     })
   }
+}
+
+function registerMemoryProposalSetting(): void {
+  teamDomRefs.memoryProposalsToggleEl.addEventListener('click', () => {
+    runCommand('GROUP_SETTINGS_UPDATE', { memoryProposals: store.settings.memoryProposals !== true })
+      .catch(error => showError(error instanceof Error ? error.message : String(error)))
+  })
 }
 
 function renderAgentControlSettings(): void {
@@ -894,6 +904,7 @@ async function boot(): Promise<void> {
   registerAllNotesEvents()
   languageSettingsController.registerEvents()
   registerReplyNotificationSettings()
+  registerMemoryProposalSetting()
   registerAgentControlSettings()
   backupView.registerEvents()
   messageSearchView.registerEvents()

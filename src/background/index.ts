@@ -186,6 +186,11 @@ async function handleSettingsUpdate(message: RuntimeMessage) {
       if (message.roundSummary) delete store.settings.roundSummary
       else store.settings.roundSummary = false
     }
+    // Off unless switched on: it adds a line to members' prompts.
+    if (typeof message.memoryProposals === 'boolean') {
+      if (message.memoryProposals) store.settings.memoryProposals = true
+      else delete store.settings.memoryProposals
+    }
   })
   await broadcastStoreUpdated(store)
   syncControlClient().catch(error => log.warn('control-client:settings-sync-failed', { error: errorReason(error) }))

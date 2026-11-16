@@ -9,6 +9,7 @@ import { buildCrossReviewPrompt } from '../group/collaboration'
 import { buildDiscussionTurnPrompt, discussionTranscript } from '../group/discussion'
 import { buildProjectPrompt } from '../group/project'
 import { memoryItemsForPrompt, noteMemoryPending, withMemoryBlock } from '../group/memoryPrompt'
+import { wantsMemoryProposals, withMemoryProposalInstruction } from '../group/memoryProposals'
 import { withTeamHandbook } from '../group/teamHandbooks'
 import type { ExternalModelConfig, GroupChat, GroupMessage, GroupRole, MessageReference, OpenTeamStore } from '../group/types'
 import type { PromptDelivery } from './promptDelivery'
@@ -68,7 +69,9 @@ export function prepareRolePromptDelivery(input: PrepareRolePromptDeliveryInput)
   // budget, with a budget of its own, and before the handbook, whose last line starts the task.
   const language = input.store.settings.language
   const memoryItems = memoryItemsForPrompt({ store: input.store, chat: input.chat, role: input.role, message: input.userMessage, reference: input.reference })
-  const withAdditions = (prompt: string) => withTeamHandbook(withMemoryBlock(prompt, memoryItems, language), input.chat, language)
+  // With the user's switch on, the same requests are told how to propose something to remember.
+  const asksForProposals = wantsMemoryProposals(input.store.settings, input.chat, input.userMessage)
+  const withAdditions = (prompt: string) => withTeamHandbook(withMemoryProposalInstruction(withMemoryBlock(prompt, memoryItems, language), asksForProposals, language), input.chat, language)
 
   if (isExternalModelRole(input.role)) {
     const model = requireExternalModelForRole(input.store, input.role)

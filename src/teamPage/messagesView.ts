@@ -5,7 +5,8 @@ import { extractReplyChoices, type ReplyChoice } from '../group/replyChoices'
 import { normalizeLanguage } from '../shared/i18n'
 import { DEFAULT_MESSAGE_HIGHLIGHT_COLOR, MESSAGE_HIGHLIGHT_COLORS, messageHighlightColorRgb, type MessageHighlightColor } from '../group/highlightColors'
 import { roleMentionLabel, roleMentionLabelOptionsFromSettings, roleModelLabel } from '../group/mentionParser'
-import type { GroupChat, GroupMessage, GroupRole, MessageFileAttachment, MessageHighlight, MessageImageAttachment, MessageReference, OpenTeamStore, OrchestrationReviewResult } from '../group/types'
+import type { GroupChat, GroupMessage, GroupRole, MemoryProposal, MessageFileAttachment, MessageHighlight, MessageImageAttachment, MessageReference, OpenTeamStore, OrchestrationReviewResult } from '../group/types'
+import { MEMORY_KIND_LABELS } from './memoryDialog'
 import { formatBytes } from './composerAttachments'
 import { paintRoleAvatar, roleAvatarSignature } from './viewHelpers'
 import { renderMarkdownInto } from './markdownRender'
@@ -51,6 +52,8 @@ export interface MessagesViewDependencies {
   editAndResend?(message: GroupMessage): void
   // Opens the window that saves a message's text to the memory store.
   rememberMessage?(message: GroupMessage, opener: HTMLElement): void
+  // Opens that window on something the member proposed to remember at the end of this reply.
+  rememberProposal?(message: GroupMessage, proposal: MemoryProposal, opener: HTMLElement): void
   // Answers a choice at the end of a member's reply.
   answerChoice?(role: GroupRole, choice: ReplyChoice): void
   insertTextIntoActiveNote?(text: string): void
@@ -419,6 +422,8 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     }
     const choices = replyChoicesBlock(message)
     if (choices) stack.append(choices)
+    const proposals = memoryProposalsBlock(message)
+    if (proposals) stack.append(proposals)
     inner.append(avatar, stack)
     article.append(inner)
     cacheMessageNode(message.id, signature, article, streamingSignature)
@@ -653,6 +658,60 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
       button.append(label, text)
       button.addEventListener('click', () => deps.answerChoice?.(role, choice))
       block.append(button)
+    }
+    return block
+  }
+
+  // What the member proposed to remember at the end of this reply. Nothing is saved until the user
+  // says so: each one is saved (through the save window, where it can be changed) or dismissed.
+  function memoryProposalsBlock(message: GroupMessage): HTMLElement | undefined {
+    const proposals = message.type === 'assistant' ? message.memoryProposals : undefined
+    if (!proposals?.length || !deps.rememberProposal) return undefined
+    const en = normalizeLanguage(deps.getStore().settings.language) === 'en'
+    const block = document.createElement('div')
+    block.className = 'memory-proposals'
+    block.setAttribute('role', 'group')
+    block.setAttribute('aria-label', en ? 'Save to memory?' : '保存到记忆库？')
+    const title = document.createElement('p')
+    title.className = 'memory-proposals-title'
+    const titleText = document.createElement('span')
+    titleText.textContent = en ? 'Save to memory?' : '保存到记忆库？'
+    title.append(createIcon('memory'), titleText)
+    block.append(title)
+    for (const proposal of proposals) {
+      const row = document.createElement('div')
+      row.className = 'memory-proposal'
+      row.dataset.memoryProposal = proposal.id
+      const kind = document.createElement('span')
+      kind.className = 'memory-proposal-kind'
+      kind.textContent = MEMORY_KIND_LABELS[proposal.kind][en ? 1 : 0]
+      const text = document.createElement('span')
+      text.className = 'memory-proposal-text'
+      text.textContent = proposal.content
+      const actions = document.createElement('span')
+      actions.className = 'memory-proposal-actions'
+      const save = document.createElement('button')
+      save.type = 'button'
+      save.className = 'btn btn-small btn-primary'
+      save.textContent = en ? 'Save…' : '保存…'
+      save.setAttribute('aria-label', `${en ? 'Save to memory: ' : '保存到记忆库：'}${proposal.content}`)
+      save.addEventListener('click', () => deps.rememberProposal?.(message, proposal, save))
+      const dismiss = document.createElement('button')
+      dismiss.type = 'button'
+      dismiss.className = 'btn btn-small'
+      dismiss.textContent = en ? 'Dismiss' : '忽略'
+      dismiss.setAttribute('aria-label', `${en ? 'Dismiss: ' : '忽略：'}${proposal.content}`)
+      dismiss.addEventListener('click', () => {
+        dismiss.disabled = true
+        deps.runCommand('GROUP_MEMORY_PROPOSAL_DISMISS', { messageId: message.id, proposalId: proposal.id })
+          .catch(error => {
+            dismiss.disabled = false
+            deps.showError(error instanceof Error ? error.message : String(error))
+          })
+      })
+      actions.append(save, dismiss)
+      row.append(kind, text, actions)
+      block.append(row)
     }
     return block
   }
@@ -1146,6 +1205,7 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
       usage: message.usage,
       retry: message.retry,
       choicesOpen: choicesOpen(message),
+      memoryProposals: message.memoryProposals,
       references: message.references,
       orchestrationRunId: message.orchestrationRunId,
       orchestrationRound: message.orchestrationRound,

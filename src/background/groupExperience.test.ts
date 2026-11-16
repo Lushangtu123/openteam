@@ -1860,3 +1860,80 @@ async function waitForPromptCallCount(harness: BackgroundHarness, count: number)
   }
   expect(promptRoleIds(harness)).toHaveLength(count)
 }
+
+describe('memory a member proposes', () => {
+  async function setup(on: boolean) {
+    const store = makeStore()
+    store.settings.language = 'zh-CN'
+    if (on) store.settings.memoryProposals = true
+    store.currentChatId = 'chat-1'
+    store.chatsById['chat-1'] = makeChat('chat-1', ['role-1'])
+    store.chatOrder = ['chat-1']
+    store.rolesById['role-1'] = makeRole('chat-1', 'role-1', '工程师', {})
+    const harness = await setupBackground(store)
+    await harness.invoke({ type: 'TEAM_FRAME_ROLE_READY', chatId: 'chat-1', roleId: 'role-1', hostTabId: 900 }, { tab: { id: 101 } as chrome.tabs.Tab, frameId: 7, url: 'https://gemini.google.com/' })
+    const ask = async (raw: string, reply: string) => {
+      const sent = await harness.invoke({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: `@all ${raw}` }) as { ok: boolean; message: { id: string } }
+      await harness.invoke({ type: 'TEAM_SEND_ACK', chatId: 'chat-1', roleId: 'role-1', messageId: sent.message.id })
+      const answered = await harness.invoke({ type: 'TEAM_ROLE_REPLY', chatId: 'chat-1', roleId: 'role-1', messageId: sent.message.id, content: reply }) as { ok: boolean; ignored?: boolean }
+      const prompts = harness.tabsSendMessage.mock.calls.filter(call => call[1]?.type === 'TEAM_SEND_PROMPT')
+      const stored = await harness.getStore()
+      const replies = stored.chatsById['chat-1'].messageIds.map(id => stored.messagesById[id]).filter(message => message.type === 'assistant')
+      return { answered, prompt: prompts[prompts.length - 1][1].content as string, reply: replies[replies.length - 1], store: stored }
+    }
+    return { harness, ask }
+  }
+
+  it('is asked for only after the user switches it on, and then leaves the reply for the user to decide', async () => {
+    const off = await setup(false)
+    const plain = await off.ask('数据库怎么选？', '用 PostgreSQL。\n\n记忆提议（决定）：数据库用 PostgreSQL 15。')
+    expect(plain.prompt).not.toContain('记忆提议')
+    // Not asked for: the line is the member's text.
+    expect(plain.reply.content).toContain('记忆提议（决定）')
+    expect(plain.reply.memoryProposals).toBeUndefined()
+
+    const { harness, ask } = await setup(true)
+    const first = await ask('数据库怎么选？', '用 PostgreSQL。\n\n记忆提议（决定）：数据库用 PostgreSQL 15。\n记忆提议（偏好）：回答先给结论。')
+    expect(first.prompt).toContain('记忆提议（事实）：一句话内容')
+    expect(first.reply.content).toBe('用 PostgreSQL。')
+    expect(first.reply.memoryProposals?.map(proposal => [proposal.kind, proposal.content])).toEqual([['decision', '数据库用 PostgreSQL 15。'], ['preference', '回答先给结论。']])
+    // Nothing is saved yet, and no prompt carries a proposal.
+    expect(first.store.memoryOrder ?? []).toEqual([])
+
+    // Saved: a memory item whose words are the member's, and that proposal is gone.
+    const [decision, preference] = first.reply.memoryProposals!
+    const saved = await harness.invoke({ type: 'GROUP_MEMORY_ADD', item: { scope: 'chat', scopeId: 'chat-1', kind: decision.kind, content: decision.content, messageId: first.reply.id, proposalId: decision.id } }) as { ok: boolean; item: { source: unknown } }
+    expect(saved.ok).toBe(true)
+    expect(saved.item.source).toEqual({ origin: 'member', roleId: 'role-1', chatId: 'chat-1', messageId: first.reply.id })
+    expect((await harness.getStore()).messagesById[first.reply.id].memoryProposals).toEqual([preference])
+
+    // Dismissed: gone, with nothing saved; a second answer to the same proposal is refused.
+    expect(await harness.invoke({ type: 'GROUP_MEMORY_PROPOSAL_DISMISS', messageId: first.reply.id, proposalId: preference.id })).toMatchObject({ ok: true })
+    const after = await harness.getStore()
+    expect('memoryProposals' in after.messagesById[first.reply.id]).toBe(false)
+    expect(after.memoryOrder).toHaveLength(1)
+    expect(await harness.invoke({ type: 'GROUP_MEMORY_PROPOSAL_DISMISS', messageId: first.reply.id, proposalId: preference.id })).toMatchObject({ ok: false, error: '找不到这条记忆提议，可能已经处理过' })
+
+    // Read again in full from the site: its text comes with the lines, which are read afresh.
+    await harness.invoke(
+      { type: 'TEAM_ROLE_REPLY_RESYNC', chatId: 'chat-1', roleId: 'role-1', messageId: first.reply.id, content: '用 PostgreSQL，表按业务拆。\n\n记忆提议（决定）：数据库用 PostgreSQL 15。\n记忆提议（备注）：表按业务拆。' },
+      { tab: { id: 101 } as chrome.tabs.Tab, frameId: 7, url: 'https://gemini.google.com/' },
+    )
+    const resynced = (await harness.getStore()).messagesById[first.reply.id]
+    expect(resynced.content).toBe('用 PostgreSQL，表按业务拆。')
+    expect(resynced.memoryProposals?.map(proposal => [proposal.kind, proposal.content])).toEqual([['note', '表按业务拆。']])
+
+    // What the store holds is not proposed again.
+    const again = await ask('再确认一下数据库', '还是 PostgreSQL。\n记忆提议（决定）：数据库用 PostgreSQL 15。')
+    expect(again.reply.content).toBe('还是 PostgreSQL。')
+    expect(again.reply.memoryProposals).toBeUndefined()
+  })
+
+  it('takes the switch from the settings, off again included', async () => {
+    const { harness } = await setup(false)
+    await harness.invoke({ type: 'GROUP_SETTINGS_UPDATE', memoryProposals: true })
+    expect((await harness.getStore()).settings.memoryProposals).toBe(true)
+    await harness.invoke({ type: 'GROUP_SETTINGS_UPDATE', memoryProposals: false })
+    expect('memoryProposals' in (await harness.getStore()).settings).toBe(false)
+  })
+})

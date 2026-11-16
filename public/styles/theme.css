@@ -1443,6 +1443,76 @@ select.reply-compare-select {
   display: none;
 }
 
+/* What a member proposed to remember, under its reply: saved or dismissed one by one. */
+:root[data-theme] .memory-proposals {
+  display: grid;
+  gap: 6px;
+  width: min(100%, 560px);
+  margin-top: 8px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 10px 12px;
+  background: var(--surface);
+}
+
+.memory-proposals-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.memory-proposals-title svg {
+  width: 14px;
+  height: 14px;
+}
+
+.memory-proposal {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+}
+
+.memory-proposal + .memory-proposal {
+  border-top: 1px solid var(--line);
+  padding-top: 6px;
+}
+
+.memory-proposal-kind {
+  flex: none;
+  border-radius: 999px;
+  padding: 1px 8px;
+  background: var(--chip-bg);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.memory-proposal-text {
+  flex: 1 1 220px;
+  min-width: 0;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.memory-proposal-actions {
+  display: flex;
+  flex: none;
+  gap: 6px;
+}
+
+.memory-proposal-actions .btn {
+  min-height: 28px;
+  padding: 3px 10px;
+  font-size: 12px;
+}
+
 /* The memory store: the window that saves one item, and the list of what is kept. */
 .modal.team-setup-dialog.memory-dialog {
   width: min(520px, 100%);

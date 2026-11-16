@@ -2,12 +2,13 @@
 // pinning or switching one off, and deleting one. Nothing else writes memory items: no reply is
 // ever saved on its own (docs/MEMORY_STORE.zh-CN.md, section 6).
 import { MAX_MEMORY_CONTENT_CHARS, MAX_MEMORY_ITEMS, MAX_MEMORY_TAGS, addMemoryItem, deleteMemoryItem, updateMemoryItem, type MemoryItemPatch, type MemoryWriteError } from '../group/memoryStore'
+import { resolveMemoryProposal } from '../group/memoryProposals'
 import type { MemoryKind, MemoryScope, MemorySource, OpenTeamStore } from '../group/types'
 import type { BackgroundMessageRoute } from './messageRouter'
 import type { RuntimeMessage } from './runtimeClient'
 import { mutateStore } from './storeAccess'
 
-export const MEMORY_ROUTE_TYPES = ['GROUP_MEMORY_ADD', 'GROUP_MEMORY_UPDATE', 'GROUP_MEMORY_DELETE'] as const
+export const MEMORY_ROUTE_TYPES = ['GROUP_MEMORY_ADD', 'GROUP_MEMORY_UPDATE', 'GROUP_MEMORY_DELETE', 'GROUP_MEMORY_PROPOSAL_DISMISS'] as const
 
 export interface MemoryHandlersDependencies {
   broadcastStoreUpdated(store: OpenTeamStore): Promise<void> | void
@@ -40,6 +41,8 @@ export function createMemoryHandlers(deps: MemoryHandlersDependencies): Backgrou
         source: sourceOf(store, input.messageId),
       }, deps.now())
       if (!saved.ok) throw new Error(WRITE_ERRORS[saved.error])
+      // Saved from a member's proposal: the proposal is answered and leaves its message.
+      if (typeof input.proposalId === 'string' && typeof input.messageId === 'string') resolveMemoryProposal(store.messagesById[input.messageId], input.proposalId)
       return saved.item
     })
     deps.log.info('memory:added', { itemId: result.id, scope: result.scope, kind: result.kind, origin: result.source.origin })
@@ -70,10 +73,23 @@ export function createMemoryHandlers(deps: MemoryHandlersDependencies): Backgrou
     return { ok: true, store }
   }
 
+  // The user does not want what a member proposed: it leaves the message and nothing is saved.
+  const handleProposalDismiss = async (message: RuntimeMessage) => {
+    const messageId = typeof message.messageId === 'string' ? message.messageId : ''
+    const proposalId = typeof message.proposalId === 'string' ? message.proposalId : ''
+    const { store } = await mutateStore(store => {
+      if (!resolveMemoryProposal(store.messagesById[messageId], proposalId)) throw new Error('找不到这条记忆提议，可能已经处理过')
+    })
+    deps.log.info('memory:proposal-dismissed', { messageId, proposalId })
+    await deps.broadcastStoreUpdated(store)
+    return { ok: true, store }
+  }
+
   return [
     { type: 'GROUP_MEMORY_ADD', handler: handleAdd },
     { type: 'GROUP_MEMORY_UPDATE', handler: handleUpdate },
     { type: 'GROUP_MEMORY_DELETE', handler: handleDelete },
+    { type: 'GROUP_MEMORY_PROPOSAL_DISMISS', handler: handleProposalDismiss },
   ]
 }
 

@@ -43,6 +43,7 @@ export interface TeamPageDomRefs {
   settingsThemeLightEl: HTMLButtonElement
   settingsThemeDarkEl: HTMLButtonElement
   roundSummaryToggleEl: HTMLButtonElement
+  memoryProposalsToggleEl: HTMLButtonElement
   agentControlStatusEl: HTMLElement
   backupExportEl: HTMLButtonElement
   backupRestoreEl: HTMLButtonElement
@@ -229,6 +230,7 @@ export function createTeamPageDomRefs(): TeamPageDomRefs {
     settingsThemeLightEl: requireElement<HTMLButtonElement>('#settings-theme-light'),
     settingsThemeDarkEl: requireElement<HTMLButtonElement>('#settings-theme-dark'),
     roundSummaryToggleEl: requireElement<HTMLButtonElement>('#round-summary-toggle'),
+    memoryProposalsToggleEl: requireElement<HTMLButtonElement>('#memory-proposals-toggle'),
     agentControlStatusEl: requireElement<HTMLElement>('#agent-control-status'),
     backupExportEl: requireElement<HTMLButtonElement>('#backup-export'),
     backupRestoreEl: requireElement<HTMLButtonElement>('#backup-restore'),

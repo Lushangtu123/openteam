@@ -84,6 +84,8 @@ export interface OpenTeamSettings {
   // When a message goes to two or more members, they start with a few key points and long replies
   // fold to them. On unless set to false.
   replyKeyPoints?: boolean
+  // Members may propose memory at the end of a reply; off unless true.
+  memoryProposals?: boolean
   // Once every member of such a round has answered, one member writes a short summary. On unless
   // set to false.
   roundSummary?: boolean
@@ -170,6 +172,14 @@ export interface MemorySource {
   roleId?: string
   chatId?: string
   messageId?: string
+}
+
+// What a member proposed to remember at the end of a reply, waiting for the user to save or
+// dismiss it. It is not a memory item and reaches no prompt.
+export interface MemoryProposal {
+  id: string
+  kind: MemoryKind
+  content: string
 }
 
 export interface MemoryItem {
@@ -548,6 +558,8 @@ export interface GroupMessage {
   // Sends each target's persona with this message again, as on its first message. Set on the
   // message that starts work after members picked their positions.
   refreshPersona?: boolean
+  // On a member's reply: what it proposed to remember, until the user saves or dismisses each.
+  memoryProposals?: MemoryProposal[]
   // Tokens an API member's reply used, as its model reported them.
   usage?: MessageTokenUsage
   // On an API member's reply while its request failed and is about to be sent again: which retry

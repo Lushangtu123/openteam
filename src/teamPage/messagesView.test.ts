@@ -1436,6 +1436,74 @@ describe('team page messages view boundary', () => {
     expect(rememberMessage).toHaveBeenLastCalledWith(done, buttons[1])
   })
 
+  it('shows what a member proposed to remember under its reply, to be saved or dismissed', async () => {
+    const now = Date.now()
+    const chat: GroupChat = { id: 'chat-1', name: '群聊', mode: 'independent', roleIds: [], messageIds: ['msg-plain', 'msg-reply'], nextMessageSeq: 3, status: 'ready', createdAt: now, updatedAt: now }
+    const plain: GroupMessage = { id: 'msg-plain', chatId: chat.id, seq: 1, type: 'assistant', roleName: 'Kimi', content: '没有提议的回复', createdAt: now, status: 'received' }
+    const decision = { id: 'p1', kind: 'decision' as const, content: '数据库用 PostgreSQL 15。' }
+    const preference = { id: 'p2', kind: 'preference' as const, content: '回答先给结论。' }
+    const reply: GroupMessage = { id: 'msg-reply', chatId: chat.id, seq: 2, type: 'assistant', roleName: 'Kimi', content: '用 PostgreSQL。', memoryProposals: [decision, preference], createdAt: now, status: 'received' }
+    const store: OpenTeamStore = { ...createDefaultStore(), currentChatId: chat.id, chatOrder: [chat.id], chatsById: { [chat.id]: chat }, messagesById: { [plain.id]: plain, [reply.id]: reply } }
+    store.settings.language = 'zh-CN'
+    const rememberProposal = vi.fn()
+    const runCommand = vi.fn(async (_type: string, _payload?: Record<string, unknown>) => undefined)
+    const messagesEl = document.createElement('section')
+    const view = createMessagesView({
+      state: createTeamPageState(),
+      getStore: () => store,
+      messagesEl,
+      getCurrentChat: () => chat,
+      getCurrentRoles: () => [],
+      getCurrentMessages: () => chat.messageIds.map(id => store.messagesById[id]),
+      emptyCard: () => document.createElement('div'),
+      openAddPersonDialog: vi.fn(),
+      messageTitle: message => message.roleName ?? '你',
+      focusRoleFrame: vi.fn(),
+      insertMention: vi.fn(),
+      setReference: vi.fn(),
+      rememberProposal,
+      resyncMessageReply: vi.fn(async () => undefined),
+      retryRoleReply: vi.fn(async () => undefined),
+      stopRoleReply: vi.fn(async () => undefined),
+      runCommand,
+      render: vi.fn(),
+      showError: vi.fn(),
+      showSuccess: vi.fn(),
+      log: { warn: vi.fn() },
+    })
+
+    view.renderMessages()
+    const blocks = [...messagesEl.querySelectorAll<HTMLElement>('.memory-proposals')]
+    expect(blocks).toHaveLength(1)
+    expect(blocks[0].getAttribute('aria-label')).toBe('保存到记忆库？')
+    expect(blocks[0].querySelector('.memory-proposals-title svg.ui-icon-memory')).not.toBeNull()
+    const rows = [...blocks[0].querySelectorAll<HTMLElement>('.memory-proposal')]
+    expect(rows.map(row => [row.querySelector('.memory-proposal-kind')?.textContent, row.querySelector('.memory-proposal-text')?.textContent])).toEqual([['决定', '数据库用 PostgreSQL 15。'], ['偏好', '回答先给结论。']])
+
+    const [save, dismiss] = [...rows[0].querySelectorAll<HTMLButtonElement>('button')]
+    expect(save.getAttribute('aria-label')).toBe('保存到记忆库：数据库用 PostgreSQL 15。')
+    save.click()
+    expect(rememberProposal).toHaveBeenCalledWith(reply, decision, save)
+    // Nothing is written by opening the window.
+    expect(runCommand).not.toHaveBeenCalled()
+    dismiss.click()
+    expect(runCommand).toHaveBeenCalledWith('GROUP_MEMORY_PROPOSAL_DISMISS', { messageId: 'msg-reply', proposalId: 'p1' })
+
+    // Answered: the row goes, and the block with the last one.
+    reply.memoryProposals = [preference]
+    view.renderMessages()
+    expect(messagesEl.querySelectorAll('.memory-proposal')).toHaveLength(1)
+    delete reply.memoryProposals
+    view.renderMessages()
+    expect(messagesEl.querySelector('.memory-proposals')).toBeNull()
+
+    // In English.
+    reply.memoryProposals = [decision]
+    store.settings.language = 'en'
+    view.renderMessages()
+    expect(messagesEl.querySelector('.memory-proposals')?.textContent).toBe('Save to memory?Decision数据库用 PostgreSQL 15。Save…Dismiss')
+  })
+
   it("shows a web member's reply as it is written in its replying row", () => {
     // Shown at once: these check what is shown, not how it flows in (see streamingReveal.test.ts).
     vi.stubGlobal('matchMedia', () => ({ matches: true }))

@@ -114,6 +114,21 @@ describe('save-to-memory window', () => {
     expect(onClose).toHaveBeenCalledWith(true)
   })
 
+  it('saves what a member proposed: its text and kind, not the whole reply, and answers the proposal', async () => {
+    const store = makeStore()
+    const proposal = { id: 'p1', kind: 'preference' as const, content: '回答先给结论。' }
+    store.messagesById.m2.memoryProposals = [proposal]
+    const { $, save, runCommand } = open({ message: store.messagesById.m2, proposal }, store)
+    expect($<HTMLTextAreaElement>('#memory-content').value).toBe('回答先给结论。')
+    expect($<HTMLSelectElement>('#memory-kind').value).toBe('preference')
+    // A preference is kept in every prompt unless the user says otherwise.
+    expect($<HTMLInputElement>('#memory-pinned').checked).toBe(true)
+    save()
+    await vi.waitFor(() => expect(runCommand).toHaveBeenCalledWith('GROUP_MEMORY_ADD', {
+      item: { scope: 'chat', scopeId: 'c1', kind: 'preference', content: '回答先给结论。', tags: [], pinned: true, messageId: 'm2', proposalId: 'p1' },
+    }))
+  })
+
   it('offers the member who wrote the reply when the item is for one member', () => {
     const store = makeStore()
     const { $, pickScope } = open({ message: store.messagesById.m2 }, store)

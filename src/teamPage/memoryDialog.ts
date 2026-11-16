@@ -2,7 +2,7 @@
 // one to edit. It says who the item will be sent to before anything is saved, because an item kept
 // for every group goes into prompts on third-party sites too (docs/MEMORY_STORE.zh-CN.md, section 6).
 import { MAX_MEMORY_CONTENT_CHARS, MAX_MEMORY_TAGS, memoryContentLength } from '../group/memoryStore'
-import type { GroupChat, GroupMessage, MemoryItem, MemoryKind, MemoryScope, MemorySource, OpenTeamStore } from '../group/types'
+import type { GroupChat, GroupMessage, MemoryItem, MemoryKind, MemoryProposal, MemoryScope, MemorySource, OpenTeamStore } from '../group/types'
 import { normalizeLanguage, translateUi } from '../shared/i18n'
 import { createIcon } from './icons'
 
@@ -16,6 +16,9 @@ export interface MemoryDialogDependencies {
 export interface MemoryDialogInput {
   // Saving from this message; its text is offered and its writer recorded.
   message?: GroupMessage
+  // Saving what the member proposed at the end of that message: the proposal's text and kind are
+  // offered instead of the whole reply, and saving answers the proposal.
+  proposal?: MemoryProposal
   // Editing this item.
   item?: MemoryItem
   // The group the window was opened in, offered as "this group".
@@ -78,12 +81,12 @@ export function openMemoryDialog(input: MemoryDialogInput, deps: MemoryDialogDep
   const members = chat ? chat.roleIds.map(id => store.rolesById[id]).filter(Boolean) : []
   const source: Pick<MemorySource, 'origin' | 'roleId'> = editing?.source
     ?? (input.message?.type === 'assistant' ? { origin: 'member', roleId: input.message.roleId } : { origin: 'user' })
-  const offered = [...(input.message?.content.trim() ?? '')]
+  const offered = [...(input.proposal?.content ?? input.message?.content.trim() ?? '')]
   const cut = offered.length > MAX_MEMORY_CONTENT_CHARS
 
   const draft = {
     content: editing?.content ?? offered.slice(0, MAX_MEMORY_CONTENT_CHARS).join(''),
-    kind: editing?.kind ?? 'fact' as MemoryKind,
+    kind: editing?.kind ?? input.proposal?.kind ?? 'fact' as MemoryKind,
     scope: editing?.scope ?? (chat ? 'chat' : 'global') as MemoryScope,
     roleId: (editing?.scope === 'role' ? editing.scopeId : undefined) ?? (input.message?.type === 'assistant' ? input.message.roleId : undefined) ?? members[0]?.id,
     pinned: editing ? Boolean(editing.pinned) : false,
@@ -272,7 +275,7 @@ export function openMemoryDialog(input: MemoryDialogInput, deps: MemoryDialogDep
         const patch = changedFields(editing, fields)
         if (Object.keys(patch).length > 0) await deps.runCommand('GROUP_MEMORY_UPDATE', { itemId: editing.id, patch })
       } else {
-        await deps.runCommand('GROUP_MEMORY_ADD', { item: { ...fields, ...(input.message ? { messageId: input.message.id } : {}) } })
+        await deps.runCommand('GROUP_MEMORY_ADD', { item: { ...fields, ...(input.message ? { messageId: input.message.id } : {}), ...(input.message && input.proposal ? { proposalId: input.proposal.id } : {}) } })
       }
       close(true)
     } catch (caught) {

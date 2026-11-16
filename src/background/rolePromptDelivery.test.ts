@@ -97,6 +97,28 @@ describe('memory items in prompts', () => {
     expect(ask({ content: '汇总本轮回复', roundSummaryOf: question.id }).prompt).not.toContain('记忆库')
   })
 
+  it.each(['site', 'openai'] as const)('tells a %s member how to propose memory once the user switches that on, after the items and before the handbook', source => {
+    const off = setup(source)
+    expect(off.ask().prompt).not.toContain('记忆提议')
+
+    const { store, chat, ask } = setup(source)
+    store.settings.memoryProposals = true
+    const { prompt, id } = ask()
+    expect(prompt).toContain('记忆提议（事实）：一句话内容')
+    expect(prompt.indexOf('记忆库结束。')).toBeLessThan(prompt.indexOf('记忆提议（事实）'))
+    expect(prompt.indexOf('记忆提议（事实）')).toBeLessThan(prompt.indexOf('本团队执行手册'))
+    // Not in a request that answers in a set form, and not in a group with memory switched off.
+    store.messagesById[id].deliveryStatus = { r: 'received', other: 'received' }
+    for (const [replyId, roleId] of [['a1', 'r'], ['a2', 'other']]) {
+      store.messagesById[replyId] = { id: replyId, chatId: 'c', seq: 10, type: 'assistant', content: '用 PostgreSQL 的数据库表结构', roleId, sourceMessageId: id, createdAt: 10, status: 'received' }
+      chat.messageIds.push(replyId)
+    }
+    store.rolesById.other = { id: 'other', chatId: 'c', name: '设计师', chatSite: 'kimi', status: 'ready', contextCursor: 0, createdAt: 1, updatedAt: 1 }
+    expect(ask({ content: '汇总本轮回复', roundSummaryOf: id }).prompt).not.toContain('记忆提议（事实）')
+    chat.memoryDisabled = true
+    expect(ask().prompt).not.toContain('记忆提议')
+  })
+
   it('sends a web member each item once per site conversation, and an API member every time', () => {
     const web = setup('site')
     const first = web.ask()
