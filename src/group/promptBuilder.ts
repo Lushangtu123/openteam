@@ -155,9 +155,9 @@ function independentResponseInstruction(roleName: string, hasReference: boolean,
 
 function collaborativeResponseInstruction(roleName: string, hasReference: boolean, language: OpenTeamLanguage): string {
   if (language === 'en') {
-    return `Reply as "${roleName}". You may reference, add to, or challenge other members' points. ${PROMPT_I18N.en.responseLanguageInstruction}${hasReference ? ' Respond directly to the point quoted by the user.' : ''}`
+    return `Reply as "${roleName}". You may reference, add to, or challenge other members' points. Speak from your own role and responsibility; do not do the parts other members are responsible for. ${PROMPT_I18N.en.responseLanguageInstruction}${hasReference ? ' Respond directly to the point quoted by the user.' : ''}`
   }
-  return `请以「${roleName}」身份回复。你可以参考、补充或反驳其他成员观点。${PROMPT_I18N['zh-CN'].responseLanguageInstruction}${hasReference ? '请明确回应用户引用的观点。' : ''}`
+  return `请以「${roleName}」身份回复。你可以参考、补充或反驳其他成员观点。只从你的身份和职责出发，不要替其他成员完成他们负责的部分。${PROMPT_I18N['zh-CN'].responseLanguageInstruction}${hasReference ? '请明确回应用户引用的观点。' : ''}`
 }
 
 function joinSections(sections: Array<string | undefined>): string {

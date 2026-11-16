@@ -548,6 +548,16 @@ describe('prompt builder', () => {
     expect(prompt).not.toContain('请以')
   })
 
+  it('keeps each member of a shared group to its own part, and leaves independent members alone', () => {
+    const role = makeRole('role-a', '工程师')
+    const userMessage = makeMessage('msg-1', 1, 'user', '你怎么看？')
+    const shared = { ...makeChat('chat-1'), mode: 'collaborative' as const }
+    expect(buildPrompt({ chat: shared, role, userMessage, roles: [role], language: 'zh-CN' })).toContain('只从你的身份和职责出发，不要替其他成员完成他们负责的部分。')
+    expect(buildPrompt({ chat: shared, role, userMessage, roles: [role], language: 'en' })).toContain('Speak from your own role and responsibility; do not do the parts other members are responsible for.')
+    // An independent member is not told about other members at all.
+    expect(buildPrompt({ chat: { ...makeChat('chat-1'), mode: 'independent' }, role, userMessage, roles: [role], language: 'zh-CN' })).not.toContain('其他成员')
+  })
+
   it('skips persona in ordinary prompts when requested', () => {
     const chat = makeChat('chat-1')
     const role = makeRole('role-a', '工程师')

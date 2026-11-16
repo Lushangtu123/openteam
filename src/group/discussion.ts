@@ -45,8 +45,10 @@ export function findHandoffMention(content: string, participants: GroupRole[], s
   return undefined
 }
 
-// Who speaks next: the member the last speaker @-mentioned, if they can; otherwise whoever has spoken
-// least so far, the next in the speaking order winning a tie.
+// Who speaks next: the member the last speaker @-mentioned, if they can and have not spoken more than
+// the others who could speak; otherwise whoever has spoken least so far, the next in the speaking order
+// winning a tie. Without that limit two members could keep handing the turn to each other and leave
+// the rest out.
 export function chooseNextSpeaker(input: {
   run: DiscussionRun
   roles: GroupRole[]
@@ -56,17 +58,19 @@ export function chooseNextSpeaker(input: {
 }): { role: GroupRole; handoffFrom?: string } | undefined {
   const participants = input.run.roleIds.map(id => input.roles.find(role => role.id === id)).filter((role): role is GroupRole => Boolean(role))
   const current = input.run.currentRoleId
-  if (input.lastReply && current) {
-    const mentioned = findHandoffMention(input.lastReply, participants, current)
-    if (mentioned && input.isAvailable(mentioned)) return { role: mentioned, handoffFrom: current }
-  }
   const start = Math.max(0, participants.findIndex(role => role.id === current))
   const inOrderAfterCurrent = participants.map((_, offset) => participants[(start + 1 + offset) % participants.length])
   const others = inOrderAfterCurrent.filter(role => role.id !== current && input.isAvailable(role))
+  const turnsOf = (role: GroupRole) => input.turnCounts.get(role.id) ?? 0
+  if (input.lastReply && current) {
+    const mentioned = findHandoffMention(input.lastReply, participants, current)
+    const fewest = Math.min(...others.map(turnsOf))
+    if (mentioned && input.isAvailable(mentioned) && turnsOf(mentioned) <= fewest) return { role: mentioned, handoffFrom: current }
+  }
   const pool = others.length > 0 ? others : inOrderAfterCurrent.filter(role => input.isAvailable(role))
   let next: GroupRole | undefined
   for (const role of pool) {
-    if (!next || (input.turnCounts.get(role.id) ?? 0) < (input.turnCounts.get(next.id) ?? 0)) next = role
+    if (!next || turnsOf(role) < turnsOf(next)) next = role
   }
   return next ? { role: next } : undefined
 }

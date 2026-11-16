@@ -6,6 +6,7 @@ import { normalizeLanguage } from '../shared/i18n'
 import type { ControlHttpResult, ExtensionRequest, LocalAgentEvent } from '../shared/localControlProtocol'
 import type { ExternalModelCompletionInput } from './externalModelClient'
 import type { LocalAgentApprovals } from './localAgentApprovals'
+import { createWorkspaceQueue, type WorkspaceQueue } from './workspaceQueue'
 
 export interface LocalAgentControl {
   request(action: ExtensionRequest['action'], payload?: Record<string, unknown>, timeoutMs?: number): Promise<ControlHttpResult>
@@ -16,11 +17,15 @@ export interface LocalAgentClientDependencies {
   control: LocalAgentControl
   approvals: Pick<LocalAgentApprovals, 'ask'>
   getLanguage(): unknown
+  // Shared by every run of this client: one agent at a time in a folder.
+  workspaces?: WorkspaceQueue
 }
 
 const PROMPT_PREVIEW_CHARS = 6000
 
 export function createLocalAgentClient(deps: LocalAgentClientDependencies) {
+  const workspaces = deps.workspaces ?? createWorkspaceQueue()
+
   async function* stream(input: ExternalModelCompletionInput): AsyncIterable<string> {
     const model = input.model
     const context = input.context
@@ -29,6 +34,24 @@ export function createLocalAgentClient(deps: LocalAgentClientDependencies) {
     const en = normalizeLanguage(deps.getLanguage()) === 'en'
     const who = context.roleName ?? model.name
     const signal = input.abortSignal
+
+    // Another member's agent working in this folder goes first; this run is asked for after it.
+    const ticket = workspaces.enter(model.workspace, who)
+    try {
+      if (ticket.waitingFor.length > 0) {
+        const names = ticket.waitingFor.map(name => en ? `"${name}"` : `「${name}」`).join(en ? ', ' : '、')
+        yield en ? `> ⏳ Waiting for ${names} to finish in ${model.workspace}\n\n` : `> ⏳ 等${names}在 ${model.workspace} 里做完再开始\n\n`
+      }
+      await ticket.ready(signal)
+      yield* run(input, model.workspace, who, en, signal)
+    } finally {
+      ticket.release()
+    }
+  }
+
+  async function* run(input: ExternalModelCompletionInput, workspace: string, who: string, en: boolean, signal: AbortSignal | undefined): AsyncIterable<string> {
+    const model = { ...input.model, workspace }
+    const context = input.context!
 
     const runAnswer = await deps.approvals.ask(context, {
       kind: 'run',

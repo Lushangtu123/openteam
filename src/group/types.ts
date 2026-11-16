@@ -371,6 +371,8 @@ export interface ProjectTask {
   status: ProjectTaskStatus
   // Tries so far (the first one included).
   attempts: number
+  // How many times it went to another member after work on it had started.
+  reassigns?: number
   summary?: string
   // The coordinator's note (what to redo) or why the member was blocked.
   note?: string

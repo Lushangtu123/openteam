@@ -60,6 +60,12 @@ describe('discussions', () => {
     // Only the last speaker is free: it speaks again rather than the discussion stalling.
     expect(chooseNextSpeaker({ run: run({ currentRoleId: 'a' }), roles: members, turnCounts: new Map(), isAvailable: member => member.id === 'a' })?.role.id).toBe('a')
     expect(chooseNextSpeaker({ run: run({ currentRoleId: 'a' }), roles: members, turnCounts: new Map(), isAvailable: () => false })).toBeUndefined()
+
+    // Two members handing the turn back and forth: once the one asked for has spoken more than
+    // someone else who could speak, that one speaks instead.
+    const volley = { run: run({ currentRoleId: 'c' }), roles: members, lastReply: '@架构师 你再说说', isAvailable: available }
+    expect(chooseNextSpeaker({ ...volley, turnCounts: new Map([['a', 2], ['c', 2]]) })).toEqual({ role: members[1] })
+    expect(chooseNextSpeaker({ ...volley, turnCounts: new Map([['a', 1], ['b', 1], ['c', 2]]) })).toEqual({ role: members[0], handoffFrom: 'c' })
   })
 
   it('announces each turn', () => {

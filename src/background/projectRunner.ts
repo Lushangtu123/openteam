@@ -8,6 +8,7 @@ import {
   parseReview,
   parseTaskOutcome,
   PROJECT_DEFAULT_MAX_STEPS,
+  PROJECT_MAX_REASSIGNS,
   PROJECT_MAX_TASK_ATTEMPTS,
   projectMembers,
   projectRequestText,
@@ -286,8 +287,17 @@ export function createProjectRunner(ctx: ProjectRunnerContext) {
             task.status = 'done'
             delete task.note
           } else {
-            if (decision.verdict === 'reassign' && decision.ownerRoleId) {
-              task.ownerRoleId = decision.ownerRoleId
+            const reassign = decision.verdict === 'reassign' && decision.ownerRoleId && decision.ownerRoleId !== task.ownerRoleId
+            if (reassign && (task.reassigns ?? 0) >= PROJECT_MAX_REASSIGNS) {
+              // Handed around enough: it fails, and the coordinator (or the user) decides what now.
+              task.note = `${decision.note ? `${decision.note}\n` : ''}已换过 ${task.reassigns} 次负责人仍未完成，不再换人。`
+              task.status = 'failed'
+              task.checked = true
+              continue
+            }
+            if (reassign) {
+              task.ownerRoleId = decision.ownerRoleId!
+              task.reassigns = (task.reassigns ?? 0) + 1
               // A new owner gets a fair try.
               task.attempts = Math.min(task.attempts, PROJECT_MAX_TASK_ATTEMPTS - 1)
             }

@@ -136,6 +136,10 @@ describe('project prompts', () => {
     expect(prompt).toContain('上一次结果的检查意见：\n补上风险')
     expect(prompt).toContain('【t1 · 任务t1 · 架构师】\n技术方案全文')
     expect(prompt).toContain('【状态】完成（或：受阻：原因）')
+    // Its own task only; what it needs from others is a reason it is blocked, not work it takes over.
+    expect(prompt).toContain('只做你这项任务，不要替其他成员做他们的任务；缺少别人负责的东西时，写在受阻原因里。')
+    const english = buildProjectPrompt({ store, chat, project: chat.project!, request, role: store.rolesById.b, includePersona: true, language: 'en' })
+    expect(english).toContain('Do only this task, not the tasks of other members;')
   })
 
   it('has the coordinator check new results in full and earlier ones by summary, then write the deliverable', () => {

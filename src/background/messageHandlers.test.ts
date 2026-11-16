@@ -1964,9 +1964,10 @@ describe('background message handlers', () => {
   })
 
   // A project between 工程师 (the coordinator, role-1) and 设计师 (role-2), answered by `answer`.
-  async function runProjectWith(answer: (prompt: string) => { content: string }) {
+  async function runProjectWith(answer: (prompt: string) => { content: string }, prepare?: (store: OpenTeamStore) => void) {
     vi.resetModules()
     let currentStore = structuredClone(createStoreWithTwoApiRoles())
+    prepare?.(currentStore)
     vi.doMock('./storeAccess', async importOriginal => {
       const actual = await importOriginal<typeof import('./storeAccess')>()
       return {
@@ -2030,6 +2031,41 @@ describe('background message handlers', () => {
     // Three checks of t2 by the coordinator, the member's check of the coordinator's t1, then the
     // coordinator decides about the failed t2.
     expect(reviewers).toEqual(['coordinator', 'coordinator', 'coordinator', 'member', 'coordinator'])
+  })
+
+  it('fails a task the coordinator keeps handing to the other member, after two reassignments', async () => {
+    const owners: string[] = []
+    const { project, prompts } = await runProjectWith(prompt => {
+      if (prompt.includes('请用完成目标所需的最少任务')) return { content: twoTaskPlan }
+      const task = prompt.match(/你的任务（(t\d)/)?.[1]
+      if (task === 't2') owners.push(prompt.match(/你是「([^」]+)」/)?.[1] ?? '')
+      if (task) return { content: `${task} 成果\n【状态】完成\n【摘要】${task} 摘要` }
+      if (prompt.includes('由你来检查')) return verdicts(reviewOf(prompt), 'pass')
+      if (prompt.includes('任务和结果：')) {
+        // Each check of t2 hands it to the other of 设计师 and 测试员; once it has failed, finish.
+        if (!reviewOf(prompt).includes('t2')) return verdicts(reviewOf(prompt), 'pass', { finish: prompt.includes('不再换人') })
+        const owner = prompt.match(/【t2 · [^·]+ · 负责人：([^ ·]+)/)?.[1]
+        const decisions = reviewOf(prompt).map(task => task === 't2'
+          ? { task, verdict: 'reassign', owner: owner === '设计师' ? '测试员' : '设计师', note: '换个人试试' }
+          : { task, verdict: 'pass', note: '对照完成标准检查过' })
+        return { content: '```json\n' + JSON.stringify({ decisions, newTasks: [], finish: false }) + '\n```' }
+      }
+      return { content: '# 最终方案' }
+    }, store => {
+      store.rolesById['role-3'] = { ...structuredClone(store.rolesById['role-2']), id: 'role-3', name: '测试员' }
+      store.chatsById['chat-1'].roleIds.push('role-3')
+    })
+
+    // Its first owner, then two others: a third hand-over is refused.
+    expect(owners).toEqual(['设计师', '测试员', '设计师'])
+    const t2 = project.tasks.find(task => task.id === 't2')!
+    expect(t2).toMatchObject({ status: 'failed', reassigns: 2 })
+    expect(t2.note).toContain('已换过 2 次负责人仍未完成，不再换人。')
+    // The coordinator is told how often it was handed over, and that it cannot be again.
+    expect(prompts.some(prompt => prompt.includes('已换过 1 次负责人】'))).toBe(true)
+    expect(prompts.some(prompt => prompt.includes('已换过 2 次负责人，不能再换】'))).toBe(true)
+    // The coordinator arranged nothing more: the project stops and waits for the user.
+    expect(project).toMatchObject({ status: 'stopped', stopReason: 'failed', stopDetail: '有任务没有完成，协调员也没有安排下一步' })
   })
 
   it('makes a task blocked, not sent again at once, when the member could not do it', async () => {

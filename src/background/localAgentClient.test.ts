@@ -90,6 +90,38 @@ describe('local agent client', () => {
     await vi.waitFor(() => expect(stopped.requests.map(([action]) => action)).toContain('agent.cancel'))
   })
 
+  it('lets one member\'s agent work in a folder at a time, asking for the next run only after the first', async () => {
+    const { client, requests, asked, listeners } = setup(['allow', 'allow'])
+    const first = collect(client.stream({ model, prompt: '改 README', context }))
+    await vi.waitFor(() => expect(requests.map(([action]) => action)).toEqual(['agent.run']))
+    // The second member's agent works in a folder inside the first one's.
+    const second = collect(client.stream({ model: { ...model, workspace: '/Users/me/app/docs' }, prompt: '改文档', context: { ...context, roleId: 'role-2', roleName: '文档员' } }))
+    await new Promise(resolve => setTimeout(resolve, 10))
+    // Not asked yet, not started yet.
+    expect(asked).toHaveLength(1)
+    expect(requests.map(([action]) => action)).toEqual(['agent.run'])
+
+    listeners.get('run-1')?.({ kind: 'text', text: '改好了。' })
+    listeners.get('run-1')?.({ kind: 'done', output: '', stopReason: 'end_turn' })
+    await expect(first).resolves.toBe('改好了。')
+    await vi.waitFor(() => expect(asked).toHaveLength(2))
+    expect(asked[1]).toMatchObject({ kind: 'run', title: '「文档员」要在 /Users/me/app/docs 里执行这项任务' })
+    await vi.waitFor(() => expect(requests.filter(([action]) => action === 'agent.run')).toHaveLength(2))
+    // Its events are listened to once the run has started.
+    await vi.waitFor(() => expect(listeners.has('run-1')).toBe(true))
+    listeners.get('run-1')?.({ kind: 'done', output: '', stopReason: 'end_turn' })
+    await expect(second).resolves.toBe('> ⏳ 等「程序员」在 /Users/me/app/docs 里做完再开始\n\n（智能体完成了，没有输出文字。）')
+  })
+
+  it('lets the next agent in the folder go on when a run is refused', async () => {
+    const { client, requests } = setup(['deny', 'allow'])
+    const first = collect(client.stream({ model, prompt: 'x', context }))
+    const second = collect(client.stream({ model, prompt: 'y', context: { ...context, roleId: 'role-2', roleName: '文档员' } }))
+    await expect(first).rejects.toThrow('你拒绝了这次执行。')
+    await vi.waitFor(() => expect(requests.map(([action]) => action)).toEqual(['agent.run']))
+    void second.catch(() => undefined)
+  })
+
   it('explains a daemon that cannot start the agent', async () => {
     const { client, control } = setup(['allow'])
     control.request.mockResolvedValueOnce({ id: 'r', ok: false, error: { code: 'workspace_not_allowed', message: '工作目录不在这个智能体允许的范围内。', hint: '用 openteamcli agent add 加入这个目录' } })

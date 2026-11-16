@@ -12,6 +12,9 @@ export const PROJECT_MAX_TASKS = 12
 export const PROJECT_DEFAULT_MAX_STEPS = 30
 // A task is tried this many times (first try and redos) before it counts as failed.
 export const PROJECT_MAX_TASK_ATTEMPTS = 3
+// A started task goes to another member at most this many times. Without a limit a coordinator could
+// hand a task back and forth between two members until the project's steps ran out.
+export const PROJECT_MAX_REASSIGNS = 2
 // What a prompt quotes of earlier results, at most.
 export const PROJECT_MAX_CONTEXT_CHARS = 40_000
 
@@ -277,8 +280,8 @@ function buildTaskPrompt(input: ProjectPromptInput): string {
     dependencyResults.length ? `${en ? 'Results of the tasks yours builds on:' : '你的任务依赖的结果：'}\n\n${dependencyResults.join('\n\n')}` : '',
     notesBlock(input, en),
     en
-      ? `Do the task now and give a result that can be used as it is. Then end with two lines:\n[Status] done (or: blocked: the reason)\n[Summary] one sentence on what you delivered\n${PROMPT_I18N.en.responseLanguageInstruction}`
-      : `请直接完成任务，给出可以直接使用的成果。最后另起两行写：\n【状态】完成（或：受阻：原因）\n【摘要】一句话说明你交付了什么\n${PROMPT_I18N['zh-CN'].responseLanguageInstruction}`,
+      ? `Do only this task, not the tasks of other members; if it needs something another member has not delivered, say so as the reason it is blocked. Do the task now and give a result that can be used as it is. Then end with two lines:\n[Status] done (or: blocked: the reason)\n[Summary] one sentence on what you delivered\n${PROMPT_I18N.en.responseLanguageInstruction}`
+      : `只做你这项任务，不要替其他成员做他们的任务；缺少别人负责的东西时，写在受阻原因里。请直接完成任务，给出可以直接使用的成果。最后另起两行写：\n【状态】完成（或：受阻：原因）\n【摘要】一句话说明你交付了什么\n${PROMPT_I18N['zh-CN'].responseLanguageInstruction}`,
   ].filter(Boolean).join('\n\n')
 }
 
@@ -312,9 +315,13 @@ function buildReviewPrompt(input: ProjectPromptInput): string {
   const byCoordinator = input.role.id === project.coordinatorRoleId
   const taskLines = project.tasks.map(task => {
     const owner = input.store.rolesById[task.ownerRoleId]?.name ?? ''
+    const reassigned = task.reassigns ?? 0
+    const handedOver = reassigned >= PROJECT_MAX_REASSIGNS
+      ? (en ? ` · handed to another member ${reassigned} times, cannot be again` : ` · 已换过 ${reassigned} 次负责人，不能再换`)
+      : reassigned > 0 ? (en ? ` · handed to another member ${reassigned} time${reassigned === 1 ? '' : 's'}` : ` · 已换过 ${reassigned} 次负责人`) : ''
     const head = en
-      ? `[${task.id} · ${task.title} · owner: ${owner} · ${statusLabel(task, en)}]`
-      : `【${task.id} · ${task.title} · 负责人：${owner} · ${statusLabel(task, en)}】`
+      ? `[${task.id} · ${task.title} · owner: ${owner} · ${statusLabel(task, en)}${handedOver}]`
+      : `【${task.id} · ${task.title} · 负责人：${owner} · ${statusLabel(task, en)}${handedOver}】`
     const parts = [head, task.doneWhen ? `${en ? 'Done when:' : '完成标准：'}${task.doneWhen}` : '']
     if (task.status === 'blocked' && task.note) parts.push(`${en ? 'Blocked:' : '受阻原因：'}${task.note}`)
     if (task.resultMessageId) {
