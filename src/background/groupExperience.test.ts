@@ -1467,6 +1467,25 @@ describe('background group chat experience handlers', () => {
     expect(promptCalls[0][1].content).not.toContain('用户最新消息：\n第一条消息')
   })
 
+  it('tells the page in plain words when the member page it asked has gone', async () => {
+    const store = makeStore()
+    store.currentChatId = 'chat-1'
+    store.chatsById['chat-1'] = { ...makeChat('chat-1', ['role-1']), messageIds: ['msg-1'], nextMessageSeq: 2 }
+    store.chatOrder = ['chat-1']
+    store.rolesById['role-1'] = makeRole('chat-1', 'role-1', '工程师')
+    store.messagesById['msg-1'] = { id: 'msg-1', chatId: 'chat-1', seq: 1, type: 'assistant', roleId: 'role-1', roleName: '工程师', content: '漏了一半', createdAt: 1, status: 'received' }
+    const harness = await setupBackground(store)
+    await harness.invoke({ type: 'TEAM_FRAME_ROLE_READY', chatId: 'chat-1', roleId: 'role-1', hostTabId: 900 }, { tab: { id: 101 } as chrome.tabs.Tab, frameId: 7, url: 'https://chatgpt.com/c/abc' })
+    harness.tabsSendMessage.mockRejectedValueOnce(new Error('Could not establish connection. Receiving end does not exist.'))
+
+    const result = await harness.invoke({ type: 'GROUP_MESSAGE_RESYNC_REPLY', chatId: 'chat-1', roleId: 'role-1', messageId: 'msg-1' }) as { ok: boolean; error?: string }
+
+    expect(result).toMatchObject({ ok: false, error: '连不上成员的网页（它可能已关闭或刷新）。请在成员卡片的菜单里点「刷新网页」后再试。' })
+    // The error pushed to the page says the same.
+    const pushed = harness.runtimeSendMessage.mock.calls.map(call => call[0]).filter(message => message?.type === 'GROUP_DELIVERY_ERROR')
+    expect(pushed.every(message => !String(message.error ?? message.message).includes('Receiving end'))).toBe(true)
+  })
+
   it('asks the role frame to resync the selected assistant reply and returns the updated store', async () => {
     const store = makeStore()
     store.currentChatId = 'chat-1'

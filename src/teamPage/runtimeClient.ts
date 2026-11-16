@@ -1,6 +1,7 @@
 import { createStoreSyncDecoder, type StoreSyncPayload } from '../group/storeSync'
 import type { OpenTeamStore, RoleSiteHealthReason, RoleSiteHealthStatus } from '../group/types'
 import type { OpenTeamControlConnectionStatus } from '../shared/localControlProtocol'
+import { BACKGROUND_GONE_MESSAGE, isReceiverGoneError } from '../shared/connectionErrors'
 
 export interface RuntimeResponse<T = unknown> {
   ok?: boolean
@@ -56,8 +57,10 @@ export function createTeamPageRuntimeClient(deps: TeamPageRuntimeClientDependenc
       chrome.runtime.sendMessage(message, response => {
         const lastError = chrome.runtime.lastError
         if (lastError) {
-          deps.log.warn('runtime-send:failed', { type, error: lastError.message })
-          reject(new Error(lastError.message))
+          const reason = lastError.message ?? ''
+          deps.log.warn('runtime-send:failed', { type, error: reason })
+          // Nobody received it: the background is not listening, as after the extension was reloaded.
+          reject(new Error(isReceiverGoneError(reason) ? BACKGROUND_GONE_MESSAGE : reason))
           return
         }
 

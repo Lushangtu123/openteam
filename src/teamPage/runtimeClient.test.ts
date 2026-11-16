@@ -29,6 +29,27 @@ async function createClient(respond: (message: Record<string, unknown>) => unkno
 }
 
 describe('team page runtime client', () => {
+  it('says in plain words when the background did not receive a command, and passes other failures on as they are', async () => {
+    vi.resetModules()
+    const chromeStub = { runtime: { lastError: undefined as { message: string } | undefined, sendMessage: vi.fn() } }
+    chromeStub.runtime.sendMessage.mockImplementation((_message: unknown, callback: (response?: unknown) => void) => {
+      chromeStub.runtime.lastError = { message: nextError }
+      callback(undefined)
+      chromeStub.runtime.lastError = undefined
+    })
+    let nextError = 'Could not establish connection. Receiving end does not exist.'
+    vi.stubGlobal('chrome', chromeStub)
+    const { createTeamPageRuntimeClient } = await import('./runtimeClient')
+    const warn = vi.fn()
+    const client = createTeamPageRuntimeClient({ getHostTabId: () => 1, applyStore: vi.fn(), refreshStore: vi.fn(async () => undefined), log: { debug: vi.fn(), warn } })
+
+    await expect(client.runCommand('GROUP_CHAT_SWITCH', { chatId: 'chat-1' })).rejects.toThrow('OpenTeam 后台暂时没有响应（扩展可能刚重新加载）。请刷新本页后再试。')
+    // The log keeps Chrome's own words.
+    expect(warn).toHaveBeenCalledWith('runtime-send:failed', { type: 'GROUP_CHAT_SWITCH', error: 'Could not establish connection. Receiving end does not exist.' })
+    nextError = 'The message port closed before a response was received.'
+    await expect(client.runCommand('GROUP_CHAT_SWITCH', { chatId: 'chat-1' })).rejects.toThrow('The message port closed before a response was received.')
+  })
+
   it('adds hostTabId to outgoing messages and applies command stores', async () => {
     vi.resetModules()
     const runtimeSendMessage = vi.fn((_message, callback) => callback({ ok: true, store: createDefaultStore() }))

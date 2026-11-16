@@ -12,7 +12,9 @@ function setup(narrow: boolean) {
     <div id="app">
       <button id="rail-chats"></button>
       <aside id="sidebar">
+        <div id="chat-list-search-box" hidden><input id="chat-list-search" /></div>
         <section class="chat-item"><button class="chat-name" type="button">群聊 A</button> <button class="chat-menu-btn">更多</button></section>
+        <section class="chat-item"><button class="chat-name" type="button" aria-current="true">群聊 B</button> <button class="chat-menu-btn">更多</button></section>
         <form id="create"><button type="submit">创建</button></form>
       </aside>
       <main><button id="open-chat-list"></button><p id="chat">聊天</p></main>
@@ -53,7 +55,33 @@ describe('chat list drawer', () => {
     expect(open()).toBe(false)
   })
 
-  it('does nothing in wide windows, and closes when the window widens', () => {
+  it('takes the focus to the list in wide windows, where the list is always shown', () => {
+    const { $, open } = setup(false)
+    $('rail-chats').click()
+    expect(open()).toBe(false)
+    // The open group, while the search box is hidden.
+    expect(document.activeElement?.textContent).toBe('群聊 B')
+
+    // The search box, once it is shown (jsdom gives no layout, so it is given one here).
+    $('chat-list-search-box').hidden = false
+    $<HTMLInputElement>('chat-list-search').getClientRects = () => [{}] as unknown as DOMRectList
+    $('rail-chats').click()
+    expect(document.activeElement).toBe($('chat-list-search'))
+  })
+
+  it('puts the focus in the list when it opens in a narrow window', () => {
+    const { $, open } = setup(true)
+    $('rail-chats').click()
+    expect(open()).toBe(true)
+    expect(document.activeElement?.textContent).toBe('群聊 B')
+    // Closing it from the same button leaves the focus where it is.
+    $('rail-chats').focus()
+    $('rail-chats').click()
+    expect(open()).toBe(false)
+    expect(document.activeElement).toBe($('rail-chats'))
+  })
+
+  it('does not open the drawer in wide windows, and closes it when the window widens', () => {
     const { $, open, resize } = setup(false)
     $('open-chat-list').click()
     expect(open()).toBe(false)

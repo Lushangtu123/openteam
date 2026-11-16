@@ -1,4 +1,5 @@
 import { isChatSite } from '../group/chatSites'
+import { backgroundErrorForUser } from '../shared/connectionErrors'
 import { loadStore } from '../group/store'
 import type { GroupChat, OpenTeamStore } from '../group/types'
 import { referencedImageIds } from '../group/backup'
@@ -427,8 +428,10 @@ chrome.runtime.onMessage.addListener((message: RuntimeMessage, sender, sendRespo
       .catch((error: unknown) => {
         const reason = errorReason(error)
         log.warn('message-handler:failed', { type: message?.type, error: reason })
-        sendError(reason).catch(() => undefined)
-        sendResponseSafely(sendResponse, { ok: false, error: reason })
+        // Chrome's wording for a member page that is gone is put in plain words; the log keeps it.
+        const shown = backgroundErrorForUser(reason)
+        sendError(shown).catch(() => undefined)
+        sendResponseSafely(sendResponse, { ok: false, error: shown })
       })
   } catch (error) {
     const reason = errorReason(error)

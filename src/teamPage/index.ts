@@ -72,7 +72,9 @@ const { openTemporaryPersonEl, closeTemporaryPersonEl, addRoleFormEl, addLibrary
 const { templateSiteEls, templateSiteExternalEl, templateExternalModelFieldEl, templateExternalModelSelectEl, templateChatGptGptsFieldEl, templateChatGptGptsUrlEl, templateGrokProjectFieldEl, templateGrokProjectUrlEl, temporaryPersonNameEl, temporaryPersonDescriptionEl, temporaryPersonPromptEl } = teamDomRefs
 const { togglePeopleDrawerEl, rolePanelEl, returnToTeamEl, showAiPagesEl } = teamDomRefs
 const log = teamPageLog
-const showError = createErrorPresenter(errorEl)
+const presentError = createErrorPresenter(errorEl)
+// The background answers in Chinese; the toast shows what has an English version in English.
+const showError = (message: string) => presentError(translateUi(message, normalizeLanguage(store.settings.language)))
 const showSuccess = createSuccessPresenter(errorEl)
 const themeController = createThemeController({
   root: document.documentElement,

@@ -1,4 +1,5 @@
 import { CHAT_SITE_INFO, chatSiteForUrl, isChatSite } from '../group/chatSites'
+import { isReceiverGoneError } from '../shared/connectionErrors'
 import { extractSupportedConversationId, getDefaultChatSiteUrlForRole, normalizeSupportedChatConversationUrl } from '../group/conversationUrl'
 import { readMessageUploads, type MessageUpload } from '../group/messageUploads'
 import { hasRoundSummary, isOpenTeamRequest, pickSummarizer, readSummarizableRound, roundSummaryRequestText } from '../group/roundSummary'
@@ -2077,8 +2078,7 @@ function isAbortError(error: unknown): boolean {
 }
 
 function isReceiverDisconnectedError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error)
-  return message.includes('Could not establish connection') || message.includes('Receiving end does not exist')
+  return isReceiverGoneError(error instanceof Error ? error.message : String(error))
 }
 
 function finalizeActiveExternalAssistantReply(store: OpenTeamStore, chat: GroupChat, role: GroupRole, promptMessageId: string): boolean {
