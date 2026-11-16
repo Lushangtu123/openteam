@@ -725,7 +725,6 @@
 :root[data-theme] .add-person-site-note {
   margin-left: auto;
   color: var(--muted);
-  font-size: 11.5px;
   font-weight: 400;
 }
 
@@ -836,10 +835,6 @@
 
 :root[data-theme] .orchestration-person-title .tiny {
   min-width: 0;
-}
-
-:root[data-theme] .orchestration-person-site {
-  font-size: 11px;
 }
 
 /* Team-up: the AIs in use first; 更多 AI shows the rest. */

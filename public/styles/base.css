@@ -850,7 +850,6 @@ select:focus {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 84px;
 }
 
 .chat-header .chat-row {
