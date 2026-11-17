@@ -646,16 +646,28 @@
             <p class="tiny">每次执行前都会先问你。执行中它要改文件或运行命令时，会不会再来问你，取决于它的权限模式：Claude Code 预设每次都问。OpenTeam 替它读写文件时只限这个目录；它自己的工具按它自己的权限规则。</p>
           </div>
           <div class="field api-model-field">
+            <label for="external-model-provider">服务商</label>
+            <select id="external-model-provider">
+              <option value="">自定义（自己填地址）</option>
+            </select>
+          </div>
+          <div class="field api-model-field">
             <label for="external-model-base-url">模型地址</label>
             <input id="external-model-base-url" type="url" autocomplete="off" placeholder="https://api.example.com/v1" />
           </div>
           <div class="field api-model-field">
             <label for="external-model-api-key">模型 Key</label>
             <input id="external-model-api-key" type="password" autocomplete="off" />
+            <a id="external-model-key-link" class="tiny external-model-key-link" target="_blank" rel="noopener noreferrer" hidden>去获取 Key</a>
           </div>
           <div class="field api-model-field">
             <label for="external-model-model-name">模型名称</label>
-            <input id="external-model-model-name" type="text" autocomplete="off" placeholder="gpt-4.1 / claude-sonnet" />
+            <div class="external-model-name-row">
+              <input id="external-model-model-name" type="text" autocomplete="off" list="external-model-names" placeholder="gpt-4.1 / claude-sonnet" />
+              <button id="fetch-external-model-names" class="btn" type="button">获取模型列表</button>
+            </div>
+            <datalist id="external-model-names"></datalist>
+            <p id="external-model-names-status" class="tiny" aria-live="polite"></p>
           </div>
           <div class="template-actions">
             <button id="reset-external-model-form" class="btn" type="button">取消</button>

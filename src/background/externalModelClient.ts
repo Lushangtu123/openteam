@@ -1,7 +1,11 @@
 import { streamText } from 'ai'
 import { createAnthropic } from '@ai-sdk/anthropic'
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
-import type { ExternalModelConfig, ExternalModelFormat } from '../group/types'
+import type { ExternalModelConfig } from '../group/types'
+import { normalizeBaseUrl } from '../shared/modelBaseUrl'
+import { serverErrorText } from '../shared/serverErrorText'
+
+export { normalizeBaseUrl }
 
 export class ExternalModelError extends Error {
   constructor(public message: string, public status?: number, public code?: string) {
@@ -61,48 +65,6 @@ export interface ExternalModelClientOptions {
 // How long a request may go without new text: before the first piece (a thinking model under load
 // can be slow to start) and between pieces. A long reply runs as long as text keeps coming.
 const DEFAULT_EXTERNAL_MODEL_TIMEOUT_MS = 60_000
-
-// An OpenAI-format address gets /v1 added unless its path already names an API version (/v1,
-// /v1beta/openai for Gemini, /api/v3, /api/paas/v4): "https://api.deepseek.com" and OpenRouter's
-// "…/api" need it; Gemini's "…/v1beta/openai" must be left as it is.
-export function normalizeBaseUrl(url: string, format: ExternalModelFormat): string {
-  let normalized = url.trim().replace(/\/+$/, '')
-  if (format === 'openai') {
-    normalized = normalizeOpenAiCompatibleBaseUrl(normalized)
-    if (!hasVersionSegment(normalized)) {
-      normalized += '/v1'
-    }
-  }
-  return normalized
-}
-
-function hasVersionSegment(url: string): boolean {
-  let path: string
-  try {
-    path = new URL(url).pathname
-  } catch {
-    path = url
-  }
-  return path.split('/').some(segment => /^v\d+(?:[a-z]+\d*)?$/i.test(segment))
-}
-
-function normalizeOpenAiCompatibleBaseUrl(url: string): string {
-  try {
-    const parsed = new URL(url)
-    if (
-      parsed.hostname === 'dashscope.aliyuncs.com' ||
-      parsed.hostname === 'dashscope-intl.aliyuncs.com'
-    ) {
-      const path = parsed.pathname.replace(/\/+$/, '')
-      if (!path || path === '/') parsed.pathname = '/compatible-mode'
-      if (path === '/compatible-mode') parsed.pathname = '/compatible-mode'
-      return parsed.href.replace(/\/+$/, '')
-    }
-  } catch {
-    // Preserve existing free-form handling for local or custom provider URLs.
-  }
-  return url
-}
 
 export function createExternalModelClient(fetchImpl: typeof fetch = fetch, options: ExternalModelClientOptions = {}): ExternalModelClient {
   let lastResponseMetadata: Record<string, unknown> = {}
@@ -334,18 +296,6 @@ function requestErrorMessage(error: any, status: number | undefined, apiKey: str
   return apiKey ? text.split(apiKey).join('***') : text
 }
 
-function serverErrorText(body: unknown): string {
-  if (typeof body !== 'string' || !body.trim()) return ''
-  try {
-    let parsed = JSON.parse(body)
-    if (Array.isArray(parsed)) parsed = parsed[0]
-    const message = parsed?.error?.message ?? (typeof parsed?.error === 'string' ? parsed.error : undefined) ?? parsed?.message
-    if (typeof message === 'string' && message.trim()) return message.trim().slice(0, ANSWER_START_CHARS)
-  } catch {
-    // Not JSON: its start is shown as it is.
-  }
-  return body.replace(/\s+/g, ' ').trim().slice(0, ANSWER_START_CHARS)
-}
 
 // The first characters of a response body, read from a copy so the AI library still gets all of it.
 function readStart(response: Response): Promise<string> {

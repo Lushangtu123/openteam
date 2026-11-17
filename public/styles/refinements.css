@@ -771,6 +771,32 @@
   border-top: 1px solid var(--line);
 }
 
+:root[data-theme] .external-model-name-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+:root[data-theme] .external-model-name-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+:root[data-theme] .external-model-name-row .btn {
+  flex: none;
+}
+
+:root[data-theme] .external-model-key-link {
+  display: inline-block;
+  margin-top: 4px;
+  color: var(--gpt-link);
+}
+
+:root[data-theme] .external-model-key-link[hidden],
+:root[data-theme] #external-model-names-status:empty {
+  display: none;
+}
+
 :root[data-theme] .external-model-form-title {
   margin: 0 0 4px;
   font-size: 15px;

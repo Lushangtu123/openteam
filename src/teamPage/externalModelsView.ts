@@ -1,4 +1,5 @@
 import type { ExternalModelConfig, ExternalModelFormat, OpenTeamStore } from '../group/types'
+import { API_MODEL_PRESETS, listModelNames as fetchModelNames, presetForBaseUrl, type ModelListRequest } from '../shared/apiModelPresets'
 import { hasHostAccess, hostAccessLabel, hostAccessPattern, requestHostAccess } from '../shared/hostAccess'
 import { normalizeLanguage, translateUi } from '../shared/i18n'
 import type { LocalAgentInfo } from '../shared/localControlProtocol'
@@ -27,6 +28,8 @@ export interface ExternalModelsViewDependencies {
   // prompt, shown only from a click).
   hasHostAccess?(baseUrl: string): Promise<boolean>
   requestHostAccess?(baseUrl: string): Promise<boolean>
+  // The provider's models for the address and key in the form (its /models list).
+  listModelNames?(request: ModelListRequest): Promise<string[]>
   showError(message: string): void
 }
 
@@ -46,6 +49,15 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
   const localHint = localStatusEl?.textContent ?? ''
   const addButtonEl = form.ownerDocument.querySelector<HTMLButtonElement>('#add-external-model')
   const formTitleEl = form.querySelector<HTMLElement>('#external-model-form-title')
+  const providerEl = form.querySelector<HTMLSelectElement>('#external-model-provider')
+  const keyLinkEl = form.querySelector<HTMLAnchorElement>('#external-model-key-link')
+  const fetchNamesEl = form.querySelector<HTMLButtonElement>('#fetch-external-model-names')
+  const modelNamesEl = form.querySelector<HTMLDataListElement>('#external-model-names')
+  const namesStatusEl = form.querySelector<HTMLElement>('#external-model-names-status')
+  const defaultModelPlaceholder = deps.externalModelModelNameEl.placeholder
+  const listNames = deps.listModelNames ?? fetchModelNames
+  // The display name a preset filled in, which the next preset may replace.
+  let presetFilledName = ''
   let localAgents: LocalAgentInfo[] = []
   const hasAccess = deps.hasHostAccess ?? hasHostAccess
   const requestAccess = deps.requestHostAccess ?? requestHostAccess
@@ -106,7 +118,97 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
     if (agent && !deps.externalModelNameEl.value.trim()) deps.externalModelNameEl.value = agent.name
   }
 
+  function fillProviderOptions(): void {
+    if (!providerEl) return
+    const custom = providerEl.querySelector('option[value=""]')
+    providerEl.replaceChildren(...(custom ? [custom] : []), ...API_MODEL_PRESETS.map(preset => {
+      const option = document.createElement('option')
+      option.value = preset.id
+      option.textContent = ui(preset.name)
+      return option
+    }))
+  }
+
+  // Shows the preset the address belongs to (custom for any other) and where to get its key.
+  function showProvider(): void {
+    const preset = presetForBaseUrl(deps.externalModelBaseUrlEl.value)
+    if (providerEl) providerEl.value = preset?.id ?? ''
+    if (keyLinkEl) {
+      keyLinkEl.hidden = !preset
+      if (preset) keyLinkEl.href = preset.keyPage
+    }
+    deps.externalModelModelNameEl.placeholder = preset?.exampleModel ?? defaultModelPlaceholder
+  }
+
+  function choosePreset(): void {
+    const preset = API_MODEL_PRESETS.find(candidate => candidate.id === providerEl?.value)
+    if (!preset) {
+      showProvider()
+      return
+    }
+    deps.externalModelFormatEl.value = preset.format
+    deps.externalModelBaseUrlEl.value = preset.baseUrl
+    const name = deps.externalModelNameEl.value.trim()
+    if (!name || name === presetFilledName) {
+      deps.externalModelNameEl.value = ui(preset.name)
+      presetFilledName = deps.externalModelNameEl.value
+    }
+    clearModelNames()
+    showProvider()
+  }
+
+  function clearModelNames(): void {
+    modelNamesEl?.replaceChildren()
+    if (namesStatusEl) namesStatusEl.textContent = ''
+  }
+
+  // Asks the provider for its models with the address and key in the form; from a click, so the
+  // browser may ask to allow the address.
+  async function fetchModelList(): Promise<void> {
+    const baseUrl = deps.externalModelBaseUrlEl.value.trim()
+    const apiKey = deps.externalModelApiKeyEl.value.trim()
+    const format = readFormat()
+    if (!baseUrl || !apiKey || format === 'local-agent') {
+      if (namesStatusEl) namesStatusEl.textContent = ui('先填写模型地址和 Key')
+      return
+    }
+    const original = fetchNamesEl?.textContent ?? ''
+    if (fetchNamesEl) {
+      fetchNamesEl.disabled = true
+      fetchNamesEl.textContent = ui('获取中')
+    }
+    try {
+      await allowAccess(baseUrl)
+      const names = await listNames({ format, baseUrl, apiKey })
+      modelNamesEl?.replaceChildren(...names.map(name => {
+        const option = document.createElement('option')
+        option.value = name
+        return option
+      }))
+      if (namesStatusEl) {
+        namesStatusEl.textContent = language() === 'en'
+          ? `Found ${names.length} models. Pick one in the model name field.`
+          : `找到 ${names.length} 个模型，在模型名称里选择。`
+      }
+      deps.externalModelModelNameEl.focus()
+    } catch (error) {
+      if (namesStatusEl) namesStatusEl.textContent = ui(error instanceof Error ? error.message : String(error))
+    } finally {
+      if (fetchNamesEl) {
+        fetchNamesEl.disabled = false
+        fetchNamesEl.textContent = original
+      }
+    }
+  }
+
   function registerExternalModelsEvents(): void {
+    fillProviderOptions()
+    providerEl?.addEventListener('change', choosePreset)
+    deps.externalModelBaseUrlEl.addEventListener('input', () => {
+      showProvider()
+      clearModelNames()
+    })
+    fetchNamesEl?.addEventListener('click', () => void fetchModelList())
     deps.externalModelFormatEl.addEventListener('change', showFieldsForFormat)
     localAgentEl?.addEventListener('change', showWorkspacesForAgent)
     deps.openExternalModelsEl.addEventListener('click', openExternalModels)
@@ -264,6 +366,9 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
     deps.externalModelApiKeyEl.value = model.apiKey
     deps.externalModelModelNameEl.value = model.modelName
     if (workspaceEl) workspaceEl.value = model.workspace ?? ''
+    presetFilledName = ''
+    clearModelNames()
+    showProvider()
     showFieldsForFormat()
     if (model.format === 'local-agent') void loadLocalAgents(model.localAgentId)
   }
@@ -276,6 +381,9 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
     deps.externalModelApiKeyEl.value = ''
     deps.externalModelModelNameEl.value = ''
     if (workspaceEl) workspaceEl.value = ''
+    presetFilledName = ''
+    clearModelNames()
+    showProvider()
     showFieldsForFormat()
   }
 
@@ -283,6 +391,8 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
     deps.settingsMenuEl.hidden = true
     deps.settingsButtonEl.setAttribute('aria-expanded', 'false')
     deps.externalModelsModalEl.hidden = false
+    // In the language chosen now.
+    fillProviderOptions()
     renderExternalModels()
     hideForm()
     if (!form.hidden) deps.externalModelNameEl.focus()
