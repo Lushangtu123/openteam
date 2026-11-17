@@ -214,6 +214,42 @@ describe('team page messages view boundary', () => {
     expect(messagesEl.querySelector('.no-chat-card')).toBe(card)
   })
 
+  it('walks someone with no group yet through signing in, checking the sites and making a first group', () => {
+    const { messagesEl, deps } = createLongChatView(0)
+    deps.getStore().chatOrder = []
+    const startNewChat = vi.fn()
+    const openSiteLogin = vi.fn()
+    const startSiteCheck = vi.fn()
+    const view = createMessagesView({ ...deps, getCurrentChat: () => undefined, getCurrentMessages: () => [], startNewChat, openSiteLogin, startSiteCheck })
+    view.renderMessages()
+
+    const guide = messagesEl.querySelector<HTMLElement>('.onboarding-guide')!
+    expect(guide).toBeTruthy()
+    const steps = [...guide.querySelectorAll<HTMLElement>('.onboarding-step')]
+    expect(steps.map(step => step.querySelector('.onboarding-step-title')?.textContent)).toEqual(['登录要用的 AI 网站', '检查能不能用（可选）', '建第一个群'])
+
+    // One button per site that opens inside OpenTeam; each opens that site to sign in.
+    const siteButtons = [...steps[0].querySelectorAll<HTMLButtonElement>('button')]
+    expect(siteButtons.map(button => button.textContent)).toEqual(['Gemini', 'ChatGPT', 'DeepSeek', 'Grok', 'Qwen', 'Kimi'])
+    siteButtons[2].click()
+    expect(openSiteLogin).toHaveBeenCalledWith('deepseek')
+
+    steps[1].querySelector<HTMLButtonElement>('button')!.click()
+    expect(startSiteCheck).toHaveBeenCalled()
+
+    const startButtons = [...steps[2].querySelectorAll<HTMLButtonElement>('button')]
+    expect(startButtons.map(button => [button.textContent, button.classList.contains('btn-primary')])).toEqual([['按任务组队', true], ['从模板创建', false], ['空白群聊', false]])
+    startButtons[0].click()
+    expect(startNewChat).toHaveBeenCalledWith('team')
+    expect(guide.textContent).toContain('@所有人')
+
+    // Once there is a group, the ordinary card comes back.
+    deps.getStore().chatOrder = ['chat-1']
+    view.renderMessages()
+    expect(messagesEl.querySelector('.onboarding-guide')).toBeNull()
+    expect(messagesEl.querySelector('.no-chat-card')).toBeTruthy()
+  })
+
   it('shows attached text files as chips that download the file', () => {
     const { messagesEl, messages, view } = createLongChatView(1)
     messages[0] = { ...messages[0], attachments: [{ id: 'f1', type: 'file', status: 'ready', fileName: 'notes.md', mimeType: 'text/markdown', size: 2048, text: '# 目标' }] }

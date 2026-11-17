@@ -27,6 +27,7 @@ import { createReplyComparisonView } from './replyComparisonView'
 import { createTeamFormationView } from './teamFormationView'
 import { createProjectView } from './projectView'
 import { createSiteCheckView } from './siteCheckView'
+import { CHAT_SITE_INFO } from '../group/chatSites'
 import { createMessagesView } from './messagesView'
 import { createNotesView } from './notesView'
 import { createPeopleLibraryView } from './peopleLibraryView'
@@ -503,6 +504,10 @@ const messagesView = createMessagesView({
   openAddPersonDialog,
   // teamUiController is created further down; this runs only on a click.
   startNewChat: kind => teamUiController.startNewChat(kind),
+  openSiteLogin: site => {
+    chrome.tabs.create({ url: CHAT_SITE_INFO[site].homeUrl }).catch(error => showError(error instanceof Error ? error.message : String(error)))
+  },
+  startSiteCheck: () => startSiteCheck(),
   messageTitle,
   focusRoleFrame,
   insertMention,
@@ -649,6 +654,11 @@ function handlePrimaryModeChange(isPrimary: boolean): void {
 
   log.warn('team-page-primary:passive', { hostTabId: appState.hostTabId })
   showError('已检测到另一个 OpenTeam 页面正在运行。当前页面已暂停 AI iframe，避免两个页面同时加载导致卡死。')
+}
+
+// 网站自检: the background makes the group, opens it and sends the question.
+function startSiteCheck(): void {
+  runCommand('GROUP_SITE_CHECK_START').catch(error => showError(error instanceof Error ? error.message : String(error)))
 }
 
 function render(): void {
@@ -907,11 +917,10 @@ async function boot(): Promise<void> {
     settingsMenuEl.hidden = true
     settingsButtonEl.setAttribute('aria-expanded', 'false')
   })
-  // 网站自检: the background makes the group, opens it and sends the question.
   document.querySelector<HTMLButtonElement>('#start-site-check')?.addEventListener('click', () => {
     settingsMenuEl.hidden = true
     settingsButtonEl.setAttribute('aria-expanded', 'false')
-    runCommand('GROUP_SITE_CHECK_START').catch(error => showError(error instanceof Error ? error.message : String(error)))
+    startSiteCheck()
   })
   registerAllNotesEvents()
   languageSettingsController.registerEvents()
