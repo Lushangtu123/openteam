@@ -392,6 +392,19 @@ export function createRolePanelView(deps: RolePanelViewDependencies): RolePanelV
 
   async function switchRoleSite(role: GroupRole, modelKey: string): Promise<void> {
     if (roleModelKey(role, deps.getStore()) === modelKey) return
+    // A reply under way cannot be read from the old model once the member has moved: it is ended
+    // first, with what it wrote kept, so its question does not wait for it.
+    const replying = role.status === 'thinking' || (role.status === 'stopped' && Boolean(role.lastPromptMessageId))
+    if (replying) {
+      const question = language() === 'en'
+        ? `"${role.name}" is still replying. Moving it to another model ends that reply; what it has written is kept, and you can ask the new model again. Go on?`
+        : `「${role.name}」还在回复。换模型会结束这条回复，已写的部分会保留，之后可以用新模型重新回复。继续吗？`
+      if (!window.confirm(question)) {
+        renderRolePanel()
+        return
+      }
+      await deps.runCommand('GROUP_ROLE_REPLY_END', { chatId: role.chatId, roleId: role.id })
+    }
     const patch = rolePatchForModelKey(modelKey)
     await deps.runCommand('GROUP_ROLE_UPDATE', { roleId: role.id, patch })
     const updatedRole = deps.getStore().rolesById[role.id]

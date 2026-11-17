@@ -2005,3 +2005,79 @@ describe('a member page loaded again while its member replies', () => {
     expect((await harness.getStore()).rolesById['role-1'].status).toBe('thinking')
   })
 })
+
+describe('moving a member to another model', () => {
+  async function setup() {
+    const store = makeStore()
+    store.settings.language = 'zh-CN'
+    store.currentChatId = 'chat-1'
+    store.chatsById['chat-1'] = makeChat('chat-1', ['role-1'])
+    store.chatOrder = ['chat-1']
+    store.rolesById['role-1'] = makeRole('chat-1', 'role-1', '工程师', { systemPrompt: '完整人设：只从工程角度回答', chatSite: 'gemini' })
+    const harness = await setupBackground(store)
+    const gemini = { tab: { id: 101 } as chrome.tabs.Tab, frameId: 7, url: 'https://gemini.google.com/', documentId: 'doc-1' }
+    await harness.invoke({ type: 'TEAM_FRAME_ROLE_READY', chatId: 'chat-1', roleId: 'role-1', hostTabId: 900 }, gemini)
+    const ask = async (raw: string, frame = gemini) => {
+      const sent = await harness.invoke({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: `@all ${raw}` }) as { message: { id: string } }
+      await harness.invoke({ type: 'TEAM_SEND_ACK', chatId: 'chat-1', roleId: 'role-1', messageId: sent.message.id }, frame)
+      return sent.message.id
+    }
+    const lastPrompt = () => harness.tabsSendMessage.mock.calls.filter(call => call[1]?.type === 'TEAM_SEND_PROMPT').slice(-1)[0]?.[1] as { content: string; includesPersona: boolean }
+    return { harness, gemini, ask, lastPrompt }
+  }
+
+  it('ends a reply under way, keeping what arrived, so its question no longer waits', async () => {
+    const { harness, gemini, ask } = await setup()
+    const first = await ask('第一问')
+    await harness.invoke({ type: 'TEAM_ROLE_REPLY', chatId: 'chat-1', roleId: 'role-1', messageId: first, content: '第一答' }, gemini)
+    const second = await ask('第二问')
+    await harness.invoke({ type: 'TEAM_ROLE_REPLY_PROGRESS', chatId: 'chat-1', roleId: 'role-1', messageId: second, content: '写到一半' }, gemini)
+
+    expect(await harness.invoke({ type: 'GROUP_ROLE_REPLY_END', chatId: 'chat-1', roleId: 'role-1' })).toMatchObject({ ok: true })
+    expect(await harness.invoke({ type: 'GROUP_ROLE_UPDATE', roleId: 'role-1', patch: { modelSource: 'site', chatSite: 'chatgpt' } })).toMatchObject({ ok: true })
+    const after = await harness.getStore()
+    expect(after.messagesById[second].deliveryStatus?.['role-1']).toBe('error')
+    const reply = after.chatsById['chat-1'].messageIds.map(id => after.messagesById[id]).filter(message => message.type === 'assistant').slice(-1)[0]
+    // A failed reply: 重新回复 asks the new model.
+    expect(reply).toMatchObject({ status: 'error', sourceMessageId: second })
+    expect(reply.content).toContain('写到一半')
+    expect(reply.content).toContain('成员换了模型')
+    // Nothing to end: nothing changes.
+    expect(await harness.invoke({ type: 'GROUP_ROLE_REPLY_END', chatId: 'chat-1', roleId: 'role-1' })).toMatchObject({ ok: true, settled: [] })
+  })
+
+  it('sends the persona again with the first prompt in the new conversation, and not after', async () => {
+    const { harness, gemini, ask, lastPrompt } = await setup()
+    const first = await ask('第一问')
+    expect(lastPrompt().includesPersona).toBe(true)
+    await harness.invoke({ type: 'TEAM_ROLE_REPLY', chatId: 'chat-1', roleId: 'role-1', messageId: first, content: '第一答' }, gemini)
+    const second = await ask('第二问')
+    expect(lastPrompt().includesPersona).toBe(false)
+    await harness.invoke({ type: 'TEAM_ROLE_REPLY', chatId: 'chat-1', roleId: 'role-1', messageId: second, content: '第二答' }, gemini)
+
+    await harness.invoke({ type: 'GROUP_ROLE_UPDATE', roleId: 'role-1', patch: { modelSource: 'site', chatSite: 'chatgpt' } })
+    const chatgpt = { tab: { id: 101 } as chrome.tabs.Tab, frameId: 9, url: 'https://chatgpt.com/', documentId: 'doc-2' }
+    await harness.invoke({ type: 'TEAM_FRAME_ROLE_READY', chatId: 'chat-1', roleId: 'role-1', hostTabId: 900 }, chatgpt)
+    const third = await ask('第三问', chatgpt)
+    expect(lastPrompt().includesPersona).toBe(true)
+    expect(lastPrompt().content).toContain('完整人设：只从工程角度回答')
+    await harness.invoke({ type: 'TEAM_ROLE_REPLY', chatId: 'chat-1', roleId: 'role-1', messageId: third, content: '第三答' }, chatgpt)
+    await ask('第四问', chatgpt)
+    expect(lastPrompt().includesPersona).toBe(false)
+  })
+
+  it('sends the persona again after the site lost the member\'s conversation', async () => {
+    const { harness, gemini, ask, lastPrompt } = await setup()
+    const first = await ask('第一问')
+    await harness.invoke({ type: 'TEAM_ROLE_CONVERSATION_UPDATED', chatId: 'chat-1', roleId: 'role-1', conversationUrl: 'https://gemini.google.com/app/abc123' }, gemini)
+    await harness.invoke({ type: 'TEAM_ROLE_REPLY', chatId: 'chat-1', roleId: 'role-1', messageId: first, content: '第一答' }, gemini)
+    const second = await ask('第二问')
+    expect(lastPrompt().includesPersona).toBe(false)
+    await harness.invoke({ type: 'TEAM_ROLE_REPLY', chatId: 'chat-1', roleId: 'role-1', messageId: second, content: '第二答' }, gemini)
+    // The site opened its start page instead of the conversation: a new chat.
+    await harness.invoke({ type: 'TEAM_ROLE_CONVERSATION_UPDATED', chatId: 'chat-1', roleId: 'role-1', conversationUrl: 'https://gemini.google.com/app' }, gemini)
+    expect((await harness.getStore()).rolesById['role-1'].geminiConversationUrl).toBeUndefined()
+    await ask('第三问')
+    expect(lastPrompt().includesPersona).toBe(true)
+  })
+})

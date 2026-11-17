@@ -318,7 +318,8 @@ export function updateGroupRole(
       delete role.externalModelId
     }
     role.contextCursor = 0
-    // Another model or site: a conversation that has been sent nothing.
+    // Another model or site: a conversation that has been sent nothing, the persona included.
+    role.conversationStartedAfterSeq = chat.nextMessageSeq - 1
     forgetMemorySent(role)
     role.status = 'pending'
     delete role.geminiConversationId

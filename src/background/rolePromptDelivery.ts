@@ -221,8 +221,12 @@ function crossReviewPromptFor(input: PrepareRolePromptDeliveryInput): string | u
   return buildCrossReviewPrompt({ round, reviewer: input.role, language: input.store.settings.language, maxReplyChars: contextCharBudgetForRole(input.store, input.role) })
 }
 
+// The prompts this member got in its current conversation: one that started over (another model or
+// site, a lost site conversation) holds none of the earlier ones, so its first prompt carries the
+// persona again.
 function countLocalRoleHistory(messages: GroupMessage[], role: GroupRole, currentMessageId: string): number {
-  return messages.filter(message => message.id !== currentMessageId && isRoleHistoryMessage(message, role.id)).length
+  const startedAfter = role.conversationStartedAfterSeq ?? 0
+  return messages.filter(message => message.id !== currentMessageId && message.seq > startedAfter && isRoleHistoryMessage(message, role.id)).length
 }
 
 function isRoleHistoryMessage(message: GroupMessage, roleId: string): boolean {

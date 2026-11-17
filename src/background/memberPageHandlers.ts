@@ -22,7 +22,7 @@ import type { MessageHandlerContext } from './messageHandlerDeps'
 const LIVE_REPLY_MAX_CHARS = 60_000
 
 export function createMemberPageHandlers(ctx: MessageHandlerContext) {
-  const { deps, roleErrorRetryCounts, deliverExternal } = ctx
+  const { deps, roleErrorRetryCounts, deliverExternal, externalModelRuns } = ctx
 
   const handleFrameRoleReady = async (message: RuntimeMessage, sender: chrome.runtime.MessageSender) => {
     const tabId = messageTabId(message, sender)
@@ -102,6 +102,7 @@ export function createMemberPageHandlers(ctx: MessageHandlerContext) {
         delete role.geminiConversationUrl
         delete role.geminiConversationId
         role.contextCursor = 0
+        role.conversationStartedAfterSeq = chat.nextMessageSeq - 1
         forgetMemorySent(role)
       } else {
         updateConversation(role, conversationUrl, readOptionalString(message.conversationId))
@@ -434,6 +435,26 @@ export function createMemberPageHandlers(ctx: MessageHandlerContext) {
     return { ok: true, message: result.message, store }
   }
 
+  // Ends the reply of a member the user is moving to another model: the reply cannot be read from
+  // the old model any more. What arrived is kept; its question no longer waits for it.
+  const handleRoleReplyEnd = async (message: RuntimeMessage) => {
+    const chatId = requireString(message.chatId, '缺少群聊 ID')
+    const roleId = requireString(message.roleId, '缺少成员 ID')
+    const { store, result } = await mutateStore(store => {
+      const role = requireRole(store, requireChat(store, chatId).id, roleId)
+      const replyAttemptId = role.replyAttemptId
+      const settled = settleInterruptedReplies(store, { siteMembers: true, apiMembers: true, onlyRole: { chatId, roleId }, cause: 'switched', timestamp: deps.now(), newId: deps.newId, getChatStatusFromRoles: deps.getChatStatusFromRoles })
+      return { settled, replyAttemptId }
+    })
+    if (result.settled.length === 0) return { ok: true, settled: [] }
+    // An API member's request still running is stopped.
+    externalModelRuns.abort(chatId, roleId, result.replyAttemptId)
+    deps.log.info('role-reply:ended-for-switch', { chatId, roleId, settled: result.settled })
+    await deps.broadcastStoreUpdated(store)
+    await afterRepliesInterrupted(store, result.settled)
+    return { ok: true, settled: result.settled, store }
+  }
+
   // Ends the replies their members can no longer give (see interruptedReplies.ts), and lets what
   // waits for them go on, as when a member reports that its reply failed.
   const handleRepliesInterrupted = async (message: RuntimeMessage) => {
@@ -513,7 +534,7 @@ export function createMemberPageHandlers(ctx: MessageHandlerContext) {
     return { ok: true, store }
   }
 
-  return { handleFrameRoleReady, handleConversationUpdated, handleSendAck, handleRoleStatus, handleSiteStatusUpdate, handleRoleReply, handleRoleReplyProgress, handleRoleReplyResync, handleRepliesInterrupted, handleRoleError }
+  return { handleFrameRoleReady, handleConversationUpdated, handleSendAck, handleRoleStatus, handleSiteStatusUpdate, handleRoleReply, handleRoleReplyProgress, handleRoleReplyResync, handleRepliesInterrupted, handleRoleReplyEnd, handleRoleError }
 }
 
 export type MemberPageHandlers = ReturnType<typeof createMemberPageHandlers>

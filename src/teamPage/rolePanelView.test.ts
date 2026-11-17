@@ -403,6 +403,46 @@ describe('team page role panel view boundary', () => {
   })
 })
 
+describe('moving a member that is replying to another model', () => {
+  async function pick(answer: boolean) {
+    const store = makeStoreWithRole()
+    Object.assign(store.rolesById['role-1'], { status: 'thinking', lastPromptMessageId: 'q1' })
+    const rolePanelEl = document.createElement('aside')
+    const roleSummaryEl = document.createElement('p')
+    const roleListEl = document.createElement('div')
+    rolePanelEl.append(roleSummaryEl, roleListEl)
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(answer)
+    const commands: string[] = []
+    const runCommand = vi.fn(async (type: string) => { commands.push(type) })
+    const iframeHost = { recoverRole: vi.fn() }
+    const view = createRolePanelView({
+      state: createTeamPageState(), getStore: () => store, rolePanelEl, roleSummaryEl, roleListEl, iframeHost,
+      getCurrentChat: () => store.chatsById['chat-1'], getCurrentRoles: () => [store.rolesById['role-1']], emptyCard: () => document.createElement('div'),
+      insertMention: vi.fn(), refreshCurrentChat: vi.fn(async () => undefined), focusRoleFrame: vi.fn(), runCommand, showError: vi.fn(),
+    })
+    view.renderRolePanel()
+    roleListEl.querySelector<HTMLButtonElement>('.site-pill')!.click()
+    const option = [...roleListEl.querySelectorAll<HTMLButtonElement>('.role-site-option')].find(button => button.textContent?.includes('Gemini'))!
+    option.click()
+    await vi.waitFor(() => expect(confirm).toHaveBeenCalled())
+    await new Promise(resolve => setTimeout(resolve, 0))
+    const question = confirm.mock.calls[0][0] as string
+    confirm.mockRestore()
+    return { question, commands }
+  }
+
+  it('asks first, then ends the reply and moves it', async () => {
+    const { question, commands } = await pick(true)
+    expect(question).toBe('「产品经理」还在回复。换模型会结束这条回复，已写的部分会保留，之后可以用新模型重新回复。继续吗？')
+    expect(commands.slice(0, 2)).toEqual(['GROUP_ROLE_REPLY_END', 'GROUP_ROLE_UPDATE'])
+  })
+
+  it('leaves everything as it is when the user says no', async () => {
+    const { commands } = await pick(false)
+    expect(commands).toEqual([])
+  })
+})
+
 function makeStoreWithRole(): OpenTeamStore {
   const store = createDefaultStore()
   store.settings.language = 'zh-CN'

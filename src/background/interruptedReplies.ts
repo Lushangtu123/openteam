@@ -16,6 +16,7 @@ import { isExternalModelRole } from './rolePromptDelivery'
 const SITE_REPLY_NOTICE = '⚠️ 这条回复还没有读完，成员页面就关闭或重新加载了（OpenTeam 页面被关闭或刷新，或浏览器被关闭）。站点上可能已经写完。\n\n可以点击下方的重新同步完整回复按钮把它读回来。'
 // The note before the page's reload was mentioned, still in replies kept back then.
 const EARLIER_SITE_REPLY_NOTICES = ['⚠️ 这条回复还没有读完，成员页面就关闭了（OpenTeam 页面或浏览器被关闭）。站点上可能已经写完。\n\n可以点击下方的重新同步完整回复按钮把它读回来。']
+const SWITCHED_REPLY_NOTICE = '⚠️ 这条回复没有写完：成员换了模型，原来的回复不再读取。\n\n可以点击下方的重新回复按钮，用新模型再答一次。'
 const API_REPLY_NOTICE = '⚠️ 回复中断了：扩展的后台重新启动，这条回复没有写完。\n\n可以点击下方的重新回复按钮再试一次。'
 
 // What had been read of a web member's reply that was ended here, without the note: the text the
@@ -42,8 +43,12 @@ export interface InterruptedReplyScope {
   // Only members with no sign of their reply since this time: a reply begun after the background
   // started is its own and goes on.
   quietSince?: number
-  // Only this member: its page was loaded again while it was reading a reply.
+  // Only this member: its page was loaded again while it was reading a reply, or it is being moved
+  // to another model.
   onlyRole?: { chatId: string; roleId: string }
+  // Why: its page or the background went away (the default), or the user moved the member to
+  // another model, which the reply cannot be read from any more.
+  cause?: 'gone' | 'switched'
 }
 
 export interface SettleInterruptedRepliesOptions extends InterruptedReplyScope {
@@ -58,8 +63,11 @@ export function settleInterruptedReplies(store: OpenTeamStore, options: SettleIn
     let changed = false
     for (const roleId of chat.roleIds) {
       const role = store.rolesById[roleId]
-      if (!role || role.chatId !== chat.id || role.status !== 'thinking') continue
+      if (!role || role.chatId !== chat.id) continue
       if (options.onlyRole && (options.onlyRole.chatId !== chat.id || options.onlyRole.roleId !== role.id)) continue
+      // A member stopped before it wrote anything still owes its question an answer.
+      const stoppedEmpty = options.onlyRole !== undefined && role.status === 'stopped' && Boolean(role.lastPromptMessageId)
+      if (role.status !== 'thinking' && !stoppedEmpty) continue
       const external = isExternalModelRole(role)
       if (!(external ? options.apiMembers : options.siteMembers)) continue
       if (options.quietSince !== undefined && role.updatedAt >= options.quietSince) continue
@@ -97,8 +105,11 @@ function keepInterruptedReply(store: OpenTeamStore, chat: GroupChat, role: Group
   const existing = replies[replies.length - 1]
   // An earlier failure's note is replaced; text that was still arriving is kept.
   const arrived = (existing?.status === 'pending' ? existing.content : role.liveReply?.promptMessageId === prompt.id ? role.liveReply.content : '').trim()
-  const content = [arrived, external ? API_REPLY_NOTICE : SITE_REPLY_NOTICE].filter(Boolean).join('\n\n')
-  const status = external ? 'error' : 'received'
+  const switched = options.cause === 'switched'
+  const content = [arrived, switched ? SWITCHED_REPLY_NOTICE : external ? API_REPLY_NOTICE : SITE_REPLY_NOTICE].filter(Boolean).join('\n\n')
+  // A web member's reply may be complete on its site and is read again there; after a switch it is
+  // not, so it is a failed reply, which 重新回复 asks again.
+  const status = external || switched ? 'error' : 'received'
   if (existing) {
     existing.content = content
     existing.contentFormat = 'markdown'

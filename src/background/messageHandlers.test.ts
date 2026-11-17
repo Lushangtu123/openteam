@@ -425,6 +425,7 @@ describe('background message handlers', () => {
       'TEAM_ROLE_REPLY_RESYNC',
       'TEAM_ROLE_ERROR',
       'GROUP_REPLIES_INTERRUPTED',
+      'GROUP_ROLE_REPLY_END',
     ])
     expect(routes.map(route => route.type)).toEqual(MESSAGE_ROUTE_TYPES)
 

@@ -500,6 +500,9 @@ export interface GroupRole {
   teamPosition?: string
   status: RoleStatus
   contextCursor: number
+  // Messages up to this seq were in an earlier conversation of this member (another model or site,
+  // or a site conversation that was lost): its persona goes again with its first prompt after it.
+  conversationStartedAfterSeq?: number
   geminiConversationId?: string
   geminiConversationUrl?: string
   chatGptGptsUrl?: string

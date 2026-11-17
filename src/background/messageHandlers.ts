@@ -41,6 +41,8 @@ export const MESSAGE_ROUTE_TYPES = [
   'TEAM_ROLE_ERROR',
   // From the background itself: see interruptedReplies.ts.
   'GROUP_REPLIES_INTERRUPTED',
+  // Before a member is moved to another model.
+  'GROUP_ROLE_REPLY_END',
 ] as const
 
 export function createMessageHandlers(baseDeps: MessageHandlersDependencies): BackgroundMessageRoute[] {
@@ -94,7 +96,7 @@ export function createMessageHandlers(baseDeps: MessageHandlersDependencies): Ba
   const { scheduleAfterRound, scheduleDiscussionAdvance, handleDiscussionStop, handleDiscussionContinue, projectRunner, handleProjectStart, projectRoute, handleRoundSummaryRequest } = roundHandlers
   const { handleMessageSend } = createMessageSendHandler(ctx, roundHandlers)
   const { handleRoleRetryReply, handleRoleStopReply, handleNoteSave, handleMessageHighlightCreate, handleMessageResyncReply } = createMessageActionHandlers(ctx)
-  const { handleFrameRoleReady, handleConversationUpdated, handleSendAck, handleRoleStatus, handleSiteStatusUpdate, handleRoleReply, handleRoleReplyProgress, handleRoleReplyResync, handleRepliesInterrupted, handleRoleError } = createMemberPageHandlers(ctx)
+  const { handleFrameRoleReady, handleConversationUpdated, handleSendAck, handleRoleStatus, handleSiteStatusUpdate, handleRoleReply, handleRoleReplyProgress, handleRoleReplyResync, handleRepliesInterrupted, handleRoleReplyEnd, handleRoleError } = createMemberPageHandlers(ctx)
 
   return [
     { type: 'GROUP_ROLE_RETRY_REPLY', handler: handleRoleRetryReply },
@@ -125,5 +127,6 @@ export function createMessageHandlers(baseDeps: MessageHandlersDependencies): Ba
     { type: 'TEAM_ROLE_REPLY_RESYNC', handler: handleRoleReplyResync },
     { type: 'TEAM_ROLE_ERROR', handler: handleRoleError },
     { type: 'GROUP_REPLIES_INTERRUPTED', handler: handleRepliesInterrupted },
+    { type: 'GROUP_ROLE_REPLY_END', handler: handleRoleReplyEnd },
   ]
 }
