@@ -201,17 +201,24 @@ async function* streamExternalModel(input: ExternalModelCompletionInput, fetchIm
   while (true) {
     try {
       const normalizedUrl = normalizeBaseUrl(input.model.baseUrl, input.model.format)
+      // The start of the server's answer, kept in case it carries no text and that needs saying why.
+      let answerStart: Promise<string> | undefined
+      const keepingFetch = async (url: RequestInfo | URL, init?: RequestInit) => {
+        const response = await fetchImpl(url, init)
+        answerStart = readStart(response)
+        return response
+      }
       const provider = input.model.format === 'anthropic'
         ? createAnthropic({
           apiKey: input.model.apiKey,
           baseURL: normalizedUrl,
-          fetch: fetchImpl,
+          fetch: keepingFetch,
         })
         : createOpenAICompatible({
           name: `openteam-${input.model.id}`,
           apiKey: input.model.apiKey,
           baseURL: normalizedUrl,
-          fetch: fetchImpl,
+          fetch: keepingFetch,
           // Asks for the token counts at the end of the stream (stream_options.include_usage).
           includeUsage: true,
         })
@@ -229,10 +236,14 @@ async function* streamExternalModel(input: ExternalModelCompletionInput, fetchIm
         },
       })
 
+      let sawText = false
       for await (const textPart of result.textStream) {
-        if (textPart) yield textPart
+        if (!textPart) continue
+        if (textPart.trim()) sawText = true
+        yield textPart
       }
       if (streamError) throw streamError
+      if (!sawText) throw await emptyReplyError(result, answerStart, input.model.apiKey)
       await reportUsage(result.usage, input.onUsage)
       return
     } catch (error: any) {
@@ -278,6 +289,57 @@ export function normalizeUsage(usage: { inputTokens?: number; outputTokens?: num
     ...(outputTokens !== undefined ? { outputTokens } : {}),
     ...(totalTokens !== undefined ? { totalTokens } : {}),
   }
+}
+
+const ANSWER_START_CHARS = 300
+
+// The first characters of a response body, read from a copy so the AI library still gets all of it.
+function readStart(response: Response): Promise<string> {
+  const status = `HTTP ${response.status}`
+  if (!response.body) return Promise.resolve(status)
+  const reader = response.clone().body!.getReader()
+  const decoder = new TextDecoder()
+  return (async () => {
+    let text = ''
+    try {
+      while (text.length < ANSWER_START_CHARS) {
+        const { done, value } = await reader.read()
+        if (done) break
+        text += decoder.decode(value, { stream: true })
+      }
+    } catch {
+      // What was read so far is enough.
+    } finally {
+      reader.cancel().catch(() => {})
+    }
+    const start = text.replace(/\s+/g, ' ').trim().slice(0, ANSWER_START_CHARS)
+    return start ? `${status}：${start}` : status
+  })()
+}
+
+// A stream that ended properly without any text: says how it ended (a filter, the length limit, or
+// only the model's thinking) and how the server's answer began, without the API key.
+async function emptyReplyError(
+  result: { finishReason: PromiseLike<string>; reasoningText: PromiseLike<string | undefined> },
+  answerStart: Promise<string> | undefined,
+  apiKey: string,
+): Promise<ExternalModelError> {
+  const settle = async <T>(value: PromiseLike<T> | undefined) => {
+    try {
+      return await value
+    } catch {
+      return undefined
+    }
+  }
+  const finishReason = await settle(result.finishReason)
+  const reasoning = (await settle(result.reasoningText))?.trim()
+  const start = await settle(answerStart)
+  const details = [
+    finishReason ? `结束原因：${finishReason}` : '',
+    reasoning ? '只返回了思考过程' : '',
+    start ? `响应开头：${apiKey ? start.split(apiKey).join('***') : start}` : '',
+  ].filter(Boolean)
+  return new ExternalModelError(details.length > 0 ? `模型没有返回内容（${details.join('；')}）` : '模型没有返回内容')
 }
 
 function promptOrMessages(input: ExternalModelCompletionInput) {
