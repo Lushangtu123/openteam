@@ -49,8 +49,14 @@ describe('what a log entry may hold', () => {
       .toEqual({ content: '[removed]', prompt: '[removed]', raw: '[removed]', apiKey: '[removed]', systemPrompt: '[removed]', contentLength: 11, chatId: 'c' })
   })
 
-  it('keeps only where a link goes, not its query', () => {
-    expect(sanitizeLogDetails({ senderUrl: 'https://chatgpt.com/c/abc-123?model=x&token=1' })).toEqual({ senderUrl: 'https://chatgpt.com/c/abc-123' })
+  it('keeps only which site a link goes to: its path may name a conversation', () => {
+    expect(sanitizeLogDetails({ senderUrl: 'https://chatgpt.com/c/abc-123?model=x&token=1', iframeSrc: 'https://gemini.google.com/app/9f8e7d' }))
+      .toEqual({ senderUrl: 'https://chatgpt.com', iframeSrc: 'https://gemini.google.com' })
+  })
+
+  it('drops names, also inside lists of members', () => {
+    expect(sanitizeLogDetails({ roleName: '王小明', chatName: '我的项目', title: 't', topic: 'x', goal: 'y', targets: [{ id: 'r1', name: '王小明', status: 'ready' }] }))
+      .toEqual({ roleName: '[removed]', chatName: '[removed]', title: '[removed]', topic: '[removed]', goal: '[removed]', targets: [{ id: 'r1', name: '[removed]', status: 'ready' }] })
   })
 
   it('shortens long text and nested values', () => {

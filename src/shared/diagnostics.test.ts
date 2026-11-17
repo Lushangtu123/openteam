@@ -73,6 +73,20 @@ describe('the diagnostics report', () => {
     expect(build().backgroundLogs[0]).toMatchObject({ event: 'external-model:retry-scheduled', level: 'warn' })
   })
 
+  it('blanks group and member names wherever they turn up, but keeps names that are only a site', () => {
+    const store = storeWithData()
+    store.rolesById['r-site'] = { id: 'r-site', chatId: 'chat-1', name: 'Gemini', chatSite: 'gemini', modelSource: 'site', status: 'ready', contextCursor: 0, createdAt: 1, updatedAt: 1 }
+    const report = buildDiagnosticsReport({
+      now: NOW,
+      extensionVersion: '1.9.0',
+      userAgent: 'Chrome',
+      store,
+      backgroundLogs: [{ at: 1, level: 'warn', scope: 'background', event: 'message-send:failed', details: { reason: '以下成员不可用，请等待或恢复：工程师、分析师 (我的私人项目) via Gemini' } }],
+      pageLogs: [],
+    })
+    expect(report.backgroundLogs[0].details.reason).toBe('以下成员不可用，请等待或恢复：[name]、[name] ([name]) via Gemini')
+  })
+
   it('holds no message text, group or member names, and no API key anywhere', () => {
     const text = JSON.stringify(build())
     for (const secret of ['机密', '我的私人项目', '工程师', '分析师', 'my-very-secret-key-123', 'key=abc']) expect(text).not.toContain(secret)

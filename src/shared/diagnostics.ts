@@ -2,6 +2,7 @@
 // is, how each AI site's page is doing, what failed lately and why, and the recent logs. It holds
 // no message text, no group or member names and no API key: members are named by their site or
 // model format, API models by host and model name, and every saved key is blanked out at the end.
+import { CHAT_SITE_INFO, CHAT_SITES } from '../group/chatSites'
 import { siteCheckResults } from '../group/siteCheck'
 import type { ExternalModelConfig, GroupChat, OpenTeamStore } from '../group/types'
 import { redactSecrets, type RecentLogEntry } from './logger'
@@ -99,7 +100,8 @@ export function buildDiagnosticsReport(input: DiagnosticsInput) {
     backgroundLogs: input.backgroundLogs,
     pageLogs: input.pageLogs,
   }
-  return withoutSavedKeys(report, models.map(model => model.apiKey))
+  const names = [...Object.values(store.chatsById).map(chat => chat.name), ...roles.map(role => role.name)]
+  return withoutSavedSecrets(report, models.map(model => model.apiKey), names)
 }
 
 export type DiagnosticsReport = ReturnType<typeof buildDiagnosticsReport>
@@ -138,11 +140,21 @@ function hostOf(url: string): string {
   }
 }
 
-// Every saved key, wherever it might have ended up (a server message, a log), blanked out.
-function withoutSavedKeys<T>(report: T, keys: string[]): T {
+// A name that is only a site's (members of a 网站自检 are called Gemini, DeepSeek…) is not private,
+// and blanking it would garble what the report says about that site.
+const SITE_NAMES = new Set(CHAT_SITES.flatMap(site => [site, CHAT_SITE_INFO[site].label.toLowerCase()]))
+
+// Every saved key, and every group and member name, wherever it might have ended up (a server
+// message, an error, a log), blanked out. Longer names go first, so one inside another is caught.
+function withoutSavedSecrets<T>(report: T, keys: string[], names: string[]): T {
   const secrets = keys.map(key => key.trim()).filter(key => key.length >= 6)
-  if (secrets.length === 0) return report
+  const privateNames = [...new Set(names.map(name => name.trim()))]
+    .filter(name => [...name].length >= 2 && !SITE_NAMES.has(name.toLowerCase()))
+    .sort((left, right) => right.length - left.length)
+  if (secrets.length === 0 && privateNames.length === 0) return report
+  const escaped = (value: string) => JSON.stringify(value).slice(1, -1)
   let text = JSON.stringify(report)
-  for (const secret of secrets) text = text.split(JSON.stringify(secret).slice(1, -1)).join('[secret]')
+  for (const secret of secrets) text = text.split(escaped(secret)).join('[secret]')
+  for (const name of privateNames) text = text.split(escaped(name)).join('[name]')
   return JSON.parse(text) as T
 }

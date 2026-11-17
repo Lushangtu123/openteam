@@ -28,8 +28,9 @@ export interface RecentLogEntry {
 export const LOG_BUFFER_SIZE = 400
 const LOG_TEXT_MAX_CHARS = 200
 const LOG_LIST_MAX_ITEMS = 10
-// Fields that may hold the text of a message, a prompt or a persona, or a key.
-const REMOVED_FIELDS = /^(content|contents|prompt|text|raw|body|snapshot|contentSnapshot|systemPrompt|persona|apiKey|key|token|authorization|password|cookie|cookies)$/i
+// Fields that may hold the text of a message, a prompt or a persona, a name the user gave (a
+// group, a member, a topic, a goal), or a key.
+const REMOVED_FIELDS = /^(content|contents|prompt|text|raw|body|snapshot|contentSnapshot|systemPrompt|persona|apiKey|key|token|authorization|password|cookie|cookies|name|roleName|chatName|groupName|title|topic|goal|task|question|description|note|summary|fileName)$/i
 
 let recent: RecentLogEntry[] = []
 const recordListeners = new Set<() => void>()
@@ -69,7 +70,8 @@ function sanitizeValue(value: unknown, depth: number): unknown {
   if (value === null || value === undefined || typeof value === 'number' || typeof value === 'boolean') return value
   if (typeof value === 'string') return sanitizeText(value)
   if (value instanceof Error) return sanitizeText(value.message)
-  if (Array.isArray(value)) return value.slice(0, LOG_LIST_MAX_ITEMS).map(item => depth > 0 ? sanitizeValue(item, depth - 1) : '[object]')
+  // A list takes no level of its own: a list of members keeps their ids and statuses.
+  if (Array.isArray(value)) return value.slice(0, LOG_LIST_MAX_ITEMS).map(item => sanitizeValue(item, depth))
   if (typeof value === 'object') {
     if (depth <= 0) return '[object]'
     return Object.fromEntries(Object.entries(value as Record<string, unknown>).slice(0, 30).map(([name, item]) => [name, REMOVED_FIELDS.test(name) ? '[removed]' : sanitizeValue(item, depth - 1)]))
@@ -79,11 +81,10 @@ function sanitizeValue(value: unknown, depth: number): unknown {
 
 function sanitizeText(text: string): string {
   let cleaned = text
-  // A link is kept as where it goes: a query or fragment may hold anything.
+  // A link is kept as the site it goes to: its path may name a conversation, its query anything.
   if (/^https?:\/\//.test(text)) {
     try {
-      const url = new URL(text)
-      cleaned = `${url.origin}${url.pathname}`
+      cleaned = new URL(text).origin
     } catch {
       // Not a link after all.
     }
