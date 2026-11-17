@@ -415,6 +415,18 @@
                   <button id="settings-theme-dark" class="settings-segment-option" type="button" aria-pressed="true">深色</button>
                 </div>
               </div>
+              <div class="settings-row">
+                <div class="settings-row-text">
+                  <div class="settings-row-title" id="update-check-title">检查新版本</div>
+                  <p class="settings-row-hint">每天最多向 GitHub 查一次有没有新版本，只读取公开的版本号，不会自动下载。</p>
+                  <p id="update-status" class="settings-row-hint settings-hint" aria-live="polite"></p>
+                  <div id="update-actions" class="update-actions" hidden>
+                    <a id="update-link" class="btn btn-primary btn-small" target="_blank" rel="noopener noreferrer">查看并下载</a>
+                    <button id="update-ignore" class="btn btn-small" type="button">忽略这个版本</button>
+                  </div>
+                </div>
+                <button id="update-check-toggle" class="settings-switch" type="button" role="switch" aria-labelledby="update-check-title" aria-checked="true"></button>
+              </div>
             </section>
             <section class="settings-panel" role="tabpanel" data-settings-panel="models" aria-label="模型" hidden>
               <div class="settings-row">

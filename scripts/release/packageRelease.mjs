@@ -41,7 +41,7 @@ export function releaseNotes({ version, extensionZip, cliPackage }) {
 2. Open \`chrome://extensions\`, turn on **Developer mode**, click **Load unpacked** and choose the folder.
 3. Sign in to the AI websites you want to use in normal tabs, then click the OpenTeam icon.
 
-To update, empty that folder, unzip the new version into it and click the reload button on OpenTeam in \`chrome://extensions\`. Your chats are kept in the browser, so an update keeps them; removing OpenTeam from Chrome deletes them (make a backup in settings first).
+OpenTeam says in its settings when a new version is out. To update, empty that folder, unzip the new version into it and click the reload button on OpenTeam in \`chrome://extensions\`. Your chats are kept in the browser, so an update keeps them; removing OpenTeam from Chrome deletes them (make a backup in settings first).
 
 Optional CLI (Node.js 18 or later): \`npm install -g ./${cliPackage}\`, then \`openteamcli daemon start\`.
 
@@ -51,7 +51,7 @@ Optional CLI (Node.js 18 or later): \`npm install -g ./${cliPackage}\`, then \`o
 2. 打开 \`chrome://extensions\`，开启「开发者模式」，点击「加载已解压的扩展程序」，选择该文件夹。
 3. 先在普通标签页登录要用的 AI 网站，再点击 OpenTeam 图标。
 
-更新时，清空这个文件夹，把新版本解压进去，再在 \`chrome://extensions\` 里点 OpenTeam 的重新加载按钮。群聊数据保存在浏览器里，更新不会丢失；但在 Chrome 里移除 OpenTeam 会删除它们（移除前先在设置里备份）。
+有新版本时，OpenTeam 会在设置里提示。更新时，清空这个文件夹，把新版本解压进去，再在 \`chrome://extensions\` 里点 OpenTeam 的重新加载按钮。群聊数据保存在浏览器里，更新不会丢失；但在 Chrome 里移除 OpenTeam 会删除它们（移除前先在设置里备份）。
 
 可选 CLI（需要 Node.js 18 或更高版本）：\`npm install -g ./${cliPackage}\`，然后运行 \`openteamcli daemon start\`。
 

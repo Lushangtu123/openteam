@@ -125,7 +125,7 @@ Use it at your own risk. The maintainers are not responsible for account restric
 2. Open `chrome://extensions/`, turn on Developer mode, click **Load unpacked** and choose the folder.
 3. Sign in to the AI websites you want to use in normal tabs, then click the OpenTeam icon.
 
-To update, empty that folder, unzip the new version into it and click the reload button on OpenTeam in `chrome://extensions/`. Your chats are kept in the browser, so an update keeps them; removing OpenTeam from Chrome deletes them (make a backup in settings first).
+OpenTeam says in its settings when a new version is out, with a dot on the settings button. To update, empty that folder, unzip the new version into it and click the reload button on OpenTeam in `chrome://extensions/`. Your chats are kept in the browser, so an update keeps them; removing OpenTeam from Chrome deletes them (make a backup in settings first).
 
 ### Build from source
 
@@ -182,7 +182,7 @@ To publish a release, set the same version in `package.json` and `public/manifes
 - Host permissions: only the supported AI websites, their image hosts and the local daemon. Each API model address is allowed separately, when you click **Allow access** on that model.
 - Microphone (no manifest permission): voice input uses Chrome's online speech recognition; Chrome asks the first time.
 
-Attached images are stored in the browser (IndexedDB) and uploaded only when you send them. API keys stay in browser storage and are left out of backups unless you include them. There is no cloud sync; your conversations are processed by the AI websites and model providers you use, under their own terms.
+Attached images are stored in the browser (IndexedDB) and uploaded only when you send them. API keys stay in browser storage and are left out of backups unless you include them. Once a day OpenTeam asks GitHub for the latest release's version number, to tell you about updates; nothing is sent but that request, and you can turn it off under Settings > General. There is no cloud sync; your conversations are processed by the AI websites and model providers you use, under their own terms.
 
 ## Current Limits
 

@@ -451,6 +451,37 @@
   margin-top: 14px;
 }
 
+/* 检查新版本: the release's link and 忽略 under the status, and a dot on the settings button. */
+:root[data-theme] .update-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+:root[data-theme] .update-actions a.btn {
+  text-decoration: none;
+}
+
+:root[data-theme] .update-actions[hidden] {
+  display: none;
+}
+
+:root[data-theme] #settings-button {
+  position: relative;
+}
+
+:root[data-theme] #settings-button .update-dot {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 8px;
+  height: 8px;
+  border: 2px solid var(--sidebar-bg, var(--surface));
+  border-radius: 999px;
+  background: #e5484d;
+}
+
 /* The first-run guide: three numbered steps, read from the left. */
 :root[data-theme] .empty-card.onboarding-guide {
   max-width: 560px;

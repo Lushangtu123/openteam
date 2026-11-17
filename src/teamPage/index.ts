@@ -27,6 +27,8 @@ import { createReplyComparisonView } from './replyComparisonView'
 import { createTeamFormationView } from './teamFormationView'
 import { createProjectView } from './projectView'
 import { createSiteCheckView } from './siteCheckView'
+import { createUpdateNotice } from './updateNotice'
+import { UPDATE_CHECK_STORAGE_KEY, type UpdateCheckState } from '../shared/updateCheck'
 import { CHAT_SITE_INFO } from '../group/chatSites'
 import { createMessagesView } from './messagesView'
 import { createNotesView } from './notesView'
@@ -663,6 +665,8 @@ function startSiteCheck(): void {
 
 function render(): void {
   renderSelectedChat()
+  // In the language chosen now.
+  updateNotice.render()
   replyComparisonView.refresh()
   teamFormationView.refresh()
   renderTemplates()
@@ -856,6 +860,18 @@ const teamFormationView = createTeamFormationView({
   openAutoPlan: (task, instruction) => orchestrationModalView.openAutoPlan(task, instruction),
 })
 
+// 检查新版本: kept in its own storage key, outside the store and its backups.
+const updateNotice = createUpdateNotice({
+  document,
+  settingsButtonEl,
+  currentVersion: chrome.runtime.getManifest().version,
+  language: () => normalizeLanguage(store.settings.language),
+  storage: {
+    get: async () => (await chrome.storage.local.get(UPDATE_CHECK_STORAGE_KEY))[UPDATE_CHECK_STORAGE_KEY],
+    set: (state: UpdateCheckState) => chrome.storage.local.set({ [UPDATE_CHECK_STORAGE_KEY]: state }),
+  },
+  now: () => Date.now(),
+})
 const siteCheckView = createSiteCheckView({ getStore: () => store, now: () => Date.now(), requestRender: () => render() })
 const projectView = createProjectView({
   getStore: () => store,
@@ -898,6 +914,7 @@ async function boot(): Promise<void> {
   uiStyleController.registerStyleEvents()
   aiPagesView.registerAiPagesControls()
   registerSettingsWindow({ windowEl: settingsMenuEl, settingsButtonEl })
+  void updateNotice.start()
   // The memory store's list takes the settings window's place, as the models window does.
   teamDomRefs.openMemoryPanelEl.addEventListener('click', () => {
     settingsMenuEl.hidden = true
