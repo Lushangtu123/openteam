@@ -13,6 +13,7 @@ export class ExternalModelError extends Error {
     // Says what to do itself (OpenTeam was not allowed to reach the address).
     if (this.code === 'host_access') return this.message
     if (this.status === 401 || this.status === 403) return 'API Key 无效或权限不足，请检查配置'
+    if (this.code === QUOTA_EXHAUSTED_CODE) return this.message
     if (this.status === 429) return '请求过于频繁，请稍后再试 (Rate Limit)'
     if (this.status === 404) return '模型名称不正确或端点路径错误'
     if (this.status && this.status >= 500) return '模型服务器出现内部错误，请稍后重试'
@@ -268,10 +269,13 @@ async function* streamExternalModel(input: ExternalModelCompletionInput, fetchIm
       attempt++
       // The AI library reports the HTTP status as statusCode.
       const status = error.status || error.statusCode || error.response?.status
-      const isRetryable = status === 429 || (status >= 500 && status <= 599) || error.message?.includes('timeout') || error.message?.includes('Network')
+      const quotaExhausted = isQuotaExhausted(error)
+      const isRetryable = quotaExhausted ? false : status === 429 || (status >= 500 && status <= 599) || error.message?.includes('timeout') || error.message?.includes('Network')
 
       if (!isRetryable || attempt >= maxRetries) {
-        throw new ExternalModelError(requestErrorMessage(error, status, input.model.apiKey), status, error.code)
+        const message = requestErrorMessage(error, status, input.model.apiKey)
+        if (quotaExhausted) throw new ExternalModelError(`额度已用完：${message}`, status, QUOTA_EXHAUSTED_CODE)
+        throw new ExternalModelError(message, status, error.code)
       }
 
       const delay = Math.pow(2, attempt) * 500
@@ -305,6 +309,19 @@ export function normalizeUsage(usage: { inputTokens?: number; outputTokens?: num
 }
 
 const ANSWER_START_CHARS = 300
+
+export const QUOTA_EXHAUSTED_CODE = 'quota_exhausted'
+
+// A refusal that retrying will not fix: the account's balance or the day's quota is gone, or the
+// model has no free quota at all. A 429 also comes from per-minute limits, which retries do fix
+// (Gemini words both the same and tells them apart only by the quota's id).
+const QUOTA_EXHAUSTED = /insufficient[_ ]quota|insufficient[_ ]balance|exceeded_current_quota|余额不足|欠费|PerDay|limit: 0\b/i
+
+function isQuotaExhausted(error: any): boolean {
+  const status = error?.status || error?.statusCode
+  if (status !== 429 && status !== 402 && status !== 403) return false
+  return QUOTA_EXHAUSTED.test(`${typeof error?.responseBody === 'string' ? error.responseBody : ''}\n${error?.message ?? ''}`)
+}
 
 // What a failed request says. The server's own words come first: the AI library reads only the
 // OpenAI error shape and otherwise falls back to the status text, which HTTP/2 leaves empty (Gemini

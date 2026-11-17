@@ -5,6 +5,7 @@ import { updateUserMessageDeliveryStatus } from '../group/deliveryStatus'
 import { takeMemoryProposals } from '../group/memoryProposals'
 import type { GroupChat, GroupMessage, GroupRole, MessageTokenUsage, OpenTeamStore } from '../group/types'
 import type { ExternalModelClient, ExternalModelCompletionInput } from './externalModelClient'
+import { QUOTA_EXHAUSTED_CODE } from './externalModelClient'
 import type { ExternalPromptDelivery } from './rolePromptDelivery'
 import { mutateStore, requireChat, requireRole } from './storeAccess'
 import type { ExternalModelRunRegistry, MessageHandlersDependencies } from './messageHandlerDeps'
@@ -202,6 +203,7 @@ export async function updateExternalAssistantContent(
 // A 4xx answer other than 408 (timeout) and 429 (too many requests) does not change when asked again:
 // a wrong key, a model that does not exist, a request the server refuses.
 export function isPermanentModelError(error: unknown): boolean {
+  if ((error as { code?: unknown } | undefined)?.code === QUOTA_EXHAUSTED_CODE) return true
   const status = (error as { status?: unknown } | undefined)?.status
   return typeof status === 'number' && status >= 400 && status < 500 && status !== 408 && status !== 429
 }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createExternalModelClient, ExternalModelError } from './externalModelClient'
+import { isPermanentModelError } from './externalModelReplies'
 import type { ExternalModelConfig } from '../group/types'
 
 // The real AI library, with the server's answer made up: a failed request or a stream with no text
@@ -150,5 +151,47 @@ describe('how long a reply may take', () => {
 
     expect(failure).toBeInstanceOf(ExternalModelError)
     expect(failure.status).toBe(408)
+  })
+})
+
+describe('a quota that is used up', () => {
+  const geminiQuota = (quotaId: string, limit: number, retry: string) => JSON.stringify([{
+    error: {
+      code: 429,
+      message: `You exceeded your current quota, please check your plan and billing details.\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: ${limit}\nPlease retry in ${retry}.`,
+      status: 'RESOURCE_EXHAUSTED',
+      details: [{ '@type': 'type.googleapis.com/google.rpc.QuotaFailure', violations: [{ quotaId }] }],
+    },
+  }])
+  const refused = (body: string, status = 429) => new Response(body, { status, statusText: '', headers: { 'content-type': 'application/json' } })
+
+  it("is not retried when the day's quota is gone", async () => {
+    let requests = 0
+    const client = createExternalModelClient(async () => { requests += 1; return refused(geminiQuota('GenerateRequestsPerDayPerProjectPerModel-FreeTier', 250, '7h12m')) })
+    const failure = await client.complete({ model, prompt: 'Hi' }).catch(error => error)
+
+    expect(requests).toBe(1)
+    expect(failure.code).toBe('quota_exhausted')
+    expect(failure.message).toMatch(/^额度已用完/)
+    expect(isPermanentModelError(failure)).toBe(true)
+  })
+
+  it('is not retried when the model has no free quota at all', async () => {
+    const failure = await failureOf(refused(geminiQuota('GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 0, '30s')))
+    expect(failure.code).toBe('quota_exhausted')
+  })
+
+  it("is not retried when the account's balance is gone", async () => {
+    const openai = await failureOf(refused(JSON.stringify({ error: { message: 'You exceeded your current quota.', type: 'insufficient_quota', code: 'insufficient_quota' } })))
+    const zhipu = await failureOf(refused(JSON.stringify({ error: { code: '1113', message: '您的账户已欠费，请充值后重试。' } })))
+    expect(openai.code).toBe('quota_exhausted')
+    expect(zhipu.code).toBe('quota_exhausted')
+  })
+
+  it('leaves a per-minute limit to the retries', async () => {
+    const failure = await failureOf(refused(geminiQuota('GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 10, '41s')))
+    expect(failure.code).toBeUndefined()
+    expect(failure.status).toBe(429)
+    expect(isPermanentModelError(failure)).toBe(false)
   })
 })
