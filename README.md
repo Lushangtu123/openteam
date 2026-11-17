@@ -119,7 +119,15 @@ Use it at your own risk. The maintainers are not responsible for account restric
 
 ## Install
 
-### Build the extension
+### Download a release
+
+1. Download `openteam-extension-v<version>.zip` from the [latest release](https://github.com/Lushangtu123/openteam/releases/latest) and unzip it into a folder you will keep (Chrome loads the extension from that folder).
+2. Open `chrome://extensions/`, turn on Developer mode, click **Load unpacked** and choose the folder.
+3. Sign in to the AI websites you want to use in normal tabs, then click the OpenTeam icon.
+
+To update, empty that folder, unzip the new version into it and click the reload button on OpenTeam in `chrome://extensions/`. Your chats are kept in the browser, so an update keeps them; removing OpenTeam from Chrome deletes them (make a backup in settings first).
+
+### Build from source
 
 ```bash
 git clone https://github.com/Lushangtu123/openteam.git
@@ -128,13 +136,13 @@ npm install
 npm run build
 ```
 
-Open `chrome://extensions/`, turn on Developer mode, click **Load unpacked** and select the generated `dist/` folder. Click the OpenTeam icon to open the workspace. Sign in to the AI websites you want to use in normal tabs first.
+Then load the generated `dist/` folder as in step 2 above.
 
 After pulling changes, run `npm run build` again and click the reload button on OpenTeam in `chrome://extensions/`.
 
 ### Local agents and the CLI (optional)
 
-Needed only for local agent members or to let an agent such as Codex or Claude Code control OpenTeam. From the repository folder:
+Needed only for local agent members or to let an agent such as Codex or Claude Code control OpenTeam. Install the CLI tarball from the release (`npm install -g ./afumu-openteamcli-<version>.tgz`, then `openteamcli daemon start`), or run it from the repository folder:
 
 ```bash
 npm run openteamcli -- daemon start
@@ -155,7 +163,10 @@ The daemon does not start by itself after a restart. On macOS, `npm run openteam
 npm install
 npm run dev       # watch build into dist/
 npm run verify    # type check, unit tests and production build
+npm run package   # after a build: release/ gets the extension ZIP, the CLI tarball and checksums
 ```
+
+To publish a release, set the same version in `package.json` and `public/manifest.json`, commit, and push a tag `v<version>`. The release workflow checks the versions, runs the checks and attaches the files to a GitHub release.
 
 `npm run visual:snap -- <folder>` and `npm run visual:compare -- <before> <after>` take screenshots of every screen (both looks, both themes, three widths) and compare two sets, with an accessibility check on each screen.
 

@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "verify": "npm run typecheck && npm test && npm run build",
     "openteamcli": "node packages/openteamcli/openteamcli.mjs",
+    "package": "node scripts/release/packageRelease.mjs",
     "visual:snap": "node scripts/visual/snap.mjs",
     "visual:compare": "node scripts/visual/compare.mjs"
   },

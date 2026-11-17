@@ -3,7 +3,7 @@ dist
 .npm-cache/
 .conda-pkgs/
 .conda-openteam/
-release/
+/release/
 .worktrees/
 .private/
 .superpowers/

@@ -119,7 +119,15 @@ OpenTeam 通过你自己登录的浏览器会话和页面自动化与 AI 网站�
 
 ## 安装
 
-### 构建扩展
+### 下载发布包
+
+1. 从 [最新发布](https://github.com/Lushangtu123/openteam/releases/latest) 下载 `openteam-extension-v<版本>.zip`，解压到一个会长期保留的文件夹（Chrome 从这个文件夹加载扩展）。
+2. 打开 `chrome://extensions/`，开启开发者模式，点击「加载已解压的扩展程序」，选择该文件夹。
+3. 先在普通标签页登录要用的 AI 网站，再点击 OpenTeam 图标。
+
+更新时，清空这个文件夹，把新版本解压进去，再在 `chrome://extensions/` 里点 OpenTeam 的重新加载按钮。群聊数据保存在浏览器里，更新不会丢失；但在 Chrome 里移除 OpenTeam 会删除它们（移除前先在设置里备份）。
+
+### 从源码构建
 
 ```bash
 git clone https://github.com/Lushangtu123/openteam.git
@@ -128,13 +136,13 @@ npm install
 npm run build
 ```
 
-打开 `chrome://extensions/`，开启开发者模式，点击「加载已解压的扩展程序」，选择生成的 `dist/` 文件夹。点击 OpenTeam 图标即可打开工作台。请先在普通标签页里登录你要用的 AI 网站。
+然后按上面第 2 步加载生成的 `dist/` 文件夹。
 
 拉取更新后，重新运行 `npm run build`，再在 `chrome://extensions/` 里点 OpenTeam 的重新加载按钮。
 
 ### 本机智能体与 CLI（可选）
 
-只有使用本机智能体成员，或想让 Codex、Claude Code 等智能体控制 OpenTeam 时才需要。在仓库文件夹里运行：
+只有使用本机智能体成员，或想让 Codex、Claude Code 等智能体控制 OpenTeam 时才需要。可以安装发布包里的 CLI（`npm install -g ./afumu-openteamcli-<版本>.tgz`，再运行 `openteamcli daemon start`），也可以在仓库文件夹里运行：
 
 ```bash
 npm run openteamcli -- daemon start
@@ -155,7 +163,10 @@ npx skills add . --skill openteam-control
 npm install
 npm run dev       # 监听构建到 dist/
 npm run verify    # 类型检查、单元测试和生产构建
+npm run package   # 构建后运行：在 release/ 里生成扩展 zip、CLI 包和校验和
 ```
+
+发布新版本时，把 `package.json` 和 `public/manifest.json` 的版本号改成一样，提交后推送标签 `v<版本>`。发布流程会核对版本号、跑完检查，并把文件附到 GitHub Release 上。
 
 `npm run visual:snap -- <文件夹>` 和 `npm run visual:compare -- <之前> <之后>` 会给每个界面截图（两种界面、两种主题、三种宽度）并逐像素比较两组截图，同时对每个界面做无障碍检查。
 

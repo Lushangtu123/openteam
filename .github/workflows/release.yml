@@ -1,12 +1,21 @@
 name: Release
 
+# Pushing a version tag (v1.1.0) publishes a GitHub release with the extension ZIP, the CLI
+# tarball, their checksums and install notes. The tag must match package.json and the manifest;
+# scripts/release/packageRelease.mjs checks that and builds the files, as `npm run package` does
+# locally.
 on:
   push:
     tags: ["v*"]
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   release:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: write
     steps:
@@ -16,14 +25,20 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+          cache: npm
       - run: npm ci
-      - run: npm run verify
-      - run: sudo apt-get install -y zip
-      - run: mkdir -p release && cd dist && zip -r ../release/openteam-extension-${GITHUB_REF_NAME}.zip .
-      - run: |
-          gh release create "${GITHUB_REF_NAME}" \
-            release/openteam-extension-${GITHUB_REF_NAME}.zip \
+      - name: Typecheck, unit tests and build
+        run: npm run verify
+      - name: Make sure zip is installed
+        run: command -v zip || (sudo apt-get update && sudo apt-get install -y zip)
+      - name: Package
+        run: npm run package -- --tag "${GITHUB_REF_NAME}"
+      - name: Publish the release
+        run: |
+          gh release create "${GITHUB_REF_NAME}" release/*.zip release/*.tgz release/SHA256SUMS.txt \
             --title "OpenTeam ${GITHUB_REF_NAME}" \
-            --notes "Chrome extension ZIP for ${GITHUB_REF_NAME}."
+            --notes-file release/RELEASE_NOTES.md \
+            --generate-notes \
+            --verify-tag
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
