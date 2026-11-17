@@ -668,6 +668,9 @@ export interface RuntimeFrameBinding {
   frameId: number
   ready: boolean
   lastSeenAt: number
+  // The page load of the frame (Chrome's documentId): a new one means the member's page was loaded
+  // again, and with it went whatever it was reading.
+  documentId?: string
 }
 
 export type RuntimeFrameBindingKey = `${string}:${string}`

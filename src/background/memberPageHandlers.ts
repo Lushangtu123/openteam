@@ -4,9 +4,9 @@ import { misreadReplyReason } from '../group/misreadReply'
 import { updateUserMessageDeliveryStatus } from '../group/deliveryStatus'
 import { confirmMemorySent, forgetMemorySent } from '../group/memoryPrompt'
 import { extractMemoryProposals, takeMemoryProposals } from '../group/memoryProposals'
-import { type InterruptedReplyScope, settleInterruptedReplies } from './interruptedReplies'
+import { type InterruptedReply, type InterruptedReplyScope, settleInterruptedReplies } from './interruptedReplies'
 import { mapRuntimeRoleStatus } from '../group/runtimeProtocol'
-import type { GroupMessage } from '../group/types'
+import type { GroupMessage, OpenTeamStore } from '../group/types'
 import { messageTabId, rememberHost, type RuntimeMessage, senderFrameId, senderTabId } from './runtimeClient'
 import { mutateStore, requireChat, requireRole } from './storeAccess'
 import { markOrchestrationRoleError, maybeAdvanceOrchestrationRun } from './orchestrationRuntime'
@@ -44,10 +44,21 @@ export function createMemberPageHandlers(ctx: MessageHandlerContext) {
       conversationUrl: message.conversationUrl,
     })
 
+    // A member whose page was loaded again (the OpenTeam page refreshed, or its frame reloaded) while
+    // it read a reply: the new page does not go on reading it, so the reply is ended now, as when its
+    // page is closed, instead of the member showing as replying until it counts as stuck. The same
+    // page reporting again (the OpenTeam page asks until it hears back) leaves it as it is.
+    const previous = deps.runtimeFrames.getByRole(chatId, roleId)
+    const documentId = sender.documentId
+    const pageLoadedAgain = Boolean(previous?.documentId && documentId && previous.documentId !== documentId)
+
     // Validate the chat and role before trusting this frame as their host.
     const { store, result } = await mutateStore(store => {
       const chat = requireChat(store, chatId)
       const role = requireRole(store, chat.id, roleId)
+      const settled = pageLoadedAgain && role.status === 'thinking'
+        ? settleInterruptedReplies(store, { siteMembers: true, apiMembers: false, onlyRole: { chatId, roleId }, timestamp, newId: deps.newId, getChatStatusFromRoles: deps.getChatStatusFromRoles })
+        : []
       if (role.status !== 'thinking') {
         role.status = 'ready'
         role.updatedAt = timestamp
@@ -55,14 +66,27 @@ export function createMemberPageHandlers(ctx: MessageHandlerContext) {
       updateConversation(role, readOptionalString(message.conversationUrl), readOptionalString(message.conversationId))
       chat.status = deps.getChatStatusFromRoles(store, chat)
       chat.updatedAt = timestamp
-      return { role, replyHistory: getRoleReplyHistory(store, chat, role.id) }
+      return { role, replyHistory: getRoleReplyHistory(store, chat, role.id), settled }
     })
     rememberHost(sender, tabId)
-    deps.runtimeFrames.bind({ chatId, roleId, tabId, frameId, ready: true, lastSeenAt: timestamp })
+    deps.runtimeFrames.bind({ chatId, roleId, tabId, frameId, ready: true, lastSeenAt: timestamp, ...(documentId ? { documentId } : {}) })
+    if (result.settled.length > 0) deps.log.warn('frame-ready:reply-interrupted', { chatId, roleId, settled: result.settled })
 
     deps.log.info('frame-ready:store-updated', { chatId, roleId, roleName: result.role.name, status: result.role.status, replyHistoryCount: result.replyHistory.length, binding: deps.runtimeFrames.getByRole(chatId, roleId) })
     await deps.broadcastStoreUpdated(store)
+    await afterRepliesInterrupted(store, result.settled)
     return { ok: true, role: result.role, replyHistory: result.replyHistory, store }
+  }
+
+  // What waited for the ended replies (a round, a discussion, a project, a workflow) goes on.
+  async function afterRepliesInterrupted(store: OpenTeamStore, settled: InterruptedReply[]): Promise<void> {
+    for (const { chatId, roleId, promptMessageId } of settled) {
+      if (!promptMessageId) continue
+      reportPromptSettled(deps, store, chatId, promptMessageId)
+      clearRoleErrorRetryCount(roleErrorRetryCounts, chatId, roleId, promptMessageId)
+      await deps.promptDeliveryLimiter?.complete(chatId, promptMessageId, roleId)
+      await markOrchestrationRoleError(deps, { chatId, roleId, promptMessageId, error: '回复中断' })
+    }
   }
 
   const handleConversationUpdated = async (message: RuntimeMessage, sender: chrome.runtime.MessageSender) => {
@@ -423,13 +447,7 @@ export function createMemberPageHandlers(ctx: MessageHandlerContext) {
 
     deps.log.warn('replies-interrupted', { scope, settled })
     await deps.broadcastStoreUpdated(store)
-    for (const { chatId, roleId, promptMessageId } of settled) {
-      if (!promptMessageId) continue
-      reportPromptSettled(deps, store, chatId, promptMessageId)
-      clearRoleErrorRetryCount(roleErrorRetryCounts, chatId, roleId, promptMessageId)
-      await deps.promptDeliveryLimiter?.complete(chatId, promptMessageId, roleId)
-      await markOrchestrationRoleError(deps, { chatId, roleId, promptMessageId, error: '回复中断' })
-    }
+    await afterRepliesInterrupted(store, settled)
     return { ok: true, settled }
   }
 

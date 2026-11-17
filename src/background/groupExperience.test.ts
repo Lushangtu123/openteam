@@ -1956,3 +1956,52 @@ describe('memory a member proposes', () => {
     expect('memoryProposals' in (await harness.getStore()).settings).toBe(false)
   })
 })
+
+describe('a member page loaded again while its member replies', () => {
+  it('ends that reply, keeping what arrived, when a new page reports in; the same page reporting again changes nothing', async () => {
+    const store = makeStore()
+    store.settings.language = 'zh-CN'
+    store.currentChatId = 'chat-1'
+    store.chatsById['chat-1'] = makeChat('chat-1', ['role-1'])
+    store.chatOrder = ['chat-1']
+    store.rolesById['role-1'] = makeRole('chat-1', 'role-1', '工程师', {})
+    const harness = await setupBackground(store)
+    const frame = (documentId: string) => ({ tab: { id: 101 } as chrome.tabs.Tab, frameId: 7, url: 'https://gemini.google.com/', documentId })
+    const ready = (documentId: string) => harness.invoke({ type: 'TEAM_FRAME_ROLE_READY', chatId: 'chat-1', roleId: 'role-1', hostTabId: 900 }, frame(documentId))
+
+    await ready('doc-1')
+    const sent = await harness.invoke({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@all 写一段说明' }) as { ok: boolean; message: { id: string } }
+    await harness.invoke({ type: 'TEAM_SEND_ACK', chatId: 'chat-1', roleId: 'role-1', messageId: sent.message.id }, frame('doc-1'))
+    await harness.invoke({ type: 'TEAM_ROLE_REPLY_PROGRESS', chatId: 'chat-1', roleId: 'role-1', messageId: sent.message.id, content: '写到一半' }, frame('doc-1'))
+    expect((await harness.getStore()).rolesById['role-1'].status).toBe('thinking')
+
+    // The OpenTeam page asks again until it hears back: the same page, still reading.
+    await ready('doc-1')
+    expect((await harness.getStore()).rolesById['role-1'].status).toBe('thinking')
+
+    // The OpenTeam page was refreshed: a new page for the member, which is not reading the reply.
+    await ready('doc-2')
+    const after = await harness.getStore()
+    expect(after.rolesById['role-1']).toMatchObject({ status: 'ready' })
+    expect(after.rolesById['role-1'].lastPromptMessageId).toBeUndefined()
+    const reply = after.chatsById['chat-1'].messageIds.map(id => after.messagesById[id]).find(message => message.type === 'assistant')!
+    expect(reply.status).toBe('received')
+    expect(reply.content).toContain('写到一半')
+    expect(reply.content).toContain('成员页面就关闭或重新加载了')
+    expect(after.messagesById[sent.message.id].deliveryStatus?.['role-1']).toBe('error')
+  })
+
+  it('leaves the reply alone when the page id is missing (an older Chrome): it cannot tell a new page from the same one', async () => {
+    const store = makeStore()
+    store.currentChatId = 'chat-1'
+    store.chatsById['chat-1'] = makeChat('chat-1', ['role-1'])
+    store.chatOrder = ['chat-1']
+    store.rolesById['role-1'] = makeRole('chat-1', 'role-1', '工程师', {})
+    const harness = await setupBackground(store)
+    const sender = { tab: { id: 101 } as chrome.tabs.Tab, frameId: 7, url: 'https://gemini.google.com/' }
+    await harness.invoke({ type: 'TEAM_FRAME_ROLE_READY', chatId: 'chat-1', roleId: 'role-1', hostTabId: 900 }, sender)
+    await harness.invoke({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@all 写一段说明' })
+    await harness.invoke({ type: 'TEAM_FRAME_ROLE_READY', chatId: 'chat-1', roleId: 'role-1', hostTabId: 900 }, { ...sender, documentId: 'doc-2' })
+    expect((await harness.getStore()).rolesById['role-1'].status).toBe('thinking')
+  })
+})

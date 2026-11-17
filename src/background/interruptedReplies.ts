@@ -13,15 +13,20 @@ import { updateUserMessageDeliveryStatus } from '../group/deliveryStatus'
 import type { GroupChat, GroupMessage, GroupRole, OpenTeamStore } from '../group/types'
 import { isExternalModelRole } from './rolePromptDelivery'
 
-const SITE_REPLY_NOTICE = '⚠️ 这条回复还没有读完，成员页面就关闭了（OpenTeam 页面或浏览器被关闭）。站点上可能已经写完。\n\n可以点击下方的重新同步完整回复按钮把它读回来。'
+const SITE_REPLY_NOTICE = '⚠️ 这条回复还没有读完，成员页面就关闭或重新加载了（OpenTeam 页面被关闭或刷新，或浏览器被关闭）。站点上可能已经写完。\n\n可以点击下方的重新同步完整回复按钮把它读回来。'
+// The note before the page's reload was mentioned, still in replies kept back then.
+const EARLIER_SITE_REPLY_NOTICES = ['⚠️ 这条回复还没有读完，成员页面就关闭了（OpenTeam 页面或浏览器被关闭）。站点上可能已经写完。\n\n可以点击下方的重新同步完整回复按钮把它读回来。']
 const API_REPLY_NOTICE = '⚠️ 回复中断了：扩展的后台重新启动，这条回复没有写完。\n\n可以点击下方的重新回复按钮再试一次。'
 
 // What had been read of a web member's reply that was ended here, without the note: the text the
 // member's page looks for on the site when the reply is read again (重新同步完整回复).
 export function textReadBeforeInterruption(content: string): string {
-  if (content === SITE_REPLY_NOTICE) return ''
-  const suffix = `\n\n${SITE_REPLY_NOTICE}`
-  return content.endsWith(suffix) ? content.slice(0, -suffix.length) : content
+  for (const notice of [SITE_REPLY_NOTICE, ...EARLIER_SITE_REPLY_NOTICES]) {
+    if (content === notice) return ''
+    const suffix = `\n\n${notice}`
+    if (content.endsWith(suffix)) return content.slice(0, -suffix.length)
+  }
+  return content
 }
 
 export interface InterruptedReply {
@@ -37,6 +42,8 @@ export interface InterruptedReplyScope {
   // Only members with no sign of their reply since this time: a reply begun after the background
   // started is its own and goes on.
   quietSince?: number
+  // Only this member: its page was loaded again while it was reading a reply.
+  onlyRole?: { chatId: string; roleId: string }
 }
 
 export interface SettleInterruptedRepliesOptions extends InterruptedReplyScope {
@@ -52,6 +59,7 @@ export function settleInterruptedReplies(store: OpenTeamStore, options: SettleIn
     for (const roleId of chat.roleIds) {
       const role = store.rolesById[roleId]
       if (!role || role.chatId !== chat.id || role.status !== 'thinking') continue
+      if (options.onlyRole && (options.onlyRole.chatId !== chat.id || options.onlyRole.roleId !== role.id)) continue
       const external = isExternalModelRole(role)
       if (!(external ? options.apiMembers : options.siteMembers)) continue
       if (options.quietSince !== undefined && role.updatedAt >= options.quietSince) continue

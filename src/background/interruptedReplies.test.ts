@@ -93,6 +93,17 @@ describe('replies that were under way when their member could no longer answer',
     expect(textReadBeforeInterruption(store.messagesById['msg-empty'].content)).toBe('')
     // Any other reply is as it is.
     expect(textReadBeforeInterruption('普通回复')).toBe('普通回复')
+    // Replies kept before the note mentioned a reload still read back by their text.
+    const earlier = '⚠️ 这条回复还没有读完，成员页面就关闭了（OpenTeam 页面或浏览器被关闭）。站点上可能已经写完。\n\n可以点击下方的重新同步完整回复按钮把它读回来。'
+    expect(textReadBeforeInterruption(`写到一半\n\n${earlier}`)).toBe('写到一半')
+    expect(textReadBeforeInterruption(earlier)).toBe('')
+  })
+
+  it('ends one member\'s reply only, when only its page was loaded again', () => {
+    const store = storeWithRepliesUnderWay()
+    const settled = settleInterruptedReplies(store, { ...options, siteMembers: true, apiMembers: false, onlyRole: { chatId: 'chat-1', roleId: 'site' } })
+    expect(settled.map(reply => reply.roleId)).toEqual(['site'])
+    expect(settleInterruptedReplies(store, { ...options, siteMembers: true, apiMembers: false, onlyRole: { chatId: 'chat-1', roleId: 'nobody' } })).toEqual([])
   })
 
   it('changes nothing when no reply is under way', () => {
