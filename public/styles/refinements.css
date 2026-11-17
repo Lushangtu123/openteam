@@ -451,6 +451,43 @@
   margin-top: 14px;
 }
 
+/* 备份提醒 over the group list. Like the search box, it gets a row of the sidebar's grid only while it
+   shows, so the list keeps the row that stretches. */
+:root[data-theme] .sidebar:has(.backup-reminder:not([hidden])) {
+  grid-template-rows: 66px auto minmax(0, 1fr);
+}
+
+:root[data-theme] .sidebar:has(.chat-list-search:not([hidden])):has(.backup-reminder:not([hidden])) {
+  grid-template-rows: 66px auto auto minmax(0, 1fr);
+}
+
+:root[data-theme] .backup-reminder {
+  flex: none;
+  margin: 0 10px 8px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: var(--chip-bg, var(--surface));
+}
+
+:root[data-theme] .backup-reminder[hidden] {
+  display: none;
+}
+
+:root[data-theme] .backup-reminder-text {
+  margin: 0;
+  color: var(--text);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+:root[data-theme] .backup-reminder-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
 /* Choosing several groups in the list: a bar over the list (count, all/none, delete, cancel), and a
    checkbox in each row where its menu button was. */
 :root[data-theme] .chat-select-bar {

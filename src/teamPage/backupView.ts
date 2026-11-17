@@ -20,6 +20,8 @@ export interface BackupViewDependencies {
   confirm?(message: string): boolean
   download?(fileName: string, blob: Blob): void
   now?(): Date
+  // Told after any export was saved (the backup reminder counts it).
+  onExported?(): void
 }
 
 export interface BackupView {
@@ -62,6 +64,7 @@ export function createBackupView(deps: BackupViewDependencies): BackupView {
         const backup = await buildBackup()
         const exportedAt = now()
         download(`${fileNamePrefix}-${fileTimestamp(exportedAt)}.json`, new Blob([JSON.stringify(backup)], { type: 'application/json' }))
+        deps.onExported?.()
         const summary = summarizeBackup(backup)
         if (fileNamePrefix === 'openteam-backup') deps.showSuccess(ui(`已导出备份：${summary.chats} 个群聊、${summary.messages} 条消息`))
         return true

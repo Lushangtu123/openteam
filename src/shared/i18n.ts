@@ -278,6 +278,8 @@ const UI_TRANSLATIONS: Record<string, string> = {
   '检查新版本': 'Check for new versions',
   '导出诊断信息': 'Export diagnostics',
   '选择多个…': 'Select several…',
+  '提醒我备份': 'Remind me to back up',
+  '群聊只保存在这个浏览器里。超过两周没有备份时，在群聊列表上方提醒一次。': 'Groups are kept only in this browser. After two weeks without a backup, a reminder appears over the group list.',
   '后台没有回应': 'The background did not answer',
   '反馈问题时附上这个文件：包含版本、各 AI 网站页面的状态、最近失败的原因和运行日志，不含消息内容、群聊和成员名称，也不含 API Key。': 'Attach this file when you report a problem: it holds the version, how each AI site\'s page is doing, why recent replies failed, and the recent logs. It holds no message text, no group or member names and no API keys.',
   '每天最多向 GitHub 查一次有没有新版本，只读取公开的版本号，不会自动下载。': 'Asks GitHub at most once a day whether a new version is out. Reads only the public version number and downloads nothing.',

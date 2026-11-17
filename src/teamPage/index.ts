@@ -28,6 +28,8 @@ import { createTeamFormationView } from './teamFormationView'
 import { createProjectView } from './projectView'
 import { createSiteCheckView } from './siteCheckView'
 import { createUpdateNotice } from './updateNotice'
+import { createBackupReminderView } from './backupReminderView'
+import { BACKUP_REMINDER_STORAGE_KEY, type BackupReminderState } from '../shared/backupReminder'
 import { exportDiagnostics, saveTextFile } from './diagnosticsExport'
 import type { RecentLogEntry } from '../shared/logger'
 import { UPDATE_CHECK_STORAGE_KEY, type UpdateCheckState } from '../shared/updateCheck'
@@ -669,6 +671,7 @@ function render(): void {
   renderSelectedChat()
   // In the language chosen now.
   updateNotice.render()
+  backupReminderView.render()
   replyComparisonView.refresh()
   teamFormationView.refresh()
   renderTemplates()
@@ -822,7 +825,21 @@ function handleRoleRecoveryRequest(message: Extract<StorePushMessage, { type: 'G
     })
 }
 
+// 备份提醒: kept in its own storage key, outside the store and its backups.
+const backupReminderView = createBackupReminderView({
+  document,
+  language: () => normalizeLanguage(store.settings.language),
+  getStore: () => store,
+  storage: {
+    get: async () => (await chrome.storage.local.get(BACKUP_REMINDER_STORAGE_KEY))[BACKUP_REMINDER_STORAGE_KEY],
+    set: (state: BackupReminderState) => chrome.storage.local.set({ [BACKUP_REMINDER_STORAGE_KEY]: state }),
+  },
+  now: () => Date.now(),
+  exportBackup: () => backupView.exportBackup(),
+})
+
 const backupView = createBackupView({
+  onExported: () => void backupReminderView.noteBackup(),
   exportButtonEl: teamDomRefs.backupExportEl,
   restoreButtonEl: teamDomRefs.backupRestoreEl,
   fileInputEl: teamDomRefs.backupFileEl,
@@ -917,6 +934,7 @@ async function boot(): Promise<void> {
   aiPagesView.registerAiPagesControls()
   registerSettingsWindow({ windowEl: settingsMenuEl, settingsButtonEl })
   void updateNotice.start()
+  void backupReminderView.start()
   // The memory store's list takes the settings window's place, as the models window does.
   teamDomRefs.openMemoryPanelEl.addEventListener('click', () => {
     settingsMenuEl.hidden = true

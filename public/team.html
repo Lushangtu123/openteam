@@ -146,6 +146,7 @@
         <div id="chat-list-search-box" class="chat-list-search" hidden>
           <input id="chat-list-search" type="search" placeholder="搜索群聊" aria-label="搜索群聊" autocomplete="off" />
         </div>
+        <div id="backup-reminder" class="backup-reminder" role="status" hidden></div>
         <div id="chat-list" class="chat-list"></div>
       </aside>
 
@@ -515,8 +516,16 @@
                   <div class="settings-row-title">导出全部数据</div>
                   <p class="settings-row-hint">备份包含群聊、成员、角色、笔记和图片。</p>
                   <label class="settings-checkbox"><input id="backup-include-keys" type="checkbox"> 同时导出 API Key（导出后请妥善保管备份文件）</label>
+                  <p id="backup-status" class="settings-row-hint settings-hint" aria-live="polite"></p>
                 </div>
                 <button id="backup-export" class="btn settings-action" type="button">导出</button>
+              </div>
+              <div class="settings-row">
+                <div class="settings-row-text">
+                  <div class="settings-row-title" id="backup-reminder-title">提醒我备份</div>
+                  <p class="settings-row-hint">群聊只保存在这个浏览器里。超过两周没有备份时，在群聊列表上方提醒一次。</p>
+                </div>
+                <button id="backup-reminder-toggle" class="settings-switch" type="button" role="switch" aria-labelledby="backup-reminder-title" aria-checked="true"></button>
               </div>
               <div class="settings-row">
                 <div class="settings-row-text">
