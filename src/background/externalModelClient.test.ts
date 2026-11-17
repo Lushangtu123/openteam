@@ -46,6 +46,23 @@ describe('ExternalModelClient Stability Baseline', () => {
     } as any
   }
 
+  it('adds /v1 to an OpenAI-format address only when its path names no API version', () => {
+    // Paths that already name a version are left as they are.
+    expect(normalizeBaseUrl('https://generativelanguage.googleapis.com/v1beta/openai/', 'openai')).toBe('https://generativelanguage.googleapis.com/v1beta/openai')
+    expect(normalizeBaseUrl('https://open.bigmodel.cn/api/paas/v4', 'openai')).toBe('https://open.bigmodel.cn/api/paas/v4')
+    expect(normalizeBaseUrl('https://ark.cn-beijing.volces.com/api/v3', 'openai')).toBe('https://ark.cn-beijing.volces.com/api/v3')
+    expect(normalizeBaseUrl('https://api.meta.ai/v1', 'openai')).toBe('https://api.meta.ai/v1')
+    // As before: a bare host, or a path without a version, gets /v1.
+    expect(normalizeBaseUrl('https://api.deepseek.com', 'openai')).toBe('https://api.deepseek.com/v1')
+    expect(normalizeBaseUrl('http://localhost:11434/', 'openai')).toBe('http://localhost:11434/v1')
+    expect(normalizeBaseUrl('https://openrouter.ai/api', 'openai')).toBe('https://openrouter.ai/api/v1')
+    expect(normalizeBaseUrl('https://api.groq.com/openai', 'openai')).toBe('https://api.groq.com/openai/v1')
+    // A host whose name has "v1" in it is not a version.
+    expect(normalizeBaseUrl('https://v1.example.com', 'openai')).toBe('https://v1.example.com/v1')
+    // Anthropic-format addresses are left alone.
+    expect(normalizeBaseUrl('https://api.anthropic.com/', 'anthropic')).toBe('https://api.anthropic.com')
+  })
+
   it('normalizes DashScope root URLs to the OpenAI-compatible endpoint', () => {
     expect(normalizeBaseUrl('https://dashscope.aliyuncs.com', 'openai')).toBe('https://dashscope.aliyuncs.com/compatible-mode/v1')
     expect(normalizeBaseUrl('https://dashscope-intl.aliyuncs.com/compatible-mode', 'openai')).toBe('https://dashscope-intl.aliyuncs.com/compatible-mode/v1')
