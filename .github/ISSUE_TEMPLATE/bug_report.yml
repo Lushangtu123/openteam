@@ -43,6 +43,7 @@ body:
       options:
         - Gemini (gemini.google.com)
         - ChatGPT (chatgpt.com)
+        - Claude (claude.ai)
         - DeepSeek (chat.deepseek.com)
         - Grok (grok.com)
         - Qwen (chat.qwen.ai)

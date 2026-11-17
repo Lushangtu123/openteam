@@ -4,8 +4,8 @@
 import { CHAT_SITE_INFO, CHAT_SITES, type ChatSite } from './chatSites'
 import type { GroupChat, OpenTeamLanguage, OpenTeamStore } from './types'
 
-// Every site that can open inside OpenTeam: claude.ai refuses to run inside other pages.
-export const SITE_CHECK_SITES: ChatSite[] = CHAT_SITES.filter(site => site !== 'claude')
+// Every AI site OpenTeam opens. A site that refuses to run inside the page shows as a page problem.
+export const SITE_CHECK_SITES: ChatSite[] = [...CHAT_SITES]
 
 // A site that has not replied by then is reported as not answering. Slow sites take minutes (Qwen
 // took three in a live check), so this is longer than that.

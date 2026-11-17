@@ -4,7 +4,7 @@
 
 > **Origin.** This project is based on **OpenTeam** by **[afumu](https://github.com/afumu)** (original repository: [afumu/openteam](https://github.com/afumu/openteam)). The original code, design and documentation belong to afumu and the OpenTeam contributors and remain under the [PolyForm Noncommercial License 1.0.0](LICENSE) (`Required Notice: Copyright (c) 2026 OpenTeam contributors.`).
 
-> A local-first AI team workspace: put ChatGPT, Gemini, DeepSeek, Grok, Qwen, Kimi, API models and local coding agents in one group chat, and let them discuss, review each other and work through a project together.
+> A local-first AI team workspace: put ChatGPT, Gemini, Claude, DeepSeek, Grok, Qwen, Kimi, API models and local coding agents in one group chat, and let them discuss, review each other and work through a project together.
 
 OpenTeam is a Manifest V3 Chrome extension. Most members need no API key: OpenTeam reuses the AI websites you are already signed in to, sends each member its task inside that site, and gathers the replies in one shared chat. When you want them, API models and local agents such as Claude Code or Codex can join the same group.
 
@@ -17,7 +17,7 @@ Use it for learning, research and personal non-commercial work where one answer 
 **A team made of the AIs you already use**
 
 - **No API tokens needed**: web members use your existing AI website sessions.
-- **Six AI websites**: Gemini, ChatGPT, DeepSeek, Grok, Qwen and Kimi as group members, each in its own page; a member can be moved to another site or model at any time.
+- **Seven AI websites**: Gemini, ChatGPT, Claude, DeepSeek, Grok, Qwen and Kimi as group members, each in its own page; a member can be moved to another site or model at any time.
 - **API members**: add any OpenAI- or Anthropic-compatible model. Presets fill in the address for DeepSeek, Gemini, OpenAI, Claude, Qwen, Zhipu, Kimi, Doubao, OpenRouter and SiliconFlow, and the model list is fetched from the provider. A backup model answers when the main one is busy, rate-limited or out of quota. Each reply shows the tokens it used, and a failed request shows the server's own reason.
 - **Local agents as members**: Claude Code, Codex or another ACP agent works in a folder you allow, through the local daemon. Every run, file edit and command waits for your approval, and agents that share a folder take turns.
 - **Team up for a task**: describe the task, pick the AIs, and each chooses its position; you confirm the roles before work starts.
@@ -74,7 +74,7 @@ flowchart TB
   bg <-->|prompts and live replies| cs["Content script and site adapter<br/>in each AI page"]
   bg <-->|HTTPS| api["API models<br/>OpenAI or Anthropic format"]
   bg <-->|WebSocket, 127.0.0.1| daemon["Local daemon<br/>openteamcli"]
-  cs <--> web["ChatGPT / Gemini / DeepSeek<br/>Grok / Qwen / Kimi"]
+  cs <--> web["ChatGPT / Gemini / Claude / DeepSeek<br/>Grok / Qwen / Kimi"]
   daemon <-->|ACP| agents["Claude Code / Codex<br/>in a folder you allow"]
   cli["Your agent using openteamcli"] -->|HTTP, 127.0.0.1| daemon
 ```
@@ -103,11 +103,11 @@ API members are called directly from the extension; local agents run through the
 | --- | --- |
 | Gemini | Long context, research, multimodal material |
 | ChatGPT | General execution, fast iteration |
+| Claude | Long documents, review, structured writing, careful reasoning |
 | DeepSeek | Code, reasoning, Chinese-language work |
 | Grok | Current events, alternative phrasing |
 | Qwen | Chinese and multilingual writing, code, long documents (chat.qwen.ai) |
 | Kimi | Long documents, Chinese-language research and writing (www.kimi.com) |
-| Claude | claude.ai refuses to run inside other pages, so add Claude as an API member (Anthropic format) |
 
 These are practical defaults, not rankings. Quality depends on model versions, account plans, task type and input.
 
@@ -195,7 +195,7 @@ Attached images are stored in the browser (IndexedDB) and uploaded only when you
 - Chrome / Chromium only.
 - AI-site adapters depend on each site's page structure, so a redesign can break sending or reading replies.
 - Embedding sites needs response-header changes through `declarativeNetRequest`, a heavier permission than a normal extension.
-- Some sites refuse to run inside other pages on purpose (claude.ai today). OpenTeam shows this on the member's status and does not work around it.
+- A site can refuse to run inside other pages. OpenTeam shows this on the member's status and does not work around it; such a model can still join as an API member.
 - Signed-out sessions have limits: signed-out Gemini does not send images, and signed-out Grok asks you to sign in before drawing.
 - Voice input needs a network connection.
 - Famous-person advisor templates are prompts inspired by public ideas, not real people.

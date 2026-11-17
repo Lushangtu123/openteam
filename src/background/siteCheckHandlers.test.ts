@@ -21,7 +21,7 @@ async function setup(options: { failOn?: string; readyAfter?: Record<string, num
   const broadcastStoreUpdated = vi.fn()
   let clock = new Date(2026, 10, 17, 9, 5).getTime()
   let checks = 0
-  const readyAfter = options.readyAfter ?? Object.fromEntries(['gemini', 'chatgpt', 'deepseek', 'grok', 'qwen', 'kimi'].map(site => [site, 0]))
+  const readyAfter = options.readyAfter ?? Object.fromEntries(['gemini', 'chatgpt', 'claude', 'deepseek', 'grok', 'qwen', 'kimi'].map(site => [site, 0]))
   const runtimeFrames = {
     getByRole: (_chatId: string, roleId: string) => {
       const site = store.rolesById[roleId]?.chatSite ?? ''
@@ -59,7 +59,7 @@ async function setup(options: { failOn?: string; readyAfter?: Record<string, num
 
 describe('background site check', () => {
   it('makes a group with one member on each site, marks it, opens it and asks everyone to reply OK once their pages are ready', async () => {
-    const { store, routes, routed, start, broadcastStoreUpdated, SITE_CHECK_ROUTE_TYPES, checksAtSend } = await setup({ readyAfter: { gemini: 0, chatgpt: 1, deepseek: 3, grok: 2, qwen: 0, kimi: 1 } })
+    const { store, routes, routed, start, broadcastStoreUpdated, SITE_CHECK_ROUTE_TYPES, checksAtSend } = await setup({ readyAfter: { gemini: 0, chatgpt: 1, claude: 1, deepseek: 3, grok: 2, qwen: 0, kimi: 1 } })
     expect(routes.map(entry => entry.type)).toEqual(SITE_CHECK_ROUTE_TYPES)
 
     // Answers as soon as the group is open; the question goes out once every page is ready.
@@ -68,7 +68,7 @@ describe('background site check', () => {
     await vi.waitFor(() => expect(routed.map(message => message.type)).toEqual(['GROUP_CHAT_CREATE', 'GROUP_ROLES_CREATE_BATCH', 'GROUP_CHAT_SWITCH', 'GROUP_MESSAGE_SEND']))
     expect(routed[0]).toMatchObject({ name: '网站自检 11-17 09:05', mode: 'independent' })
     const items = routed[1].items as Array<Record<string, unknown>>
-    expect(items.map(item => item.chatSite)).toEqual(['gemini', 'chatgpt', 'deepseek', 'grok', 'qwen', 'kimi'])
+    expect(items.map(item => item.chatSite)).toEqual(['gemini', 'chatgpt', 'claude', 'deepseek', 'grok', 'qwen', 'kimi'])
     expect(items[0]).toMatchObject({ source: 'temporary', name: 'Gemini', modelSource: 'site' })
     expect(routed[2]).toMatchObject({ chatId: 'chat-check' })
     expect(routed[3]).toMatchObject({ chatId: 'chat-check', raw: expect.stringMatching(/^@all .*OK/) })

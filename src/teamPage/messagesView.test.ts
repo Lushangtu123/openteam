@@ -230,8 +230,8 @@ describe('team page messages view boundary', () => {
 
     // One button per site that opens inside OpenTeam; each opens that site to sign in.
     const siteButtons = [...steps[0].querySelectorAll<HTMLButtonElement>('button')]
-    expect(siteButtons.map(button => button.textContent)).toEqual(['Gemini', 'ChatGPT', 'DeepSeek', 'Grok', 'Qwen', 'Kimi'])
-    siteButtons[2].click()
+    expect(siteButtons.map(button => button.textContent)).toEqual(['Gemini', 'ChatGPT', 'Claude', 'DeepSeek', 'Grok', 'Qwen', 'Kimi'])
+    siteButtons[3].click()
     expect(openSiteLogin).toHaveBeenCalledWith('deepseek')
 
     steps[1].querySelector<HTMLButtonElement>('button')!.click()

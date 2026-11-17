@@ -4,7 +4,7 @@
 
 > **项目来源：** 本项目基于 **[afumu](https://github.com/afumu)** 的 **OpenTeam**（原仓库：[afumu/openteam](https://github.com/afumu/openteam)）修改而来。原始代码、设计与文档归 afumu 及 OpenTeam 贡献者所有，并继续遵循 [PolyForm Noncommercial License 1.0.0](LICENSE)（`Required Notice: Copyright (c) 2026 OpenTeam contributors.`）。
 
-> 本地优先的 AI 团队工作台：把 ChatGPT、Gemini、DeepSeek、Grok、Qwen、Kimi、API 模型和本机编程智能体放进同一个群聊，让它们讨论、互相审查，一起推进项目。
+> 本地优先的 AI 团队工作台：把 ChatGPT、Gemini、Claude、DeepSeek、Grok、Qwen、Kimi、API 模型和本机编程智能体放进同一个群聊，让它们讨论、互相审查，一起推进项目。
 
 OpenTeam 是一个 Manifest V3 Chrome 扩展。大多数成员不需要 API Key：OpenTeam 复用你已经登录的 AI 网页，在各自的网站里把任务发给成员，再把回复汇总到同一个群聊。需要时，API 模型和 Claude Code、Codex 等本机智能体也可以加入同一个群。
 
@@ -17,7 +17,7 @@ OpenTeam 是一个 Manifest V3 Chrome 扩展。大多数成员不需要 API Key�
 **用你已有的 AI 组成团队**
 
 - **不需要 API token**：网页成员使用你已登录的 AI 网站账号。
-- **六个 AI 网站**：Gemini、ChatGPT、DeepSeek、Grok、Qwen、Kimi 都能作为群成员，各占一个页面；成员随时可以换到别的网站或模型。
+- **七个 AI 网站**：Gemini、ChatGPT、Claude、DeepSeek、Grok、Qwen、Kimi 都能作为群成员，各占一个页面；成员随时可以换到别的网站或模型。
 - **API 成员**：可添加任何 OpenAI 或 Anthropic 兼容的模型。选择服务商（DeepSeek、Gemini、OpenAI、Claude、通义千问、智谱、Kimi、豆包、OpenRouter、硅基流动）就会自动填好地址，模型列表可以直接从服务商获取。主模型繁忙、限流或额度用完时，由备用模型接手回答。每条回复显示用了多少 token，请求失败时显示服务器给出的原因。
 - **本机智能体当成员**：Claude Code、Codex 或其他 ACP 智能体通过本机守护进程，在你允许的文件夹里工作。每次运行、每次改文件和执行命令都要你批准；共用同一文件夹的智能体会排队，不会同时动手。
 - **按任务组队**：描述任务、挑选 AI，由它们各自认领岗位，你确认后再开工。
@@ -74,7 +74,7 @@ flowchart TB
   bg <-->|提示词与实时回复| cs["内容脚本与网站适配器<br/>在每个 AI 页面中"]
   bg <-->|HTTPS| api["API 模型<br/>OpenAI 或 Anthropic 格式"]
   bg <-->|WebSocket，127.0.0.1| daemon["本机守护进程<br/>openteamcli"]
-  cs <--> web["ChatGPT / Gemini / DeepSeek<br/>Grok / Qwen / Kimi"]
+  cs <--> web["ChatGPT / Gemini / Claude / DeepSeek<br/>Grok / Qwen / Kimi"]
   daemon <-->|ACP| agents["Claude Code / Codex<br/>在你允许的文件夹里"]
   cli["用 openteamcli 的智能体"] -->|HTTP，127.0.0.1| daemon
 ```
@@ -103,11 +103,11 @@ API 成员由扩展直接调用；本机智能体通过本机守护进程运行�
 | --- | --- |
 | Gemini | 长上下文、调研、多模态材料 |
 | ChatGPT | 通用执行、快速迭代 |
+| Claude | 长文档、评审、结构化写作、严谨推理 |
 | DeepSeek | 代码、推理、中文任务 |
 | Grok | 时事、换一种说法 |
 | Qwen | 中文与多语言写作、代码、长文档（chat.qwen.ai） |
 | Kimi | 长文档、中文调研与写作（www.kimi.com） |
-| Claude | claude.ai 拒绝在其他页面里运行，请以 API 成员（Anthropic 格式）添加 |
 
 以上只是常用默认选择，不是排名。实际效果取决于模型版本、账号套餐、任务类型和输入材料。
 
@@ -195,7 +195,7 @@ npm run package   # 构建后运行：在 release/ 里生成扩展 zip、CLI 包
 - 仅支持 Chrome / Chromium。
 - AI 网站适配依赖各网站的页面结构，网站改版可能导致发送或读取回复失败。
 - 在工作台里嵌入网站需要通过 `declarativeNetRequest` 修改响应头，权限比普通扩展更重。
-- 有些网站有意拒绝在其他页面里运行（目前是 claude.ai）。OpenTeam 会在成员状态上说明，不会绕过。
+- 网站可能拒绝在其他页面里运行。遇到时 OpenTeam 会在成员状态上说明，不会绕过；这样的模型仍可以作为 API 成员加入。
 - 未登录的会话有限制：未登录的 Gemini 不能发送图片，未登录的 Grok 画图前会要求登录。
 - 语音输入需要联网。
 - 名人顾问模板是受公开思想启发的提示词，不是真人。

@@ -30,8 +30,8 @@ function checkStore(sites: ChatSite[]) {
 }
 
 describe('the site check', () => {
-  it('checks every site that can open inside OpenTeam, which leaves out Claude', () => {
-    expect(SITE_CHECK_SITES).toEqual(['gemini', 'chatgpt', 'deepseek', 'grok', 'qwen', 'kimi'])
+  it('checks every AI site OpenTeam opens', () => {
+    expect(SITE_CHECK_SITES).toEqual(['gemini', 'chatgpt', 'claude', 'deepseek', 'grok', 'qwen', 'kimi'])
   })
 
   it('says how each site did', () => {
