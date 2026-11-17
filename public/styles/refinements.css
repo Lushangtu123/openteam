@@ -451,6 +451,58 @@
   margin-top: 14px;
 }
 
+/* Choosing several groups in the list: a bar over the list (count, all/none, delete, cancel), and a
+   checkbox in each row where its menu button was. */
+:root[data-theme] .chat-select-bar {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin: 0 0 4px;
+  border-bottom: 1px solid var(--line);
+  padding: 6px 2px;
+  background: var(--sidebar-bg, var(--surface));
+}
+
+:root[data-theme] .chat-select-count {
+  flex: 1;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+
+:root[data-theme] .chat-select-bar .btn {
+  min-height: 28px;
+  padding: 0 8px;
+  font-size: 12.5px;
+}
+
+/* The darker red of the other quiet delete buttons: the theme red is too light on the sidebar. */
+:root[data-theme] .chat-select-bar .btn-danger {
+  color: #cf2e23;
+}
+
+:root[data-theme="dark"] .chat-select-bar .btn-danger {
+  color: #ff8a82;
+}
+
+:root[data-theme] .chat-select-check {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--text);
+  cursor: pointer;
+}
+
+:root[data-theme] .chat-item.selecting {
+  cursor: pointer;
+}
+
 /* 检查新版本: the release's link and 忽略 under the status, and a dot on the settings button. */
 :root[data-theme] .update-actions {
   display: flex;

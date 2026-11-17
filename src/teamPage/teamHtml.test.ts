@@ -568,7 +568,8 @@ describe('team.html chat creation UI', () => {
   it('switches chats from the whole chat row while keeping row menus isolated', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/teamPage/chatListView.ts'), 'utf8')
 
-    expect(source).toContain("item.addEventListener('click', () => switchChat(chat.id))")
+    // Outside select mode (where a click ticks the row instead).
+    expect(source).toContain("item.addEventListener('click', () => selection ? toggleSelected(chat.id) : switchChat(chat.id))")
     // The row is not a button itself: it holds the name button and the menu button.
     expect(source).not.toContain("item.setAttribute('role', 'button')")
     expect(source).toContain("name.setAttribute('aria-current', 'true')")

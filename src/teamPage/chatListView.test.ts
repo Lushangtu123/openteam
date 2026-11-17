@@ -113,3 +113,125 @@ describe('chat menu and the memory store', () => {
     expect(confirm).toHaveBeenLastCalledWith('确定删除「选型群」吗？删除后这个群聊的消息和角色都会移除。')
   })
 })
+
+describe('choosing several groups', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  function setup(language: 'zh-CN' | 'en' = 'zh-CN') {
+    const store = createDefaultStore()
+    store.settings.language = language
+    for (const [id, name] of [['chat-1', '网站自检 1'], ['chat-2', '网站自检 2'], ['chat-3', '正式项目']]) {
+      store.chatsById[id] = { id, name, mode: 'independent', roleIds: [`r-${id}`], messageIds: [], nextMessageSeq: 1, status: 'ready', createdAt: 1, updatedAt: 1 }
+    }
+    store.chatOrder = ['chat-1', 'chat-2', 'chat-3']
+    store.memoryItemsById = { m1: { id: 'm1', scope: 'chat', scopeId: 'chat-2', kind: 'fact', content: 'x', source: { origin: 'user' }, createdAt: 1, updatedAt: 1 } }
+    store.memoryOrder = ['m1']
+    const state = createTeamPageState()
+    state.selectedChatId = 'chat-3'
+    const chatListEl = document.createElement('div')
+    document.body.replaceChildren(chatListEl)
+    const runCommand = vi.fn(async (_type: string, _payload?: Record<string, unknown>) => undefined)
+    const remaining = createDefaultStore()
+    const sendRuntimeMessage = vi.fn(async (_type: string, _payload?: Record<string, unknown>) => ({ ok: true, store: remaining }))
+    const applyStore = vi.fn()
+    const removeChat = vi.fn()
+    const view = createChatListView({
+      state,
+      getStore: () => store,
+      applyStore,
+      storeSummaryEl: document.createElement('p'),
+      chatListEl,
+      iframeHost: { removeChat, restoreChat: vi.fn() },
+      getTemplates: () => [],
+      getChatRecentSummary: () => '',
+      roleToneClass: () => '',
+      roleAvatarLabel: value => value.slice(0, 1),
+      emptyCard: () => document.createElement('div'),
+      renderSelectedChat: vi.fn(),
+      renderRolePanel: vi.fn(),
+      sendRuntimeMessage: sendRuntimeMessage as never,
+      runCommand,
+      log: { warn: vi.fn() },
+      showError: vi.fn(),
+    })
+    view.renderChatList()
+    const rows = () => [...chatListEl.querySelectorAll<HTMLElement>('.chat-item')]
+    const checkbox = (index: number) => rows()[index].querySelector<HTMLInputElement>('input[type="checkbox"]')!
+    const bar = () => chatListEl.querySelector<HTMLElement>('.chat-select-bar')
+    const barButton = (text: string) => [...(bar()?.querySelectorAll<HTMLButtonElement>('button') ?? [])].find(button => button.textContent === text)
+    const startFrom = (index: number, label = '选择多个…') => {
+      rows()[index].querySelector<HTMLButtonElement>('.chat-menu-btn')!.click()
+      ;[...chatListEl.querySelectorAll<HTMLButtonElement>('.chat-action-menu button')].find(button => button.textContent === label)!.click()
+    }
+    return { store, state, chatListEl, rows, checkbox, bar, barButton, startFrom, runCommand, sendRuntimeMessage, applyStore, removeChat }
+  }
+
+  it('starts from a group’s menu with that group ticked, and rows tick instead of opening', () => {
+    const { rows, checkbox, bar, startFrom, runCommand } = setup()
+    startFrom(0)
+
+    expect(bar()?.textContent).toContain('已选 1 个')
+    expect(rows().map((_, index) => checkbox(index).checked)).toEqual([true, false, false])
+    expect(checkbox(1).getAttribute('aria-label')).toBe('选择「网站自检 2」')
+    expect(rows()[0].querySelector('.chat-menu-btn')).toBeNull()
+
+    rows()[1].click()
+    expect(rows().map((_, index) => checkbox(index).checked)).toEqual([true, true, false])
+    expect(bar()?.textContent).toContain('已选 2 个')
+
+    // The list is drawn again on each tick; a keyboard user stays on the box they ticked.
+    checkbox(2).focus()
+    checkbox(2).click()
+    expect(document.activeElement).toBe(checkbox(2))
+    expect(checkbox(2).checked).toBe(true)
+    expect(runCommand).not.toHaveBeenCalledWith('GROUP_CHAT_SWITCH', expect.anything())
+  })
+
+  it('selects all and none, and leaves without deleting', () => {
+    const { rows, checkbox, bar, barButton, startFrom } = setup()
+    startFrom(0)
+    barButton('全选')!.click()
+    expect(rows().map((_, index) => checkbox(index).checked)).toEqual([true, true, true])
+    barButton('全不选')!.click()
+    expect(rows().map((_, index) => checkbox(index).checked)).toEqual([false, false, false])
+    expect(barButton('删除')!.disabled).toBe(true)
+
+    barButton('取消')!.click()
+    expect(bar()).toBeNull()
+    expect(rows()[0].querySelector('.chat-menu-btn')).toBeTruthy()
+  })
+
+  it('deletes the chosen groups after one yes that counts their memory, then leaves select mode', async () => {
+    const { rows, bar, barButton, startFrom, sendRuntimeMessage, applyStore, removeChat } = setup()
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true)
+    startFrom(0)
+    rows()[1].click()
+
+    barButton('删除')!.click()
+    expect(confirm).toHaveBeenLastCalledWith('确定删除选中的 2 个群聊吗？它们的消息和成员都会移除，为它们保存的 1 条记忆也会一并删除。删除后无法恢复。')
+    expect(sendRuntimeMessage).not.toHaveBeenCalled()
+    expect(bar()).toBeTruthy()
+
+    barButton('删除')!.click()
+    await vi.waitFor(() => expect(sendRuntimeMessage).toHaveBeenCalledWith('GROUP_CHATS_DELETE', { chatIds: ['chat-1', 'chat-2'] }))
+    await vi.waitFor(() => expect(applyStore).toHaveBeenCalled())
+    expect(removeChat.mock.calls.map(call => call[0])).toEqual(['chat-1', 'chat-2'])
+    expect(bar()).toBeNull()
+  })
+
+  it('leaves select mode on Escape', () => {
+    const { bar, startFrom, chatListEl } = setup()
+    startFrom(0)
+    chatListEl.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    expect(bar()).toBeNull()
+  })
+
+  it('speaks English when the page does', () => {
+    const { bar, barButton, startFrom } = setup('en')
+    startFrom(0, 'Select several…')
+    expect(bar()?.textContent).toContain('1 selected')
+    expect(barButton('Select all')).toBeTruthy()
+  })
+})

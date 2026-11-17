@@ -25,6 +25,8 @@ export interface TeamPageState {
   mentionIndex: number
   peopleDrawerOpen: boolean
   chatMenuChatId?: string
+  // The groups ticked while choosing several in the chat list; undefined when not choosing.
+  chatSelection?: string[]
   // What the search box above the group list holds.
   chatListQuery: string
   roleSiteMenuRoleId?: string

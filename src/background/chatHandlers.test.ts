@@ -40,6 +40,7 @@ describe('background chat handlers', () => {
       'GROUP_CHAT_SWITCH',
       'GROUP_CHAT_UPDATE',
       'GROUP_CHAT_DELETE',
+      'GROUP_CHATS_DELETE',
       'GROUP_CHAT_CLEAR_MESSAGES',
       'GROUP_CHAT_CLOSE',
       'GROUP_CHAT_MARK_READ',
@@ -274,5 +275,61 @@ describe('background chat handlers', () => {
     expect(removeRole).toHaveBeenCalledTimes(2)
     expect(store.rolesById['role-1']).toMatchObject({ status: 'loading', updatedAt: 100 })
     expect(store.rolesById['role-2']).toMatchObject({ status: 'thinking', lastPromptMessageId: 'msg-1', updatedAt: 40 })
+  })
+
+  it('deletes several groups at once, with their members, messages, memory and images, in one update', async () => {
+    vi.resetModules()
+    const store = createDefaultStore()
+    for (const [chatId, roleId, messageId] of [['chat-1', 'role-1', 'msg-1'], ['chat-2', 'role-2', 'msg-2'], ['chat-3', 'role-3', 'msg-3']]) {
+      store.chatsById[chatId] = { id: chatId, name: chatId, mode: 'independent', roleIds: [roleId], messageIds: [messageId], nextMessageSeq: 2, status: 'ready', createdAt: 0, updatedAt: 0 }
+      store.rolesById[roleId] = { id: roleId, chatId, name: roleId, systemPrompt: '', status: 'ready', contextCursor: 0, createdAt: 0, updatedAt: 0 }
+      store.messagesById[messageId] = { id: messageId, chatId, seq: 1, type: 'user', content: 'x', createdAt: 0, status: 'received' }
+    }
+    store.chatOrder = ['chat-1', 'chat-2', 'chat-3']
+    store.currentChatId = 'chat-2'
+    store.memoryItemsById = { kept: { id: 'kept', scope: 'chat', scopeId: 'chat-3', kind: 'fact', content: 'k', source: { origin: 'user' }, createdAt: 1, updatedAt: 1 }, gone: { id: 'gone', scope: 'role', scopeId: 'role-1', kind: 'fact', content: 'g', source: { origin: 'user' }, createdAt: 1, updatedAt: 1 } }
+    store.memoryOrder = ['kept', 'gone']
+    let updates = 0
+    vi.doMock('./storeAccess', async importOriginal => {
+      const actual = await importOriginal<typeof import('./storeAccess')>()
+      return {
+        ...actual,
+        mutateStore: async (mutator: (store: OpenTeamStore) => unknown) => {
+          updates += 1
+          return { store, result: await mutator(store) }
+        },
+      }
+    })
+    const { createChatHandlers } = await import('./chatHandlers')
+    const broadcastStoreUpdated = vi.fn()
+    const deleteByChatId = vi.fn(async () => undefined)
+    const removeRole = vi.fn()
+    const routes = createChatHandlers({
+      broadcastStoreUpdated,
+      getChatStatusFromRoles: () => 'ready',
+      imageAttachments: { deleteByChatId } as never,
+      log: { info: vi.fn(), warn: vi.fn() },
+      newId: vi.fn(),
+      now: vi.fn(() => 100),
+      runtimeFrames: { removeRole },
+    })
+    const run = (chatIds: unknown) => Promise.resolve(routes.find(route => route.type === 'GROUP_CHATS_DELETE')!.handler({ type: 'GROUP_CHATS_DELETE', chatIds }, {})) as Promise<{ ok: boolean; deleted: number; memoryItemCount: number }>
+
+    // A group that no longer exists is skipped, not an error.
+    const response = await run(['chat-1', 'chat-2', 'chat-gone'])
+
+    expect(response).toMatchObject({ ok: true, deleted: 2, memoryItemCount: 1 })
+    expect(store.chatOrder).toEqual(['chat-3'])
+    expect(Object.keys(store.rolesById)).toEqual(['role-3'])
+    expect(Object.keys(store.messagesById)).toEqual(['msg-3'])
+    expect(store.memoryOrder).toEqual(['kept'])
+    expect(store.currentChatId).toBe('chat-3')
+    expect(removeRole).toHaveBeenCalledWith('chat-1', 'role-1')
+    expect(deleteByChatId.mock.calls.map(call => (call as unknown[])[0])).toEqual(['chat-1', 'chat-2'])
+    expect(updates).toBe(1)
+    expect(broadcastStoreUpdated).toHaveBeenCalledTimes(1)
+
+    await expect(run([])).rejects.toThrow()
+    await expect(run('chat-3')).rejects.toThrow()
   })
 })

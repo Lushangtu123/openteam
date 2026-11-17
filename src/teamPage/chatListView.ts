@@ -54,8 +54,20 @@ export function createChatListView(deps: ChatListViewDependencies): ChatListView
     deps.state.chatListQuery = ''
     renderChatList()
   })
+  deps.chatListEl.addEventListener('keydown', event => {
+    if (event.key !== 'Escape' || !deps.state.chatSelection) return
+    event.preventDefault()
+    leaveSelection()
+  })
 
   function renderChatList() {
+    // Drawn anew each time: the control that had focus gets it back.
+    const focusKey = (document.activeElement as HTMLElement | null)?.dataset?.focusKey
+    renderChatListItems()
+    if (focusKey) [...deps.chatListEl.querySelectorAll<HTMLElement>('[data-focus-key]')].find(element => element.dataset.focusKey === focusKey)?.focus()
+  }
+
+  function renderChatListItems() {
     const store = deps.getStore()
     const allChats = store.chatOrder.map(chatId => store.chatsById[chatId]).filter((chat): chat is GroupChat => Boolean(chat))
     deps.storeSummaryEl.textContent = ui(`${allChats.length} 个群聊 · ${deps.getTemplates().length} 个角色`)
@@ -70,6 +82,8 @@ export function createChatListView(deps: ChatListViewDependencies): ChatListView
     }
 
     const chats = orderChatsForList(allChats, query, deps.getChatRecentSummary)
+    const selection = deps.state.chatSelection
+    if (selection) deps.chatListEl.append(selectionBar(chats, selection))
     if (chats.length === 0) {
       deps.chatListEl.append(deps.emptyCard(ui('没有找到群聊'), language() === 'en' ? `No group's name or last message contains "${query.trim()}".` : `没有名称或最近消息包含「${query.trim()}」的群聊。`))
       return
@@ -78,10 +92,11 @@ export function createChatListView(deps: ChatListViewDependencies): ChatListView
     for (const chat of chats) {
       const item = document.createElement('section')
       const hasActivity = chat.id !== deps.state.selectedChatId && Boolean(store.viewState?.chatHasNewMessageById?.[chat.id])
-      item.className = `chat-item${chat.id === deps.state.selectedChatId ? ' active' : ''}${hasActivity ? ' has-activity' : ''}`
+      item.className = `chat-item${chat.id === deps.state.selectedChatId ? ' active' : ''}${hasActivity ? ' has-activity' : ''}${selection ? ' selecting' : ''}`
       // The whole row switches to the chat on a click; for the keyboard and screen readers its name is
-      // the button (a row acting as a button could not hold the menu button too).
-      item.addEventListener('click', () => switchChat(chat.id))
+      // the button (a row acting as a button could not hold the menu button too). While choosing
+      // several, a click ticks the row instead.
+      item.addEventListener('click', () => selection ? toggleSelected(chat.id) : switchChat(chat.id))
 
       const avatar = document.createElement('div')
       avatar.className = `chat-avatar ${deps.roleToneClass(chat.name)}`
@@ -121,12 +136,93 @@ export function createChatListView(deps: ChatListViewDependencies): ChatListView
       const time = document.createElement('span')
       time.className = 'chat-time'
       time.textContent = formatChatListTime(chat.updatedAt)
-      side.append(time, menuButton)
+      if (selection) {
+        const tick = document.createElement('input')
+        tick.type = 'checkbox'
+        tick.className = 'chat-select-check'
+        tick.dataset.focusKey = `select:${chat.id}`
+        tick.checked = selection.includes(chat.id)
+        tick.setAttribute('aria-label', language() === 'en' ? `Select "${chat.name}"` : `选择「${chat.name}」`)
+        tick.addEventListener('click', event => event.stopPropagation())
+        tick.addEventListener('change', () => toggleSelected(chat.id))
+        side.append(time, tick)
+      } else {
+        side.append(time, menuButton)
+      }
 
       item.append(avatar, body, side)
-      if (deps.state.chatMenuChatId === chat.id) item.append(chatActionMenu(chat))
+      if (!selection && deps.state.chatMenuChatId === chat.id) item.append(chatActionMenu(chat))
       deps.chatListEl.append(item)
     }
+  }
+
+  function toggleSelected(chatId: string): void {
+    const selection = deps.state.chatSelection ?? []
+    deps.state.chatSelection = selection.includes(chatId) ? selection.filter(id => id !== chatId) : [...selection, chatId]
+    renderChatList()
+  }
+
+  function leaveSelection(): void {
+    deps.state.chatSelection = undefined
+    renderChatList()
+  }
+
+  // Over the list while choosing several: how many are ticked, all or none of those listed (the
+  // search may hide some), delete, and leave.
+  function selectionBar(listed: GroupChat[], selection: string[]): HTMLElement {
+    const en = language() === 'en'
+    const bar = document.createElement('div')
+    bar.className = 'chat-select-bar'
+    bar.setAttribute('role', 'toolbar')
+    bar.setAttribute('aria-label', en ? 'Selected groups' : '选中的群聊')
+    const count = document.createElement('span')
+    count.className = 'chat-select-count'
+    count.setAttribute('aria-live', 'polite')
+    count.textContent = en ? `${selection.length} selected` : `已选 ${selection.length} 个`
+    const allListed = listed.length > 0 && listed.every(chat => selection.includes(chat.id))
+    const all = barButton(allListed ? (en ? 'Select none' : '全不选') : (en ? 'Select all' : '全选'), 'btn btn-ghost', () => {
+      deps.state.chatSelection = allListed ? selection.filter(id => !listed.some(chat => chat.id === id)) : [...new Set([...selection, ...listed.map(chat => chat.id)])]
+      renderChatList()
+    }, 'select-bar:all')
+    const remove = barButton(en ? 'Delete' : '删除', 'btn btn-ghost btn-danger', () => {
+      deleteSelected().catch(error => deps.showError(error instanceof Error ? error.message : String(error)))
+    }, 'select-bar:delete')
+    remove.disabled = selection.length === 0
+    const cancel = barButton(en ? 'Cancel' : '取消', 'btn btn-ghost', leaveSelection, 'select-bar:cancel')
+    bar.append(count, all, remove, cancel)
+    return bar
+  }
+
+  function barButton(text: string, className: string, onClick: () => void, focusKey: string): HTMLButtonElement {
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.className = className
+    button.dataset.focusKey = focusKey
+    button.textContent = text
+    button.addEventListener('click', event => {
+      event.stopPropagation()
+      onClick()
+    })
+    return button
+  }
+
+  // One yes for all of them, counting the memory items that go too.
+  async function deleteSelected(): Promise<void> {
+    const store = deps.getStore()
+    const chats = (deps.state.chatSelection ?? []).map(id => store.chatsById[id]).filter((chat): chat is GroupChat => Boolean(chat))
+    if (chats.length === 0) return
+    const memoryCount = chats.reduce((total, chat) => total + countMemoryForChat(store, chat.id, chat.roleIds), 0)
+    const question = language() === 'en'
+      ? `Delete the ${chats.length} selected ${chats.length === 1 ? 'group' : 'groups'}? Their messages and members are removed${memoryCount ? `, and the ${memoryCount} memory ${memoryCount === 1 ? 'item' : 'items'} saved for them too` : ''}. This cannot be undone.`
+      : `确定删除选中的 ${chats.length} 个群聊吗？它们的消息和成员都会移除${memoryCount ? `，为它们保存的 ${memoryCount} 条记忆也会一并删除` : ''}。删除后无法恢复。`
+    if (!window.confirm(question)) return
+    const chatIds = chats.map(chat => chat.id)
+    const response = await deps.sendRuntimeMessage<{ deleted?: number }>('GROUP_CHATS_DELETE', { chatIds })
+    if (response.ok === false) throw new Error(response.error || '删除群聊失败')
+    for (const chatId of chatIds) deps.iframeHost.removeChat(chatId)
+    deps.state.chatSelection = undefined
+    deps.applyStore(response.store ?? createDefaultStore())
+    renderChatList()
   }
 
   function switchChat(chatId: string) {
@@ -237,6 +333,15 @@ export function createChatListView(deps: ChatListViewDependencies): ChatListView
       renderChatList()
       closeChatFrames(chat.id).catch(error => deps.showError(error.message))
     })
+    const select = document.createElement('button')
+    select.type = 'button'
+    select.className = 'btn btn-ghost'
+    select.textContent = ui('选择多个…')
+    select.addEventListener('click', () => {
+      deps.state.chatMenuChatId = undefined
+      deps.state.chatSelection = [chat.id]
+      renderChatList()
+    })
     const remove = document.createElement('button')
     remove.type = 'button'
     remove.className = 'btn btn-ghost btn-danger'
@@ -252,7 +357,7 @@ export function createChatListView(deps: ChatListViewDependencies): ChatListView
       if (!window.confirm(question)) return
       deleteChat(chat.id).catch(error => deps.showError(error.message))
     })
-    menu.append(pin, rename, duplicate, exportRecord, memory, clearMessages, closeFrames, remove)
+    menu.append(pin, rename, duplicate, exportRecord, memory, clearMessages, closeFrames, select, remove)
     return menu
   }
 

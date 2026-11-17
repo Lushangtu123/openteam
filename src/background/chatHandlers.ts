@@ -21,6 +21,7 @@ export const CHAT_ROUTE_TYPES = [
   'GROUP_CHAT_SWITCH',
   'GROUP_CHAT_UPDATE',
   'GROUP_CHAT_DELETE',
+  'GROUP_CHATS_DELETE',
   'GROUP_CHAT_CLEAR_MESSAGES',
   'GROUP_CHAT_CLOSE',
   'GROUP_CHAT_MARK_READ',
@@ -185,40 +186,57 @@ export function createChatHandlers(deps: ChatHandlersDependencies): BackgroundMe
     return { ok: true, chat: result.chat, store }
   }
 
+  // A group and everything that belongs to it: its members (and their frames), messages, the
+  // memory items saved for it and its members (items for every group stay), and its read state.
+  const removeChatFromStore = (store: OpenTeamStore, chat: GroupChat) => {
+    const roleIds = [...chat.roleIds]
+    const messageIds = [...chat.messageIds]
+    for (const roleId of roleIds) {
+      delete store.rolesById[roleId]
+      deps.runtimeFrames.removeRole(chat.id, roleId)
+    }
+    for (const messageId of messageIds) delete store.messagesById[messageId]
+    const memoryItemCount = deleteMemoryForChat(store, chat.id, roleIds)
+
+    store.chatOrder = store.chatOrder.filter(id => id !== chat.id)
+    delete store.chatsById[chat.id]
+    if (store.currentChatId === chat.id) store.currentChatId = store.chatOrder[0]
+    if (store.viewState?.chatReadSeqById) delete store.viewState.chatReadSeqById[chat.id]
+    if (store.viewState?.chatHasNewMessageById) delete store.viewState.chatHasNewMessageById[chat.id]
+    return { chatId: chat.id, roleIds, messageIds, memoryItemCount }
+  }
+
+  // Images live outside the store; a failure to remove them leaves the group deleted.
+  const deleteChatImages = async (chatId: string) => {
+    try {
+      await deps.imageAttachments?.deleteByChatId(chatId)
+    } catch (error) {
+      deps.log.warn('chat-delete:image-cleanup-failed', { chatId, error: error instanceof Error ? error.message : String(error) })
+    }
+  }
+
   const handleChatDelete = async (message: RuntimeMessage) => {
     const chatId = requireString(message.chatId, '缺少群聊 ID')
-    const { store, result } = await mutateStore(store => {
-      const chat = requireChat(store, chatId)
-      const roleIds = [...chat.roleIds]
-      const messageIds = [...chat.messageIds]
-
-      for (const roleId of roleIds) {
-        delete store.rolesById[roleId]
-        deps.runtimeFrames.removeRole(chat.id, roleId)
-      }
-      for (const messageId of messageIds) delete store.messagesById[messageId]
-      // The group's memory items and its members' go with it; items for every group stay.
-      const memoryItemCount = deleteMemoryForChat(store, chat.id, roleIds)
-
-      store.chatOrder = store.chatOrder.filter(id => id !== chat.id)
-      delete store.chatsById[chat.id]
-      if (store.currentChatId === chat.id) store.currentChatId = store.chatOrder[0]
-      if (store.viewState?.chatReadSeqById) delete store.viewState.chatReadSeqById[chat.id]
-      if (store.viewState?.chatHasNewMessageById) delete store.viewState.chatHasNewMessageById[chat.id]
-
-      return { chatId: chat.id, roleIds, messageIds, memoryItemCount }
-    })
-    try {
-      await deps.imageAttachments?.deleteByChatId(result.chatId)
-    } catch (error) {
-      deps.log.warn('chat-delete:image-cleanup-failed', {
-        chatId: result.chatId,
-        error: error instanceof Error ? error.message : String(error),
-      })
-    }
+    const { store, result } = await mutateStore(store => removeChatFromStore(store, requireChat(store, chatId)))
+    await deleteChatImages(result.chatId)
     deps.log.info('chat-delete:stored', { chatId: result.chatId, roleCount: result.roleIds.length, messageCount: result.messageIds.length, memoryItemCount: result.memoryItemCount })
     await deps.broadcastStoreUpdated(store)
     return { ok: true, chatId: result.chatId, store }
+  }
+
+  // Several groups in one update and one broadcast. A group already gone is skipped.
+  const handleChatsDelete = async (message: RuntimeMessage) => {
+    const chatIds = Array.isArray(message.chatIds) ? [...new Set(message.chatIds.filter((id): id is string => typeof id === 'string' && id.length > 0))] : []
+    if (chatIds.length === 0) throw new Error('没有选中要删除的群聊')
+    const { store, result } = await mutateStore(store => chatIds
+      .map(chatId => store.chatsById[chatId])
+      .filter((chat): chat is GroupChat => Boolean(chat))
+      .map(chat => removeChatFromStore(store, chat)))
+    for (const removed of result) await deleteChatImages(removed.chatId)
+    const memoryItemCount = result.reduce((total, removed) => total + removed.memoryItemCount, 0)
+    deps.log.info('chats-delete:stored', { chatCount: result.length, memoryItemCount })
+    await deps.broadcastStoreUpdated(store)
+    return { ok: true, deleted: result.length, chatIds: result.map(removed => removed.chatId), memoryItemCount, store }
   }
 
   const handleChatClearMessages = async (message: RuntimeMessage) => {
@@ -311,6 +329,7 @@ export function createChatHandlers(deps: ChatHandlersDependencies): BackgroundMe
     { type: 'GROUP_CHAT_SWITCH', handler: handleChatSwitch },
     { type: 'GROUP_CHAT_UPDATE', handler: handleChatUpdate },
     { type: 'GROUP_CHAT_DELETE', handler: handleChatDelete },
+    { type: 'GROUP_CHATS_DELETE', handler: handleChatsDelete },
     { type: 'GROUP_CHAT_CLEAR_MESSAGES', handler: handleChatClearMessages },
     { type: 'GROUP_CHAT_CLOSE', handler: handleChatClose },
     { type: 'GROUP_CHAT_MARK_READ', handler: handleChatMarkRead },
