@@ -254,11 +254,7 @@ async function* streamExternalModel(input: ExternalModelCompletionInput, fetchIm
       const isRetryable = status === 429 || (status >= 500 && status <= 599) || error.message?.includes('timeout') || error.message?.includes('Network')
 
       if (!isRetryable || attempt >= maxRetries) {
-        throw new ExternalModelError(
-          error.message || '外部模型请求失败',
-          status,
-          error.code
-        )
+        throw new ExternalModelError(requestErrorMessage(error, status, input.model.apiKey), status, error.code)
       }
 
       const delay = Math.pow(2, attempt) * 500
@@ -292,6 +288,30 @@ export function normalizeUsage(usage: { inputTokens?: number; outputTokens?: num
 }
 
 const ANSWER_START_CHARS = 300
+
+// What a failed request says. The server's own words come first: the AI library reads only the
+// OpenAI error shape and otherwise falls back to the status text, which HTTP/2 leaves empty (Gemini
+// answers a key with no quota with `[{"error": {...}}]`, which ended up as no message at all).
+function requestErrorMessage(error: any, status: number | undefined, apiKey: string): string {
+  const fromServer = serverErrorText(error?.responseBody)
+  const text = fromServer
+    ? (status ? `HTTP ${status}：${fromServer}` : fromServer)
+    : error?.message || (status ? `外部模型请求失败（HTTP ${status}）` : '外部模型请求失败')
+  return apiKey ? text.split(apiKey).join('***') : text
+}
+
+function serverErrorText(body: unknown): string {
+  if (typeof body !== 'string' || !body.trim()) return ''
+  try {
+    let parsed = JSON.parse(body)
+    if (Array.isArray(parsed)) parsed = parsed[0]
+    const message = parsed?.error?.message ?? (typeof parsed?.error === 'string' ? parsed.error : undefined) ?? parsed?.message
+    if (typeof message === 'string' && message.trim()) return message.trim().slice(0, ANSWER_START_CHARS)
+  } catch {
+    // Not JSON: its start is shown as it is.
+  }
+  return body.replace(/\s+/g, ' ').trim().slice(0, ANSWER_START_CHARS)
+}
 
 // The first characters of a response body, read from a copy so the AI library still gets all of it.
 function readStart(response: Response): Promise<string> {

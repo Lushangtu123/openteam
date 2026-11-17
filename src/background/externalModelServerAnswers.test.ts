@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { createExternalModelClient, ExternalModelError } from './externalModelClient'
 import type { ExternalModelConfig } from '../group/types'
 
-// The real AI library, with the server's answer made up: a stream that ends properly but carries
-// no text must say why, not only that nothing came.
+// The real AI library, with the server's answer made up: a failed request or a stream with no text
+// must say why, in the server's own words where it gave any.
 const model: ExternalModelConfig = {
   id: 'empty-model',
   name: 'Empty',
@@ -24,8 +24,16 @@ function chunk(delta: Record<string, unknown>, finishReason: string | null = nul
   return { id: '1', object: 'chat.completion.chunk', created: 1, model: 'm', choices: [{ index: 0, delta, finish_reason: finishReason }] }
 }
 
-async function failureOf(response: Response): Promise<ExternalModelError> {
+async function failureOf(response: Response, attempts?: number): Promise<ExternalModelError> {
   const client = createExternalModelClient(async () => response.clone())
+  if (attempts) {
+    try {
+      await client.complete({ model, prompt: 'Hi' })
+    } catch (error) {
+      return error as ExternalModelError
+    }
+    throw new Error('expected the request to fail')
+  }
   try {
     for await (const part of client.stream!({ model, prompt: 'Hi' })) void part
   } catch (error) {
@@ -63,5 +71,35 @@ describe('a reply that ends with no text', () => {
     let text = ''
     for await (const part of client.stream!({ model, prompt: 'Hi' })) text += part
     expect(text).toBe('OK')
+  })
+})
+
+describe('a request the server refuses', () => {
+  // Gemini's answer to a key with no quota left. Over HTTP/2 there is no status text, so the AI
+  // library, which cannot read this shape, gives an empty message.
+  const quota = '[{\n  "error": {\n    "code": 429,\n    "message": "You exceeded your current quota, please check your plan and billing details.",\n    "status": "RESOURCE_EXHAUSTED"\n  }\n}\n]'
+
+  it("gives the server's own message and the status", async () => {
+    const failure = await failureOf(new Response(quota, { status: 429, statusText: '', headers: { 'content-type': 'application/json' } }))
+
+    expect(failure).toBeInstanceOf(ExternalModelError)
+    expect(failure.status).toBe(429)
+    expect(failure.message).toBe('HTTP 429：You exceeded your current quota, please check your plan and billing details.')
+  })
+
+  it('prefers the server message to a bare status text', async () => {
+    const body = JSON.stringify({ error: { message: 'Please pass a valid API key', code: 400 } })
+    const failure = await failureOf(new Response(body, { status: 400, statusText: 'Bad Request', headers: { 'content-type': 'application/json' } }))
+
+    expect(failure.message).toBe('HTTP 400：Please pass a valid API key')
+  })
+
+  it('shows the start of a body it cannot read, without the API key', async () => {
+    const failure = await failureOf(new Response('<html>Gateway sk-secret-123 down</html>', { status: 502, statusText: '' }), 1)
+
+    expect(failure.status).toBe(502)
+    expect(failure.message).toContain('HTTP 502')
+    expect(failure.message).toContain('Gateway')
+    expect(failure.message).not.toContain('sk-secret-123')
   })
 })
