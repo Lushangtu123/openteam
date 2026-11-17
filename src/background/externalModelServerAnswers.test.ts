@@ -25,16 +25,9 @@ function chunk(delta: Record<string, unknown>, finishReason: string | null = nul
   return { id: '1', object: 'chat.completion.chunk', created: 1, model: 'm', choices: [{ index: 0, delta, finish_reason: finishReason }] }
 }
 
-async function failureOf(response: Response, attempts?: number): Promise<ExternalModelError> {
+// A group reply's failure: the stream tries once, so nothing here waits for retries.
+async function failureOf(response: Response): Promise<ExternalModelError> {
   const client = createExternalModelClient(async () => response.clone())
-  if (attempts) {
-    try {
-      await client.complete({ model, prompt: 'Hi' })
-    } catch (error) {
-      return error as ExternalModelError
-    }
-    throw new Error('expected the request to fail')
-  }
   try {
     for await (const part of client.stream!({ model, prompt: 'Hi' })) void part
   } catch (error) {
@@ -96,7 +89,7 @@ describe('a request the server refuses', () => {
   })
 
   it('shows the start of a body it cannot read, without the API key', async () => {
-    const failure = await failureOf(new Response('<html>Gateway sk-secret-123 down</html>', { status: 502, statusText: '' }), 1)
+    const failure = await failureOf(new Response('<html>Gateway sk-secret-123 down</html>', { status: 502, statusText: '' }))
 
     expect(failure.status).toBe(502)
     expect(failure.message).toContain('HTTP 502')
