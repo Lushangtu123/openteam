@@ -177,6 +177,24 @@ describe('team page messages view boundary', () => {
     expect([...messagesEl.querySelectorAll<HTMLElement>('.message-row .message-body')].pop()!.textContent?.trim()).toBe('正在回复中')
   })
 
+  it("names the backup model on a reply it wrote, and redraws when that changes", () => {
+    const { messagesEl, messages, view, deps } = createLongChatView(2)
+    deps.getStore().settings.language = 'zh-CN'
+    const label = () => messagesEl.querySelector<HTMLElement>('.message-row.assistant .message-fallback')
+    view.renderMessages()
+    expect(label()).toBeNull()
+
+    messages[1] = { ...messages[1], answeredByFallback: 'gemini-flash-lite-latest' }
+    view.renderMessages()
+    expect(label()?.textContent).toBe('备用 gemini-flash-lite-latest')
+    expect(label()?.title).toBe('主模型这次没能回答，由备用模型 gemini-flash-lite-latest 回答')
+
+    deps.getStore().settings.language = 'en'
+    messages[1] = { ...messages[1], answeredByFallback: 'lite' }
+    view.renderMessages()
+    expect(label()?.textContent).toBe('Backup lite')
+  })
+
   it('offers the three ways to start a group when none is open', () => {
     const { messagesEl, deps } = createLongChatView(0)
     const startNewChat = vi.fn()

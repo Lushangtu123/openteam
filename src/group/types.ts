@@ -128,6 +128,9 @@ export interface ExternalModelConfig {
   baseUrl: string
   apiKey: string
   modelName: string
+  // An API model's backup, at the same address with the same key: it answers a group reply when the
+  // main model is busy, rate-limited, out of quota or too slow.
+  fallbackModelName?: string
   // For a local agent: its ID in the daemon's agent list, and the folder it works in.
   localAgentId?: string
   workspace?: string
@@ -570,6 +573,8 @@ export interface GroupMessage {
   memoryProposalsHandled?: string[]
   // Tokens an API member's reply used, as its model reported them.
   usage?: MessageTokenUsage
+  // The backup model that wrote an API member's reply, when its main model could not.
+  answeredByFallback?: string
   // On an API member's reply while its request failed and is about to be sent again: which retry
   // this is, of how many, and why the last attempt failed. Gone once text arrives or it ends.
   retry?: { attempt: number; total: number; reason: string }

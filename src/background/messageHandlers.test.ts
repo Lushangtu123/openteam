@@ -2331,7 +2331,9 @@ describe('background message handlers', () => {
 
     const { createMessageHandlers } = await import('./messageHandlers')
     const externalModelClient = {
-      stream: vi.fn(async function* (input: { onUsage?(usage: { inputTokens: number; outputTokens: number; totalTokens: number }): void }) {
+      stream: vi.fn(async function* (input: { onUsage?(usage: { inputTokens: number; outputTokens: number; totalTokens: number }): void; onFallback?(modelName: string): void }) {
+        // The main model was busy: its backup writes the reply.
+        input.onFallback?.('backup-model')
         yield '第一段'
         yield '第二段'
         input.onUsage?.({ inputTokens: 120, outputTokens: 30, totalTokens: 150 })
@@ -2376,6 +2378,7 @@ describe('background message handlers', () => {
       status: 'received',
       roleId: 'role-1',
       usage: { inputTokens: 120, outputTokens: 30, totalTokens: 150 },
+      answeredByFallback: 'backup-model',
     })
     expect(finalStore?.messagesById['msg-1']).toMatchObject({
       status: 'received',

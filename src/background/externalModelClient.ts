@@ -34,6 +34,8 @@ export interface ExternalModelCompletionInput {
   abortSignal?: AbortSignal
   // Told how many tokens the reply used, once the model reports it at the end of the stream.
   onUsage?(usage: ExternalModelUsage): void
+  // Told when the model's backup takes over a group reply, with the backup's name.
+  onFallback?(modelName: string): void
   // The member and message the reply is for (a local agent asks the user's approval on that member).
   context?: { chatId: string; roleId: string; messageId: string; roleName?: string }
 }
@@ -83,7 +85,7 @@ export function createExternalModelClient(fetchImpl: typeof fetch = fetch, optio
 
   return {
     stream(input) {
-      return streamExternalModelWithTimeout(input, wrappedFetch, timeoutMs)
+      return streamWithFallback(input, wrappedFetch, timeoutMs)
     },
     async complete(input) {
       const timeout = createTimedAbortSignal(input.abortSignal, timeoutMs)
@@ -114,6 +116,30 @@ export function createExternalModelClient(fetchImpl: typeof fetch = fetch, optio
       }
     },
   }
+}
+
+// A group reply: when the main model fails before any text in a way another model may not (busy,
+// rate-limited, out of quota, too slow), its backup answers instead, once.
+async function* streamWithFallback(input: ExternalModelCompletionInput, fetchImpl: typeof fetch, timeoutMs: number): AsyncIterable<string> {
+  let sawText = false
+  try {
+    for await (const chunk of streamExternalModelWithTimeout(input, fetchImpl, timeoutMs)) {
+      sawText = true
+      yield chunk
+    }
+  } catch (error) {
+    const fallback = input.model.fallbackModelName?.trim()
+    if (sawText || !fallback || fallback === input.model.modelName || input.abortSignal?.aborted || !isWorthAnotherModel(error)) throw error
+    input.onFallback?.(fallback)
+    yield* streamExternalModelWithTimeout({ ...input, model: { ...input.model, modelName: fallback } }, fetchImpl, timeoutMs)
+  }
+}
+
+function isWorthAnotherModel(error: unknown): boolean {
+  if (!(error instanceof ExternalModelError)) return false
+  if (error.code === QUOTA_EXHAUSTED_CODE) return true
+  const status = error.status
+  return status === 408 || status === 429 || (status !== undefined && status >= 500)
 }
 
 async function* streamExternalModelWithTimeout(input: ExternalModelCompletionInput, fetchImpl: typeof fetch, timeoutMs: number): AsyncIterable<string> {

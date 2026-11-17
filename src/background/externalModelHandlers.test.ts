@@ -40,6 +40,7 @@ describe('background external model handlers', () => {
       baseUrl: 'https://api.example.test/v1',
       apiKey: 'sk-test',
       modelName: 'local-chat-model',
+      fallbackModelName: ' local-lite-model ',
     }, {})
 
     expect(currentStore.settings.externalModelOrder).toEqual(['external-model-1'])
@@ -47,6 +48,7 @@ describe('background external model handlers', () => {
       name: '本地模型',
       format: 'openai',
       modelName: 'local-chat-model',
+      fallbackModelName: 'local-lite-model',
     })
 
     const update = routes.find(route => route.type === 'EXTERNAL_MODEL_UPDATE')!
@@ -58,6 +60,7 @@ describe('background external model handlers', () => {
       baseUrl: 'https://api.anthropic.example',
       apiKey: 'sk-next',
       modelName: 'claude-sonnet',
+      fallbackModelName: '',
     }, {})
 
     expect(currentStore.settings.externalModelsById['external-model-1']).toMatchObject({
@@ -68,6 +71,8 @@ describe('background external model handlers', () => {
       modelName: 'claude-sonnet',
       updatedAt: 100,
     })
+    // An empty backup field removes the backup.
+    expect(currentStore.settings.externalModelsById['external-model-1'].fallbackModelName).toBeUndefined()
 
     currentStore.rolesById['role-1'] = {
       id: 'role-1',

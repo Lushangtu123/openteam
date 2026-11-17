@@ -319,70 +319,73 @@ describe('external models view', () => {
   })
 })
 
-describe('provider presets and the model list', () => {
-  function setup(options: { listModelNames?: (request: { format: string; baseUrl: string; apiKey: string }) => Promise<string[]>, requestHostAccess?: () => Promise<boolean> } = {}) {
-    const store = createDefaultStore()
-    store.settings.language = 'zh-CN'
-    document.body.innerHTML = `
-      <button id="settings-button"></button>
-      <div id="settings-menu"></div>
-      <button id="open-external-models"></button>
-      <button id="close-external-models"></button>
-      <div id="external-models-modal"></div>
-      <div id="external-models-list"></div>
-      <form id="external-model-form">
-        <input id="external-model-id" />
-        <input id="external-model-name" />
-        <select id="external-model-format"><option value="openai">OpenAI</option><option value="anthropic">Anthropic</option><option value="local-agent">本机</option></select>
-        <select id="external-model-provider"><option value="">自定义（自己填地址）</option></select>
-        <input id="external-model-base-url" />
-        <input id="external-model-api-key" />
-        <a id="external-model-key-link" hidden>去获取 Key</a>
-        <input id="external-model-model-name" list="external-model-names" />
-        <button id="fetch-external-model-names" type="button">获取模型列表</button>
-        <datalist id="external-model-names"></datalist>
-        <p id="external-model-names-status"></p>
-        <button id="reset-external-model-form" type="button"></button>
-      </form>
-    `
-    const $ = <T extends Element>(selector: string) => document.querySelector<T>(selector)!
-    const listModelNames = vi.fn(options.listModelNames ?? (async () => ['gemini-flash-latest', 'gemini-flash-lite-latest']))
-    const requestHostAccess = vi.fn(options.requestHostAccess ?? (async () => true))
-    const showError = vi.fn()
-    const view = createExternalModelsView({
-      getStore: () => store,
-      settingsButtonEl: $('#settings-button'),
-      settingsMenuEl: $('#settings-menu'),
-      openExternalModelsEl: $('#open-external-models'),
-      closeExternalModelsEl: $('#close-external-models'),
-      externalModelsModalEl: $('#external-models-modal'),
-      externalModelsListEl: $('#external-models-list'),
-      externalModelFormEl: $('#external-model-form'),
-      externalModelIdEl: $('#external-model-id'),
-      externalModelNameEl: $('#external-model-name'),
-      externalModelFormatEl: $('#external-model-format'),
-      externalModelBaseUrlEl: $('#external-model-base-url'),
-      externalModelApiKeyEl: $('#external-model-api-key'),
-      externalModelModelNameEl: $('#external-model-model-name'),
-      resetExternalModelFormEl: $('#reset-external-model-form'),
-      runCommand: vi.fn(async () => undefined),
-      testExternalModel: vi.fn(async () => undefined),
-      hasHostAccess: async () => true,
-      requestHostAccess,
-      listModelNames,
-      showError,
-    })
-    view.registerExternalModelsEvents()
-    const choose = (selector: string, value: string) => {
-      const element = $<HTMLSelectElement | HTMLInputElement>(selector)
-      element.value = value
-      element.dispatchEvent(new Event(element instanceof HTMLSelectElement ? 'change' : 'input', { bubbles: true }))
-    }
-    return { store, view, $, choose, listModelNames, requestHostAccess, showError }
+// A form with every field, for the preset, model list and backup tests.
+function setupForm(options: { listModelNames?: (request: { format: string; baseUrl: string; apiKey: string }) => Promise<string[]>, requestHostAccess?: () => Promise<boolean> } = {}) {
+  const store = createDefaultStore()
+  store.settings.language = 'zh-CN'
+  document.body.innerHTML = `
+    <button id="settings-button"></button>
+    <div id="settings-menu"></div>
+    <button id="open-external-models"></button>
+    <button id="close-external-models"></button>
+    <div id="external-models-modal"></div>
+    <div id="external-models-list"></div>
+    <form id="external-model-form">
+      <input id="external-model-id" />
+      <input id="external-model-name" />
+      <select id="external-model-format"><option value="openai">OpenAI</option><option value="anthropic">Anthropic</option><option value="local-agent">本机</option></select>
+      <select id="external-model-provider"><option value="">自定义（自己填地址）</option></select>
+      <input id="external-model-base-url" />
+      <input id="external-model-api-key" />
+      <a id="external-model-key-link" hidden>去获取 Key</a>
+      <input id="external-model-model-name" list="external-model-names" />
+      <button id="fetch-external-model-names" type="button">获取模型列表</button>
+      <datalist id="external-model-names"></datalist>
+      <p id="external-model-names-status"></p>
+      <input id="external-model-fallback-name" list="external-model-names" />
+      <button id="reset-external-model-form" type="button"></button>
+    </form>
+  `
+  const $ = <T extends Element>(selector: string) => document.querySelector<T>(selector)!
+  const listModelNames = vi.fn(options.listModelNames ?? (async () => ['gemini-flash-latest', 'gemini-flash-lite-latest']))
+  const requestHostAccess = vi.fn(options.requestHostAccess ?? (async () => true))
+  const showError = vi.fn()
+  const runCommand = vi.fn(async (_type: string, _payload?: Record<string, unknown>) => undefined)
+  const view = createExternalModelsView({
+    getStore: () => store,
+    settingsButtonEl: $('#settings-button'),
+    settingsMenuEl: $('#settings-menu'),
+    openExternalModelsEl: $('#open-external-models'),
+    closeExternalModelsEl: $('#close-external-models'),
+    externalModelsModalEl: $('#external-models-modal'),
+    externalModelsListEl: $('#external-models-list'),
+    externalModelFormEl: $('#external-model-form'),
+    externalModelIdEl: $('#external-model-id'),
+    externalModelNameEl: $('#external-model-name'),
+    externalModelFormatEl: $('#external-model-format'),
+    externalModelBaseUrlEl: $('#external-model-base-url'),
+    externalModelApiKeyEl: $('#external-model-api-key'),
+    externalModelModelNameEl: $('#external-model-model-name'),
+    resetExternalModelFormEl: $('#reset-external-model-form'),
+    runCommand,
+    testExternalModel: vi.fn(async () => undefined),
+    hasHostAccess: async () => true,
+    requestHostAccess,
+    listModelNames,
+    showError,
+  })
+  view.registerExternalModelsEvents()
+  const choose = (selector: string, value: string) => {
+    const element = $<HTMLSelectElement | HTMLInputElement>(selector)
+    element.value = value
+    element.dispatchEvent(new Event(element instanceof HTMLSelectElement ? 'change' : 'input', { bubbles: true }))
   }
+  return { store, view, $, choose, listModelNames, requestHostAccess, showError, runCommand }
+}
 
+describe('provider presets and the model list', () => {
   it('offers every preset, and fills the format, address, name and key page from one', () => {
-    const { $, choose } = setup()
+    const { $, choose } = setupForm()
     const options = [...$<HTMLSelectElement>('#external-model-provider').options].map(option => option.value)
     expect(options).toContain('gemini')
     expect(options).toContain('deepseek')
@@ -407,7 +410,7 @@ describe('provider presets and the model list', () => {
   })
 
   it('shows which preset an address belongs to while it is typed, and custom for any other', () => {
-    const { $, choose } = setup()
+    const { $, choose } = setupForm()
     choose('#external-model-base-url', 'https://api.deepseek.com')
     expect($<HTMLSelectElement>('#external-model-provider').value).toBe('deepseek')
     choose('#external-model-base-url', 'https://proxy.example.test/v1')
@@ -416,7 +419,7 @@ describe('provider presets and the model list', () => {
   })
 
   it('fetches the models for the address and key in the form, and offers them in the name field', async () => {
-    const { $, choose, listModelNames, requestHostAccess } = setup()
+    const { $, choose, listModelNames, requestHostAccess } = setupForm()
     choose('#external-model-provider', 'gemini')
     $<HTMLInputElement>('#external-model-api-key').value = 'sk-form'
 
@@ -430,7 +433,7 @@ describe('provider presets and the model list', () => {
   })
 
   it('asks for the address and key before fetching, and shows a refusal next to the field', async () => {
-    const { $, choose, listModelNames } = setup({ listModelNames: async () => { throw new Error('HTTP 400：API key not valid') } })
+    const { $, choose, listModelNames } = setupForm({ listModelNames: async () => { throw new Error('HTTP 400：API key not valid') } })
     $<HTMLButtonElement>('#fetch-external-model-names').click()
     await vi.waitFor(() => expect($('#external-model-names-status').textContent).toBe('先填写模型地址和 Key'))
     expect(listModelNames).not.toHaveBeenCalled()
@@ -439,5 +442,26 @@ describe('provider presets and the model list', () => {
     $<HTMLInputElement>('#external-model-api-key').value = 'bad'
     $<HTMLButtonElement>('#fetch-external-model-names').click()
     await vi.waitFor(() => expect($('#external-model-names-status').textContent).toBe('HTTP 400：API key not valid'))
+  })
+})
+
+describe('a backup model in the form', () => {
+  it('is saved with the model, filled in when the model is edited, and shown on its card', async () => {
+    const { store, view, $, choose, runCommand } = setupForm()
+    choose('#external-model-provider', 'gemini')
+    $<HTMLInputElement>('#external-model-api-key').value = 'sk-1'
+    $<HTMLInputElement>('#external-model-model-name').value = 'gemini-flash-latest'
+    $<HTMLInputElement>('#external-model-fallback-name').value = ' gemini-flash-lite-latest '
+    $<HTMLFormElement>('#external-model-form').requestSubmit()
+
+    await vi.waitFor(() => expect(runCommand).toHaveBeenCalled())
+    expect(runCommand).toHaveBeenCalledWith('EXTERNAL_MODEL_CREATE', expect.objectContaining({ modelName: 'gemini-flash-latest', fallbackModelName: 'gemini-flash-lite-latest' }))
+
+    store.settings.externalModelOrder = ['m-1']
+    store.settings.externalModelsById['m-1'] = { id: 'm-1', name: 'Gemini', format: 'openai', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai', apiKey: 'sk-1', modelName: 'gemini-flash-latest', fallbackModelName: 'gemini-flash-lite-latest', createdAt: 1, updatedAt: 1 }
+    view.renderExternalModels()
+    expect($('#external-models-list').textContent).toContain('gemini-flash-lite-latest')
+    ;[...document.querySelectorAll<HTMLButtonElement>('#external-models-list button')].find(button => button.textContent === '编辑')!.click()
+    expect($<HTMLInputElement>('#external-model-fallback-name').value).toBe('gemini-flash-lite-latest')
   })
 })

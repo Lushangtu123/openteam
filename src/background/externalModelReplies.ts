@@ -25,6 +25,8 @@ export async function sendExternalModelDelivery(deps: MessageHandlersDependencie
   let content = ''
   let usage: MessageTokenUsage | undefined
   const onUsage = (value: MessageTokenUsage) => { usage = value }
+  let answeredByFallback: string | undefined
+  const onFallback = (modelName: string) => { answeredByFallback = modelName }
   try {
     deps.log.info('external-model:send:start', {
       chatId: delivery.chatId,
@@ -55,9 +57,10 @@ export async function sendExternalModelDelivery(deps: MessageHandlersDependencie
       try {
         content = ''
         usage = undefined
+        answeredByFallback = undefined
         let updatedAt = Number.NEGATIVE_INFINITY
         const stream = typeof client.stream === 'function'
-          ? client.stream({ model: delivery.model, prompt: delivery.prompt, images, abortSignal: controller.signal, onUsage, context })
+          ? client.stream({ model: delivery.model, prompt: delivery.prompt, images, abortSignal: controller.signal, onUsage, onFallback, context })
           : streamCompleteFallback(client, { model: delivery.model, prompt: delivery.prompt, images, abortSignal: controller.signal, onUsage, context })
         for await (const chunk of abortableChunks(stream, controller.signal)) {
           throwIfAborted(controller.signal)
@@ -100,7 +103,7 @@ export async function sendExternalModelDelivery(deps: MessageHandlersDependencie
       }
     }
 
-    const finalized = await finishExternalAssistantReply(deps, delivery, replyMessageId, content, usage)
+    const finalized = await finishExternalAssistantReply(deps, delivery, replyMessageId, content, usage, answeredByFallback)
     if (finalized.ignored) {
       deps.log.warn('external-model:reply:ignored-stale', { chatId: delivery.chatId, roleId: delivery.roleId, messageId: delivery.messageId, reason: finalized.reason })
       return finalized.store
@@ -233,6 +236,7 @@ export async function finishExternalAssistantReply(
   replyMessageId: string,
   content: string,
   usage?: MessageTokenUsage,
+  answeredByFallback?: string,
 ): Promise<{ ignored: true; reason: string; store: OpenTeamStore } | { ignored: false; store: OpenTeamStore }> {
   const timestamp = deps.now()
   const { store, result } = await mutateStore(store => {
@@ -247,6 +251,8 @@ export async function finishExternalAssistantReply(
       takeMemoryProposals(store, chat, reply, deps.newId)
       delete reply.retry
       if (usage) reply.usage = usage
+      if (answeredByFallback) reply.answeredByFallback = answeredByFallback
+      else delete reply.answeredByFallback
       markChatHasNewMessage(store, chat)
 
       const userMessage = store.messagesById[delivery.messageId]

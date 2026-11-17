@@ -100,9 +100,16 @@ function readExternalModelInput(message: RuntimeMessage, id: string, createdAt: 
     baseUrl: requireString(message.baseUrl, '模型地址不能为空').replace(/\/+$/, ''),
     apiKey: requireString(message.apiKey, '模型 Key 不能为空'),
     modelName: requireString(message.modelName, '模型名称不能为空'),
+    ...optionalFallback(message.fallbackModelName),
     createdAt,
     updatedAt,
   }
+}
+
+// Left out when empty, so that clearing the field removes the backup.
+function optionalFallback(value: unknown): { fallbackModelName?: string } {
+  const name = typeof value === 'string' ? value.trim() : ''
+  return name ? { fallbackModelName: name } : {}
 }
 
 function readExternalModelFormat(value: unknown): ExternalModelFormat {

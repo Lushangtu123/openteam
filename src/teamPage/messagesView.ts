@@ -320,6 +320,8 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
       }
       const usage = usageLabel(message)
       if (usage) name.append(usage)
+      const fallback = fallbackLabel(message)
+      if (fallback) name.append(fallback)
       wireMentionShortcut(name, role)
       stack.append(name)
     }
@@ -720,6 +722,18 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
       block.append(row)
     }
     return block
+  }
+
+  // The backup model that wrote an API reply its main model could not.
+  function fallbackLabel(message: GroupMessage): HTMLElement | undefined {
+    const modelName = message.answeredByFallback
+    if (!modelName) return undefined
+    const en = normalizeLanguage(deps.getStore().settings.language) === 'en'
+    const label = document.createElement('span')
+    label.className = 'message-usage message-fallback'
+    label.textContent = `${en ? 'Backup' : '备用'} ${modelName}`
+    label.title = en ? `The main model could not answer this time; the backup model ${modelName} did` : `主模型这次没能回答，由备用模型 ${modelName} 回答`
+    return label
   }
 
   // How many tokens an API reply used, with the input/output split on hover.
@@ -1209,6 +1223,7 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
       createdAt: message.createdAt,
       status: message.status,
       usage: message.usage,
+      answeredByFallback: message.answeredByFallback,
       retry: message.retry,
       choicesOpen: choicesOpen(message),
       memoryProposals: message.memoryProposals,

@@ -195,3 +195,47 @@ describe('a quota that is used up', () => {
     expect(isPermanentModelError(failure)).toBe(false)
   })
 })
+
+describe('a backup model', () => {
+  const busy = () => new Response(JSON.stringify([{ error: { code: 503, message: 'This model is currently experiencing high demand.', status: 'UNAVAILABLE' } }]), { status: 503, statusText: '', headers: { 'content-type': 'application/json' } })
+  const answer = (text: string) => sse(chunk({ content: text }), chunk({}, 'stop'))
+  const modelAsked = async (init?: RequestInit) => JSON.parse(String(init?.body)).model as string
+
+  it('answers when the main model is busy, and the reply is told so', async () => {
+    const asked: string[] = []
+    const client = createExternalModelClient(async (_url, init) => {
+      const name = await modelAsked(init)
+      asked.push(name)
+      return name === 'main' ? busy() : answer('from backup')
+    })
+    const used: string[] = []
+    let text = ''
+    for await (const part of client.stream!({ model: { ...model, modelName: 'main', fallbackModelName: 'lite' }, prompt: 'Hi', onFallback: name => used.push(name) })) text += part
+
+    expect(text).toBe('from backup')
+    expect(asked).toEqual(['main', 'lite'])
+    expect(used).toEqual(['lite'])
+  })
+
+  it('is not asked when the main model refuses the request itself, or has no backup', async () => {
+    const asked: string[] = []
+    const refuses = createExternalModelClient(async (_url, init) => {
+      asked.push(await modelAsked(init))
+      return new Response(JSON.stringify({ error: { message: 'Invalid API key' } }), { status: 401, headers: { 'content-type': 'application/json' } })
+    })
+    await expect((async () => { for await (const part of refuses.stream!({ model: { ...model, modelName: 'main', fallbackModelName: 'lite' }, prompt: 'Hi' })) void part })()).rejects.toThrow('Invalid API key')
+    expect(asked).toEqual(['main'])
+
+    const noBackup = createExternalModelClient(async () => busy())
+    const failure = await (async () => { for await (const part of noBackup.stream!({ model: { ...model, modelName: 'main' }, prompt: 'Hi' })) void part })().catch(error => error)
+    expect(failure.status).toBe(503)
+  })
+
+  it("gives the backup's own failure when it fails too", async () => {
+    const client = createExternalModelClient(async (_url, init) => (await modelAsked(init)) === 'main'
+      ? busy()
+      : new Response(JSON.stringify({ error: { message: 'lite is down' } }), { status: 500, headers: { 'content-type': 'application/json' } }))
+    const failure = await (async () => { for await (const part of client.stream!({ model: { ...model, modelName: 'main', fallbackModelName: 'lite' }, prompt: 'Hi' })) void part })().catch(error => error)
+    expect(failure.message).toContain('lite is down')
+  })
+})

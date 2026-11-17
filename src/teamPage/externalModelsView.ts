@@ -54,6 +54,7 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
   const fetchNamesEl = form.querySelector<HTMLButtonElement>('#fetch-external-model-names')
   const modelNamesEl = form.querySelector<HTMLDataListElement>('#external-model-names')
   const namesStatusEl = form.querySelector<HTMLElement>('#external-model-names-status')
+  const fallbackNameEl = form.querySelector<HTMLInputElement>('#external-model-fallback-name')
   const defaultModelPlaceholder = deps.externalModelModelNameEl.placeholder
   const listNames = deps.listModelNames ?? fetchModelNames
   // The display name a preset filled in, which the next preset may replace.
@@ -250,7 +251,7 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
     description.className = 'template-description'
     description.textContent = model.format === 'local-agent'
       ? `${ui('本机智能体')} · ${model.localAgentId ?? ''}`
-      : `${model.format === 'anthropic' ? 'Anthropic' : 'OpenAI'} · ${model.modelName}`
+      : `${model.format === 'anthropic' ? 'Anthropic' : 'OpenAI'} · ${model.modelName}${model.fallbackModelName ? ` · ${ui('备用')} ${model.fallbackModelName}` : ''}`
     const baseUrl = document.createElement('div')
     baseUrl.className = 'template-description'
     baseUrl.textContent = model.format === 'local-agent' ? model.workspace ?? '' : model.baseUrl
@@ -320,6 +321,7 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
           baseUrl: deps.externalModelBaseUrlEl.value.trim(),
           apiKey: deps.externalModelApiKeyEl.value.trim(),
           modelName: deps.externalModelModelNameEl.value.trim(),
+          fallbackModelName: fallbackNameEl?.value.trim() ?? '',
         }
     if (format !== 'local-agent') await allowAccess(deps.externalModelBaseUrlEl.value)
     await deps.runCommand(modelId ? 'EXTERNAL_MODEL_UPDATE' : 'EXTERNAL_MODEL_CREATE', modelId ? { modelId, ...payload } : payload)
@@ -365,6 +367,7 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
     deps.externalModelBaseUrlEl.value = model.baseUrl
     deps.externalModelApiKeyEl.value = model.apiKey
     deps.externalModelModelNameEl.value = model.modelName
+    if (fallbackNameEl) fallbackNameEl.value = model.fallbackModelName ?? ''
     if (workspaceEl) workspaceEl.value = model.workspace ?? ''
     presetFilledName = ''
     clearModelNames()
@@ -380,6 +383,7 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
     deps.externalModelBaseUrlEl.value = ''
     deps.externalModelApiKeyEl.value = ''
     deps.externalModelModelNameEl.value = ''
+    if (fallbackNameEl) fallbackNameEl.value = ''
     if (workspaceEl) workspaceEl.value = ''
     presetFilledName = ''
     clearModelNames()
