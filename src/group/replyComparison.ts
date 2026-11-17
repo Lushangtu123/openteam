@@ -110,6 +110,7 @@ export function hasAnswered(comparison: ReplyComparison, roleId: string | undefi
   return comparison.replies.some(reply => reply.roleId === roleId && reply.status === 'replied')
 }
 
-function modelKey(role: GroupRole, defaultChatSite: ChatSite): string {
+// Members on the same site or API model count as one model.
+export function modelKey(role: GroupRole, defaultChatSite: ChatSite): string {
   return role.modelSource === 'external' ? `external:${role.externalModelId ?? ''}` : `site:${role.chatSite ?? defaultChatSite}`
 }

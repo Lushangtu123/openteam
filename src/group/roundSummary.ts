@@ -3,7 +3,8 @@
 import { PROMPT_I18N, normalizeLanguage } from '../shared/i18n'
 import { describeAttachments } from './messageUploads'
 import { discussionTranscript } from './discussion'
-import type { GroupChat, GroupMessage, GroupRole, OpenTeamLanguage, OpenTeamSettings, OpenTeamStore } from './types'
+import { modelKey } from './replyComparison'
+import type { ChatSite, GroupChat, GroupMessage, GroupRole, OpenTeamLanguage, OpenTeamSettings, OpenTeamStore } from './types'
 
 // Key points
 
@@ -130,10 +131,19 @@ export function hasRoundSummary(store: OpenTeamStore, chat: GroupChat, questionI
   return latestRequestSeq >= 0 && latestRequestSeq > latestReplySeq
 }
 
-// Who writes the summary: an API member if there is one (quick, and its page holds no
-// conversation), then whoever answered first in the round, then anyone else who is free.
-export function pickSummarizer(roles: GroupRole[], round: SummarizableRound, isAvailable: (role: GroupRole) => boolean): GroupRole | undefined {
+// Who writes the summary, so that it does not lean toward one side of a disagreement: someone who
+// sat the round out, on a model none of the replies came from if there is one, then anyone who sat
+// it out (as the reply comparison's summary is picked). Only when everyone took part: an API member,
+// then whoever answered first. Among equals an API member goes first: it is quick, and its page
+// holds no conversation.
+export function pickSummarizer(roles: GroupRole[], round: SummarizableRound, isAvailable: (role: GroupRole) => boolean, defaultChatSite: ChatSite): GroupRole | undefined {
   const available = roles.filter(isAvailable)
+  const tookPart = new Set(round.replies.map(reply => reply.role.id))
+  const usedModels = new Set(round.replies.map(reply => modelKey(reply.role, defaultChatSite)))
+  const apiFirst = (candidates: GroupRole[]) => candidates.find(role => role.modelSource === 'external') ?? candidates[0]
+  const outsiders = available.filter(role => !tookPart.has(role.id))
+  const outsider = apiFirst(outsiders.filter(role => !usedModels.has(modelKey(role, defaultChatSite)))) ?? apiFirst(outsiders)
+  if (outsider) return outsider
   const api = available.find(role => role.modelSource === 'external')
   if (api) return api
   for (const reply of round.replies) {
@@ -164,6 +174,8 @@ export function buildRoundSummaryPrompt(input: {
   const quoted = replies.map(({ role, message, turn }) => `${label(role.name, turn)}\n${trimRoundReply(message.content, share, en)}`)
   // A review round is summarized against the user's question it reviewed.
   const asked = input.round.reviewOf ?? question
+  // When everyone took part, the summarizer is one of them: it is asked to stay even-handed.
+  const tookPart = input.round.replies.some(reply => reply.role.id === input.summarizer.id)
   const questionText = `${asked.content}${describeAttachments(asked.attachments, language)}`.trim()
 
   return [
@@ -186,6 +198,8 @@ export function buildRoundSummaryPrompt(input: {
           '**Suggested next step**',
           '- one or two concrete suggestions',
           `Summarize only what the replies say; add no new views, and name the member behind each view. ${PROMPT_I18N.en.responseLanguageInstruction}`,
+          ...(tookPart ? ['You took part in this round too: do not lean toward your own view; give each side the same room and tone.'] : []),
+          'Write only the summary: @-mention nobody, and add no hand-off or request for someone to go on.',
         ].join('\n')
       : [
           '请把以上回复整理成一份简短的汇总，帮用户一眼看清现状（不超过 300 字），格式如下：',
@@ -198,6 +212,8 @@ export function buildRoundSummaryPrompt(input: {
           '**建议下一步**',
           '- 一到两条具体建议',
           `只根据以上回复汇总，不要加入新的观点；提到观点时写明是哪位成员的。${PROMPT_I18N['zh-CN'].responseLanguageInstruction}`,
+          ...(tookPart ? ['你也参加了这一轮：汇总时不要偏向你自己的观点，各方观点用同样的篇幅和语气写。'] : []),
+          '只写汇总本身：不要 @ 任何成员，也不要加交接或请别人接着说的话。',
         ].join('\n'),
   ].join('\n\n')
 }

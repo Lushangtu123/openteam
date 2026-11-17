@@ -85,19 +85,41 @@ describe('round summaries', () => {
     expect(readSummarizableRound(store, chat, question)?.replies.map(reply => reply.message.content)).toEqual(['A 更稳', 'B 更省'])
   })
 
-  it('picks an API member first, then whoever answered first', () => {
+  it('picks someone who sat the round out, on another model if possible, before anyone who took part', () => {
     const { store, chat, add } = setup()
     add({ id: 'q1', type: 'user', content: '?', targetRoleIds: ['a', 'b'], deliveryStatus: { a: 'received', b: 'received' } })
     add({ id: 'r1', type: 'assistant', content: 'B', roleId: 'b', sourceMessageId: 'q1' })
     add({ id: 'r2', type: 'assistant', content: 'A', roleId: 'a', sourceMessageId: 'q1' })
     const round = readSummarizableRound(store, chat, store.messagesById.q1)!
+    store.rolesById.a.chatSite = 'deepseek'
+    store.rolesById.b.chatSite = 'kimi'
+    const outsiderSameModel = role('d', '旁观者', { chatSite: 'deepseek' })
+    const outsiderOtherModel = role('e', '另一位旁观者', { chatSite: 'gemini' })
+    const roles = [store.rolesById.a, store.rolesById.b, outsiderSameModel, outsiderOtherModel]
+
+    // Neither answered, and Gemini is a model none of the answers came from.
+    expect(pickSummarizer(roles, round, () => true, 'deepseek')?.id).toBe('e')
+    // Someone who sat it out, though on a model one of them used.
+    expect(pickSummarizer(roles, round, member => member.id !== 'e', 'deepseek')?.id).toBe('d')
+    // An API member among equals goes first: it is quick, and its page holds no conversation.
+    const apiOutsider = role('f', 'API 旁观者', { modelSource: 'external', externalModelId: 'm-1' })
+    expect(pickSummarizer([...roles, apiOutsider], round, () => true, 'deepseek')?.id).toBe('f')
+  })
+
+  it('falls back on those who took part when nobody sat the round out: an API member, then whoever answered first', () => {
+    const { store, chat, add } = setup()
+    add({ id: 'q1', type: 'user', content: '?', targetRoleIds: ['a', 'b', 'c'], deliveryStatus: { a: 'received', b: 'received', c: 'received' } })
+    add({ id: 'r1', type: 'assistant', content: 'B', roleId: 'b', sourceMessageId: 'q1' })
+    add({ id: 'r2', type: 'assistant', content: 'A', roleId: 'a', sourceMessageId: 'q1' })
+    add({ id: 'r3', type: 'assistant', content: 'C', roleId: 'c', sourceMessageId: 'q1' })
+    const round = readSummarizableRound(store, chat, store.messagesById.q1)!
     const roles = chat.roleIds.map(id => store.rolesById[id])
 
-    expect(pickSummarizer(roles, round, () => true)?.id).toBe('b')
-    expect(pickSummarizer(roles, round, member => member.id !== 'b')?.id).toBe('a')
+    expect(pickSummarizer(roles, round, () => true, 'deepseek')?.id).toBe('b')
+    expect(pickSummarizer(roles, round, member => member.id !== 'b', 'deepseek')?.id).toBe('a')
     store.rolesById.c.modelSource = 'external'
-    expect(pickSummarizer(roles, round, () => true)?.id).toBe('c')
-    expect(pickSummarizer(roles, round, () => false)).toBeUndefined()
+    expect(pickSummarizer(roles, round, () => true, 'deepseek')?.id).toBe('c')
+    expect(pickSummarizer(roles, round, () => false, 'deepseek')).toBeUndefined()
   })
 
   it('writes a summary request with the question, every reply (trimmed to fit) and the format', () => {
@@ -114,6 +136,26 @@ describe('round summaries', () => {
     expect(prompt).toContain(`【设计师】\n${'长'.repeat(1000)}\n［……其余部分已省略］`)
     expect(prompt).toContain('**分歧**')
     expect(buildRoundSummaryPrompt({ round, summarizer: store.rolesById.c, language: 'en' })).toContain('**Disagreements**')
+  })
+
+  it('asks a summarizer who took part to treat every side alike, and any summarizer to add no hand-off', () => {
+    const { store, chat, add } = setup()
+    add({ id: 'q1', type: 'user', content: '选哪个方案？', targetRoleIds: ['a', 'b'], deliveryStatus: { a: 'received', b: 'received' } })
+    add({ id: 'r1', type: 'assistant', content: '方案 A', roleId: 'a', sourceMessageId: 'q1' })
+    add({ id: 'r2', type: 'assistant', content: '方案 B', roleId: 'b', sourceMessageId: 'q1' })
+    const round = readSummarizableRound(store, chat, store.messagesById.q1)!
+
+    const byParticipant = buildRoundSummaryPrompt({ round, summarizer: store.rolesById.a, language: 'zh-CN' })
+    expect(byParticipant).toContain('你也参加了这一轮：汇总时不要偏向你自己的观点，各方观点用同样的篇幅和语气写。')
+    expect(byParticipant).toContain('只写汇总本身：不要 @ 任何成员，也不要加交接或请别人接着说的话。')
+
+    const byOutsider = buildRoundSummaryPrompt({ round, summarizer: store.rolesById.c, language: 'zh-CN' })
+    expect(byOutsider).not.toContain('你也参加了这一轮')
+    expect(byOutsider).toContain('不要 @ 任何成员')
+
+    const english = buildRoundSummaryPrompt({ round, summarizer: store.rolesById.a, language: 'en' })
+    expect(english).toContain('You took part in this round too')
+    expect(english).toContain('Write only the summary')
   })
 
   it('keeps summary requests and summaries out of what members are sent as context', () => {

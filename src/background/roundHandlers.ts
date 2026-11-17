@@ -42,7 +42,7 @@ export function createRoundHandlers(ctx: MessageHandlerContext) {
       const isAvailable = (role: GroupRole) => role.status !== 'thinking' && (isExternalModelRole(role)
         ? Boolean(getExternalModelForRole(store, role))
         : isRoleDeliverable(role, deps.runtimeFrames.getByRole(chat.id, role.id), timestamp))
-      const summarizer = options.roleId ? roles.find(role => role.id === options.roleId) : pickSummarizer(roles, round, isAvailable)
+      const summarizer = options.roleId ? roles.find(role => role.id === options.roleId) : pickSummarizer(roles, round, isAvailable, store.settings.defaultChatSite)
       if (!summarizer || !isAvailable(summarizer)) {
         if (options.auto) return undefined
         throw new Error('现在没有空闲的成员可以汇总，请稍后再试')
