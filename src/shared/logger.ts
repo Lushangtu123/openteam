@@ -59,8 +59,12 @@ export function redactSecrets(text: string): string {
     .replace(/\bBearer\s+\S+/gi, 'Bearer [secret]')
     .replace(/\b(?:sk|pk|rk)-[A-Za-z0-9_-]{10,}/g, '[secret]')
     .replace(/\bAIza[A-Za-z0-9_-]{20,}/g, '[secret]')
-    .replace(/(?<![A-Za-z0-9_-])(?=[A-Za-z0-9_-]*\d)(?=[A-Za-z0-9_-]*[A-Za-z])[A-Za-z0-9_-]{40,}/g, '[secret]')
+    .replace(/(?<![A-Za-z0-9_-])(?=[A-Za-z0-9_-]*\d)(?=[A-Za-z0-9_-]*[A-Za-z])[A-Za-z0-9_-]{40,}/g, token => OPENTEAM_ID.test(token) ? token : '[secret]')
 }
+
+// An id OpenTeam made: a UUID after a word or two ("chat-…", "external-model-…"). A bare UUID
+// is not exempt (some providers' keys look like one); it is too short for the rule above anyway.
+const OPENTEAM_ID = /^(?:[a-z]+-)+[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 export function sanitizeLogDetails(details: LogDetails): LogDetails {
   return Object.fromEntries(Object.entries(details).slice(0, 30).map(([name, value]) => [name, REMOVED_FIELDS.test(name) ? '[removed]' : sanitizeValue(value, 1)]))

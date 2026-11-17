@@ -79,6 +79,12 @@ describe('secrets in text', () => {
     expect(redactSecrets('token ' + 'a1B2'.repeat(12))).toBe('token [secret]')
     expect(redactSecrets('HTTP 503：This model is busy')).toBe('HTTP 503：This model is busy')
   })
+
+  it('leaves OpenTeam\'s own ids alone: they say which entries belong together', () => {
+    expect(redactSecrets('chat-88994423-ad77-40d1-bddc-df782e4f3533')).toBe('chat-88994423-ad77-40d1-bddc-df782e4f3533')
+    expect(redactSecrets('external-model-d279de47-f98c-46df-afbd-02d2c54dbecd')).toBe('external-model-d279de47-f98c-46df-afbd-02d2c54dbecd')
+    expect(redactSecrets('88994423-ad77-40d1-bddc-df782e4f3533')).toBe('88994423-ad77-40d1-bddc-df782e4f3533')
+  })
 })
 
 describe('createLogger', () => {
