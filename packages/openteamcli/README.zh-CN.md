@@ -6,12 +6,14 @@ OpenTeam CLI 让本机智能体可以通过本地 daemon 控制 OpenTeam 浏览�
 
 ## 安装
 
-从 npm 安装 CLI：
+从最新发布安装 CLI（需要 Node.js 18 或更高版本）：
 
 ```bash
-npm install -g @afumu/openteamcli
+npm install -g https://github.com/Lushangtu123/openteam/releases/latest/download/openteamcli.tgz
 openteamcli doctor
 ```
+
+包名是 `@lushangtu123/openteamcli`，没有发布到 npm。在本仓库的 checkout 里，`npm install -g ./packages/openteamcli` 会装上同一个 CLI。
 
 ## 安装 Agent Skill
 
@@ -20,7 +22,7 @@ openteamcli doctor
 使用标准的 skills 安装器从 GitHub 安装：
 
 ```bash
-npx skills add afumu/openteam --skill openteam-control
+npx skills add Lushangtu123/openteam --skill openteam-control
 ```
 
 如果使用本地 checkout 或解压后的源码包，请在仓库根目录执行：
@@ -44,10 +46,10 @@ openteamcli doctor
 请帮我安装 OpenTeam 本机智能体控制能力。
 
 1. 安装 CLI：
-   npm install -g @afumu/openteamcli
+   npm install -g https://github.com/Lushangtu123/openteam/releases/latest/download/openteamcli.tgz
 
 2. 安装 OpenTeam agent skill：
-   npx skills add afumu/openteam --skill openteam-control
+   npx skills add Lushangtu123/openteam --skill openteam-control
 
    如果你正在使用本地 OpenTeam checkout 或解压后的源码包，请在仓库根目录改用：
    npx skills add . --skill openteam-control
@@ -98,7 +100,7 @@ openteamcli daemon install
 - **停止和启动**：`daemon stop` 让守护进程以退出码 0 结束，launchd 不会再启动它，所以它会一直停着，直到下次登录或运行 `daemon start`。LaunchAgent 已加载时，`daemon start` 和 `daemon restart` 都通过 launchd 启动，这样在运行的始终是崩溃后会被拉起来的那一个。
 - **状态**：`daemon status` 和 `doctor` 的结果里有 `launchAgent`：是否已安装、是否已加载，launchd 看到的状态、pid 和上次退出码，端口上的守护进程是不是 launchd 运行的那个（`managed`），需要处理时还有 `hint`（比如它要运行的 Node 已经不在了）。
 - **登录项**：macOS 可能会提示添加了一个后台项目（`node`）。请在“系统设置 › 通用 › 登录项”里保持允许；关掉后 launchd 不会运行守护进程。
-- 请从全局安装（`npm install -g @afumu/openteamcli`）或一个不会移动的 checkout 运行 `install`。用 `npx` 运行的命令放在 npm 的缓存里，npm 清理缓存后就没了。
+- 请从全局安装（见上方「安装」）或一个不会移动的 checkout 运行 `install`。用 `npx` 运行的命令放在 npm 的缓存里，npm 清理缓存后就没了。
 
 ```bash
 openteamcli daemon uninstall

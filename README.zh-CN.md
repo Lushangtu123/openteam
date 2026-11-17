@@ -148,7 +148,7 @@ npm run build
 
 ### 本机智能体与 CLI（可选）
 
-只有使用本机智能体成员，或想让 Codex、Claude Code 等智能体控制 OpenTeam 时才需要。可以安装发布包里的 CLI（`npm install -g ./afumu-openteamcli-<版本>.tgz`，再运行 `openteamcli daemon start`），也可以在仓库文件夹里运行：
+只有使用本机智能体成员，或想让 Codex、Claude Code 等智能体控制 OpenTeam 时才需要。可以从最新发布安装 CLI（`npm install -g https://github.com/Lushangtu123/openteam/releases/latest/download/openteamcli.tgz`，再运行 `openteamcli daemon start`），也可以在仓库文件夹里运行：
 
 ```bash
 npm run openteamcli -- daemon start
@@ -160,6 +160,8 @@ npm run openteamcli -- doctor
 ```bash
 npx skills add . --skill openteam-control
 ```
+
+不在仓库文件夹里时，`npx skills add Lushangtu123/openteam --skill openteam-control` 会从 GitHub 安装。
 
 电脑重启后守护进程不会自动启动。在 macOS 上，`npm run openteamcli -- daemon install` 会把它添加为登录时启动的 LaunchAgent；`daemon uninstall` 可移除。全部命令见 [OpenTeam CLI](packages/openteamcli/README.zh-CN.md)。
 

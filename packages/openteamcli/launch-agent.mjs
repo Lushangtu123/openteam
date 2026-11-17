@@ -289,7 +289,7 @@ export function createLaunchAgent(deps) {
         ...(started?.pid ? { pid: started.pid } : {}),
         ...(started ? {} : { hint: `LaunchAgent 已加载，但守护进程 ${Math.round(startTimeoutMs / 1000)} 秒内没有响应；运行 openteamcli daemon status 查看，原因见 ${DAEMON_LOG}。` }),
         // npx runs the command from its cache, which npm clears: the LaunchAgent would then run nothing.
-        ...(/\/_npx\//.test(daemonScript) ? { warning: 'openteamcli 是用 npx 临时运行的，npm 清理缓存后 LaunchAgent 就找不到它了。建议先 npm install -g @afumu/openteamcli，再运行 openteamcli daemon install。' } : {}),
+        ...(/\/_npx\//.test(daemonScript) ? { warning: 'openteamcli 是用 npx 临时运行的，npm 清理缓存后 LaunchAgent 就找不到它了。建议先 npm install -g https://github.com/Lushangtu123/openteam/releases/latest/download/openteamcli.tgz，再运行 openteamcli daemon install。' } : {}),
       }
     },
 

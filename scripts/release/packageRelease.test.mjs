@@ -29,9 +29,11 @@ describe('release version checks', () => {
 
 describe('release notes', () => {
   it('names the files and how to install them, in both languages', () => {
-    const notes = releaseNotes({ version: '1.1.0', extensionZip: 'openteam-extension-v1.1.0.zip', cliPackage: 'afumu-openteamcli-0.1.0.tgz' })
+    const notes = releaseNotes({ version: '1.1.0', extensionZip: 'openteam-extension-v1.1.0.zip', cliPackage: 'lushangtu123-openteamcli-0.2.0.tgz' })
     expect(notes).toContain('openteam-extension-v1.1.0.zip')
-    expect(notes).toContain('afumu-openteamcli-0.1.0.tgz')
+    expect(notes).toContain('lushangtu123-openteamcli-0.2.0.tgz')
+    // The copy with a fixed name, which the latest release always serves at the same address.
+    expect(notes).toContain('npm install -g https://github.com/Lushangtu123/openteam/releases/latest/download/openteamcli.tgz')
     expect(notes).toContain('chrome://extensions')
     expect(notes).toContain('加载已解压的扩展程序')
     expect(notes).toContain('Load unpacked')

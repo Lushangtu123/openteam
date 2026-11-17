@@ -13,10 +13,10 @@ OpenTeam 通过已安装的 `openteamcli` 命令和本地 daemon 控制。不要
 
 ## 本机命令要求
 
-默认直接调用已安装到本机 PATH 里的 `openteamcli`。如果命令不存在，请提示用户先从 npm 安装：
+默认直接调用已安装到本机 PATH 里的 `openteamcli`。如果命令不存在，请提示用户先从 OpenTeam 的最新发布安装（需要 Node.js 18 或更高版本）：
 
 ```bash
-npm install -g @afumu/openteamcli
+npm install -g https://github.com/Lushangtu123/openteam/releases/latest/download/openteamcli.tgz
 ```
 
 开发期可以在 OpenTeam 仓库里执行：

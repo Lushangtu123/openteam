@@ -19,7 +19,7 @@ describe('openteamcli install configuration', () => {
     const pkg = JSON.parse(readFileSync(resolve(packageRoot, 'package.json'), 'utf8'))
 
     expect(pkg).toMatchObject({
-      name: '@afumu/openteamcli',
+      name: '@lushangtu123/openteamcli',
       version: expect.any(String),
       type: 'module',
       private: false,

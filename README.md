@@ -148,7 +148,7 @@ After pulling changes, run `npm run build` again and click the reload button on 
 
 ### Local agents and the CLI (optional)
 
-Needed only for local agent members or to let an agent such as Codex or Claude Code control OpenTeam. Install the CLI tarball from the release (`npm install -g ./afumu-openteamcli-<version>.tgz`, then `openteamcli daemon start`), or run it from the repository folder:
+Needed only for local agent members or to let an agent such as Codex or Claude Code control OpenTeam. Install the CLI from the latest release (`npm install -g https://github.com/Lushangtu123/openteam/releases/latest/download/openteamcli.tgz`, then `openteamcli daemon start`), or run it from the repository folder:
 
 ```bash
 npm run openteamcli -- daemon start
@@ -160,6 +160,8 @@ Then enable local agent control in OpenTeam's settings. To give your agent the O
 ```bash
 npx skills add . --skill openteam-control
 ```
+
+From anywhere else, `npx skills add Lushangtu123/openteam --skill openteam-control` installs it from GitHub.
 
 The daemon does not start by itself after a restart. On macOS, `npm run openteamcli -- daemon install` adds it as a LaunchAgent that starts at login; `daemon uninstall` removes it. See [OpenTeam CLI](packages/openteamcli/README.md) for all commands.
 

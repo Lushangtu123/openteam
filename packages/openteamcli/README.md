@@ -6,12 +6,14 @@ OpenTeam CLI lets local agents control an OpenTeam browser extension through a l
 
 ## Install
 
-Install the CLI from npm:
+Install the CLI from the latest release (Node.js 18 or later):
 
 ```bash
-npm install -g @afumu/openteamcli
+npm install -g https://github.com/Lushangtu123/openteam/releases/latest/download/openteamcli.tgz
 openteamcli doctor
 ```
+
+The package is `@lushangtu123/openteamcli`; it is not on npm. From a checkout of this repository, `npm install -g ./packages/openteamcli` installs the same CLI.
 
 ## Install the Agent Skill
 
@@ -20,7 +22,7 @@ The package also ships an `openteam-control` skill for local agents. The skill t
 Install from GitHub with the standard skills installer:
 
 ```bash
-npx skills add afumu/openteam --skill openteam-control
+npx skills add Lushangtu123/openteam --skill openteam-control
 ```
 
 For a local checkout or unzipped source package, install from the repository root:
@@ -44,10 +46,10 @@ If you want an agent to install everything for you, copy this prompt into Codex,
 Please install OpenTeam local agent control for me.
 
 1. Install the CLI:
-   npm install -g @afumu/openteamcli
+   npm install -g https://github.com/Lushangtu123/openteam/releases/latest/download/openteamcli.tgz
 
 2. Install the OpenTeam agent skill:
-   npx skills add afumu/openteam --skill openteam-control
+   npx skills add Lushangtu123/openteam --skill openteam-control
 
    If you are working from a local OpenTeam checkout or unzipped source package, run this from the repository root instead:
    npx skills add . --skill openteam-control
@@ -98,7 +100,7 @@ This writes `~/Library/LaunchAgents/io.github.afumu.openteam.daemon.plist` and l
 - **Stop and start**: `daemon stop` ends the daemon with exit code 0, which launchd leaves alone, so it stays stopped until the next login or `daemon start`. With the LaunchAgent loaded, `daemon start` and `daemon restart` start it through launchd, so the running daemon is always the one that comes back after a crash.
 - **Status**: `daemon status` and `doctor` include `launchAgent`: whether it is installed and loaded, launchd's state, pid and last exit code, whether the daemon on the port is the one launchd runs (`managed`), and a `hint` when something needs doing (for example the Node it runs is gone).
 - **Login Items**: macOS may show a notice that a background item (`node`) was added. Leave it allowed under System Settings › General › Login Items; turned off, launchd does not run the daemon.
-- Run `install` from a global install (`npm install -g @afumu/openteamcli`) or a checkout that stays where it is. A command run with `npx` lives in npm's cache, which npm clears.
+- Run `install` from a global install (see Install above) or a checkout that stays where it is. A command run with `npx` lives in npm's cache, which npm clears.
 
 ```bash
 openteamcli daemon uninstall

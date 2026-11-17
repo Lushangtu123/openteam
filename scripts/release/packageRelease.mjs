@@ -5,11 +5,16 @@
 //   npm run package [-- --tag v1.1.0]
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = resolve(fileURLToPath(new URL('../..', import.meta.url)))
+
+// The CLI tarball is also attached under a name with no version in it: GitHub serves the latest
+// release's files at /releases/latest/download/<name>, so one install command always works.
+export const CLI_FIXED_NAME = 'openteamcli.tgz'
+export const CLI_LATEST_URL = `https://github.com/Lushangtu123/openteam/releases/latest/download/${CLI_FIXED_NAME}`
 
 // What stands in the way of a release: each version that differs from package.json's.
 export function releaseVersionProblems({ tag, packageVersion, manifestVersion, builtVersion }) {
@@ -33,6 +38,7 @@ export function releaseNotes({ version, extensionZip, cliPackage }) {
 
 - \`${extensionZip}\`: the Chrome extension
 - \`${cliPackage}\`: the optional local CLI and daemon (for local agent members and agent control)
+- \`${CLI_FIXED_NAME}\`: the same CLI under a name that does not change, for the one-line install below
 - \`SHA256SUMS.txt\`: checksums of both
 
 ## Install
@@ -43,7 +49,7 @@ export function releaseNotes({ version, extensionZip, cliPackage }) {
 
 OpenTeam says in its settings when a new version is out. To update, empty that folder, unzip the new version into it and click the reload button on OpenTeam in \`chrome://extensions\`. Your chats are kept in the browser, so an update keeps them; removing OpenTeam from Chrome deletes them (make a backup in settings first).
 
-Optional CLI (Node.js 18 or later): \`npm install -g ./${cliPackage}\`, then \`openteamcli daemon start\`.
+Optional CLI (Node.js 18 or later): \`npm install -g ${CLI_LATEST_URL}\`, then \`openteamcli daemon start\`.
 
 ## 安装
 
@@ -53,7 +59,7 @@ Optional CLI (Node.js 18 or later): \`npm install -g ./${cliPackage}\`, then \`o
 
 有新版本时，OpenTeam 会在设置里提示。更新时，清空这个文件夹，把新版本解压进去，再在 \`chrome://extensions\` 里点 OpenTeam 的重新加载按钮。群聊数据保存在浏览器里，更新不会丢失；但在 Chrome 里移除 OpenTeam 会删除它们（移除前先在设置里备份）。
 
-可选 CLI（需要 Node.js 18 或更高版本）：\`npm install -g ./${cliPackage}\`，然后运行 \`openteamcli daemon start\`。
+可选 CLI（需要 Node.js 18 或更高版本）：\`npm install -g ${CLI_LATEST_URL}\`，然后运行 \`openteamcli daemon start\`。
 
 OpenTeam ${version} is based on [afumu/openteam](https://github.com/afumu/openteam) and released under the PolyForm Noncommercial License 1.0.0.
 `
@@ -93,10 +99,11 @@ function main() {
   execFileSync('npm', ['pack', '--silent', '--pack-destination', out], { cwd: join(root, 'packages/openteamcli'), stdio: ['ignore', 'ignore', 'inherit'] })
   const cliPackage = readdirSync(out).find(name => name.endsWith('.tgz'))
   if (!cliPackage) throw new Error('npm pack wrote no tarball')
+  copyFileSync(join(out, cliPackage), join(out, CLI_FIXED_NAME))
 
-  writeFileSync(join(out, 'SHA256SUMS.txt'), [extensionZip, cliPackage].map(name => `${sha256(join(out, name))}  ${name}`).join('\n') + '\n')
+  writeFileSync(join(out, 'SHA256SUMS.txt'), [extensionZip, cliPackage, CLI_FIXED_NAME].map(name => `${sha256(join(out, name))}  ${name}`).join('\n') + '\n')
   writeFileSync(join(out, 'RELEASE_NOTES.md'), releaseNotes({ version: packageVersion, extensionZip, cliPackage }))
-  console.log(`release/ holds ${extensionZip}, ${cliPackage}, SHA256SUMS.txt and RELEASE_NOTES.md`)
+  console.log(`release/ holds ${extensionZip}, ${cliPackage}, ${CLI_FIXED_NAME}, SHA256SUMS.txt and RELEASE_NOTES.md`)
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main()

@@ -18,7 +18,7 @@ const HOME = '/Users/someone'
 const PLIST = `${HOME}/Library/LaunchAgents/${LAUNCH_AGENT_LABEL}.plist`
 const SERVICE = `gui/501/${LAUNCH_AGENT_LABEL}`
 const NODE = '/opt/homebrew/bin/node'
-const SCRIPT = '/opt/homebrew/lib/node_modules/@afumu/openteamcli/openteam-daemon.mjs'
+const SCRIPT = '/opt/homebrew/lib/node_modules/@lushangtu123/openteamcli/openteam-daemon.mjs'
 const ENVIRONMENT = { PATH: '/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin' }
 const OK = { code: 0, stdout: '', stderr: '' }
 
@@ -355,10 +355,10 @@ describe('daemon install', () => {
   })
 
   it('warns when the command runs from the npx cache, which npm clears', async () => {
-    const script = `${HOME}/.npm/_npx/0a1b2c/node_modules/@afumu/openteamcli/openteam-daemon.mjs`
+    const script = `${HOME}/.npm/_npx/0a1b2c/node_modules/@lushangtu123/openteamcli/openteam-daemon.mjs`
     const { agent } = fakeMac({ daemonScript: script, existing: [NODE, script] })
 
-    await expect(agent.install()).resolves.toMatchObject({ warning: expect.stringContaining('npm install -g @afumu/openteamcli') })
+    await expect(agent.install()).resolves.toMatchObject({ warning: expect.stringContaining('npm install -g https://github.com/Lushangtu123/openteam/releases/latest/download/openteamcli.tgz') })
   })
 
   it('refuses on other systems and under sudo, touching nothing', async () => {
