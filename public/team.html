@@ -663,15 +663,16 @@
           <div class="field api-model-field">
             <label for="external-model-model-name">模型名称</label>
             <div class="external-model-name-row">
-              <input id="external-model-model-name" type="text" autocomplete="off" list="external-model-names" placeholder="gpt-4.1 / claude-sonnet" />
+              <input id="external-model-model-name" type="text" autocomplete="off" placeholder="gpt-4.1 / claude-sonnet" />
               <button id="fetch-external-model-names" class="btn" type="button">获取模型列表</button>
             </div>
-            <datalist id="external-model-names"></datalist>
+            <select id="external-model-name-choices" class="external-model-choices" aria-label="从列表选择模型" hidden></select>
             <p id="external-model-names-status" class="tiny" aria-live="polite"></p>
           </div>
           <div class="field api-model-field">
             <label for="external-model-fallback-name">备用模型（可选）</label>
-            <input id="external-model-fallback-name" type="text" autocomplete="off" list="external-model-names" />
+            <input id="external-model-fallback-name" type="text" autocomplete="off" />
+            <select id="external-model-fallback-choices" class="external-model-choices" aria-label="从列表选择备用模型" hidden></select>
             <p class="tiny">同一地址、同一 Key 下的另一个模型。主模型繁忙、限流、额度用完或太慢时，由它回答群聊消息，回复上会注明。</p>
           </div>
           <div class="template-actions">

@@ -338,11 +338,12 @@ function setupForm(options: { listModelNames?: (request: { format: string; baseU
       <input id="external-model-base-url" />
       <input id="external-model-api-key" />
       <a id="external-model-key-link" hidden>去获取 Key</a>
-      <input id="external-model-model-name" list="external-model-names" />
+      <input id="external-model-model-name" />
+      <select id="external-model-name-choices" hidden></select>
       <button id="fetch-external-model-names" type="button">获取模型列表</button>
-      <datalist id="external-model-names"></datalist>
       <p id="external-model-names-status"></p>
-      <input id="external-model-fallback-name" list="external-model-names" />
+      <input id="external-model-fallback-name" />
+      <select id="external-model-fallback-choices" hidden></select>
       <button id="reset-external-model-form" type="button"></button>
     </form>
   `
@@ -418,18 +419,36 @@ describe('provider presets and the model list', () => {
     expect($<HTMLAnchorElement>('#external-model-key-link').hidden).toBe(true)
   })
 
-  it('fetches the models for the address and key in the form, and offers them in the name field', async () => {
+  it('fetches the models for the address and key in the form, and lets either field be set from them', async () => {
     const { $, choose, listModelNames, requestHostAccess } = setupForm()
     choose('#external-model-provider', 'gemini')
     $<HTMLInputElement>('#external-model-api-key').value = 'sk-form'
 
     $<HTMLButtonElement>('#fetch-external-model-names').click()
 
-    await vi.waitFor(() => expect($('#external-model-names').children).toHaveLength(2))
+    const nameChoices = $<HTMLSelectElement>('#external-model-name-choices')
+    const fallbackChoices = $<HTMLSelectElement>('#external-model-fallback-choices')
+    await vi.waitFor(() => expect(nameChoices.hidden).toBe(false))
     expect(requestHostAccess).toHaveBeenCalledWith('https://generativelanguage.googleapis.com/v1beta/openai')
     expect(listModelNames).toHaveBeenCalledWith({ format: 'openai', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai', apiKey: 'sk-form' })
-    expect([...$('#external-model-names').children].map(option => (option as HTMLOptionElement).value)).toEqual(['gemini-flash-latest', 'gemini-flash-lite-latest'])
+    // The first option only asks to choose, so that every model can be chosen.
+    expect([...nameChoices.options].map(option => option.value)).toEqual(['', 'gemini-flash-latest', 'gemini-flash-lite-latest'])
+    expect(fallbackChoices.hidden).toBe(false)
+    expect([...fallbackChoices.options].map(option => option.value)).toEqual(['', 'gemini-flash-latest', 'gemini-flash-lite-latest'])
     expect($('#external-model-names-status').textContent).toContain('2')
+
+    // A field that already holds a name is changed by the list all the same.
+    $<HTMLInputElement>('#external-model-model-name').value = 'gemini-flash-lite-latest'
+    choose('#external-model-name-choices', 'gemini-flash-latest')
+    choose('#external-model-fallback-choices', 'gemini-flash-lite-latest')
+    expect($<HTMLInputElement>('#external-model-model-name').value).toBe('gemini-flash-latest')
+    expect($<HTMLInputElement>('#external-model-fallback-name').value).toBe('gemini-flash-lite-latest')
+    expect(nameChoices.value).toBe('')
+
+    // Another address: the list is gone.
+    choose('#external-model-base-url', 'https://api.deepseek.com')
+    expect(nameChoices.hidden).toBe(true)
+    expect(fallbackChoices.hidden).toBe(true)
   })
 
   it('asks for the address and key before fetching, and shows a refusal next to the field', async () => {

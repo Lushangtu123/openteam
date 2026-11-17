@@ -792,6 +792,11 @@
   color: var(--gpt-link);
 }
 
+:root[data-theme] .external-model-choices {
+  margin-top: 6px;
+}
+
+:root[data-theme] .external-model-choices[hidden],
 :root[data-theme] .external-model-key-link[hidden],
 :root[data-theme] #external-model-names-status:empty {
   display: none;

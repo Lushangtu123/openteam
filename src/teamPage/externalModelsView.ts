@@ -52,7 +52,9 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
   const providerEl = form.querySelector<HTMLSelectElement>('#external-model-provider')
   const keyLinkEl = form.querySelector<HTMLAnchorElement>('#external-model-key-link')
   const fetchNamesEl = form.querySelector<HTMLButtonElement>('#fetch-external-model-names')
-  const modelNamesEl = form.querySelector<HTMLDataListElement>('#external-model-names')
+  // Lists of the provider's models, one beside each model field, shown once the list is fetched.
+  const nameChoicesEl = form.querySelector<HTMLSelectElement>('#external-model-name-choices')
+  const fallbackChoicesEl = form.querySelector<HTMLSelectElement>('#external-model-fallback-choices')
   const namesStatusEl = form.querySelector<HTMLElement>('#external-model-names-status')
   const fallbackNameEl = form.querySelector<HTMLInputElement>('#external-model-fallback-name')
   const defaultModelPlaceholder = deps.externalModelModelNameEl.placeholder
@@ -159,8 +161,37 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
   }
 
   function clearModelNames(): void {
-    modelNamesEl?.replaceChildren()
+    for (const choices of [nameChoicesEl, fallbackChoicesEl]) {
+      if (!choices) continue
+      choices.replaceChildren()
+      choices.hidden = true
+    }
     if (namesStatusEl) namesStatusEl.textContent = ''
+  }
+
+  // Each list starts with an option that only asks to choose, so every model can be chosen, and
+  // goes back to it once a model is put in the field.
+  function showModelChoices(names: string[]): void {
+    for (const choices of [nameChoicesEl, fallbackChoicesEl]) {
+      if (!choices) continue
+      const prompt = document.createElement('option')
+      prompt.value = ''
+      prompt.textContent = ui(choices === nameChoicesEl ? '从列表选择模型' : '从列表选择备用模型')
+      choices.replaceChildren(prompt, ...names.map(name => {
+        const option = document.createElement('option')
+        option.value = name
+        option.textContent = name
+        return option
+      }))
+      choices.value = ''
+      choices.hidden = false
+    }
+  }
+
+  function pickFrom(choices: HTMLSelectElement | null, field: HTMLInputElement | null): void {
+    if (!choices || !field || !choices.value) return
+    field.value = choices.value
+    choices.value = ''
   }
 
   // Asks the provider for its models with the address and key in the form; from a click, so the
@@ -181,17 +212,13 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
     try {
       await allowAccess(baseUrl)
       const names = await listNames({ format, baseUrl, apiKey })
-      modelNamesEl?.replaceChildren(...names.map(name => {
-        const option = document.createElement('option')
-        option.value = name
-        return option
-      }))
+      showModelChoices(names)
       if (namesStatusEl) {
         namesStatusEl.textContent = language() === 'en'
-          ? `Found ${names.length} models. Pick one in the model name field.`
-          : `找到 ${names.length} 个模型，在模型名称里选择。`
+          ? `Found ${names.length} models. Choose them from the lists beside the model fields.`
+          : `找到 ${names.length} 个模型，可在模型名称和备用模型旁的列表里选择。`
       }
-      deps.externalModelModelNameEl.focus()
+      nameChoicesEl?.focus()
     } catch (error) {
       if (namesStatusEl) namesStatusEl.textContent = ui(error instanceof Error ? error.message : String(error))
     } finally {
@@ -210,6 +237,8 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
       clearModelNames()
     })
     fetchNamesEl?.addEventListener('click', () => void fetchModelList())
+    nameChoicesEl?.addEventListener('change', () => pickFrom(nameChoicesEl, deps.externalModelModelNameEl))
+    fallbackChoicesEl?.addEventListener('change', () => pickFrom(fallbackChoicesEl, fallbackNameEl))
     deps.externalModelFormatEl.addEventListener('change', showFieldsForFormat)
     localAgentEl?.addEventListener('change', showWorkspacesForAgent)
     deps.openExternalModelsEl.addEventListener('click', openExternalModels)

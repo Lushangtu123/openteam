@@ -271,6 +271,8 @@ const UI_TRANSLATIONS: Record<string, string> = {
   '备用模型（可选）': 'Backup model (optional)',
   '同一地址、同一 Key 下的另一个模型。主模型繁忙、限流、额度用完或太慢时，由它回答群聊消息，回复上会注明。': 'Another model at the same address with the same key. When the main model is busy, rate-limited, out of quota or too slow, it answers group messages instead, and the reply says so.',
   '备用': 'Backup',
+  '从列表选择模型': 'Choose a model from the list',
+  '从列表选择备用模型': 'Choose a backup model from the list',
   '保存模型': 'Save model',
   '新建角色': 'New person',
   '维护角色名称、人设和默认模型。': "Manage the role's name, persona and default model.",
