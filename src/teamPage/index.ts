@@ -26,6 +26,7 @@ import { createMessageSearchView } from './messageSearchView'
 import { createReplyComparisonView } from './replyComparisonView'
 import { createTeamFormationView } from './teamFormationView'
 import { createProjectView } from './projectView'
+import { createSiteCheckView } from './siteCheckView'
 import { createMessagesView } from './messagesView'
 import { createNotesView } from './notesView'
 import { createPeopleLibraryView } from './peopleLibraryView'
@@ -530,6 +531,7 @@ const messagesView = createMessagesView({
   openTeamCard: chatId => teamFormationView.openCard(chatId),
   renderTeamClaim: message => teamFormationView.renderClaim(message),
   renderProjectBoard: (chat, messages) => projectView.renderBoard(chat, messages),
+  renderSiteCheck: chat => siteCheckView.renderBoard(chat),
   log,
 })
 const renderMessages = messagesView.renderMessages
@@ -844,6 +846,7 @@ const teamFormationView = createTeamFormationView({
   openAutoPlan: (task, instruction) => orchestrationModalView.openAutoPlan(task, instruction),
 })
 
+const siteCheckView = createSiteCheckView({ getStore: () => store, now: () => Date.now(), requestRender: () => render() })
 const projectView = createProjectView({
   getStore: () => store,
   getCurrentChat,
@@ -903,6 +906,12 @@ async function boot(): Promise<void> {
   showAiPagesEl.addEventListener('click', () => {
     settingsMenuEl.hidden = true
     settingsButtonEl.setAttribute('aria-expanded', 'false')
+  })
+  // 网站自检: the background makes the group, opens it and sends the question.
+  document.querySelector<HTMLButtonElement>('#start-site-check')?.addEventListener('click', () => {
+    settingsMenuEl.hidden = true
+    settingsButtonEl.setAttribute('aria-expanded', 'false')
+    runCommand('GROUP_SITE_CHECK_START').catch(error => showError(error instanceof Error ? error.message : String(error)))
   })
   registerAllNotesEvents()
   languageSettingsController.registerEvents()

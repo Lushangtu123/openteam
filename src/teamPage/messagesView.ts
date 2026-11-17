@@ -78,6 +78,8 @@ export interface MessagesViewDependencies {
   renderOrchestrationStatus?(): HTMLElement | undefined
   // The project's task board, at the end of the chat.
   renderProjectBoard?(chat: GroupChat, messages: GroupMessage[]): HTMLElement | undefined
+  // A 网站自检 group's result, at the end of the chat.
+  renderSiteCheck?(chat: GroupChat): HTMLElement | undefined
   log: {
     warn(event: string, details?: Record<string, unknown>): void
   }
@@ -205,6 +207,8 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     if (discussion) nodes.push(discussion)
     const projectBoard = deps.renderProjectBoard?.(chat, messages)
     if (projectBoard) nodes.push(projectBoard)
+    const siteCheck = deps.renderSiteCheck?.(chat)
+    if (siteCheck) nodes.push(siteCheck)
     reconcileChildren(deps.messagesEl, nodes)
     reveal.retain(new Set([
       ...messages.filter(message => message.type === 'assistant' && message.status === 'pending').map(message => streamingRevealKey(message)),

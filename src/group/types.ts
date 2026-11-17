@@ -350,6 +350,8 @@ export interface GroupChat {
   crossReview?: boolean
   // The group's latest discussion.
   discussion?: DiscussionRun
+  // A 网站自检 group (src/group/siteCheck.ts): its result is shown at the end of the chat.
+  siteCheck?: { startedAt: number }
   // The group's latest 项目 (a coordinator plans tasks for the members and checks the results).
   project?: ProjectRun
   // No memory items are sent to this group's members.

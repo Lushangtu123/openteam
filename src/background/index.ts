@@ -40,6 +40,7 @@ import { getChatRoles, mutateStore } from './storeAccess'
 import { createLogger } from '../shared/logger'
 import type { BackgroundToRoleMessage } from '../group/runtimeProtocol'
 import { createControlActionExecutor } from './controlHandlers'
+import { createSiteCheckHandlers } from './siteCheckHandlers'
 import { createControlClient } from './controlClient'
 import { createTeamPageShower } from './teamPageTab'
 import { createImageAttachmentService } from './imageAttachments'
@@ -226,6 +227,8 @@ const routeMessage = createMessageRouter([
   { type: 'GROUP_SETTINGS_UPDATE', handler: handleSettingsUpdate },
   ...createBackupHandlers({ broadcastStoreUpdated, log, imageAttachments: imageAttachmentRepository }),
   ...createMemoryHandlers({ broadcastStoreUpdated, log, now }),
+  // Runs through this router itself, once it is made.
+  ...createSiteCheckHandlers({ route: message => Promise.resolve(routeMessage(message, {})), broadcastStoreUpdated, now }),
   ...createExternalModelHandlers({ broadcastStoreUpdated, externalModelClient, checkLocalAgent, newId, now }),
   { type: 'LOCAL_AGENT_LIST', handler: async () => ({ ok: true, agents: await listLocalAgents() }) },
   {
