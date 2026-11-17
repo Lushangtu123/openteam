@@ -57,7 +57,9 @@ export interface ExternalModelClientOptions {
   timeoutMs?: number
 }
 
-const DEFAULT_EXTERNAL_MODEL_TIMEOUT_MS = 30000
+// How long a request may go without new text: before the first piece (a thinking model under load
+// can be slow to start) and between pieces. A long reply runs as long as text keeps coming.
+const DEFAULT_EXTERNAL_MODEL_TIMEOUT_MS = 60_000
 
 // An OpenAI-format address gets /v1 added unless its path already names an API version (/v1,
 // /v1beta/openai for Gemini, /api/v3, /api/paas/v4): "https://api.deepseek.com" and OpenRouter's
@@ -127,7 +129,10 @@ export function createExternalModelClient(fetchImpl: typeof fetch = fetch, optio
         let content = ''
         const normalizedUrl = normalizeBaseUrl(input.model.baseUrl, input.model.format)
         const stream = streamExternalModel({ ...input, abortSignal: timeout.signal }, wrappedFetch)
-        for await (const chunk of stream) content += chunk
+        for await (const chunk of stream) {
+          timeout.touch()
+          content += chunk
+        }
         if (!content.trim()) {
           throw new ExternalModelError(
             `外部模型返回内容为空 (URL: ${normalizedUrl}, Model: ${input.model.modelName}, Response: ${JSON.stringify(lastResponseMetadata)})`
@@ -152,7 +157,10 @@ async function* streamExternalModelWithTimeout(input: ExternalModelCompletionInp
   const timeout = createTimedAbortSignal(input.abortSignal, timeoutMs)
   try {
     // A group reply: OpenTeam's reply loop retries it and says so on the reply, so one attempt here.
-    yield* streamExternalModel({ ...input, abortSignal: timeout.signal }, fetchImpl, 1)
+    for await (const chunk of streamExternalModel({ ...input, abortSignal: timeout.signal }, fetchImpl, 1)) {
+      timeout.touch()
+      yield chunk
+    }
   } catch (error: any) {
     if (isAbortError(error)) {
       if (!timeout.timedOut()) throw error
@@ -165,13 +173,15 @@ async function* streamExternalModelWithTimeout(input: ExternalModelCompletionInp
   }
 }
 
-function createTimedAbortSignal(parentSignal: AbortSignal | undefined, timeoutMs: number): { signal: AbortSignal; clear(): void; timedOut(): boolean } {
+// Aborts once `timeoutMs` pass without a touch().
+function createTimedAbortSignal(parentSignal: AbortSignal | undefined, timeoutMs: number): { signal: AbortSignal; touch(): void; clear(): void; timedOut(): boolean } {
   const controller = new AbortController()
   let didTimeout = false
-  const timeoutId = setTimeout(() => {
+  const onTimeout = () => {
     didTimeout = true
     controller.abort()
-  }, timeoutMs)
+  }
+  let timeoutId = setTimeout(onTimeout, timeoutMs)
   const abortFromParent = () => controller.abort()
 
   if (parentSignal?.aborted) {
@@ -182,6 +192,11 @@ function createTimedAbortSignal(parentSignal: AbortSignal | undefined, timeoutMs
 
   return {
     signal: controller.signal,
+    touch() {
+      if (controller.signal.aborted) return
+      clearTimeout(timeoutId)
+      timeoutId = setTimeout(onTimeout, timeoutMs)
+    },
     clear() {
       clearTimeout(timeoutId)
       parentSignal?.removeEventListener('abort', abortFromParent)
@@ -243,6 +258,8 @@ async function* streamExternalModel(input: ExternalModelCompletionInput, fetchIm
         yield textPart
       }
       if (streamError) throw streamError
+      // The AI library ends the text quietly when the request is aborted (a timeout, or the user).
+      if (input.abortSignal?.aborted) throw new DOMException('Aborted', 'AbortError')
       if (!sawText) throw await emptyReplyError(result, answerStart, input.model.apiKey)
       await reportUsage(result.usage, input.onUsage)
       return

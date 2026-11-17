@@ -103,3 +103,52 @@ describe('a request the server refuses', () => {
     expect(failure.message).not.toContain('sk-secret-123')
   })
 })
+
+describe('how long a reply may take', () => {
+  // A server that answers in pieces, `gapMs` apart.
+  function slowSse(pieces: string[], gapMs: number): typeof fetch {
+    return async (_url, init) => {
+      const encoder = new TextEncoder()
+      const body = new ReadableStream<Uint8Array>({
+        async start(controller) {
+          // As fetch does, an abort makes the body fail.
+          init?.signal?.addEventListener('abort', () => controller.error(new DOMException('Aborted', 'AbortError')), { once: true })
+          for (const piece of pieces) {
+            await new Promise(resolve => setTimeout(resolve, gapMs))
+            if (init?.signal?.aborted) return
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk({ content: piece }))}\n\n`))
+          }
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk({}, 'stop'))}\n\ndata: [DONE]\n\n`))
+          controller.close()
+        },
+      })
+      return new Response(body, { status: 200, headers: { 'content-type': 'text/event-stream' } })
+    }
+  }
+
+  it('lets a long reply run as long as text keeps coming', async () => {
+    const client = createExternalModelClient(slowSse(['a', 'b', 'c', 'd', 'e', 'f'], 30), { timeoutMs: 80 })
+    let text = ''
+    for await (const part of client.stream!({ model, prompt: 'Hi' })) text += part
+    expect(text).toBe('abcdef')
+  })
+
+  it('says the request timed out when the server never answers', async () => {
+    const neverAnswers: typeof fetch = (_url, init) => new Promise((_, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true })
+    })
+    const client = createExternalModelClient(neverAnswers, { timeoutMs: 50 })
+    const failure = await (async () => { for await (const part of client.stream!({ model, prompt: 'Hi' })) void part })().catch(error => error)
+
+    expect(failure).toBeInstanceOf(ExternalModelError)
+    expect(failure.status).toBe(408)
+  })
+
+  it('says the request timed out when the text stops coming', async () => {
+    const client = createExternalModelClient(slowSse(['a', 'b'], 120), { timeoutMs: 50 })
+    const failure = await (async () => { for await (const part of client.stream!({ model, prompt: 'Hi' })) void part })().catch(error => error)
+
+    expect(failure).toBeInstanceOf(ExternalModelError)
+    expect(failure.status).toBe(408)
+  })
+})
