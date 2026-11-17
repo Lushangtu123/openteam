@@ -3,17 +3,20 @@ import { createIcon } from './icons'
 import { createApprovalCards } from './approvalCard'
 import { extractReplyChoices, type ReplyChoice } from '../group/replyChoices'
 import { normalizeLanguage } from '../shared/i18n'
-import { DEFAULT_MESSAGE_HIGHLIGHT_COLOR, MESSAGE_HIGHLIGHT_COLORS, messageHighlightColorRgb, type MessageHighlightColor } from '../group/highlightColors'
+import { applyHighlightsToBody } from './messageHighlights'
+import { registerSelectionMarkMenu } from './selectionMarkMenu'
 import { roleMentionLabel, roleMentionLabelOptionsFromSettings, roleModelLabel } from '../group/mentionParser'
-import type { GroupChat, GroupMessage, GroupRole, MemoryProposal, MessageFileAttachment, MessageHighlight, MessageImageAttachment, MessageReference, OpenTeamStore, OrchestrationReviewResult } from '../group/types'
-import { CHAT_SITE_INFO, type ChatSite } from '../group/chatSites'
-import { SITE_CHECK_SITES } from '../group/siteCheck'
+import type { GroupChat, GroupMessage, GroupRole, MemoryProposal, MessageReference, OpenTeamStore } from '../group/types'
+import { findReviewResultForMessage, renderOrchestrationMessageLabel, renderOrchestrationReviewSummary } from './orchestrationMessageLabels'
+import type { ChatSite } from '../group/chatSites'
+import { createStartCards } from './startCards'
 import { MEMORY_KIND_LABELS } from './memoryDialog'
-import { formatBytes } from './composerAttachments'
+import { createMessageAttachmentsView } from './messageAttachmentsView'
 import { paintRoleAvatar, roleAvatarSignature } from './viewHelpers'
 import { renderMarkdownInto } from './markdownRender'
 import { countRepliesByQuestion } from '../group/replyComparison'
-import { hasRoundSummary, isKeyPointsHeading, isOpenTeamRequest } from '../group/roundSummary'
+import { hasRoundSummary, isOpenTeamRequest } from '../group/roundSummary'
+import { foldToKeyPoints } from './keyPointsFold'
 import type { ImageAttachmentBlobRecord } from '../shared/imageAttachmentRepository'
 import type { TeamPageState } from './appState'
 import { buildChatRenderItems, getChatStartupNotice, getStoppedReplyRoles, getVisibleThinkingRoles, THINKING_TIMEOUT_MS } from './chatExperience'
@@ -23,17 +26,7 @@ type MessageActionIcon = 'copy' | 'quote' | 'jump' | 'check' | 'stop' | 'retry' 
 const MAX_CACHED_MESSAGE_NODES = 400
 const COPY_FEEDBACK_MS = 1200
 const AUTO_SCROLL_BOTTOM_THRESHOLD_PX = 48
-const MARK_MENU_SELECTION_GAP_PX = 12
-const MARK_MENU_FALLBACK_HEIGHT_PX = 148
-const MARK_MENU_SELECTION_SETTLE_DELAY_MS = 80
-// A reply with key points folds to them when the rest is longer than this.
-const KEY_POINTS_FOLD_MIN_CHARS = 280
-// An opening line a member may put before its key points is no longer than this.
-const KEY_POINTS_OPENING_MAX_CHARS = 40
-// Key points written as paragraphs of their own: at most this many, each this short (members are
-// asked for 1–3 points of up to 40 characters).
-const KEY_POINT_PARAGRAPHS_MAX = 3
-const KEY_POINT_PARAGRAPH_MAX_CHARS = 60
+
 
 export interface MessagesViewDependencies {
   state: TeamPageState
@@ -109,14 +102,15 @@ function isStructuredFailureReason(value: string): boolean {
 }
 
 export function createMessagesView(deps: MessagesViewDependencies): MessagesView {
-  let markMenu: HTMLElement | undefined
-  let selectedMark: { message: GroupMessage; text: string; startOffset: number; endOffset: number; rect: DOMRect; color: MessageHighlightColor } | undefined
-  let selectedHighlightColor: MessageHighlightColor = DEFAULT_MESSAGE_HIGHLIGHT_COLOR
-  let selectionDragActive = false
-  let ignoreNextDocumentClick = false
-  let markMenuUpdateTimer: number | undefined
-  const imageObjectUrls = new Map<string, string>()
-  const imageLoadPromises = new Map<string, Promise<string | undefined>>()
+  // What the chat area shows with no group open.
+  const startCards = createStartCards(deps)
+  // Image tiles and file chips under a message.
+  const attachmentsView = createMessageAttachmentsView({
+    loadImageAttachment: deps.loadImageAttachment,
+    showError: deps.showError,
+    resync: message => handleResyncMessage(message),
+    iconButton: (label, icon, onClick) => createMessageIconButton(label, icon, onClick),
+  })
   let timeDividers = new Map<string, HTMLElement>()
   // People who answered each question in the chat on screen, counted once per render.
   let replyCounts = new Map<string, number>()
@@ -154,13 +148,13 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     // OpenTeam's own requests (summaries, discussion turns) are not the user speaking, so they leave
     // the round's choices open.
     latestUserSeq = messages.reduce((latest, message) => message.type === 'user' && !isOpenTeamRequest(message) ? Math.max(latest, message.seq) : latest, 0)
-    releaseUnusedImageUrls(messages)
+    attachmentsView.releaseUnused(messages)
     const preserveScroll = deps.state.preserveNextMessageScroll
     const previousScrollTop = deps.messagesEl.scrollTop
     const shouldFollowNewReplies = isScrolledNearBottom(deps.messagesEl)
 
     if (!chat) {
-      reconcileChildren(deps.messagesEl, [noChatCard()])
+      reconcileChildren(deps.messagesEl, [startCards.noChatCard()])
       return
     }
 
@@ -382,13 +376,13 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
       details.append(summary, body)
       bubble.append(details)
     } else if (hasVisibleTextBody) bubble.append(body)
-    const foldToggle = message.type === 'assistant' && message.status === 'received' ? foldToKeyPoints(body, message.id) : undefined
+    const foldToggle = message.type === 'assistant' && message.status === 'received' ? foldToKeyPoints(body, message.id, expandedReplyIds) : undefined
     if (foldToggle) bubble.append(foldToggle)
-    const imageGrid = renderMessageImageGrid(message)
+    const imageGrid = attachmentsView.renderImageGrid(message)
     if (imageGrid) bubble.append(imageGrid)
-    const fileList = renderMessageFileList(message)
+    const fileList = attachmentsView.renderFileList(message)
     if (fileList) bubble.append(fileList)
-    const reviewSummary = renderOrchestrationReviewSummary(message)
+    const reviewSummary = renderOrchestrationReviewSummary(deps.getStore(), message)
     if (reviewSummary) bubble.append(reviewSummary)
     if (message.references?.length) bubble.append(referenceBox(message.references[0]))
 
@@ -455,184 +449,6 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
 
   function isRoundSummaryReply(message: GroupMessage): boolean {
     return message.type === 'assistant' && Boolean(message.sourceMessageId && summaryRequestsById.has(message.sourceMessageId))
-  }
-
-  // A reply that starts with key points shows only them until opened, when the rest is long. The
-  // reply is rendered whole and the rest hidden, so highlights and copying keep working.
-  function foldToKeyPoints(body: HTMLElement, messageId: string): HTMLButtonElement | undefined {
-    const parts = keyPointsParts([...body.children])
-    if (!parts) return undefined
-    body.classList.add('has-key-points')
-    const restLength = [...body.children].slice(parts).reduce((total, element) => total + (element.textContent?.trim().length ?? 0), 0)
-    if (restLength < KEY_POINTS_FOLD_MIN_CHARS) return undefined
-
-    const toggle = document.createElement('button')
-    toggle.type = 'button'
-    toggle.className = 'key-points-toggle'
-    const update = () => {
-      const expanded = expandedReplyIds.has(messageId)
-      body.classList.toggle('folded', !expanded)
-      toggle.setAttribute('aria-expanded', String(expanded))
-      toggle.textContent = expanded ? '收起' : '展开全文'
-    }
-    toggle.addEventListener('click', () => {
-      if (expandedReplyIds.has(messageId)) expandedReplyIds.delete(messageId)
-      else expandedReplyIds.add(messageId)
-      update()
-    })
-    update()
-    return toggle
-  }
-
-  // Marks a reply's key points and says how many leading elements they and anything before them
-  // take. They start the reply, or follow one short opening line (Gemini says who it is first).
-  function keyPointsParts(children: Element[]): number | undefined {
-    const atStart = keyPointsAt(children, 0)
-    if (atStart) return atStart
-    const opening = children[0]
-    if (opening?.tagName !== 'P' || (opening.textContent ?? '').trim().length > KEY_POINTS_OPENING_MAX_CHARS) return undefined
-    return keyPointsAt(children, 1)
-  }
-
-  // Key points that start at the given element: marks them and returns the position after them.
-  // Members write them as a heading and a list, a heading and lines, the heading and lines in one
-  // paragraph, or a heading and a few short paragraphs, one per point.
-  function keyPointsAt(children: Element[], start: number): number | undefined {
-    const first = children[start]
-    if (!first) return undefined
-    const isLines = (element: Element | undefined) => element?.tagName === 'P' && Boolean(element.querySelector('br'))
-    if (isKeyPointsHeading(first.textContent ?? '')) {
-      const second = children[start + 1]
-      if (second && (second.tagName === 'UL' || second.tagName === 'OL' || isLines(second))) {
-        first.classList.add('key-points-heading')
-        second.classList.add('key-points-list')
-        return start + 2
-      }
-      const points: Element[] = []
-      for (const element of children.slice(start + 1, start + 1 + KEY_POINT_PARAGRAPHS_MAX)) {
-        const length = (element.textContent ?? '').trim().length
-        if (element.tagName !== 'P' || length === 0 || length > KEY_POINT_PARAGRAPH_MAX_CHARS) break
-        points.push(element)
-      }
-      if (points.length === 0) return undefined
-      first.classList.add('key-points-heading')
-      for (const point of points) point.classList.add('key-points-list')
-      return start + 1 + points.length
-    }
-    if (isLines(first) && isKeyPointsHeading(firstLineText(first))) {
-      first.classList.add('key-points-list', 'key-points-block')
-      return start + 1
-    }
-    return undefined
-  }
-
-  function firstLineText(element: Element): string {
-    let text = ''
-    for (const node of element.childNodes) {
-      if (node.nodeName === 'BR') break
-      text += node.textContent ?? ''
-    }
-    return text
-  }
-
-  // No group open: say what a group is for and offer the three ways to start one. Someone with no
-  // group at all gets the steps to start with instead (onboardingGuide).
-  let noChatCardCache: { key: string; node: HTMLElement } | undefined
-  function noChatCard(): HTMLElement {
-    const hasChats = deps.getStore().chatOrder.length > 0
-    const key = `${hasChats}`
-    if (noChatCardCache?.key === key) return noChatCardCache.node
-    if (!hasChats) {
-      noChatCardCache = { key, node: onboardingGuide() }
-      return noChatCardCache.node
-    }
-    const card = deps.emptyCard(hasChats ? '选一个群聊，或者新建一个' : '建一个群，让几个 AI 一起干活', hasChats ? '左边是你的群聊。新建的话，可以按任务组队、从模板创建，或先建一个空白群聊。' : '按任务组队最省事：写下要做的事，AI 们自己认领职位。')
-    card.classList.add('no-chat-card')
-    if (deps.startNewChat) {
-      const actions = document.createElement('div')
-      actions.className = 'no-chat-actions'
-      actions.append(...newChatButtons())
-      // Inside the card box, under its text (emptyCard wraps the box in a centering container).
-      const box = card.querySelector('.empty-card') ?? card
-      box.append(actions)
-    }
-    noChatCardCache = { key, node: card }
-    return card
-  }
-
-  function newChatButtons(): HTMLButtonElement[] {
-    return ([['team', '按任务组队', true], ['template', '从模板创建', false], ['blank', '空白群聊', false]] as const).map(([kind, label, primary]) => {
-      const button = document.createElement('button')
-      button.type = 'button'
-      button.className = `btn${primary ? ' btn-primary' : ''}`
-      button.dataset.newChat = kind
-      button.textContent = label
-      button.addEventListener('click', () => deps.startNewChat?.(kind))
-      return button
-    })
-  }
-
-  // The first thing someone sees: members answer through the AI sites the user is signed in to,
-  // which nothing else says, then an optional check that they work, then a first group.
-  function onboardingGuide(): HTMLElement {
-    const wrapper = document.createElement('div')
-    wrapper.className = 'empty-state no-chat-card'
-    const guide = document.createElement('section')
-    guide.className = 'empty-card onboarding-guide'
-    guide.setAttribute('aria-labelledby', 'onboarding-title')
-    const heading = document.createElement('h3')
-    heading.id = 'onboarding-title'
-    heading.textContent = '开始使用 OpenTeam'
-    const intro = document.createElement('p')
-    intro.className = 'muted'
-    intro.textContent = '把你已经在用的 AI 组成一个群：它们用你在各网站上的登录回答，不需要 API Key。'
-    const steps = document.createElement('ol')
-    steps.className = 'onboarding-steps'
-
-    const sites = SITE_CHECK_SITES.map(site => {
-      const button = document.createElement('button')
-      button.type = 'button'
-      button.className = 'btn btn-small'
-      button.textContent = CHAT_SITE_INFO[site].label
-      button.addEventListener('click', () => deps.openSiteLogin?.(site))
-      return button
-    })
-    const check = document.createElement('button')
-    check.type = 'button'
-    check.className = 'btn btn-small'
-    check.textContent = '网站自检'
-    check.addEventListener('click', () => deps.startSiteCheck?.())
-
-    steps.append(
-      onboardingStep('登录要用的 AI 网站', '在新标签页打开网站并登录，用几个就登录几个。', sites),
-      onboardingStep('检查能不能用（可选）', '给每个网站发一句「只回复 OK」，看哪些已经能用。', deps.startSiteCheck ? [check] : []),
-      onboardingStep('建第一个群', '按任务组队最省事：写下要做的事，AI 们自己认领职位。也可以从模板创建，或建空白群聊自己挑成员。', deps.startNewChat ? newChatButtons() : []),
-    )
-    const tip = document.createElement('p')
-    tip.className = 'muted onboarding-tip'
-    tip.textContent = '在群里 @成员 让某一位回答，@所有人 让大家都回答。想加 API 模型或本机智能体，到设置里的「模型」。'
-    guide.append(heading, intro, steps, tip)
-    wrapper.append(guide)
-    return wrapper
-  }
-
-  function onboardingStep(title: string, hint: string, actions: HTMLElement[]): HTMLElement {
-    const step = document.createElement('li')
-    step.className = 'onboarding-step'
-    const name = document.createElement('div')
-    name.className = 'onboarding-step-title'
-    name.textContent = title
-    const text = document.createElement('p')
-    text.className = 'muted onboarding-step-hint'
-    text.textContent = hint
-    step.append(name, text)
-    if (actions.length > 0) {
-      const row = document.createElement('div')
-      row.className = 'onboarding-step-actions'
-      row.append(...actions)
-      step.append(row)
-    }
-    return step
   }
 
   // The group's discussion while it runs (turn, speaker, stop), and once it ends (one more round,
@@ -940,20 +756,6 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     body.append(document.createTextNode(content))
   }
 
-  function renderMessageImageGrid(message: GroupMessage): HTMLElement | undefined {
-    const attachments = message.attachments?.filter(attachment => attachment.type === 'image') ?? []
-    if (attachments.length === 0) return undefined
-
-    const grid = document.createElement('div')
-    grid.className = `message-image-grid image-count-${Math.min(attachments.length, 4)}`
-    // Uploads carry no dimensions, so they keep their own size instead of filling the bubble.
-    if (attachments.every(attachment => attachment.source === 'user-upload')) grid.classList.add('message-image-grid-uploads')
-    for (const attachment of attachments) {
-      grid.append(renderImageAttachment(message, attachment))
-    }
-    return grid
-  }
-
   function compareButton(message: GroupMessage): HTMLButtonElement | undefined {
     const chat = deps.getCurrentChat()
     if (message.type === 'user' && chat && deps.isTeamInvitation?.(chat, message.id)) {
@@ -978,145 +780,6 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
       deps.openReplyComparison?.(message.id)
     })
     return button
-  }
-
-  function renderMessageFileList(message: GroupMessage): HTMLElement | undefined {
-    const files = message.attachments?.filter((attachment): attachment is MessageFileAttachment => attachment.type === 'file') ?? []
-    if (files.length === 0) return undefined
-    const list = document.createElement('div')
-    list.className = 'message-file-list'
-    for (const file of files) {
-      const chip = document.createElement('button')
-      chip.type = 'button'
-      chip.className = 'message-file-chip'
-      chip.title = `下载 ${file.fileName}`
-      const icon = document.createElement('span')
-      icon.className = 'message-file-icon'
-      icon.textContent = file.fileName.match(/\.([a-z0-9]{1,5})$/i)?.[1]?.toUpperCase() ?? 'TXT'
-      const name = document.createElement('span')
-      name.className = 'message-file-name'
-      name.textContent = file.fileName
-      const size = document.createElement('span')
-      size.className = 'message-file-size'
-      size.textContent = formatBytes(file.size)
-      chip.append(icon, name, size)
-      chip.addEventListener('click', event => {
-        event.stopPropagation()
-        const url = URL.createObjectURL(new Blob([file.text], { type: file.mimeType || 'text/plain' }))
-        const link = document.createElement('a')
-        link.href = url
-        link.download = file.fileName
-        link.click()
-        window.setTimeout(() => URL.revokeObjectURL(url), 1000)
-      })
-      list.append(chip)
-    }
-    return list
-  }
-
-  function renderImageAttachment(message: GroupMessage, attachment: MessageImageAttachment): HTMLElement {
-    const tile = document.createElement('div')
-    tile.className = `message-image-tile ${attachment.status === 'error' ? 'message-image-error' : 'message-image-loading'}`
-
-    if (attachment.status === 'error') {
-      const errorText = document.createElement('span')
-      errorText.textContent = attachment.error || '图片获取失败'
-      const retry = document.createElement('button')
-      retry.type = 'button'
-      retry.className = 'message-image-retry'
-      retry.textContent = '重新同步'
-      retry.addEventListener('click', event => {
-        event.stopPropagation()
-        handleResyncMessage(message)
-      })
-      tile.append(errorText, retry)
-      return tile
-    }
-
-    const preview = document.createElement('button')
-    preview.type = 'button'
-    preview.className = 'message-image-preview'
-    preview.setAttribute('aria-label', '预览图片')
-    preview.disabled = true
-    const image = document.createElement('img')
-    image.alt = attachment.alt || (attachment.source === 'user-upload' ? attachment.fileName : undefined) || 'ChatGPT 生成图片'
-    image.loading = 'lazy'
-    image.decoding = 'async'
-    if (attachment.width) image.width = attachment.width
-    if (attachment.height) image.height = attachment.height
-    preview.append(image)
-
-    const download = createMessageIconButton('下载图片', 'download', () => {
-      downloadImageAttachment(attachment).catch(error => deps.showError(error instanceof Error ? error.message : String(error)))
-    })
-    download.classList.add('message-image-download')
-    download.disabled = true
-    tile.append(preview, download)
-
-    loadImageObjectUrl(attachment.id)
-      .then(url => {
-        if (!url || !tile.isConnected) {
-          if (url && !tile.isConnected) releaseImageUrl(attachment.id)
-          return
-        }
-        image.src = url
-        preview.disabled = false
-        download.disabled = false
-        tile.classList.remove('message-image-loading')
-        preview.addEventListener('click', () => window.open(url, '_blank', 'noopener'))
-      })
-      .catch(error => {
-        tile.className = 'message-image-tile message-image-error'
-        tile.replaceChildren()
-        const errorText = document.createElement('span')
-        errorText.textContent = error instanceof Error ? error.message : '图片读取失败'
-        tile.append(errorText)
-      })
-
-    return tile
-  }
-
-  async function loadImageObjectUrl(attachmentId: string): Promise<string | undefined> {
-    const cached = imageObjectUrls.get(attachmentId)
-    if (cached) return cached
-    const pending = imageLoadPromises.get(attachmentId)
-    if (pending) return pending
-
-    const load = (async () => {
-      const record = await deps.loadImageAttachment?.(attachmentId)
-      if (!record) throw new Error('本地图片不可用，请重新同步')
-      const url = URL.createObjectURL(record.blob)
-      imageObjectUrls.set(attachmentId, url)
-      return url
-    })().finally(() => {
-      imageLoadPromises.delete(attachmentId)
-    })
-    imageLoadPromises.set(attachmentId, load)
-    return load
-  }
-
-  async function downloadImageAttachment(attachment: MessageImageAttachment): Promise<void> {
-    const url = await loadImageObjectUrl(attachment.id)
-    if (!url) throw new Error('本地图片不可用，请重新同步')
-    const anchor = document.createElement('a')
-    anchor.href = url
-    anchor.download = attachment.fileName || 'chatgpt-image.png'
-    anchor.rel = 'noreferrer'
-    anchor.click()
-  }
-
-  function releaseUnusedImageUrls(messages: GroupMessage[]): void {
-    const activeIds = new Set(messages.flatMap(message => message.attachments ?? []).filter(attachment => attachment.type === 'image' && attachment.status === 'ready').map(attachment => attachment.id))
-    for (const attachmentId of imageObjectUrls.keys()) {
-      if (!activeIds.has(attachmentId)) releaseImageUrl(attachmentId)
-    }
-  }
-
-  function releaseImageUrl(attachmentId: string): void {
-    const url = imageObjectUrls.get(attachmentId)
-    if (!url) return
-    URL.revokeObjectURL(url)
-    imageObjectUrls.delete(attachmentId)
   }
 
   function renderSavedHighlights(body: HTMLElement, message: GroupMessage): void {
@@ -1228,67 +891,6 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     await navigator.clipboard.writeText(message.content)
   }
 
-  function renderOrchestrationMessageLabel(message: GroupMessage): HTMLElement | undefined {
-    if (!message.orchestrationKind) return undefined
-    const label = document.createElement('div')
-    label.className = `orchestration-message-label orchestration-message-${message.orchestrationKind}`
-    label.textContent = orchestrationMessageLabelText(message)
-    return label
-  }
-
-  function orchestrationMessageLabelText(message: GroupMessage): string {
-    const parts = ['编排']
-    if (message.orchestrationStageIndex !== undefined) parts.push(`第 ${message.orchestrationStageIndex + 1} 步`)
-    parts.push(orchestrationKindLabel(message.orchestrationKind))
-    return parts.join(' · ')
-  }
-
-  function orchestrationKindLabel(kind: GroupMessage['orchestrationKind']): string {
-    if (kind === 'task') return '任务'
-    if (kind === 'role') return '成员'
-    if (kind === 'review') return '复核'
-    return '状态'
-  }
-
-  function renderOrchestrationReviewSummary(message: GroupMessage): HTMLElement | undefined {
-    if (message.orchestrationKind !== 'review') return undefined
-    const result = findReviewResultForMessage(message)
-    if (!result) return undefined
-    const summary = document.createElement('div')
-    summary.className = 'orchestration-review-summary'
-    summary.append(reviewSummaryLine('决策', reviewDecisionLabel(result.decision)))
-    if (result.reason) summary.append(reviewSummaryLine('原因', result.reason))
-    if (result.failedCriteria.length > 0) summary.append(reviewSummaryLine('未通过', result.failedCriteria.join('、')))
-    if (result.nextRoundInstruction) summary.append(reviewSummaryLine('重试说明', result.nextRoundInstruction))
-    return summary
-  }
-
-  function findReviewResultForMessage(message: GroupMessage): OrchestrationReviewResult | undefined {
-    if (!message.orchestrationRunId) return undefined
-    const run = deps.getStore().orchestrationRunsById[message.orchestrationRunId]
-    for (const stageRun of run?.stageRuns ?? []) {
-      const result = stageRun.reviewResults?.find(result => result.messageId === message.id)
-      if (result) return result
-    }
-    return undefined
-  }
-
-  function reviewSummaryLine(label: string, value: string): HTMLElement {
-    const line = document.createElement('div')
-    line.className = 'orchestration-review-line'
-    const labelEl = document.createElement('span')
-    labelEl.textContent = `${label}：`
-    const valueEl = document.createElement('span')
-    valueEl.textContent = value
-    line.append(labelEl, valueEl)
-    return line
-  }
-
-  function reviewDecisionLabel(decision: OrchestrationReviewResult['decision']): string {
-    if (decision === 'pass') return '通过'
-    return '不通过'
-  }
-
   function messageSignature(message: GroupMessage, showName = true, showAvatar = true): string {
     return JSON.stringify({
       type: message.type,
@@ -1314,7 +916,7 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
       orchestrationStageId: message.orchestrationStageId,
       orchestrationStageIndex: message.orchestrationStageIndex,
       orchestrationKind: message.orchestrationKind,
-      orchestrationReviewResult: findReviewResultForMessage(message),
+      orchestrationReviewResult: findReviewResultForMessage(deps.getStore(), message),
       highlights: deps.getStore().messageHighlightsById?.[message.id],
       compareCount: message.type === 'user' ? replyCounts.get(message.id) ?? 0 : undefined,
       summarized: message.type === 'user' ? summarizedQuestionIds.has(message.id) : undefined,
@@ -1344,7 +946,7 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
       orchestrationStageId: message.orchestrationStageId,
       orchestrationStageIndex: message.orchestrationStageIndex,
       orchestrationKind: message.orchestrationKind,
-      orchestrationReviewResult: findReviewResultForMessage(message),
+      orchestrationReviewResult: findReviewResultForMessage(deps.getStore(), message),
       highlights: deps.getStore().messageHighlightsById?.[message.id],
       showName,
       showAvatar,
@@ -1533,201 +1135,6 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     })
   }
 
-  deps.messagesEl.addEventListener('mousedown', beginSelectionDrag)
-  deps.messagesEl.addEventListener('pointerdown', beginSelectionDrag)
-  deps.messagesEl.addEventListener('dragstart', cancelSelectionMarking)
-  document.addEventListener('mouseup', finishSelectionDrag)
-  document.addEventListener('pointerup', finishSelectionDrag)
-
-  document.addEventListener('selectionchange', () => {
-    if (selectionDragActive) return
-    const selection = window.getSelection()
-    if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
-      hideMarkMenu()
-      return
-    }
-    scheduleMarkMenuFromSelection()
-  })
-
-  document.addEventListener('click', event => {
-    if (ignoreNextDocumentClick) {
-      ignoreNextDocumentClick = false
-      return
-    }
-    if (markMenu?.contains(event.target as Node)) return
-    const target = event.target as Element | null
-    if (target?.closest('.message-body')) return
-    hideMarkMenu()
-  })
-
-  document.addEventListener('keydown', event => {
-    if (event.key === 'Escape') hideMarkMenu()
-  })
-
-  function beginSelectionDrag(event: MouseEvent | PointerEvent): void {
-    const target = event.target as Element | null
-    if (!target || target.closest('button, input, textarea, select, a, [role="button"]')) return
-    if (!deps.messagesEl.contains(target)) return
-    selectionDragActive = true
-    clearMarkMenuUpdate()
-    hideMarkMenu()
-  }
-
-  function finishSelectionDrag(event: MouseEvent | PointerEvent): void {
-    const target = event.target as Node | null
-    if (!selectionDragActive && (!target || !deps.messagesEl.contains(target))) return
-    selectionDragActive = false
-    ignoreNextDocumentClick = true
-    scheduleMarkMenuFromSelection()
-  }
-
-  function cancelSelectionMarking(): void {
-    selectionDragActive = false
-    ignoreNextDocumentClick = false
-    clearMarkMenuUpdate()
-    hideMarkMenu()
-  }
-
-  function scheduleMarkMenuFromSelection(): void {
-    clearMarkMenuUpdate()
-    markMenuUpdateTimer = window.setTimeout(() => {
-      markMenuUpdateTimer = undefined
-      showMarkMenuFromSelection()
-    }, MARK_MENU_SELECTION_SETTLE_DELAY_MS)
-  }
-
-  function clearMarkMenuUpdate(): void {
-    if (markMenuUpdateTimer === undefined) return
-    window.clearTimeout(markMenuUpdateTimer)
-    markMenuUpdateTimer = undefined
-  }
-
-  function showMarkMenuFromSelection(): void {
-    const selection = window.getSelection()
-    if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
-      hideMarkMenu()
-      return
-    }
-
-    const range = selection.getRangeAt(0)
-    const body = closestMessageBody(range.commonAncestorContainer)
-    if (!body || !deps.messagesEl.contains(body)) {
-      hideMarkMenu()
-      return
-    }
-
-    const article = body.closest<HTMLElement>('.message-row[data-message-id]')
-    const messageId = article?.dataset.messageId
-    const message = messageId ? deps.getStore().messagesById[messageId] : undefined
-    const selectedText = selection.toString().trim()
-    if (!message || !selectedText) {
-      hideMarkMenu()
-      return
-    }
-
-    const startOffset = message.content.indexOf(selectedText)
-    if (startOffset < 0) {
-      hideMarkMenu()
-      return
-    }
-
-    selectedMark = {
-      message,
-      text: selectedText,
-      startOffset,
-      endOffset: startOffset + selectedText.length,
-      rect: rangeRect(range),
-      color: selectedHighlightColor,
-    }
-    renderMarkMenu()
-  }
-
-  function renderMarkMenu(): void {
-    if (!selectedMark) return
-    markMenu?.remove()
-    markMenu = document.createElement('div')
-    markMenu.className = 'mark-menu'
-    const colorRow = document.createElement('div')
-    colorRow.className = 'mark-color-row'
-    colorRow.setAttribute('aria-label', '高亮颜色')
-    for (const color of MESSAGE_HIGHLIGHT_COLORS) {
-      colorRow.append(markColorButton(color.value, color.label))
-    }
-    markMenu.append(
-      colorRow,
-      markMenuButton('高亮', '高亮', () => applySelectedMark('highlight')),
-      markMenuButton('加入笔记', '加入笔记', () => applySelectedMark('note')),
-      markMenuButton('高亮并加入笔记', '高亮并加入笔记', () => applySelectedMark('both')),
-    )
-    document.body.append(markMenu)
-    const menuRect = markMenu.getBoundingClientRect()
-    const menuHeight = menuRect.height || markMenu.offsetHeight || MARK_MENU_FALLBACK_HEIGHT_PX
-    const menuWidth = menuRect.width || markMenu.offsetWidth
-    const preferredTop = selectedMark.rect.top - menuHeight - MARK_MENU_SELECTION_GAP_PX
-    const top = preferredTop >= 8
-      ? preferredTop
-      : Math.min(Math.max(8, selectedMark.rect.bottom + MARK_MENU_SELECTION_GAP_PX), window.innerHeight - menuHeight - 8)
-    const centeredLeft = selectedMark.rect.left + selectedMark.rect.width / 2 - menuWidth / 2
-    const left = Math.min(Math.max(8, centeredLeft), window.innerWidth - menuWidth - 8)
-    markMenu.style.top = `${top}px`
-    markMenu.style.left = `${left}px`
-  }
-
-  function markMenuButton(text: string, label: string, onClick: () => void): HTMLButtonElement {
-    const button = document.createElement('button')
-    button.type = 'button'
-    button.textContent = text
-    button.setAttribute('aria-label', label)
-    button.addEventListener('click', event => {
-      event.preventDefault()
-      event.stopPropagation()
-      onClick()
-    })
-    return button
-  }
-
-  function markColorButton(color: MessageHighlightColor, label: string): HTMLButtonElement {
-    const button = document.createElement('button')
-    button.type = 'button'
-    button.className = 'mark-color-btn'
-    button.setAttribute('aria-label', `高亮颜色：${label}`)
-    button.setAttribute('aria-pressed', String(selectedMark?.color === color))
-    button.style.setProperty('--mark-color-rgb', messageHighlightColorRgb(color))
-    button.addEventListener('click', event => {
-      event.preventDefault()
-      event.stopPropagation()
-      selectedHighlightColor = color
-      if (selectedMark) selectedMark.color = color
-      renderMarkMenu()
-    })
-    return button
-  }
-
-  function applySelectedMark(action: 'highlight' | 'note' | 'both'): void {
-    const mark = selectedMark
-    if (!mark) return
-    if (action === 'note' || action === 'both') deps.insertTextIntoActiveNote?.(mark.text)
-    if (action === 'highlight' || action === 'both') {
-      deps.runCommand('GROUP_MESSAGE_HIGHLIGHT_CREATE', {
-        chatId: mark.message.chatId,
-        messageId: mark.message.id,
-        text: mark.text,
-        startOffset: mark.startOffset,
-        endOffset: mark.endOffset,
-        color: mark.color,
-      }).catch(error => deps.showError(error instanceof Error ? error.message : String(error)))
-    }
-    window.getSelection()?.removeAllRanges()
-    hideMarkMenu()
-  }
-
-  function hideMarkMenu(): void {
-    clearMarkMenuUpdate()
-    selectedMark = undefined
-    markMenu?.remove()
-    markMenu = undefined
-  }
-
   function siteBadge(role: GroupRole): HTMLElement {
     const badge = document.createElement('span')
     badge.className = `role-site-badge ${role.modelSource === 'external' ? 'site-pill-external' : `site-pill-${role.chatSite ?? 'gemini'}`}`
@@ -1746,63 +1153,7 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     return roleMentionLabelOptionsFromSettings(deps.getStore().settings)
   }
 
+  registerSelectionMarkMenu(deps)
+
   return { renderMessages }
-}
-
-function closestMessageBody(node: Node): HTMLElement | undefined {
-  const element = node.nodeType === Node.ELEMENT_NODE ? node as Element : node.parentElement
-  return element?.closest<HTMLElement>('.message-body') ?? undefined
-}
-
-function rangeRect(range: Range): DOMRect {
-  if (typeof range.getBoundingClientRect === 'function') return range.getBoundingClientRect()
-  return new DOMRect(8, 8, 1, 1)
-}
-
-function applyHighlightsToBody(body: HTMLElement, highlights: MessageHighlight[]): void {
-  const bodyText = body.textContent ?? ''
-  const normalized = highlights
-    .map(highlight => {
-      const renderedStart = bodyText.slice(highlight.startOffset, highlight.endOffset) === highlight.text ? highlight.startOffset : bodyText.indexOf(highlight.text)
-      return renderedStart >= 0 ? { ...highlight, startOffset: renderedStart, endOffset: renderedStart + highlight.text.length } : undefined
-    })
-    .filter((highlight): highlight is MessageHighlight => Boolean(highlight))
-    .sort((left, right) => left.startOffset - right.startOffset)
-
-  let cursor = 0
-  for (const highlight of normalized) {
-    if (highlight.startOffset < cursor) continue
-    wrapTextRange(body, highlight.startOffset, highlight.endOffset, highlight.color)
-    cursor = highlight.endOffset
-  }
-}
-
-function wrapTextRange(root: HTMLElement, startOffset: number, endOffset: number, color: MessageHighlight['color']): void {
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
-  let textPosition = 0
-  const ranges: Array<{ node: Text; start: number; end: number }> = []
-
-  while (walker.nextNode()) {
-    const node = walker.currentNode as Text
-    const nodeStart = textPosition
-    const nodeEnd = nodeStart + node.data.length
-    if (nodeEnd > startOffset && nodeStart < endOffset) {
-      ranges.push({
-        node,
-        start: Math.max(0, startOffset - nodeStart),
-        end: Math.min(node.data.length, endOffset - nodeStart),
-      })
-    }
-    textPosition = nodeEnd
-  }
-
-  for (const range of ranges.reverse()) {
-    const selected = range.node.splitText(range.start)
-    selected.splitText(range.end - range.start)
-    const mark = document.createElement('span')
-    mark.className = 'message-highlight'
-    mark.style.setProperty('--message-highlight-rgb', messageHighlightColorRgb(color))
-    selected.parentNode?.insertBefore(mark, selected)
-    mark.append(selected)
-  }
 }
