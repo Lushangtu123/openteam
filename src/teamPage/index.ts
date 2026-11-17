@@ -28,6 +28,8 @@ import { createTeamFormationView } from './teamFormationView'
 import { createProjectView } from './projectView'
 import { createSiteCheckView } from './siteCheckView'
 import { createUpdateNotice } from './updateNotice'
+import { exportDiagnostics, saveTextFile } from './diagnosticsExport'
+import type { RecentLogEntry } from '../shared/logger'
 import { UPDATE_CHECK_STORAGE_KEY, type UpdateCheckState } from '../shared/updateCheck'
 import { CHAT_SITE_INFO } from '../group/chatSites'
 import { createMessagesView } from './messagesView'
@@ -933,6 +935,21 @@ async function boot(): Promise<void> {
   showAiPagesEl.addEventListener('click', () => {
     settingsMenuEl.hidden = true
     settingsButtonEl.setAttribute('aria-expanded', 'false')
+  })
+  document.querySelector<HTMLButtonElement>('#export-diagnostics')?.addEventListener('click', () => {
+    exportDiagnostics({
+      getStore: () => store,
+      extensionVersion: chrome.runtime.getManifest().version,
+      userAgent: navigator.userAgent,
+      now: () => Date.now(),
+      getBackgroundLogs: async () => {
+        const response = await sendRuntimeMessage('DIAGNOSTICS_LOGS_GET') as { ok?: boolean; error?: string; logs?: RecentLogEntry[] }
+        if (response.ok === false) throw new Error(response.error || '后台没有回应')
+        return Array.isArray(response.logs) ? response.logs : []
+      },
+      getUpdateState: async () => (await chrome.storage.local.get(UPDATE_CHECK_STORAGE_KEY))[UPDATE_CHECK_STORAGE_KEY],
+      save: saveTextFile,
+    }).catch(error => showError(error instanceof Error ? error.message : String(error)))
   })
   document.querySelector<HTMLButtonElement>('#start-site-check')?.addEventListener('click', () => {
     settingsMenuEl.hidden = true

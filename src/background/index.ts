@@ -41,6 +41,8 @@ import { createLogger } from '../shared/logger'
 import type { BackgroundToRoleMessage } from '../group/runtimeProtocol'
 import { createControlActionExecutor } from './controlHandlers'
 import { createSiteCheckHandlers } from './siteCheckHandlers'
+import { keepLogsAcrossRestarts } from './diagnosticsLogs'
+import { recentLogs } from '../shared/logger'
 import { createControlClient } from './controlClient'
 import { createTeamPageShower } from './teamPageTab'
 import { createImageAttachmentService } from './imageAttachments'
@@ -50,6 +52,8 @@ import { createIndexedDbImageAttachmentRepository } from '../shared/imageAttachm
 
 const runtimeFrames = createRuntimeFrameRegistry()
 const log = createLogger('background')
+// 导出诊断信息 reads these; they outlive the worker in session storage.
+void keepLogsAcrossRestarts(chrome.storage?.session)
 const CONTROL_KEEPALIVE_ALARM = 'openteam-control-keepalive'
 const CONTROL_KEEPALIVE_PERIOD_MINUTES = 0.4
 
@@ -223,6 +227,8 @@ function sendResponseSafely(sendResponse: (response?: unknown) => void, response
 
 const routeMessage = createMessageRouter([
   { type: 'GROUP_STORE_GET', handler: handleStoreGet },
+  // The background's recent log entries, for 导出诊断信息 (already cleaned: src/shared/logger.ts).
+  { type: 'DIAGNOSTICS_LOGS_GET', handler: async () => ({ ok: true, logs: recentLogs() }) },
   ...createChatHandlers({ broadcastStoreUpdated, getChatStatusFromRoles, imageAttachments: imageAttachmentRepository, log, newId, now, runtimeFrames }),
   { type: 'GROUP_SETTINGS_UPDATE', handler: handleSettingsUpdate },
   ...createBackupHandlers({ broadcastStoreUpdated, log, imageAttachments: imageAttachmentRepository }),
