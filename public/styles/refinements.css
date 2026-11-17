@@ -1029,14 +1029,18 @@
   white-space: nowrap;
 }
 
-/* The stop button under a reply being written: the icon and the word. */
+/* The stop button under a reply being written, and 采纳 under a round summary: the icon and the
+   word, kept on one line (the Grok look puts the tools beside a reply, where a narrow chat squeezed
+   the word into two lines). */
 :root[data-theme] .message-tool-btn.message-tool-btn-labeled {
   width: auto;
+  flex: none;
   gap: 4px;
   padding: 0 10px 0 8px;
   opacity: 1;
   font-size: 12.5px;
   font-weight: 500;
+  white-space: nowrap;
 }
 
 :root[data-theme] .message-tool-btn-labeled .ui-icon {

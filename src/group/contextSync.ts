@@ -1,6 +1,6 @@
 import { normalizeLanguage } from '../shared/i18n'
 import { describeAttachments } from './messageUploads'
-import { isOpenTeamRequest, isRoundSummaryMessage } from './roundSummary'
+import { isFailedReply, isOpenTeamRequest, isRoundSummaryMessage } from './roundSummary'
 import type { GroupChat, GroupMessage, GroupRole, OpenTeamLanguage } from './types'
 
 export interface UnsyncedContextResult {
@@ -25,7 +25,7 @@ export function getUnsyncedMessagesForRole(
     .filter(message => isMessageVisibleToRole(message, role.id))
     // Round summaries are for the user; they repeat what members already said. Discussion turn
     // requests are OpenTeam's own instructions.
-    .filter(message => !isRoundSummaryMessage(message, id => messageById.get(id)) && !isOpenTeamRequest(message))
+    .filter(message => !isRoundSummaryMessage(message, id => messageById.get(id)) && !isOpenTeamRequest(message) && !isFailedReply(message))
     .filter(message => Boolean(message.content.trim()))
 }
 

@@ -464,6 +464,20 @@ describe('context sync utilities', () => {
     expect(getContextCursorAfterAck(chat)).toBe(4)
   })
 
+  it("does not sync another member's failed reply, which is OpenTeam's note and not something it said", () => {
+    const chat = makeChat('chat-1')
+    chat.messageIds = ['msg-1', 'msg-2', 'msg-3']
+    const role = makeRole('role-b', 'B')
+    const failed = { ...makeMessage('msg-1', 1, 'assistant', '回复失败：HTTP 503：busy\n\n可以点击下方的重新回复按钮再试一次。'), roleId: 'role-a', roleName: 'A', status: 'error' as const }
+    const answered = { ...makeMessage('msg-2', 2, 'assistant', 'A 的真实回答'), roleId: 'role-a', roleName: 'A' }
+    const current = makeMessage('msg-3', 3, 'user', '继续')
+
+    const context = buildUnsyncedContext(chat, role, [failed, answered, current], current)
+
+    expect(context.messages.map(message => message.id)).toEqual(['msg-2'])
+    expect(context.contextText).not.toContain('回复失败')
+  })
+
   it('does not sync user messages that were directed to other roles', () => {
     const chat = makeChat('chat-1')
     chat.messageIds = ['msg-1', 'msg-2']

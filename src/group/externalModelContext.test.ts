@@ -29,6 +29,26 @@ describe('external model context', () => {
     expect(prompt.content).not.toContain('设计师不该自动进入专家上下文')
   })
 
+  it("leaves its own failed replies out of an API member's context, so it does not learn to write them", () => {
+    const store = createDefaultStore()
+    const chat = makeChat('collaborative')
+    const engineer = makeRole('role-engineer', '工程师')
+    const messages = [
+      makeUserMessage('msg-1', 1, '第一个问题', ['role-engineer']),
+      { ...makeAssistantMessage('msg-2', 2, engineer, '回复失败：HTTP 503：This model is currently experiencing high demand.\n\n可以点击下方的重新回复按钮再试一次。'), status: 'error' as const },
+      makeUserMessage('msg-3', 3, '第二个问题', ['role-engineer']),
+      makeAssistantMessage('msg-4', 4, engineer, '第二个问题的真实回答'),
+      makeUserMessage('msg-5', 5, '第三个问题', ['role-engineer']),
+    ]
+    install(store, chat, [engineer], messages)
+
+    const prompt = buildExternalModelPrompt(store, chat, engineer, messages[4], [engineer])
+
+    expect(prompt.content).not.toContain('回复失败')
+    expect(prompt.content).toContain('第一个问题')
+    expect(prompt.content).toContain('第二个问题的真实回答')
+  })
+
   it('uses the full group timeline in collaborative mode', () => {
     const store = createDefaultStore()
     const chat = makeChat('collaborative')

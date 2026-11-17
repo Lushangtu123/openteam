@@ -63,6 +63,12 @@ export function isOpenTeamRequest(message: GroupMessage | undefined): boolean {
   return message?.type === 'user' && Boolean(message.roundSummaryOf || message.discussionTurnOf || message.projectRequest || message.crossReviewOf)
 }
 
+// A reply that failed holds OpenTeam's note about the failure ("回复失败：…"), not anything the member
+// said. Given back to a model as its own words, it teaches the model to write such notes itself.
+export function isFailedReply(message: GroupMessage | undefined): boolean {
+  return message?.type === 'assistant' && message.status === 'error'
+}
+
 // A summary request, or the summary written in answer to one.
 export function isRoundSummaryMessage(message: GroupMessage, messageById: (id: string) => GroupMessage | undefined): boolean {
   if (isRoundSummaryRequest(message)) return true
