@@ -215,17 +215,29 @@ export function summaryConsensus(content: string): string[] {
   return points
 }
 
-// The decision text offered when the user adopts a summary: what was asked, and what everyone agreed
-// on; the whole summary when it has no agreed points.
+// The decision text offered when the user adopts a summary: what everyone agreed on, as one sentence,
+// after the question when that is short enough to name the topic (a long question usually repeats
+// the decision, and would crowd it out); the whole summary when it has no agreed points.
+export const ADOPTED_TOPIC_MAX_CHARS = 40
+
 export function adoptedSummaryText(question: string | undefined, summary: string, languageInput: OpenTeamLanguage | undefined): string {
   const en = normalizeLanguage(languageInput) === 'en'
-  const points = summaryConsensus(summary)
-  const topic = (question ?? '').replace(/\s+/g, ' ').trim()
-  const shortTopic = [...topic].length > 60 ? `${[...topic].slice(0, 60).join('')}…` : topic
+  const points = summaryConsensus(summary).map(withoutAttribution).filter(Boolean)
   if (points.length === 0) return summary.trim()
+  const topic = (question ?? '').replace(/\s+/g, ' ').trim()
   const joined = points.map(point => point.replace(/[。.；;]+$/, '')).join(en ? '; ' : '；')
-  if (!shortTopic) return en ? `${joined}.` : `${joined}。`
-  return en ? `On "${shortTopic}": ${joined}.` : `关于「${shortTopic}」：${joined}。`
+  if (!topic || [...topic].length > ADOPTED_TOPIC_MAX_CHARS) return en ? `${joined}.` : `${joined}。`
+  return en ? `On "${topic}": ${joined}.` : `关于「${topic}」：${joined}。`
+}
+
+// A summary names whose view each point is ("A and B both confirm: …", as it is asked to); a decision
+// is the user's, so that lead-in goes.
+const ATTRIBUTION_ZH = /^[^：:。！？\n]{0,40}?(?:均|都|一致|共同|皆)[^：:。！？\n]{0,6}?(?:认为|同意|复述|表示|指出|确认|主张|建议|提到|赞成|支持|说)了?[：:，,]\s*/
+const ATTRIBUTION_EN = /^[^:.!?\n]{0,60}?\b(?:both|all|everyone|each)\b[^:.!?\n]{0,20}?\b(?:agree|agreed|agrees|confirm|confirmed|say|said|note|noted|think|thinks)\b(?:\s+that\s+|\s*[:,]\s*)/i
+
+function withoutAttribution(point: string): string {
+  const stripped = point.replace(ATTRIBUTION_ZH, '').replace(ATTRIBUTION_EN, '').trim()
+  return stripped || point
 }
 
 export function trimRoundReply(content: string, maxChars: number, en: boolean): string {

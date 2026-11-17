@@ -165,9 +165,22 @@ describe('adopting a summary as a decision', () => {
   it('offers what was asked and what everyone agreed on, as one sentence', () => {
     expect(adoptedSummaryText('闰年怎么规定？', summary, 'zh-CN')).toBe('关于「闰年怎么规定？」：普通年份能被 4 整除即为闰年；世纪年份必须能被 400 整除才是闰年。')
     expect(adoptedSummaryText('When do we ship?', '**Agreed**\n- Ship on Friday.\n- Freeze on Wednesday', 'en')).toBe('On "When do we ship?": Ship on Friday; Freeze on Wednesday.')
-    // A long question is cut; no question, no prefix.
-    expect(adoptedSummaryText('问'.repeat(80), summary, 'zh-CN')).toMatch(/^关于「问{60}…」：/)
+    // A long question is left out: it would crowd the decision out. No question, no prefix either.
+    expect(adoptedSummaryText('问'.repeat(41), summary, 'zh-CN')).toBe('普通年份能被 4 整除即为闰年；世纪年份必须能被 400 整除才是闰年。')
+    expect(adoptedSummaryText('问'.repeat(40), summary, 'zh-CN')).toMatch(/^关于「问{40}」：/)
     expect(adoptedSummaryText(undefined, summary, 'zh-CN')).toBe('普通年份能被 4 整除即为闰年；世纪年份必须能被 400 整除才是闰年。')
+  })
+
+  it('leaves out who said it: the summary names members, the decision is the user\'s', () => {
+    // The summaries written in the live test (2026-11-17).
+    const restated = '**共识**\n\n- 实测DeepSeek与Kimi均复述：青柠项目日志统一写到 /var/log/qingning/ 目录，日志保留 23 天。\n\n**分歧**\n\n- 无明显分歧'
+    const question = '青柠项目刚定了两条约定：日志统一写到 /var/log/qingning/ 目录，日志保留 23 天。请用两句话复述这两条约定，不要加别的内容。'
+    expect(adoptedSummaryText(question, restated, 'zh-CN')).toBe('青柠项目日志统一写到 /var/log/qingning/ 目录，日志保留 23 天。')
+    const listed = '**共识**\n- 智能体甲和智能体乙都确认：`/Users/me/test` 里只有 1 个文件，就是 `hello.md`。两人都把隐藏文件算进去查过了。\n- 两人都只做了只读的列目录操作，没有创建、修改或删除任何文件。\n\n**分歧**\n- 无明显分歧。'
+    expect(adoptedSummaryText('列出文件', listed, 'zh-CN')).toBe('关于「列出文件」：/Users/me/test 里只有 1 个文件，就是 hello.md。两人都把隐藏文件算进去查过了；两人都只做了只读的列目录操作，没有创建、修改或删除任何文件。')
+    expect(adoptedSummaryText('Ship date?', '**Agreed**\n- Kimi and Grok both agree that we ship on Friday\n- Everyone confirmed: no IE support', 'en')).toBe('On "Ship date?": we ship on Friday; no IE support.')
+    // Words like these inside a point, not leading it, stay.
+    expect(adoptedSummaryText('用什么？', '**共识**\n- 前端和后端都用 Go：省事', 'zh-CN')).toBe('关于「用什么？」：前端和后端都用 Go：省事。')
   })
 
   it('offers the whole summary when nothing was agreed, for the user to cut down', () => {
