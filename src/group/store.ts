@@ -870,6 +870,7 @@ function normalizeExternalModelRecord(raw: unknown): Record<string, ExternalMode
       continue
     }
     if (!id || !name || !baseUrl || !apiKey || !modelName || !format) continue
+    const fallbackModelName = readTrimmedString(value.fallbackModelName)
     normalized[id] = {
       id,
       name,
@@ -877,6 +878,7 @@ function normalizeExternalModelRecord(raw: unknown): Record<string, ExternalMode
       baseUrl,
       apiKey,
       modelName,
+      ...(fallbackModelName ? { fallbackModelName } : {}),
       createdAt,
       updatedAt,
     }

@@ -484,3 +484,22 @@ describe('a backup model in the form', () => {
     expect($<HTMLInputElement>('#external-model-fallback-name').value).toBe('gemini-flash-lite-latest')
   })
 })
+
+describe('editing a saved model with the fetched list', () => {
+  it('saves the main and backup models chosen from the lists', async () => {
+    const { store, view, $, choose, runCommand } = setupForm()
+    store.settings.externalModelOrder = ['m-1']
+    store.settings.externalModelsById['m-1'] = { id: 'm-1', name: 'Gemini API', format: 'openai', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai', apiKey: 'sk-1', modelName: 'gemini-flash-lite-latest', createdAt: 1, updatedAt: 1 }
+    view.openExternalModels()
+    ;[...document.querySelectorAll<HTMLButtonElement>('#external-models-list button')].find(button => button.textContent === '编辑')!.click()
+
+    $<HTMLButtonElement>('#fetch-external-model-names').click()
+    await vi.waitFor(() => expect($<HTMLSelectElement>('#external-model-fallback-choices').hidden).toBe(false))
+    choose('#external-model-name-choices', 'gemini-flash-latest')
+    choose('#external-model-fallback-choices', 'gemini-flash-lite-latest')
+    $<HTMLFormElement>('#external-model-form').requestSubmit()
+
+    await vi.waitFor(() => expect(runCommand).toHaveBeenCalled())
+    expect(runCommand).toHaveBeenCalledWith('EXTERNAL_MODEL_UPDATE', expect.objectContaining({ modelId: 'm-1', modelName: 'gemini-flash-latest', fallbackModelName: 'gemini-flash-lite-latest' }))
+  })
+})
