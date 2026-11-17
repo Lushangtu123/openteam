@@ -139,6 +139,22 @@ openteamcli memory add --scope global|chat|role [--chat <chatId>] [--role name:<
 
 `memory add` saves an item as you, as saving it on the OpenTeam page does. An item with `--scope global` goes to every member of every group, including members on third-party sites and local agents.
 
+## Site check
+
+```bash
+openteamcli site-check [--no-wait] [--timeout <ms>]
+```
+
+Runs 网站自检, as Settings > AI pages > Site check does: a new group with one member on each AI site, each asked to reply OK. It opens the OpenTeam page (the members' pages load there) and waits until every site has an outcome, about a minute when all is well and at most about six and a half minutes. The result lists each site: `ok`, `login` (wants a sign-in), `page-problem` (blocked or broken page), `failed` (sending or reading the reply failed), `not-sent`, or `no-reply` (the question reached the page but no reply was read: what a site's redesign usually breaks). `--no-wait` returns once the check has started.
+
+The exit code is 0 when every site works, 2 when one needs attention or did not answer in time, and 1 when the command failed, so a scheduled job can act on it. Chrome must be running with OpenTeam installed and local agent control on. A daily check at 9:00 with cron, for example:
+
+```text
+0 9 * * * openteamcli site-check > ~/openteam-site-check.json || osascript -e 'display notification "An AI site needs attention" with title "OpenTeam"'
+```
+
+Each run makes a group named 网站自检 with the time; delete the old ones with Select several in the group list.
+
 ## Local agents in OpenTeam groups
 
 Add a local ACP agent, then pick it in OpenTeam under 添加大模型 → 本机智能体（ACP）:

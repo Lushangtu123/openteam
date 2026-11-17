@@ -313,3 +313,80 @@ function makeReply(id: string, roleId: string, roleName: string, content: string
     status: 'received',
   }
 }
+
+describe('the site check through the control interface', () => {
+  // A check group whose members reply over time: a site has replied once its time comes.
+  function checkStore(replyAt: Record<string, number>, options: { error?: string } = {}) {
+    const store = createDefaultStore()
+    store.settings.agentControlEnabled = true
+    const sites = Object.keys(replyAt)
+    store.chatsById['chat-check'] = { id: 'chat-check', name: '网站自检', mode: 'independent', roleIds: sites.map(site => `role-${site}`), messageIds: ['q'], nextMessageSeq: 2, status: 'ready', createdAt: 0, updatedAt: 0, siteCheck: { startedAt: 0, ...(options.error ? { error: options.error } : {}) } }
+    store.chatOrder = ['chat-check']
+    for (const site of sites) store.rolesById[`role-${site}`] = { id: `role-${site}`, chatId: 'chat-check', name: site, chatSite: site as never, modelSource: 'site', status: 'ready', contextCursor: 0, createdAt: 0, updatedAt: 0 }
+    store.messagesById.q = { id: 'q', chatId: 'chat-check', seq: 1, type: 'user', content: '@all OK', createdAt: 0, status: 'sent', deliveryStatus: Object.fromEntries(sites.map(site => [`role-${site}`, 'sent'])) }
+    return store
+  }
+
+  function executorFor(store: OpenTeamStore, replyAt: Record<string, number>) {
+    let clock = 0
+    const routeRuntimeMessage = vi.fn(async (message: { type: string }) => message.type === 'GROUP_SITE_CHECK_START' ? { ok: true, chatId: 'chat-check', store } : { ok: true, store })
+    const openTeamPage = vi.fn(async () => undefined)
+    const executor = createControlActionExecutor({
+      loadStore: async () => {
+        for (const [site, at] of Object.entries(replyAt)) {
+          const id = `a-${site}`
+          if (clock >= at && !store.messagesById[id]) {
+            store.messagesById[id] = { id, chatId: 'chat-check', seq: store.chatsById['chat-check'].messageIds.length + 1, type: 'assistant', content: site === 'grok' ? '回复失败：发送失败' : 'OK', roleId: `role-${site}`, sourceMessageId: 'q', createdAt: at, status: site === 'grok' ? 'error' : 'received' }
+            store.chatsById['chat-check'].messageIds.push(id)
+          }
+        }
+        return store
+      },
+      routeRuntimeMessage: routeRuntimeMessage as never,
+      runtimeFrames: { list: () => [] },
+      openTeamPage,
+      waitFor: async (ms: number) => { clock += ms },
+      now: () => clock,
+    })
+    return { executor, routeRuntimeMessage, openTeamPage }
+  }
+
+  it('starts the check, opens the page, waits for every site, and reports them', async () => {
+    const replyAt = { gemini: 2000, deepseek: 6000, grok: 4000 }
+    const { executor, routeRuntimeMessage, openTeamPage } = executorFor(checkStore(replyAt), replyAt)
+
+    const result = await executor({ id: 'cmd-1', action: 'site.check' })
+
+    expect(routeRuntimeMessage).toHaveBeenCalledWith({ type: 'GROUP_SITE_CHECK_START' })
+    expect(openTeamPage).toHaveBeenCalled()
+    expect(result.ok).toBe(true)
+    expect(result.data).toEqual({
+      chatId: 'chat-check',
+      finished: true,
+      ok: 2,
+      needsAttention: 1,
+      waiting: 0,
+      results: [
+        { site: 'gemini', outcome: 'ok' },
+        { site: 'deepseek', outcome: 'ok' },
+        { site: 'grok', outcome: 'failed', detail: '发送失败' },
+      ],
+    })
+  })
+
+  it('returns at once without waiting, and when its time is up', async () => {
+    const replyAt = { gemini: 999_999 }
+    const now = executorFor(checkStore(replyAt), replyAt)
+    expect((await now.executor({ id: 'cmd-1', action: 'site.check', payload: { wait: false } })).data).toEqual({ chatId: 'chat-check', finished: false })
+
+    const late = executorFor(checkStore(replyAt), replyAt)
+    const result = await late.executor({ id: 'cmd-2', action: 'site.check', payload: { timeoutMs: 10_000 } })
+    expect(result.data).toMatchObject({ finished: false, waiting: 1 })
+  })
+
+  it('says why when the question could not be sent', async () => {
+    const replyAt = { gemini: 999_999 }
+    const { executor } = executorFor(checkStore(replyAt, { error: '没有一个网站的页面打开了。' }), replyAt)
+    expect((await executor({ id: 'cmd-1', action: 'site.check' })).data).toMatchObject({ finished: true, error: '没有一个网站的页面打开了。' })
+  })
+})

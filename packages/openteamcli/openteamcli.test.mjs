@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { buildCliRequest, help } from './openteamcli.mjs'
+import { buildCliRequest, help, siteCheckExitCode } from './openteamcli.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -93,6 +93,7 @@ describe('openteamcli command builder', () => {
         'openteamcli task post|wait|read',
         'openteamcli run create-and-post --file task.json --wait',
         'openteamcli memory search --chat <chatId> --role name:<name>|role:<id> [--query <text>] [--limit <n>]',
+        'openteamcli site-check [--no-wait] [--timeout <ms>]',
         'openteamcli memory add --scope global|chat|role [--chat <chatId>] [--role name:<name>|role:<id>] [--kind fact|decision|preference|note] --content <text> [--tags a,b] [--pinned]',
         'openteamcli agent list|run --agent <id> --content <prompt> --cwd <path>',
         'openteamcli agent add --preset claude-code|codex|gemini --cwd <folder>[,<folder>] [--id <id>] [--name <name>] [--env KEY=VALUE,...] [--mode <session mode>]',
@@ -161,5 +162,35 @@ describe('openteamcli command builder', () => {
     } finally {
       rmSync(folder, { recursive: true, force: true })
     }
+  })
+})
+
+describe('openteamcli site-check', () => {
+  it('asks the extension to run the check, waiting long enough for every site', () => {
+    const request = buildCliRequest(['site-check'])
+    expect(request).toMatchObject({ kind: 'command', command: { action: 'site.check', payload: {} } })
+    // The check may take over six minutes: the daemon must not give up before it does.
+    expect(request.command.timeoutMs).toBeGreaterThanOrEqual(420_000)
+  })
+
+  it('can return as soon as the check starts, and take a time limit', () => {
+    expect(buildCliRequest(['site-check', '--no-wait']).command.payload).toEqual({ wait: false })
+    const limited = buildCliRequest(['site-check', '--timeout', '60000'])
+    expect(limited.command.payload).toEqual({ timeoutMs: 60000 })
+    expect(limited.command.timeoutMs).toBeGreaterThan(60000)
+  })
+
+  it('exits with 2 when a site needs attention or the check ran out of time, so a scheduled job notices', () => {
+    expect(siteCheckExitCode({ ok: true, data: { finished: true, needsAttention: 0, waiting: 0 } })).toBe(0)
+    expect(siteCheckExitCode({ ok: true, data: { finished: true, needsAttention: 1, waiting: 0 } })).toBe(2)
+    expect(siteCheckExitCode({ ok: true, data: { finished: false, needsAttention: 0, waiting: 2 } })).toBe(2)
+    expect(siteCheckExitCode({ ok: true, data: { finished: true, needsAttention: 0, waiting: 0, error: '没有一个网站的页面打开了。' } })).toBe(2)
+    // Started without waiting: nothing to judge yet.
+    expect(siteCheckExitCode({ ok: true, data: { chatId: 'c', finished: false } })).toBe(0)
+    expect(siteCheckExitCode({ ok: false, error: { message: 'x' } })).toBe(1)
+  })
+
+  it('is in the help', () => {
+    expect(JSON.stringify(help())).toContain('openteamcli site-check')
   })
 })

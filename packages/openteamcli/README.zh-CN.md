@@ -119,6 +119,22 @@ openteamcli memory add --scope global|chat|role [--chat <chatId>] [--role name:<
 
 `memory add` 以你的身份保存一条记忆，和在 OpenTeam 页面里保存一样。`--scope global` 的条目会发给所有群聊的所有成员，包括第三方站点上的成员和本机智能体。
 
+## 网站自检
+
+```bash
+openteamcli site-check [--no-wait] [--timeout <毫秒>]
+```
+
+和「设置 → AI 网页 → 网站自检」一样：新建一个群，每个 AI 网站一位成员，各发一句「只回复 OK」。它会打开 OpenTeam 页面（成员的网页在那里加载），等到每个网站都有结果：一切正常时约一分钟，最长约六分半钟。结果逐个列出网站：`ok`、`login`（需要登录）、`page-problem`（页面被挡住或出错）、`failed`（发送或读取回复失败）、`not-sent`（没发出去）、`no-reply`（提问送到了但没读到回复，网站改版后最常见）。`--no-wait` 在检查开始后立即返回。
+
+退出码：所有网站正常为 0；有网站需要处理或没在时限内回复为 2；命令本身失败为 1，方便定时任务判断。运行时 Chrome 要开着，装着 OpenTeam，并开启了本机智能体控制。比如用 cron 每天 9 点检查一次：
+
+```text
+0 9 * * * openteamcli site-check > ~/openteam-site-check.json || osascript -e 'display notification "有 AI 网站需要处理" with title "OpenTeam"'
+```
+
+每次运行都会新建一个以时间命名的「网站自检」群，旧的可以在群聊列表里用「选择多个…」一次删掉。
+
 ## 发布检查
 
 发布新的 CLI 版本前，先更新 `packages/openteamcli/package.json` 里的版本号；npm 不允许重复发布已经存在的版本。

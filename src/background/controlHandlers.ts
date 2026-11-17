@@ -3,6 +3,7 @@ import type { GroupChat, GroupMessage, GroupRole, MemoryItem, OpenTeamStore, Roo
 import type { RuntimeMessage } from './runtimeClient'
 import { readNewChatCollaboration } from '../group/collaboration'
 import { MEMORY_MAX_RETRIEVED, memoryModeForChat, pinnedMemoryItems, searchMemoryItems, visibleMemoryItems } from '../group/memoryRetrieval'
+import { SITE_CHECK_TIMEOUT_MS, siteCheckNeedsAttention, siteCheckResults } from '../group/siteCheck'
 
 export interface ControlActionExecutorDependencies {
   loadStore(): Promise<OpenTeamStore>
@@ -37,6 +38,10 @@ type RuntimeResponse = { ok?: boolean; error?: string; [key: string]: unknown }
 
 const DEFAULT_WAIT_TIMEOUT_MS = 300_000
 const WAIT_POLL_INTERVAL_MS = 500
+// A site check waits for the pages to load (up to 45 s) and then up to SITE_CHECK_TIMEOUT_MS for
+// replies; a little more than that by default, and it looks every few seconds.
+export const SITE_CHECK_COMMAND_TIMEOUT_MS = SITE_CHECK_TIMEOUT_MS + 90_000
+const SITE_CHECK_POLL_INTERVAL_MS = 2_000
 
 export function createControlActionExecutor(deps: ControlActionExecutorDependencies): (command: ControlHttpCommand) => Promise<ControlHttpResult> {
   return async command => {
@@ -98,6 +103,8 @@ async function executeEnabledCommand(command: ControlHttpCommand, initialStore: 
       return searchMemory(command.payload, initialStore)
     case 'memory.add':
       return addMemory(command.payload, initialStore, deps)
+    case 'site.check':
+      return runSiteCheck(command.payload, deps)
     default:
       throw new Error(`不支持的控制命令：${command.action}`)
   }
@@ -178,6 +185,41 @@ async function waitForTask(payload: unknown, deps: ControlActionExecutorDependen
   }
 
   return { ...readTaskResult(await deps.loadStore(), chatId, messageId), timedOut: true }
+}
+
+// 网站自检 from an agent or a scheduled job: started as the settings button starts it, with the
+// OpenTeam page opened (the members' pages load there), then followed until every site has an
+// outcome or the time is up. { wait: false } returns once it has started.
+async function runSiteCheck(payload: unknown, deps: ControlActionExecutorDependencies): Promise<unknown> {
+  const input = isRecord(payload) ? payload : {}
+  const timeoutMs = readPositiveNumber(input.timeoutMs) ?? SITE_CHECK_COMMAND_TIMEOUT_MS
+  const started = await routeOk(deps, { type: 'GROUP_SITE_CHECK_START' }) as RuntimeResponse & { chatId?: string }
+  const chatId = started.chatId
+  if (!chatId) throw new Error('网站自检没有开始')
+  await deps.openTeamPage()
+  if (input.wait === false) return { chatId, finished: false }
+
+  const start = deps.now()
+  while (true) {
+    const store = await deps.loadStore()
+    const chat = store.chatsById[chatId]
+    if (!chat) throw new Error('网站自检的群聊不见了')
+    const results = siteCheckResults(store, chat, deps.now())
+    const error = chat.siteCheck?.error
+    const finished = Boolean(error) || !results.some(result => result.outcome === 'waiting')
+    if (finished || deps.now() - start >= timeoutMs) {
+      return {
+        chatId,
+        finished,
+        ok: results.filter(result => result.outcome === 'ok').length,
+        needsAttention: results.filter(result => siteCheckNeedsAttention(result.outcome)).length,
+        waiting: results.filter(result => result.outcome === 'waiting').length,
+        ...(error ? { error } : {}),
+        results: results.map(result => ({ site: result.site, outcome: result.outcome, ...(result.detail ? { detail: result.detail } : {}) })),
+      }
+    }
+    await deps.waitFor(SITE_CHECK_POLL_INTERVAL_MS)
+  }
 }
 
 async function createAndPost(payload: unknown, initialStore: OpenTeamStore, deps: ControlActionExecutorDependencies): Promise<unknown> {

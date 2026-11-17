@@ -10,6 +10,10 @@ import { chooseNodePath, createLaunchAgent, daemonEnvironment, describeLaunchAge
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const DAEMON_SCRIPT = resolve(__dirname, 'openteam-daemon.mjs')
 const DEFAULT_COMMAND_TIMEOUT_MS = 300_000
+// The extension's own limit for a site check (pages loading, then replies), and the daemon's on top
+// of it, so the daemon never gives up first.
+const SITE_CHECK_DEFAULT_TIMEOUT_MS = 390_000
+const SITE_CHECK_DAEMON_MARGIN_MS = 30_000
 
 export function buildCliRequest(argv) {
   const [group, subcommand, ...rest] = argv
@@ -103,6 +107,18 @@ export function buildCliRequest(argv) {
     }
   }
 
+  // 网站自检: every AI site is asked to reply OK; the result says, site by site, whether it works.
+  if (group === 'site-check') {
+    const checkOptions = parseOptions(argv.slice(1))
+    const timeoutMs = numberOption(checkOptions.timeout)
+    const request = command('site.check', {
+      ...(checkOptions['no-wait'] === true ? { wait: false } : {}),
+      ...(timeoutMs ? { timeoutMs } : {}),
+    })
+    request.command.timeoutMs = (timeoutMs ?? SITE_CHECK_DEFAULT_TIMEOUT_MS) + SITE_CHECK_DAEMON_MARGIN_MS
+    return request
+  }
+
   if (group === 'run' && subcommand === 'create-and-post') {
     return {
       kind: 'file-command',
@@ -145,6 +161,7 @@ async function main(argv) {
     const request = buildCliRequest(argv)
     const result = await runRequest(request)
     if (result !== undefined) writeJson(result)
+    if (request.kind === 'command' && request.command.action === 'site.check') process.exitCode = siteCheckExitCode(result)
   } catch (error) {
     writeJson({
       ok: false,
@@ -155,6 +172,16 @@ async function main(argv) {
     })
     process.exitCode = 1
   }
+}
+
+// 0 when every site works (or the check was only started), 2 when one needs attention, could not be
+// asked, or did not answer in time, 1 when the command itself failed: a scheduled job can act on it.
+export function siteCheckExitCode(result) {
+  if (!result || result.ok === false) return 1
+  const data = result.data ?? {}
+  if (data.finished === false && data.waiting === undefined) return 0
+  if (data.error || data.needsAttention > 0 || data.waiting > 0 || data.finished === false) return 2
+  return 0
 }
 
 async function runRequest(request) {
@@ -552,6 +579,7 @@ export function help() {
       'openteamcli task post|wait|read',
       'openteamcli run create-and-post --file task.json --wait',
       'openteamcli memory search --chat <chatId> --role name:<name>|role:<id> [--query <text>] [--limit <n>]',
+      'openteamcli site-check [--no-wait] [--timeout <ms>]',
       'openteamcli memory add --scope global|chat|role [--chat <chatId>] [--role name:<name>|role:<id>] [--kind fact|decision|preference|note] --content <text> [--tags a,b] [--pinned]',
       'openteamcli agent list|run --agent <id> --content <prompt> --cwd <path>',
       'openteamcli agent add --preset claude-code|codex|gemini --cwd <folder>[,<folder>] [--id <id>] [--name <name>] [--env KEY=VALUE,...] [--mode <session mode>]',
