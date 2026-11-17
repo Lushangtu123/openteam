@@ -228,7 +228,7 @@ const routeMessage = createMessageRouter([
   ...createBackupHandlers({ broadcastStoreUpdated, log, imageAttachments: imageAttachmentRepository }),
   ...createMemoryHandlers({ broadcastStoreUpdated, log, now }),
   // Runs through this router itself, once it is made.
-  ...createSiteCheckHandlers({ route: message => Promise.resolve(routeMessage(message, {})), broadcastStoreUpdated, now }),
+  ...createSiteCheckHandlers({ route: message => Promise.resolve(routeMessage(message, {})), broadcastStoreUpdated, runtimeFrames, waitFor: ms => new Promise(resolve => globalThis.setTimeout(resolve, ms)), now }),
   ...createExternalModelHandlers({ broadcastStoreUpdated, externalModelClient, checkLocalAgent, newId, now }),
   { type: 'LOCAL_AGENT_LIST', handler: async () => ({ ok: true, agents: await listLocalAgents() }) },
   {

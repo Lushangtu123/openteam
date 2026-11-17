@@ -46,6 +46,13 @@ describe('site check card', () => {
     expect(rows[1].textContent).toContain('打开网站')
   })
 
+  it("says why the question could not be sent", () => {
+    const { chat, view } = setup()
+    chat.siteCheck = { startedAt: START, error: '没有一个网站的页面打开了。' }
+    const board = view.renderBoard(chat)!
+    expect(board.querySelector('.site-check-error')?.textContent).toBe('没有一个网站的页面打开了。')
+  })
+
   it('is in English when the page is', () => {
     const { chat, view } = setup('en')
     const board = view.renderBoard(chat)!

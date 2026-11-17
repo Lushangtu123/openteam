@@ -1,18 +1,26 @@
 // Starts a 网站自检 (src/group/siteCheck.ts) through the same handlers the page uses: a new group,
-// one member per site, the group marked as a check and opened, and the question sent to everyone.
+// one member per site, the group marked as a check and opened. The question goes to everyone once
+// their pages have loaded (a message to members with no page yet is refused), or, after a wait, to
+// those that have; the others show as not reached.
 import { CHAT_SITE_INFO } from '../group/chatSites'
 import { SITE_CHECK_PERSONA, SITE_CHECK_PROMPT, SITE_CHECK_SITES } from '../group/siteCheck'
-import type { OpenTeamStore } from '../group/types'
+import type { OpenTeamStore, RuntimeFrameBinding } from '../group/types'
 import type { BackgroundMessageRoute } from './messageRouter'
 import type { RuntimeMessage } from './runtimeClient'
 import { mutateStore } from './storeAccess'
 
 export const SITE_CHECK_ROUTE_TYPES = ['GROUP_SITE_CHECK_START'] as const
 
+// How long the question waits for the members' pages to load, and how often it looks.
+export const SITE_CHECK_PAGE_WAIT_MS = 45_000
+const PAGE_POLL_MS = 1_000
+
 export interface SiteCheckHandlerDependencies {
   // The background's own message router.
   route(message: RuntimeMessage): Promise<unknown>
   broadcastStoreUpdated(store: OpenTeamStore): Promise<void> | void
+  runtimeFrames: { getByRole(chatId: string, roleId: string): RuntimeFrameBinding | undefined }
+  waitFor(ms: number): Promise<void>
   now(): number
 }
 
@@ -45,9 +53,27 @@ export function createSiteCheckHandlers(deps: SiteCheckHandlerDependencies): Bac
       if (chat) chat.siteCheck = { startedAt }
     })
     await deps.broadcastStoreUpdated(store)
-    await routeOk({ type: 'GROUP_CHAT_SWITCH', chatId })
-    const sent = await routeOk({ type: 'GROUP_MESSAGE_SEND', chatId, raw: `@all ${SITE_CHECK_PROMPT}` })
-    return { ok: true, chatId, store: sent.store }
+    const switched = await routeOk({ type: 'GROUP_CHAT_SWITCH', chatId })
+    // The page opens the group, and with it the members' pages, while this waits for them.
+    void askWhenPagesReady(chatId, Object.keys(store.rolesById).filter(roleId => store.rolesById[roleId]?.chatId === chatId))
+    return { ok: true, chatId, store: switched.store }
+  }
+
+  async function askWhenPagesReady(chatId: string, roleIds: string[]): Promise<void> {
+    const deadline = deps.now() + SITE_CHECK_PAGE_WAIT_MS
+    const readyCount = () => roleIds.filter(roleId => deps.runtimeFrames.getByRole(chatId, roleId)?.ready).length
+    while (readyCount() < roleIds.length && deps.now() < deadline) await deps.waitFor(PAGE_POLL_MS)
+    try {
+      if (readyCount() === 0) throw new Error('没有一个网站的页面打开了。请确认 OpenTeam 页面开着、停在这个群，再重新检查。')
+      await routeOk({ type: 'GROUP_MESSAGE_SEND', chatId, raw: `@all ${SITE_CHECK_PROMPT}` })
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error)
+      const { store } = await mutateStore(store => {
+        const check = store.chatsById[chatId]?.siteCheck
+        if (check) check.error = reason
+      })
+      await deps.broadcastStoreUpdated(store)
+    }
   }
 
   return [{ type: 'GROUP_SITE_CHECK_START', handler: handleStart }]

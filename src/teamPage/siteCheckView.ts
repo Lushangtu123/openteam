@@ -44,6 +44,7 @@ export function createSiteCheckView(deps: SiteCheckViewDependencies): SiteCheckV
     title.append(element('span', 'project-board-chip', en ? 'Site check' : '网站自检'), element('span', '', siteCheckSummary(results, en ? 'en' : 'zh-CN')))
     head.append(title)
     board.append(head)
+    if (chat.siteCheck.error) board.append(element('p', 'project-board-detail question site-check-error', chat.siteCheck.error))
 
     const list = element('ul', 'project-task-list')
     for (const result of results) list.append(resultRow(result, en))
