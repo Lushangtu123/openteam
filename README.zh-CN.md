@@ -2,54 +2,51 @@
 
 **🌐 语言:** [English](README.md) | 简体中文
 
-> **关于此 Fork：** OpenTeam 的原作者是 **[afumu](https://github.com/afumu)**，原项目地址为 **[afumu/openteam](https://github.com/afumu/openteam)**。项目的原始代码、设计与文档均归 afumu 及 OpenTeam 贡献者所有，并继续遵循 [PolyForm Noncommercial License 1.0.0](LICENSE)（`Required Notice: Copyright (c) 2026 OpenTeam contributors.`）。本 Fork 在此基础上新增了 Qwen 和 Kimi、按任务组队、网页成员回复实时显示、图片收发、回复选项一键作答和两种界面风格；加固了本机控制守护进程、iframe 响应头规则和后台消息处理的安全性，提升了大量聊天记录下的存储与消息渲染速度，并新增了 AI 网页健康状态、全量数据备份与恢复，以及「核心亮点」里列出的各项工作台工具。官方版本、发布与交流群请以原仓库为准。
+> **项目来源：** 本项目基于 **[afumu](https://github.com/afumu)** 的 **OpenTeam**（原仓库：[afumu/openteam](https://github.com/afumu/openteam)）修改而来。原始代码、设计与文档归 afumu 及 OpenTeam 贡献者所有，并继续遵循 [PolyForm Noncommercial License 1.0.0](LICENSE)（`Required Notice: Copyright (c) 2026 OpenTeam contributors.`）。
 
-> 复用你已经登录的 AI 网页账号，把 ChatGPT、Claude、Gemini、DeepSeek、Grok、Qwen、Kimi 组织成一个本地优先的 AI 专家团。
+> 本地优先的 AI 团队工作台：把 ChatGPT、Gemini、DeepSeek、Grok、Qwen、Kimi、API 模型和本机编程智能体放进同一个群聊，让它们讨论、互相审查，一起推进项目。
 
-OpenTeam 是一个 Manifest V3 Chrome 扩展。它不要求你配置模型 API Key，也不额外消耗 OpenAI、Claude、Gemini、DeepSeek 或 Grok 的 API token；它会复用你已经在浏览器里打开的 AI 网页会话，把任务发送给不同人员和不同模型，再把回复汇总到同一个群聊工作台。
+OpenTeam 是一个 Manifest V3 Chrome 扩展。大多数成员不需要 API Key：OpenTeam 复用你已经登录的 AI 网页，在各自的网站里把任务发给成员，再把回复汇总到同一个群聊。需要时，API 模型和 Claude Code、Codex 等本机智能体也可以加入同一个群。
 
-它适合用于学习、研究和个人非商用实验，处理需要多视角判断的问题：产品评审、技术方案审查、内容创作、个人决策、多模型对比，以及需要多个 AI 角色协作完成的连续任务。
-
-## 🌱 项目背景
-
-OpenTeam 可以看作 [OpenLink](https://github.com/afumu/openlink) 的姊妹篇。之前我做 OpenLink 时，就想过做一个能复用浏览器会话、直接和多个大模型网页对话与讨论的插件，只是后来一直忙，没有真正做出来。
-
-后来我认识了陆同学（[YUANLU007](https://github.com/YUANLU007)）。她做新闻编辑，在写稿过程中经常需要同时利用多个 AI：对比不同模型的回答效果，也用它们辅助做新闻事实性校验。这个需求和我之前的想法一拍即合，于是就有了 OpenTeam。
-
-![OpenTeam 群聊预览](docs/assets/group-chat-ui-concept.png)
-
-## 💬 交流群
-
-欢迎扫码加入 OpenTeam 微信交流群。二维码若已过期，请添加微信 `afumudev`，并备注 `OpenTeam`，我会拉你进群。
-
-<p>
-  <img src="docs/assets/openteam-wechat-group-qr.jpg" alt="OpenTeam 微信交流群二维码" width="280">
-</p>
+适合学习、研究和个人非商用场景里"一个答案不够"的问题：多模型对比、事实核查、方案和代码评审、内容策划、个人决策，以及需要多个角色配合完成的连续任务。
 
 ## ✨ 核心亮点
 
-- 🚫 **0 API token 工作流**：复用 AI 网站网页会话，而不是直接调用模型 API。
-- 🧩 **多模型讨论**：在同一个群聊里调度 Gemini、ChatGPT、Claude、DeepSeek、Grok、Qwen、Kimi 等网页端模型。
-- 🙋 **按任务组队**：写下要做的事、挑几个 AI，让它们自己决定在项目里担任什么职位；你确认分工后再开工。
-- 🧑‍🏫 **内置顾问库**：内置 38 个专家 / 思想风格顾问模板，也支持自定义人员。
-- 📣 **基于 @ 的消息路由**：用 `@人员` 定向提问，或用 `@所有人` 同时分发给整个团队。
-- 🔄 **独立与协作两种模式**：先收集彼此独立的视角，再让成员参考、补充或反驳其他观点。
-- 🖥️ **本机智能体当成员**：本机的 Claude Code、Codex 或其他 ACP 智能体可以加入群聊，在你允许的目录里干活（经本地守护进程）；每次执行、以及它要改文件或运行命令时，都会先问你。
-- 🗂️ **项目模式**：给团队一个目标，协调员把它拆成任务（负责人、完成标准），你确认后成员并行或按顺序完成，协调员检查结果、安排返工，最后整理出完整交付；全程显示在群聊里的任务看板上。
-- 🗣️ **轮流讨论**：在协作群聊里打开「轮流讨论」，成员会一个接一个发言，每人都能看到前面说了什么，也可以 @ 别人接着说。讨论中你可以随时补充、停止，或再讨论一轮，结束时自动汇总。
-- 📋 **要点与每轮汇总**：同时问几位成员时，每条回复先列要点，长回复折叠起来；大家都回复后，由一位成员（有 API 成员时优先用它）写一份简短汇总：共识、分歧、待定问题和下一步。
-- ⚡ **回复实时显示**：网页成员还在写的时候，回复就会出现在群聊里；按停止会保留已经写出的内容。
-- 🖼️ **图片与文件**：发消息时可以附上图片、PDF、Word、PowerPoint、Excel 和文本文件（文档会读出其中的文字发给成员）；ChatGPT、Gemini、Grok、Qwen 生成的图片会自动收进群聊。
-- 🔘 **选项一键作答**：成员回复结尾给出选项（A / B / C）时，点一下就能回答。
-- 🔌 **可选的 API 成员**：在网页会话之外，还可以添加 OpenAI 或 Anthropic 兼容的模型；每条 API 回复会显示用了多少 token。
-- 🧰 **工作台工具**：对比同一个问题的各家回复、搜索消息、编辑后重新发送、语音输入、群聊置顶与搜索、笔记、所有成员回复完时的桌面通知、每个 AI 网页的健康状态，以及全量备份与恢复。
-- 🎨 **两种界面风格**：ChatGPT 风格和 Grok 风格，各有浅色与深色，可在顶栏或设置菜单里切换。
-- 💾 **本地优先存储**：群聊、人员、消息、笔记、高亮和设置都保存在浏览器本地存储中。
-- 🤖 **智能体控制 CLI**：可选的 `openteamcli` 可以让本机智能体创建群聊、添加角色、发布任务并等待回复。
+**用你已有的 AI 组成团队**
+
+- 🚫 **不需要 API token**：网页成员使用你已登录的 AI 网站账号。
+- 🧩 **六个 AI 网站**：Gemini、ChatGPT、DeepSeek、Grok、Qwen、Kimi 都能作为群成员，各占一个页面；成员随时可以换到别的网站或模型。
+- 🔌 **API 成员**：可添加任何 OpenAI 或 Anthropic 兼容的模型（DeepSeek、Gemini、智谱、火山方舟、OpenRouter 等）。每条回复显示用了多少 token，请求失败时显示服务器给出的原因。
+- 🖥️ **本机智能体当成员**：Claude Code、Codex 或其他 ACP 智能体通过本机守护进程，在你允许的文件夹里工作。每次运行、每次改文件和执行命令都要你批准；共用同一文件夹的智能体会排队，不会同时动手。
+- 🙋 **按任务组队**：描述任务、挑选 AI，由它们各自认领岗位，你确认后再开工。
+- 🧑‍🏫 **顾问库**：内置 38 个专家和思维方式模板，也可以自己创建人员。
+
+**协作方式**
+
+- 📣 **@ 提及**：`@成员` 只问一个人，`@所有人` 问全队。
+- 🔄 **独立与协作模式**：先各自独立回答做对比，再让成员互相引用、质疑和补充。
+- 🗣️ **轮流讨论**：成员依次发言，可以把下一轮交给别人；不会有某个成员一直霸占发言。
+- 🗂️ **项目模式**：协调人把目标拆成有负责人和完成标准的任务。你批准后，成员按顺序或并行执行，协调人逐项验收、要求返工（有次数上限，任务不会被无限踢来踢去），最后在群聊的任务看板上写出完整交付物。
+- 📋 **要点与轮次总结**：发给多人的回复先列要点；所有人答完后，由一位成员总结共识、分歧、待核实之处和下一步。总结可以一键采纳为决定。
+
+**跨群聊的记忆库**
+
+- 🧠 **记忆库**：从任意消息保存事实、决定、偏好或备注，可用于所有群、某个群或某位成员。每位成员会收到置顶条目和与当前请求相关的条目，不超出它的上下文预算；网页成员只会收到它还没见过的内容。
+- 🔒 **该隔离的地方隔离**：独立模式下，成员读不到其他成员写的内容。成员也可以提议保存条目，由你接受或忽略（默认关闭）。
+
+**工作台**
+
+- ⚡ **实时回复**：网页成员的回复边写边显示，停止时保留已写的内容。成员页面中途刷新或换了模型，这条回复会正常收尾，成员也会重新跟上群里的进度。
+- 🖼️ **图片与文件**：可附加图片、PDF、Word、PowerPoint、Excel 和文本文件；ChatGPT、Gemini、Grok、Qwen 画出的图片会复制到群聊。
+- 🔘 **一键作答**：回复以选项（A / B / C）结尾时，点一下就能回答。
+- 🧰 **工具**：对比同一问题的回复、搜索、编辑后重发、语音输入、置顶群聊、笔记、所有人答完时的通知、每个 AI 页面的健康状态，以及全量备份与恢复。
+- 🎨 **两种界面**：类 ChatGPT 和类 Grok 两种风格，各有浅色和深色。
+- 💾 **本地优先**：群聊、人员、记忆、笔记和设置都保存在你的浏览器里。
+- 🤖 **智能体控制 CLI**：`openteamcli` 让本机智能体创建群聊、添加成员、发布任务、等待回复，以及查询和保存记忆。
 
 ## 🧭 工作原理
 
-OpenTeam 会把每个群聊成员绑定到一个 AI 网页会话。用户发送消息后，扩展会根据群聊模式、人员人设、引用消息和共享上下文构建 prompt，然后投递到该成员对应的 iframe AI 页面里，并监听网页回复。
+每位网页成员绑定 OpenTeam 工作台里的一个 AI 网站页面。你发消息时，OpenTeam 根据群聊模式、成员人设、引用的消息、共享上下文和相关记忆生成提示词，送进成员的页面，并在回复写出的过程中实时读取。
 
 ```text
 team.html
@@ -60,35 +57,33 @@ team.html
   -> OpenTeam message stream
 ```
 
-当前支持的网页站点类型：
+API 成员由扩展直接调用；本机智能体通过本机守护进程运行。
 
-| 站点 | 常见适用方向 |
+| 网站 | 常见适用场景 |
 | --- | --- |
-| Gemini | 长上下文、研究、多模态材料 |
-| ChatGPT | 综合执行、工具化工作流、快速迭代 |
-| Claude | 长文档、审查、结构化写作、谨慎推理。claude.ai 现在拒绝在其他页面里运行，请改为添加 Claude API 成员（Anthropic 格式） |
-| DeepSeek | 代码、推理、中文任务和成本敏感场景 |
-| Grok | 时事研究、替代表述、X/Grok 网页会员会话工作流 |
+| Gemini | 长上下文、调研、多模态材料 |
+| ChatGPT | 通用执行、快速迭代 |
+| DeepSeek | 代码、推理、中文任务 |
+| Grok | 时事、换一种说法 |
 | Qwen | 中文与多语言写作、代码、长文档（chat.qwen.ai） |
-| Kimi | 长文档、中文资料研究与写作（www.kimi.com） |
+| Kimi | 长文档、中文调研与写作（www.kimi.com） |
+| Claude | claude.ai 拒绝在其他页面里运行，请以 API 成员（Anthropic 格式）添加 |
 
-这些只是常见使用方向，不代表固定排名。实际效果取决于模型版本、账号权益、任务类型和输入材料。
+以上只是常用默认选择，不是排名。实际效果取决于模型版本、账号套餐、任务类型和输入材料。
 
-## ⚠️ 风险提示
+## ⚠️ 免责声明
 
-OpenTeam 是一个非官方项目，仅供学习、研究和个人非商用用途。它不隶属于 OpenAI、Anthropic、Google、DeepSeek、xAI、阿里巴巴、月之暗面或任何受支持的 AI 网站，也未获得这些平台背书或支持。
+OpenTeam 是非官方项目，仅供学习、研究和个人非商业使用。它与 OpenAI、Anthropic、Google、DeepSeek、xAI、阿里巴巴、月之暗面或任何受支持的 AI 网站均无关联，也未获得其认可或支持。
 
-OpenTeam 会通过用户自己登录的浏览器网页会话和 DOM 自动化与 AI 网站交互。目标网站改版、账号规则、限流、反滥用机制或服务条款都可能影响它是否可用。使用者需要自行了解并遵守相关网站规则、政策、法律法规和服务条款。
+OpenTeam 通过你自己登录的浏览器会话和页面自动化与 AI 网站交互。网站改版、账号规则、频率限制、反滥用机制或服务条款都可能影响它能否正常工作。你需要自行遵守适用于你的使用场景的规则、政策和法律。
 
-请不要将 OpenTeam 用于商业产品、托管服务、付费工作流、批量自动化、垃圾信息、爬取、绕过访问控制、绕过付费权益，或任何侵犯第三方条款与权利的行为。
+不得将 OpenTeam 用于商业产品、托管服务、付费工作流、批量自动化、垃圾信息、爬取数据、绕过访问控制或付费限制，或任何侵犯第三方条款与权利的行为。
 
-使用本项目产生的账号限制、服务中断、数据丢失、法律纠纷或其他后果，均由使用者自行承担。以上说明不构成法律建议。
+使用风险自负。对于因使用本项目导致的账号限制、服务中断、数据丢失、法律问题或其他后果，维护者不承担责任。本声明不构成法律意见。
 
 ## 🚀 安装
 
-### 方式一：从源码安装浏览器扩展
-
-大多数普通用户只需要安装浏览器扩展：
+### 构建扩展
 
 ```bash
 git clone https://github.com/Lushangtu123/openteam.git
@@ -97,121 +92,90 @@ npm install
 npm run build
 ```
 
-这里克隆的是本 Fork；原项目地址为 [afumu/openteam](https://github.com/afumu/openteam)。构建完成后，打开 `chrome://extensions/`，开启开发者模式，点击 **加载已解压的扩展程序**，选择生成的 `dist/` 目录，然后点击 OpenTeam 扩展图标打开团队工作台。请先在普通标签页里登录要用的 AI 网站。拉取更新后，重新运行 `npm run build`，再在 `chrome://extensions/` 里点 OpenTeam 的重新加载按钮。
+打开 `chrome://extensions/`，开启开发者模式，点击「加载已解压的扩展程序」，选择生成的 `dist/` 文件夹。点击 OpenTeam 图标即可打开工作台。请先在普通标签页里登录你要用的 AI 网站。
 
-### 方式二：安装 CLI + Agent Skill
+拉取更新后，重新运行 `npm run build`，再在 `chrome://extensions/` 里点 OpenTeam 的重新加载按钮。
 
-如果你希望 Codex、Claude Code 或其他本机智能体控制 OpenTeam 群聊，可以先从 npm 安装 CLI，再安装 agent skill：
+### 本机智能体与 CLI（可选）
+
+只有使用本机智能体成员，或想让 Codex、Claude Code 等智能体控制 OpenTeam 时才需要。在仓库文件夹里运行：
 
 ```bash
-npm install -g @afumu/openteamcli
-npx skills add afumu/openteam --skill openteam-control
-openteamcli daemon start
-openteamcli doctor
+npm run openteamcli -- daemon start
+npm run openteamcli -- doctor
 ```
 
-skills 安装器会询问要安装到哪个 agent、使用什么范围和安装方式。公开仓库推荐使用上面的 GitHub 安装方式；如果你正在使用本地 checkout 或解压后的源码包开发，也可以在仓库根目录安装 skill：
+然后在 OpenTeam 设置里打开本机智能体控制。要给你的智能体安装 OpenTeam 控制技能，在仓库文件夹里运行：
 
 ```bash
 npx skills add . --skill openteam-control
 ```
 
-安装完成后，打开 OpenTeam 扩展页面，并在设置里开启本机智能体控制。更多 CLI 说明见 [OpenTeam CLI](packages/openteamcli/README.zh-CN.md)。
+电脑重启后守护进程不会自动启动。在 macOS 上，`npm run openteamcli -- daemon install` 会把它添加为登录时启动的 LaunchAgent；`daemon uninstall` 可移除。全部命令见 [OpenTeam CLI](packages/openteamcli/README.zh-CN.md)。
 
-电脑重启后守护进程不会自己启动。在 macOS 上运行 `openteamcli daemon install` 可以把它装成 LaunchAgent：登录时自动启动，崩溃后自动重启；`openteamcli daemon uninstall` 可以去掉它。它写入了什么，见[登录时自动启动](packages/openteamcli/README.zh-CN.md#登录时自动启动macos)。
-
-## 🛠️ 从源码开发
+## 🛠️ 开发
 
 ```bash
 npm install
-npm run dev
+npm run dev       # 监听构建到 dist/
+npm run verify    # 类型检查、单元测试和生产构建
 ```
 
-构建扩展后，在 `chrome://extensions/` 里开启开发者模式，并加载生成的 `dist/` 目录。
-
-常用检查命令：
-
-```bash
-npm run typecheck
-npm test
-npm run build
-npm run verify
-```
-
-`npm run verify` 会依次执行类型检查、单元测试和生产构建。
+`npm run visual:snap -- <文件夹>` 和 `npm run visual:compare -- <之前> <之后>` 会给每个界面截图（两种界面、两种主题、三种宽度）并逐像素比较两组截图，同时对每个界面做无障碍检查。
 
 ## 🔐 权限与隐私
 
-OpenTeam 是本地优先的扩展，但安装前仍然值得了解它需要的浏览器权限：
+- `storage` / `unlimitedStorage`：保存群聊、人员、记忆、笔记、设置和大量聊天记录。
+- `tabs`：找到 OpenTeam 和 AI 网站的标签页与页面框架并与之通信。
+- `alarms`：运行时维护任务。
+- `declarativeNetRequest`：调整响应头，让受支持的 AI 网站能在工作台里打开。
+- `clipboardRead` / `clipboardWrite`：复制和粘贴。
+- `cookies`：读取 Grok 的会话 Cookie，让它的实时连接在工作台里可用（只作用于 OpenTeam 自己的标签页）。
+- `notifications`：所有人答完时提醒你（可在设置里关闭）。
+- 网站权限：只包括受支持的 AI 网站、它们的图片域名和本机守护进程。每个 API 模型的地址单独授权，在该模型上点「允许访问」即可。
+- 麦克风（不在 manifest 中申请）：语音输入使用 Chrome 的在线语音识别，首次使用时由 Chrome 询问。
 
-- `storage` / `unlimitedStorage`：保存群聊、人员、笔记、设置和本地状态，包括很长的群聊。
-- `tabs`：定位并和扩展页、AI 网站 tab / frame 通信。
-- `alarms`：调度运行时维护任务。
-- `declarativeNetRequest`：调整响应头，让支持的 AI 网站可以嵌入扩展的 iframe 工作区。
-- `clipboardRead` / `clipboardWrite`：支持复制和剪贴板相关交互。
-- `cookies`：读取 Grok 的登录 cookie，让它的实时连接在团队页里也能工作（只作用于 OpenTeam 自己的标签页）。
-- `notifications`：OpenTeam 不在前台时，所有成员回复完会弹出桌面通知（可在设置里关闭）。
-- Host permissions：允许 OpenTeam 访问支持的 AI 网站和嵌入式网页会话，包括 Grok 的 WebSocket（`wss://grok.com`）。
-- 麦克风（不在 manifest 里）：语音输入使用 Chrome 自带的在线语音识别；第一次使用时 Chrome 会询问是否允许使用麦克风。
-
-你附加的图片保存在浏览器本地（IndexedDB），只有发送时才会上传到对应的 AI 网站或模型。API Key 保存在浏览器本地存储中，导出备份时默认不包含，除非你主动勾选。
-
-OpenTeam 不提供云端同步。你的 AI 对话仍然会由你使用的 AI 网站处理，并受对应网站的账号规则、额度限制、隐私政策和服务条款约束。
+附加的图片保存在浏览器（IndexedDB）里，只在发送时上传。API Key 保存在浏览器存储中，备份默认不包含它。OpenTeam 不提供云同步；你的对话由你使用的 AI 网站和模型服务商按其自身条款处理。
 
 ## 🚧 当前限制
 
-- OpenTeam 当前优先支持 Chrome / Chromium 系浏览器。
-- AI 站点适配依赖网页 DOM，目标网站改版可能导致 prompt 发送或回复监听失效。
-- iframe 工作区依赖 `declarativeNetRequest` 调整响应头，因此权限面比普通 popup 扩展更重。
-- 有些网站会主动拒绝在其他页面里运行，目前 claude.ai 就是这样。OpenTeam 会在该成员的网页状态里说明原因，不会绕过这种限制；请改用该网站的 API。
-- 未登录的会话有限制：未登录的 Gemini 不会发送带图片的消息，未登录的 Grok 生成图片前会要求登录。
-- 语音输入需要联网，因为 Chrome 是在线识别语音的。
-- 内置名人风格顾问是基于公开思想整理的提示词模板，不是真人参与，也不应被表述为真人参与。
-- 医疗、法律、金融等高风险输出仍需要用户自行判断，并咨询合格专业人士。
+- 仅支持 Chrome / Chromium。
+- AI 网站适配依赖各网站的页面结构，网站改版可能导致发送或读取回复失败。
+- 在工作台里嵌入网站需要通过 `declarativeNetRequest` 修改响应头，权限比普通扩展更重。
+- 有些网站有意拒绝在其他页面里运行（目前是 claude.ai）。OpenTeam 会在成员状态上说明，不会绕过。
+- 未登录的会话有限制：未登录的 Gemini 不能发送图片，未登录的 Grok 画图前会要求登录。
+- 语音输入需要联网。
+- 名人顾问模板是受公开思想启发的提示词，不是真人。
+- 医疗、法律、金融等高风险问题的回答仍需要人工判断和专业意见。
 
-## 🗂️ 目录结构
+## 🗂️ 仓库结构
 
 ```text
-public/                 Chrome 扩展 manifest、团队页、样式、DNR 规则
-src/background/         service worker、命令处理、运行时路由
-src/content/            AI 站点 content scripts、适配器、回复监听
-src/group/              群聊数据模型、存储、人员、prompt、@ 解析
-src/teamPage/           OpenTeam 工作台 UI
-packages/openteamcli/   本地 CLI 和智能体控制 daemon
-docs/                   设计文档和素材
-```
-
-## 🤝 参与贡献
-
-欢迎提交 issue 和 pull request。比较适合作为起点的方向包括：
-
-- AI 网站改版后的适配器修复。
-- 权限和隐私加固。
-- 群聊路由、prompt 构建、存储和 UI 流程的测试覆盖。
-- 文档、示例和上手体验改进。
-- 边界清晰的新顾问模板或编排模式。
-
-提交 pull request 前，请运行：
-
-```bash
-npm run verify
+public/                 扩展 manifest、团队页面、样式、DNR 规则
+src/background/         service worker、消息与命令处理、模型客户端
+src/content/            AI 网站内容脚本与适配器
+src/group/              群聊数据模型、存储、角色、提示词、记忆、提及解析
+src/teamPage/           OpenTeam 工作台界面
+packages/openteamcli/   供智能体使用的本机 CLI 与守护进程
+docs/                   设计文档
 ```
 
 ## 📚 文档
 
 - [设计文档](docs/DESIGN.zh-CN.md)
-- [按任务组队](docs/TEAM_FORMATION.md)（英文）
-- [AI 网页健康状态](docs/AI_PAGE_HEALTH.md)（英文）
-- [图片与附件](docs/MULTIMODAL_ATTACHMENTS.md)（英文）
-- [项目模式](docs/PROJECT_MODE.md)（英文）
-- [本机智能体（ACP）](docs/ACP.md)（英文）
-- [ACP 支持](docs/ACP.md)（英文）
+- [按任务组队](docs/TEAM_FORMATION.md)
+- [项目模式](docs/PROJECT_MODE.md)
+- [记忆库](docs/MEMORY_STORE.zh-CN.md)
+- [AI 页面健康状态](docs/AI_PAGE_HEALTH.md)
+- [图片与附件](docs/MULTIMODAL_ATTACHMENTS.md)
+- [本机智能体（ACP）](docs/ACP.md)
 - [OpenTeam CLI](packages/openteamcli/README.zh-CN.md)
+- [贡献指南](CONTRIBUTING.md)
+
+欢迎到 [Lushangtu123/openteam](https://github.com/Lushangtu123/openteam) 提交 Issue 和 Pull Request。提交 PR 前请运行 `npm run verify`。
 
 ## 📜 许可证
 
-OpenTeam 使用 [PolyForm Noncommercial License 1.0.0](LICENSE) 发布，SPDX 标识符为 `PolyForm-Noncommercial-1.0.0`。
+本项目以 [PolyForm Noncommercial License 1.0.0](LICENSE)（SPDX：`PolyForm-Noncommercial-1.0.0`）发布。你可以出于非商业目的使用、学习、修改和再分发；未经另行书面许可，不得用于商业用途、商业再分发、商业托管服务或付费工作流。
 
-读取 PDF 使用了 Mozilla 的 [pdf.js](https://github.com/mozilla/pdf.js)（`pdfjs-dist`），采用 Apache License 2.0；构建产物在 `pdfjs/LICENSE` 中附带其许可证。
-
-你可以在非商用目的下使用、学习、修改和再分发本项目。未经单独书面授权，禁止商用、商业再分发、托管商业服务、付费工作流或产品化商业使用。
+读取 PDF 使用 Mozilla 的 [pdf.js](https://github.com/mozilla/pdf.js)（`pdfjs-dist`），遵循 Apache License 2.0；构建产物在 `pdfjs/LICENSE` 中附带其许可证。

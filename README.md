@@ -2,54 +2,51 @@
 
 **🌐 Language:** English | [简体中文](README.zh-CN.md)
 
-> **About this fork.** OpenTeam was created by **[afumu](https://github.com/afumu)** — the original project lives at **[afumu/openteam](https://github.com/afumu/openteam)**. All original code, design and documentation belong to afumu and the OpenTeam contributors and remain under the [PolyForm Noncommercial License 1.0.0](LICENSE) (`Required Notice: Copyright (c) 2026 OpenTeam contributors.`). This fork adds Qwen and Kimi, task-based team formation, live replies from web members, images in both directions, clickable reply choices, two interface styles, security hardening for the local control daemon, iframe header rules and background message handling, faster storage and message rendering for large chats, a live health status for each AI page, full backup and restore, and the workspace tools listed under Highlights. For the official version, releases and community, please use the original repository.
+> **Origin.** This project is based on **OpenTeam** by **[afumu](https://github.com/afumu)** (original repository: [afumu/openteam](https://github.com/afumu/openteam)). The original code, design and documentation belong to afumu and the OpenTeam contributors and remain under the [PolyForm Noncommercial License 1.0.0](LICENSE) (`Required Notice: Copyright (c) 2026 OpenTeam contributors.`).
 
-> A local-first AI team workspace that turns your existing ChatGPT, Claude, Gemini, DeepSeek, Grok, Qwen, and Kimi web sessions into a multi-agent discussion room.
+> A local-first AI team workspace: put ChatGPT, Gemini, DeepSeek, Grok, Qwen, Kimi, API models and local coding agents in one group chat, and let them discuss, review each other and work through a project together.
 
-OpenTeam is a Manifest V3 Chrome extension. It does not require model API keys and does not spend extra OpenAI, Claude, Gemini, DeepSeek, or Grok API tokens. Instead, it reuses the AI accounts you already have open in your browser, sends tasks to those web sessions, and gathers replies from different people and models into one shared team chat.
+OpenTeam is a Manifest V3 Chrome extension. Most members need no API key: OpenTeam reuses the AI websites you are already signed in to, sends each member its task inside that site, and gathers the replies in one shared chat. When you want them, API models and local agents such as Claude Code or Codex can join the same group.
 
-Use it for learning, research, and personal non-commercial experiments where one answer is not enough: product reviews, technical design reviews, content planning, personal decisions, multi-model comparison, and multi-step work that benefits from several AI roles thinking together.
-
-## 🌱 Background
-
-OpenTeam is a sister project to [OpenLink](https://github.com/afumu/openlink), an earlier browser extension I built around using the browser itself as the working surface. While building OpenLink, I already wanted a companion extension that could reuse signed-in browser sessions to talk with large language models and compare answers across models, but that idea stayed on the shelf while other work got busy.
-
-The idea became concrete after I met Lu ([YUANLU007](https://github.com/YUANLU007)), a news editor. In her writing workflow, she often needs to compare several AI systems, inspect how different models answer the same question, and use multiple perspectives for factual checks. That matched the original OpenLink idea closely, so OpenTeam became its sister project: a local browser workspace for sending one task to multiple AI web sessions and gathering their responses in one discussion room.
-
-![OpenTeam group chat preview](docs/assets/group-chat-ui-concept.png)
-
-## 💬 Community
-
-Join the OpenTeam WeChat community by scanning the QR code below. If the QR code has expired, add WeChat ID `afumudev` and include `OpenTeam` in your request so I can invite you to the group.
-
-<p>
-  <img src="docs/assets/openteam-wechat-group-qr.jpg" alt="OpenTeam WeChat community QR code" width="280">
-</p>
+Use it for learning, research and personal non-commercial work where one answer is not enough: comparing models, fact-checking, design and code reviews, content planning, decisions, and multi-step work that benefits from several roles.
 
 ## ✨ Highlights
 
-- 🚫 **0 API token workflow**: reuse AI website sessions instead of calling model APIs directly.
-- 🧩 **Multi-model discussion**: coordinate Gemini, ChatGPT, Claude, DeepSeek, Grok, Qwen, Kimi, and other supported web sessions in one chat.
-- 🙋 **Team up for a task**: describe the task, pick the AIs, and let each choose its own position on the project; you confirm the roles before work starts.
-- 🧑‍🏫 **Built-in advisor library**: start with 38 expert and thinking-style advisor templates, or create your own people.
-- 📣 **Mention-based routing**: use `@person` to ask one member, or `@everyone` to dispatch the same task to the whole team.
-- 🔄 **Independent and collaborative modes**: compare isolated perspectives first, then let members reference, challenge, and build on each other.
-- 🖥️ **Local agents as members**: Claude Code, Codex or another ACP agent on your computer can join a group and work in a folder you allow, through the local daemon; every run, and every file edit or command it asks for, waits for your approval.
-- 🗂️ **Project mode**: give the team a goal; a coordinator breaks it into tasks with owners and "done" criteria, you approve, members work in parallel or in order, the coordinator checks the results, asks for rework and finally writes the complete deliverable, all on a task board in the chat.
-- 🗣️ **Turn-by-turn discussions**: switch on 轮流讨论 in a collaborative group and members speak one at a time, each seeing what was said before; a member can hand the next turn to another by @-mentioning them. You can add notes while it runs, stop it, or run one more round, and it ends with a summary.
-- 📋 **Key points and round summaries**: when a message goes to several members, each reply starts with its key points and long replies fold to them; once everyone has answered, one member (an API member when there is one) writes a short summary of agreements, disagreements, open questions and next steps.
-- ⚡ **Live replies**: a web member's reply appears in the chat while the site is still writing it; stopping keeps what was written.
-- 🖼️ **Images and files**: attach images, PDF, Word, PowerPoint, Excel and text files to a message (documents are sent as the text read from them); images that ChatGPT, Gemini, Grok or Qwen draw are copied into the chat.
-- 🔘 **Clickable choices**: when a reply ends with options (A / B / C), answer it with one click.
-- 🔌 **Optional API members**: add OpenAI- or Anthropic-compatible models next to web sessions; each API reply shows how many tokens it used.
-- 🧰 **Workspace tools**: compare the replies to one question, search messages, edit and resend a message, voice input, pin and search groups, notes, a desktop notification when every member has answered, a live health status for each AI page, and full backup and restore.
-- 🎨 **Two looks**: a ChatGPT-like and a Grok-like interface, each in light and dark, switched from the header or the settings menu.
-- 💾 **Local-first storage**: chats, people, messages, notes, highlights, and settings are stored in browser storage.
-- 🤖 **Agent control CLI**: optional `openteamcli` support lets local agents create chats, add roles, post tasks, and wait for replies.
+**A team made of the AIs you already use**
+
+- 🚫 **No API tokens needed**: web members use your existing AI website sessions.
+- 🧩 **Six AI websites**: Gemini, ChatGPT, DeepSeek, Grok, Qwen and Kimi as group members, each in its own page; a member can be moved to another site or model at any time.
+- 🔌 **API members**: add any OpenAI- or Anthropic-compatible model (DeepSeek, Gemini, Zhipu, Ark, OpenRouter and others). Each reply shows the tokens it used, and a failed request shows the server's own reason.
+- 🖥️ **Local agents as members**: Claude Code, Codex or another ACP agent works in a folder you allow, through the local daemon. Every run, file edit and command waits for your approval, and agents that share a folder take turns.
+- 🙋 **Team up for a task**: describe the task, pick the AIs, and each chooses its position; you confirm the roles before work starts.
+- 🧑‍🏫 **Advisor library**: 38 expert and thinking-style templates, or people you create yourself.
+
+**Ways to work together**
+
+- 📣 **Mentions**: `@person` asks one member, `@everyone` asks the whole team.
+- 🔄 **Independent and collaborative modes**: compare separate answers first, then let members read, challenge and build on each other.
+- 🗣️ **Turn-by-turn discussion**: members speak one at a time and can hand the turn to someone else; no single member can take over the discussion.
+- 🗂️ **Project mode**: a coordinator breaks a goal into tasks with owners and "done" criteria. After you approve, members work in order or in parallel, the coordinator checks each result and asks for rework (with a limit, so tasks are not passed around forever), and finally writes the deliverable on a task board in the chat.
+- 📋 **Key points and round summaries**: replies to a group start with their key points; once everyone has answered, one member summarises agreements, disagreements, open questions and next steps. You can adopt a summary as a decision with one click.
+
+**Memory that lasts across chats**
+
+- 🧠 **Memory store**: save a fact, decision, preference or note from any message, for every group, one group or one member. Each member gets the pinned items and the ones relevant to the current request, within its context budget; a web member is sent only what it has not seen yet.
+- 🔒 **Kept apart where it should be**: in independent mode a member does not read what other members wrote. Members can also propose items for you to accept or dismiss (off by default).
+
+**Workspace**
+
+- ⚡ **Live replies**: a web member's reply appears while the site is still writing it; stopping keeps what was written. If a member's page reloads or the member moves to another model mid-reply, the reply is closed properly and the member is brought back up to date.
+- 🖼️ **Images and files**: attach images, PDF, Word, PowerPoint, Excel and text files; images that ChatGPT, Gemini, Grok or Qwen draw are copied into the chat.
+- 🔘 **Clickable choices**: when a reply ends with options (A / B / C), answer with one click.
+- 🧰 **Tools**: compare replies to one question, search, edit and resend, voice input, pinned groups, notes, a notification when everyone has answered, a live health status for each AI page, and full backup and restore.
+- 🎨 **Two looks**: a ChatGPT-like and a Grok-like interface, each in light and dark.
+- 💾 **Local-first**: chats, people, memory, notes and settings stay in your browser.
+- 🤖 **Agent control CLI**: `openteamcli` lets a local agent create groups, add members, post tasks, wait for replies and search or add memory.
 
 ## 🧭 How It Works
 
-Each OpenTeam member is bound to an AI website session. When you send a message, OpenTeam builds a prompt from the chat mode, member persona, referenced messages, and shared context. The extension then delivers that prompt into the member's iframe-backed AI page and listens for the reply.
+Each web member is bound to an AI website page inside the OpenTeam workspace. When you send a message, OpenTeam builds a prompt from the chat mode, the member's persona, quoted messages, shared context and relevant memory, delivers it into the member's page, and follows the reply as it is written.
 
 ```text
 team.html
@@ -60,35 +57,33 @@ team.html
   -> OpenTeam message stream
 ```
 
-Supported site types:
+API members are called directly from the extension; local agents run through the local daemon.
 
 | Site | Common fit |
 | --- | --- |
 | Gemini | Long context, research, multimodal material |
-| ChatGPT | General execution, tool-shaped workflows, fast iteration |
-| Claude | Long documents, review, structured writing, careful reasoning. claude.ai now refuses to run inside other pages, so add Claude as an API member (Anthropic format) instead |
-| DeepSeek | Code, reasoning, Chinese-language work, cost-sensitive tasks |
-| Grok | Current-events research, alternative phrasing, X/Grok web-session workflows |
+| ChatGPT | General execution, fast iteration |
+| DeepSeek | Code, reasoning, Chinese-language work |
+| Grok | Current events, alternative phrasing |
 | Qwen | Chinese and multilingual writing, code, long documents (chat.qwen.ai) |
 | Kimi | Long documents, Chinese-language research and writing (www.kimi.com) |
+| Claude | claude.ai refuses to run inside other pages, so add Claude as an API member (Anthropic format) |
 
-These are practical defaults, not rankings. Actual quality depends on model versions, account plans, task type, and input material.
+These are practical defaults, not rankings. Quality depends on model versions, account plans, task type and input.
 
 ## ⚠️ Disclaimer
 
-OpenTeam is an unofficial project for learning, research, and personal non-commercial use only. It is not affiliated with, endorsed by, or supported by OpenAI, Anthropic, Google, DeepSeek, xAI, Alibaba, Moonshot AI, or any supported AI website.
+OpenTeam is an unofficial project for learning, research and personal non-commercial use only. It is not affiliated with, endorsed by or supported by OpenAI, Anthropic, Google, DeepSeek, xAI, Alibaba, Moonshot AI or any supported AI website.
 
-OpenTeam interacts with AI websites through user-authenticated browser sessions and DOM automation. Website changes, account rules, rate limits, anti-abuse systems, or terms of service may affect whether it works. You are responsible for reviewing and complying with the rules, policies, laws, and regulations that apply to your use.
+OpenTeam works with AI websites through your own signed-in browser sessions and page automation. Website changes, account rules, rate limits, anti-abuse systems or terms of service may affect whether it works. You are responsible for following the rules, policies and laws that apply to your use.
 
-Do not use OpenTeam for commercial products, hosted services, paid workflows, bulk automation, spam, scraping, bypassing access controls, bypassing paid access, or any activity that violates third-party terms or rights.
+Do not use OpenTeam for commercial products, hosted services, paid workflows, bulk automation, spam, scraping, bypassing access controls or paid access, or anything that violates third-party terms or rights.
 
-Use it at your own risk. The maintainers are not responsible for account restrictions, service interruptions, data loss, legal issues, or other consequences arising from your use. This notice is not legal advice.
+Use it at your own risk. The maintainers are not responsible for account restrictions, service interruptions, data loss, legal issues or other consequences of your use. This notice is not legal advice.
 
 ## 🚀 Install
 
-### Option 1: Build the Extension From Source
-
-Most users only need the browser extension:
+### Build the extension
 
 ```bash
 git clone https://github.com/Lushangtu123/openteam.git
@@ -97,121 +92,90 @@ npm install
 npm run build
 ```
 
-This clones this fork; the original project is [afumu/openteam](https://github.com/afumu/openteam). After the build finishes, open `chrome://extensions/`, turn on Developer mode, click **Load unpacked**, select the generated `dist/` directory, and then click the OpenTeam extension icon to open the team workspace. Sign in to the AI websites you want to use in normal tabs first. After pulling changes, run `npm run build` again and click the reload button on OpenTeam in `chrome://extensions/`.
+Open `chrome://extensions/`, turn on Developer mode, click **Load unpacked** and select the generated `dist/` folder. Click the OpenTeam icon to open the workspace. Sign in to the AI websites you want to use in normal tabs first.
 
-### Option 2: CLI + Agent Skill
+After pulling changes, run `npm run build` again and click the reload button on OpenTeam in `chrome://extensions/`.
 
-Use this path if you want Codex, Claude Code, or another local agent to control OpenTeam chats. Install the CLI from npm, then install the agent skill:
+### Local agents and the CLI (optional)
+
+Needed only for local agent members or to let an agent such as Codex or Claude Code control OpenTeam. From the repository folder:
 
 ```bash
-npm install -g @afumu/openteamcli
-npx skills add afumu/openteam --skill openteam-control
-openteamcli daemon start
-openteamcli doctor
+npm run openteamcli -- daemon start
+npm run openteamcli -- doctor
 ```
 
-The skills installer will ask which agent, scope, and install method to use. Use the GitHub command above for the public repository; if you are developing from a local checkout or unzipped source package, install the skill from the repository root instead:
+Then enable local agent control in OpenTeam's settings. To give your agent the OpenTeam control skill, install it from the repository folder:
 
 ```bash
 npx skills add . --skill openteam-control
 ```
 
-After installation, open the OpenTeam extension page and enable local agent control in settings. See [OpenTeam CLI](packages/openteamcli/README.md) for more CLI details.
+The daemon does not start by itself after a restart. On macOS, `npm run openteamcli -- daemon install` adds it as a LaunchAgent that starts at login; `daemon uninstall` removes it. See [OpenTeam CLI](packages/openteamcli/README.md) for all commands.
 
-The daemon does not start by itself after a restart. On macOS, `openteamcli daemon install` adds it as a LaunchAgent, so it starts when you log in and comes back if it crashes; `openteamcli daemon uninstall` removes it. See [Start at Login](packages/openteamcli/README.md#start-at-login-macos) for what it writes.
-
-## 🛠️ Development From Source
+## 🛠️ Development
 
 ```bash
 npm install
-npm run dev
+npm run dev       # watch build into dist/
+npm run verify    # type check, unit tests and production build
 ```
 
-Build the extension and load the generated `dist/` directory from `chrome://extensions/` with Developer mode enabled.
-
-Useful checks:
-
-```bash
-npm run typecheck
-npm test
-npm run build
-npm run verify
-```
-
-`npm run verify` runs type checking, unit tests, and a production build.
+`npm run visual:snap -- <folder>` and `npm run visual:compare -- <before> <after>` take screenshots of every screen (both looks, both themes, three widths) and compare two sets, with an accessibility check on each screen.
 
 ## 🔐 Permissions and Privacy
 
-OpenTeam is local-first, but it needs browser-extension permissions that are worth reviewing before installation:
+- `storage` / `unlimitedStorage`: chats, people, memory, notes, settings and large chats.
+- `tabs`: find and talk to OpenTeam and AI-site tabs and frames.
+- `alarms`: runtime maintenance.
+- `declarativeNetRequest`: adjust response headers so supported AI websites can open inside the workspace.
+- `clipboardRead` / `clipboardWrite`: copy and paste.
+- `cookies`: Grok's session cookies, so its live connection works inside the workspace (OpenTeam's own tabs only).
+- `notifications`: tell you when everyone has answered (can be turned off).
+- Host permissions: only the supported AI websites, their image hosts and the local daemon. Each API model address is allowed separately, when you click **Allow access** on that model.
+- Microphone (no manifest permission): voice input uses Chrome's online speech recognition; Chrome asks the first time.
 
-- `storage` / `unlimitedStorage`: save chats, people, notes, settings, and local state, including large chats.
-- `tabs`: locate and communicate with extension and AI-site tabs/frames.
-- `alarms`: schedule runtime maintenance tasks.
-- `declarativeNetRequest`: adjust response headers so supported AI websites can be embedded in the extension iframe workspace.
-- `clipboardRead` / `clipboardWrite`: support copy and clipboard-based interactions.
-- `cookies`: read Grok's session cookies so its real-time connection works inside the team page (applied only to OpenTeam's own tabs).
-- `notifications`: tell you when every member has answered while OpenTeam is not in front (can be turned off in settings).
-- Host permissions: allow OpenTeam to work with supported AI websites and embedded web sessions, including Grok's WebSocket (`wss://grok.com`).
-- Microphone (no manifest permission): voice input uses Chrome's built-in speech recognition, which works online; Chrome asks for microphone access the first time.
-
-Images that you attach are stored in the browser (IndexedDB) and uploaded to an AI site or model only when you send them. API keys stay in browser storage and are left out of backups unless you choose to include them.
-
-OpenTeam does not provide cloud sync. Your AI conversations are still processed by the AI websites you use, under their own account rules, usage limits, privacy policies, and terms of service.
+Attached images are stored in the browser (IndexedDB) and uploaded only when you send them. API keys stay in browser storage and are left out of backups unless you include them. There is no cloud sync; your conversations are processed by the AI websites and model providers you use, under their own terms.
 
 ## 🚧 Current Limits
 
-- OpenTeam is Chrome / Chromium-first.
-- AI-site adapters depend on page DOM structure, so website redesigns can break prompt sending or reply capture.
-- The iframe workspace requires response-header changes through `declarativeNetRequest`, which makes the permission surface heavier than a normal popup extension.
-- Some sites refuse to run inside other pages on purpose; claude.ai does today. OpenTeam reports this on the member's page status and does not work around it; use the site's API instead.
-- Signed-out sessions have limits: signed-out Gemini does not send messages with images, and signed-out Grok asks you to log in before drawing.
-- Voice input needs a network connection, because Chrome recognizes speech online.
-- Built-in famous-person advisor templates are prompt templates inspired by public ideas. They are not real people and should not be presented as real participation.
-- Medical, legal, financial, and other high-stakes outputs still require human judgment and qualified professional advice.
+- Chrome / Chromium only.
+- AI-site adapters depend on each site's page structure, so a redesign can break sending or reading replies.
+- Embedding sites needs response-header changes through `declarativeNetRequest`, a heavier permission than a normal extension.
+- Some sites refuse to run inside other pages on purpose (claude.ai today). OpenTeam shows this on the member's status and does not work around it.
+- Signed-out sessions have limits: signed-out Gemini does not send images, and signed-out Grok asks you to sign in before drawing.
+- Voice input needs a network connection.
+- Famous-person advisor templates are prompts inspired by public ideas, not real people.
+- Medical, legal, financial and other high-stakes answers still need human judgment and qualified advice.
 
 ## 🗂️ Repository Layout
 
 ```text
-public/                 Chrome extension manifest, team page, styles, DNR rules
-src/background/         service worker, command handlers, runtime routing
-src/content/            AI-site content scripts, adapters, reply observation
-src/group/              group data model, store, roles, prompts, mention parsing
+public/                 extension manifest, team page, styles, DNR rules
+src/background/         service worker, message and command handlers, model clients
+src/content/            AI-site content scripts and adapters
+src/group/              group data model, store, roles, prompts, memory, mentions
 src/teamPage/           OpenTeam workspace UI
-packages/openteamcli/   local CLI and daemon for agent control
-docs/                   design documents and assets
-```
-
-## 🤝 Contributing
-
-Issues and pull requests are welcome. Good starting areas include:
-
-- AI-site adapter fixes when target websites change.
-- Permission and privacy hardening.
-- Test coverage for group routing, prompt construction, storage, and UI flows.
-- Documentation, examples, and onboarding improvements.
-- New advisor templates or orchestration patterns with clear boundaries.
-
-Before opening a pull request, run:
-
-```bash
-npm run verify
+packages/openteamcli/   local CLI and daemon for agents
+docs/                   design documents
 ```
 
 ## 📚 Documentation
 
 - [Design document](docs/DESIGN.md)
 - [Team formation](docs/TEAM_FORMATION.md)
+- [Project mode](docs/PROJECT_MODE.md)
+- [Memory store (Chinese)](docs/MEMORY_STORE.zh-CN.md)
 - [AI page health status](docs/AI_PAGE_HEALTH.md)
 - [Images and attachments](docs/MULTIMODAL_ATTACHMENTS.md)
-- [Project mode](docs/PROJECT_MODE.md)
 - [Local agents (ACP)](docs/ACP.md)
-- [ACP support](docs/ACP.md)
 - [OpenTeam CLI](packages/openteamcli/README.md)
+- [Contributing](CONTRIBUTING.md)
+
+Issues and pull requests are welcome at [Lushangtu123/openteam](https://github.com/Lushangtu123/openteam). Run `npm run verify` before opening a pull request.
 
 ## 📜 License
 
-OpenTeam is released under the [PolyForm Noncommercial License 1.0.0](LICENSE), using the SPDX identifier `PolyForm-Noncommercial-1.0.0`.
+Released under the [PolyForm Noncommercial License 1.0.0](LICENSE) (SPDX `PolyForm-Noncommercial-1.0.0`). You may use, study, modify and redistribute it for non-commercial purposes only; commercial use, commercial redistribution, hosted commercial services and paid workflows are not permitted without separate written permission.
 
 Reading PDFs uses Mozilla's [pdf.js](https://github.com/mozilla/pdf.js) (`pdfjs-dist`), under the Apache License 2.0; the build includes its license at `pdfjs/LICENSE`.
-
-You may use, study, modify, and redistribute the project for non-commercial purposes only. Commercial use, commercial redistribution, hosted commercial services, paid workflows, and productized commercial use are not permitted without separate written permission.
