@@ -90,9 +90,9 @@ function explanation(result: SiteCheckResult, en: boolean): string {
     case 'failed':
       return en ? `Sending or reading the reply failed${detail}.` : `发送或读取回复失败${detail}。`
     case 'not-sent':
-      return en ? 'The question did not reach the page in 3 minutes.' : '3 分钟内没能把提问送进页面。'
+      return en ? 'The question did not reach the page in 5 minutes.' : '5 分钟内没能把提问送进页面。'
     case 'no-reply':
-      return en ? 'The question reached the page, but no reply was read in 3 minutes. The site may have changed.' : '提问已送进页面，但 3 分钟内没读到回复，网站可能改版了。'
+      return en ? 'The question reached the page, but no reply was read in 5 minutes. The site may have changed.' : '提问已送进页面，但 5 分钟内没读到回复，网站可能改版了。'
   }
 }
 

@@ -7,8 +7,9 @@ import type { GroupChat, OpenTeamLanguage, OpenTeamStore } from './types'
 // Every site that can open inside OpenTeam: claude.ai refuses to run inside other pages.
 export const SITE_CHECK_SITES: ChatSite[] = CHAT_SITES.filter(site => site !== 'claude')
 
-// A site that has not replied by then is reported as not answering.
-export const SITE_CHECK_TIMEOUT_MS = 180_000
+// A site that has not replied by then is reported as not answering. Slow sites take minutes (Qwen
+// took three in a live check), so this is longer than that.
+export const SITE_CHECK_TIMEOUT_MS = 300_000
 
 export const SITE_CHECK_PROMPT = '这是 OpenTeam 的网站自检，请只回复：OK'
 export const SITE_CHECK_PERSONA = '你在帮 OpenTeam 检查这个网站能否正常收发消息。'
