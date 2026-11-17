@@ -18,10 +18,12 @@ OpenTeam 是一个 Manifest V3 Chrome 扩展。大多数成员不需要 API Key�
 
 - **不需要 API token**：网页成员使用你已登录的 AI 网站账号。
 - **六个 AI 网站**：Gemini、ChatGPT、DeepSeek、Grok、Qwen、Kimi 都能作为群成员，各占一个页面；成员随时可以换到别的网站或模型。
-- **API 成员**：可添加任何 OpenAI 或 Anthropic 兼容的模型（DeepSeek、Gemini、智谱、火山方舟、OpenRouter 等）。每条回复显示用了多少 token，请求失败时显示服务器给出的原因。
+- **API 成员**：可添加任何 OpenAI 或 Anthropic 兼容的模型。选择服务商（DeepSeek、Gemini、OpenAI、Claude、通义千问、智谱、Kimi、豆包、OpenRouter、硅基流动）就会自动填好地址，模型列表可以直接从服务商获取。主模型繁忙、限流或额度用完时，由备用模型接手回答。每条回复显示用了多少 token，请求失败时显示服务器给出的原因。
 - **本机智能体当成员**：Claude Code、Codex 或其他 ACP 智能体通过本机守护进程，在你允许的文件夹里工作。每次运行、每次改文件和执行命令都要你批准；共用同一文件夹的智能体会排队，不会同时动手。
 - **按任务组队**：描述任务、挑选 AI，由它们各自认领岗位，你确认后再开工。
 - **顾问库**：内置 38 个专家和思维方式模板，也可以自己创建人员。
+
+<p><img src="docs/assets/screenshots/model-presets.png" alt="添加 API 模型：选 Google Gemini 后自动填好地址，旁边是获取模型列表按钮和备用模型" width="420"></p>
 
 **协作方式**
 
@@ -53,9 +55,11 @@ OpenTeam 是一个 Manifest V3 Chrome 扩展。大多数成员不需要 API Key�
 - **图片与文件**：可附加图片、PDF、Word、PowerPoint、Excel 和文本文件；ChatGPT、Gemini、Grok、Qwen 画出的图片会复制到群聊。
 - **对比回复**：把同一问题的所有回答并排显示，再请一位成员总结异同。
 - **一键作答**：回复以选项（A / B / C）结尾时，点一下就能回答。
+- **网站自检**：一键让每个 AI 网站回复 OK，逐个列出能否使用、是否需要登录、是否被挡住，或者提问已送达却没读到回复（网站改版后最常见的情况）。
 - **工具**：搜索、编辑后重发、语音输入、置顶群聊、笔记、所有人答完时的通知、每个 AI 页面的健康状态，以及全量备份与恢复。
 - **两种界面**：类 ChatGPT 和类 Grok 两种风格，各有浅色和深色。
 - **本地优先**：群聊、人员、记忆、笔记和设置都保存在你的浏览器里。
+- **新版本提示**：有新版本发布时，设置按钮上出现小圆点，并附下载链接。
 - **智能体控制 CLI**：`openteamcli` 让本机智能体创建群聊、添加成员、发布任务、等待回复，以及查询和保存记忆。
 
 ![并排对比三位成员的回复](docs/assets/screenshots/compare-replies.png)
@@ -123,7 +127,9 @@ OpenTeam 通过你自己登录的浏览器会话和页面自动化与 AI 网站�
 
 1. 从 [最新发布](https://github.com/Lushangtu123/openteam/releases/latest) 下载 `openteam-extension-v<版本>.zip`，解压到一个会长期保留的文件夹（Chrome 从这个文件夹加载扩展）。
 2. 打开 `chrome://extensions/`，开启开发者模式，点击「加载已解压的扩展程序」，选择该文件夹。
-3. 先在普通标签页登录要用的 AI 网站，再点击 OpenTeam 图标。
+3. 点击 OpenTeam 图标。第一次打开时会有引导：登录 AI 网站、检查能不能用、建第一个群。
+
+![上手引导：登录 AI 网站、检查能不能用、建第一个群](docs/assets/screenshots/first-run-guide.png)
 
 有新版本时，OpenTeam 会在设置里提示，设置按钮上也会出现一个小圆点。更新时，清空这个文件夹，把新版本解压进去，再在 `chrome://extensions/` 里点 OpenTeam 的重新加载按钮。群聊数据保存在浏览器里，更新不会丢失；但在 Chrome 里移除 OpenTeam 会删除它们（移除前先在设置里备份）。
 
@@ -212,7 +218,7 @@ docs/                   设计文档
 - [设计文档](docs/DESIGN.zh-CN.md)
 - [按任务组队](docs/TEAM_FORMATION.md)
 - [项目模式](docs/PROJECT_MODE.md)
-- [记忆库](docs/MEMORY_STORE.zh-CN.md)
+- [记忆库](docs/MEMORY_STORE.zh-CN.md)（[English](docs/MEMORY_STORE.md)）
 - [AI 页面健康状态](docs/AI_PAGE_HEALTH.md)
 - [图片与附件](docs/MULTIMODAL_ATTACHMENTS.md)
 - [本机智能体（ACP）](docs/ACP.md)

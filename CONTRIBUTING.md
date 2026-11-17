@@ -48,4 +48,4 @@ Use the [bug report template](.github/ISSUE_TEMPLATE/bug_report.yml) and fill in
 
 ## Security
 
-Do not file public issues for security vulnerabilities. Contact the maintainer directly.
+Do not file public issues for security vulnerabilities. Report them privately through the repository's Security tab (Report a vulnerability) on [Lushangtu123/openteam](https://github.com/Lushangtu123/openteam/security).

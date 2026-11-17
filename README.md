@@ -18,10 +18,12 @@ Use it for learning, research and personal non-commercial work where one answer 
 
 - **No API tokens needed**: web members use your existing AI website sessions.
 - **Six AI websites**: Gemini, ChatGPT, DeepSeek, Grok, Qwen and Kimi as group members, each in its own page; a member can be moved to another site or model at any time.
-- **API members**: add any OpenAI- or Anthropic-compatible model (DeepSeek, Gemini, Zhipu, Ark, OpenRouter and others). Each reply shows the tokens it used, and a failed request shows the server's own reason.
+- **API members**: add any OpenAI- or Anthropic-compatible model. Presets fill in the address for DeepSeek, Gemini, OpenAI, Claude, Qwen, Zhipu, Kimi, Doubao, OpenRouter and SiliconFlow, and the model list is fetched from the provider. A backup model answers when the main one is busy, rate-limited or out of quota. Each reply shows the tokens it used, and a failed request shows the server's own reason.
 - **Local agents as members**: Claude Code, Codex or another ACP agent works in a folder you allow, through the local daemon. Every run, file edit and command waits for your approval, and agents that share a folder take turns.
 - **Team up for a task**: describe the task, pick the AIs, and each chooses its position; you confirm the roles before work starts.
 - **Advisor library**: 38 expert and thinking-style templates, or people you create yourself.
+
+<p><img src="docs/assets/screenshots/model-presets.png" alt="Adding an API model: the Google Gemini preset fills in the address, with a fetch-models button and a backup model" width="420"></p>
 
 **Ways to work together**
 
@@ -53,9 +55,11 @@ Use it for learning, research and personal non-commercial work where one answer 
 - **Images and files**: attach images, PDF, Word, PowerPoint, Excel and text files; images that ChatGPT, Gemini, Grok or Qwen draw are copied into the chat.
 - **Compare replies**: put every answer to one question side by side, then ask a member to summarise where they agree and differ.
 - **Clickable choices**: when a reply ends with options (A / B / C), answer with one click.
+- **Site check**: one click asks every AI site to reply OK and lists, per site, whether it works, wants a sign-in, is blocked, or got the question but gave no reply (what a site's redesign breaks).
 - **Tools**: search, edit and resend, voice input, pinned groups, notes, a notification when everyone has answered, a live health status for each AI page, and full backup and restore.
 - **Two looks**: a ChatGPT-like and a Grok-like interface, each in light and dark.
 - **Local-first**: chats, people, memory, notes and settings stay in your browser.
+- **Update notice**: a dot on the settings button when a new release is out, with a link to it.
 - **Agent control CLI**: `openteamcli` lets a local agent create groups, add members, post tasks, wait for replies and search or add memory.
 
 ![Comparing three replies side by side](docs/assets/screenshots/compare-replies.png)
@@ -123,7 +127,9 @@ Use it at your own risk. The maintainers are not responsible for account restric
 
 1. Download `openteam-extension-v<version>.zip` from the [latest release](https://github.com/Lushangtu123/openteam/releases/latest) and unzip it into a folder you will keep (Chrome loads the extension from that folder).
 2. Open `chrome://extensions/`, turn on Developer mode, click **Load unpacked** and choose the folder.
-3. Sign in to the AI websites you want to use in normal tabs, then click the OpenTeam icon.
+3. Click the OpenTeam icon. The first screen walks you through signing in to the AI websites, checking they work, and making a first group.
+
+![The first-run guide: sign in to the AI sites, check they work, make a first group](docs/assets/screenshots/first-run-guide.png)
 
 OpenTeam says in its settings when a new version is out, with a dot on the settings button. To update, empty that folder, unzip the new version into it and click the reload button on OpenTeam in `chrome://extensions/`. Your chats are kept in the browser, so an update keeps them; removing OpenTeam from Chrome deletes them (make a backup in settings first).
 
@@ -212,7 +218,7 @@ docs/                   design documents
 - [Design document](docs/DESIGN.md)
 - [Team formation](docs/TEAM_FORMATION.md)
 - [Project mode](docs/PROJECT_MODE.md)
-- [Memory store (Chinese)](docs/MEMORY_STORE.zh-CN.md)
+- [Memory store](docs/MEMORY_STORE.md)
 - [AI page health status](docs/AI_PAGE_HEALTH.md)
 - [Images and attachments](docs/MULTIMODAL_ATTACHMENTS.md)
 - [Local agents (ACP)](docs/ACP.md)
