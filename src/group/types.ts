@@ -562,6 +562,9 @@ export interface GroupMessage {
   refreshPersona?: boolean
   // On a member's reply: what it proposed to remember, until the user saves or dismisses each.
   memoryProposals?: MemoryProposal[]
+  // The text of the proposals the user already saved or dismissed, so that reading the reply again
+  // (重新同步完整回复) does not offer them again.
+  memoryProposalsHandled?: string[]
   // Tokens an API member's reply used, as its model reported them.
   usage?: MessageTokenUsage
   // On an API member's reply while its request failed and is about to be sent again: which retry

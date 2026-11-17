@@ -1,18 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  MEMORY_BUDGET_MAX_CHARS,
-  MEMORY_ITEM_OVERHEAD_CHARS,
-  MEMORY_MAX_RETRIEVED,
-  fitMemoryBudget,
-  isMemoryItemVisible,
-  memoryCharBudget,
-  memoryModeForChat,
-  pinnedMemoryItems,
-  searchMemoryItems,
-  selectMemoryItems,
-  tokenizeMemoryText,
-  visibleMemoryItems,
-} from './memoryRetrieval'
+import { MEMORY_BUDGET_MAX_CHARS, MEMORY_ITEM_OVERHEAD_CHARS, MEMORY_MAX_RETRIEVED, fitMemoryBudget, isMemoryItemVisible, memoryCharBudget, memoryModeForChat, pinnedMemoryItems, searchMemoryItems, selectMemoryItems, tokenizeMemoryText, visibleMemoryItems, isMemoryItemReadByNobody, memoryItemsLeftUnreadBy } from './memoryRetrieval'
 import { createDefaultStore } from './store'
 import type { GroupChat, GroupRole, MemoryItem, OpenTeamStore, RoomMode } from './types'
 
@@ -303,6 +290,29 @@ describe('memory retrieval', () => {
   it('selects nothing when the store has no items', () => {
     const store = makeStore([], 'collaborative')
     expect(selectMemoryItems({ store, chat: store.chatsById['chat-1'], role: store.rolesById.alice, query: 'database password' })).toEqual([])
+  })
+})
+
+describe('items nobody reads', () => {
+  const fromBob = makeItem('from-bob', { scope: 'chat', scopeId: 'chat-1', source: { origin: 'member', roleId: 'bob', chatId: 'chat-1' } })
+
+  it('are a group item from the reply of a member who has left an independent group', () => {
+    const store = makeStore([fromBob], 'independent')
+    expect(isMemoryItemReadByNobody(store, fromBob)).toBe(false)
+    store.chatsById['chat-1'].roleIds = ['alice']
+    expect(isMemoryItemReadByNobody(store, fromBob)).toBe(true)
+    // In a shared group, or as the user's words, or kept for every group, others read it.
+    expect(isMemoryItemReadByNobody(makeStore([fromBob], 'collaborative'), { ...fromBob })).toBe(false)
+    expect(isMemoryItemReadByNobody(store, { ...fromBob, source: { origin: 'user' } })).toBe(false)
+    expect(isMemoryItemReadByNobody(store, { ...fromBob, scope: 'global', scopeId: undefined })).toBe(false)
+  })
+
+  it('are what a member leaves behind when it leaves an independent group', () => {
+    const own = makeItem('bob-own', { scope: 'role', scopeId: 'bob' })
+    const store = makeStore([fromBob, own, makeItem('from-alice', { scope: 'chat', scopeId: 'chat-1', source: { origin: 'member', roleId: 'alice' } })], 'independent')
+    expect(memoryItemsLeftUnreadBy(store, 'chat-1', 'bob').map(item => item.id)).toEqual(['from-bob'])
+    expect(memoryItemsLeftUnreadBy(makeStore([fromBob], 'collaborative'), 'chat-1', 'bob')).toEqual([])
+    expect(memoryItemsLeftUnreadBy(store, 'gone', 'bob')).toEqual([])
   })
 })
 

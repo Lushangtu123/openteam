@@ -184,6 +184,18 @@ describe('memory panel', () => {
     expect(onClose).toHaveBeenCalledTimes(1)
   })
 
+  it('marks an item nobody reads any more, and says why', () => {
+    const store = makeStore()
+    store.chatsById.c1.mode = 'independent'
+    // c came from Kimi's reply; Kimi has left the group.
+    store.memoryItemsById!.c = { ...store.memoryItemsById!.c, scope: 'chat', scopeId: 'c1' }
+    store.chatsById.c1.roleIds = ['r1']
+    const { $ } = open(store, { chatId: 'c1' })
+    expect($('[data-memory-item="c"] .memory-panel-meta').textContent).toContain('无人可读')
+    expect($('[data-memory-item="c"] .memory-panel-tags').textContent).toContain('已移出的成员')
+    expect($('[data-memory-item="b"] .memory-panel-meta').textContent).not.toContain('无人可读')
+  })
+
   it('says how to start when nothing is saved, in English too', () => {
     const store = makeStore('en')
     store.memoryItemsById = {}

@@ -70,6 +70,22 @@ export function isMemoryItemVisible(item: MemoryItem, chat: GroupChat, role: Gro
   return item.scope === 'global' && item.source.chatId !== undefined && item.source.chatId !== chat.id
 }
 
+// An item saved for an 独立 group from a member's reply is read only by that member. Once the member
+// has left the group, nobody there reads it (until the group works 协作).
+export function isMemoryItemReadByNobody(store: Pick<OpenTeamStore, 'chatsById'>, item: MemoryItem): boolean {
+  if (item.scope !== 'chat' || item.source.origin !== 'member' || !item.source.roleId) return false
+  const chat = store.chatsById[item.scopeId ?? '']
+  return Boolean(chat) && chat.mode !== 'collaborative' && !chat.roleIds.includes(item.source.roleId)
+}
+
+// The items that nobody in the group will read once this member has left it: those saved for the
+// group from its replies, in an 独立 group. (Its own items are deleted with it.)
+export function memoryItemsLeftUnreadBy(store: Pick<OpenTeamStore, 'chatsById' | 'memoryItemsById' | 'memoryOrder'>, chatId: string, roleId: string): MemoryItem[] {
+  const chat = store.chatsById[chatId]
+  if (!chat || chat.mode === 'collaborative') return []
+  return listMemoryItems(store).filter(item => item.scope === 'chat' && item.scopeId === chatId && item.source.origin === 'member' && item.source.roleId === roleId)
+}
+
 export function visibleMemoryItems(store: Pick<OpenTeamStore, 'memoryItemsById' | 'memoryOrder'>, chat: GroupChat, role: GroupRole, mode: RoomMode = memoryModeForChat(chat)): MemoryItem[] {
   return listMemoryItems(store).filter(item => isMemoryItemVisible(item, chat, role, mode))
 }

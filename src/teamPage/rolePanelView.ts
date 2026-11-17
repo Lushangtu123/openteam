@@ -1,6 +1,7 @@
 import { CHAT_SITES, chatSiteLabel, isChatSite } from '../group/chatSites'
 import { roleMentionLabel, roleMentionLabelOptionsFromSettings } from '../group/mentionParser'
 import { countMemoryForRole } from '../group/memoryStore'
+import { memoryItemsLeftUnreadBy } from '../group/memoryRetrieval'
 import type { ChatSite, ExternalModelConfig, GroupRole, OpenTeamStore, RoleModelSource, RoleStatus } from '../group/types'
 import { normalizeLanguage, translateUi } from '../shared/i18n'
 import type { TeamPageState } from './appState'
@@ -373,11 +374,15 @@ export function createRolePanelView(deps: RolePanelViewDependencies): RolePanelV
   }
 
   async function kickRoleFromChat(role: GroupRole): Promise<void> {
-    // The items kept for this member alone go with it; say how many before the user agrees.
+    // The items kept for this member alone go with it, and in an 独立 group the items saved for the
+    // group from its replies are read by nobody after it: say both before the user agrees.
     const memoryCount = countMemoryForRole(deps.getStore(), role.id)
-    const question = language() === 'en'
-      ? `Remove "${role.name}" from this group? The chat history stays.${memoryCount ? ` The ${memoryCount} memory ${memoryCount === 1 ? 'item' : 'items'} saved for this member alone will be deleted.` : ''}`
-      : `确定将「${role.name}」移出当前群聊吗？历史聊天记录会保留。${memoryCount ? `只为这位成员保存的 ${memoryCount} 条记忆会一并删除。` : ''}`
+    const unreadCount = memoryItemsLeftUnreadBy(deps.getStore(), role.chatId, role.id).length
+    const en = language() === 'en'
+    const items = (count: number) => en ? `${count} memory ${count === 1 ? 'item' : 'items'}` : `${count} 条记忆`
+    const question = en
+      ? `Remove "${role.name}" from this group? The chat history stays.${memoryCount ? ` The ${items(memoryCount)} saved for this member alone will be deleted.` : ''}${unreadCount ? ` The ${items(unreadCount)} saved for the group from its replies will be read by no one: in an independent group only the member who wrote them reads them.` : ''}`
+      : `确定将「${role.name}」移出当前群聊吗？历史聊天记录会保留。${memoryCount ? `只为这位成员保存的 ${items(memoryCount)}会一并删除。` : ''}${unreadCount ? `另有出自它的回复、存为本群的 ${items(unreadCount)}，之后没有成员会读到：独立模式的群里只有写它的成员读得到。` : ''}`
     if (!window.confirm(question)) {
       renderRolePanel()
       return

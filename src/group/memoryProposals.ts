@@ -72,8 +72,8 @@ export function extractMemoryProposals(content: string): ExtractedMemoryProposal
 }
 
 // Takes the proposals off a finished reply and keeps them on the message, when the request it
-// answers asked for them. What the store already holds word for word is not proposed again.
-// Returns how many were kept.
+// answers asked for them. What the store already holds word for word is not proposed again, nor
+// what the user already answered on this reply. Returns how many were kept.
 export function takeMemoryProposals(store: OpenTeamStore, chat: GroupChat, reply: GroupMessage, newId: (prefix: string) => string): number {
   const request = reply.sourceMessageId ? store.messagesById[reply.sourceMessageId] : undefined
   delete reply.memoryProposals
@@ -81,19 +81,21 @@ export function takeMemoryProposals(store: OpenTeamStore, chat: GroupChat, reply
   const extracted = extractMemoryProposals(reply.content)
   if (extracted.content === reply.content) return 0
   reply.content = extracted.content
-  const known = new Set(listMemoryItems(store).map(item => item.content))
+  const known = new Set([...listMemoryItems(store).map(item => item.content), ...(reply.memoryProposalsHandled ?? [])])
   const proposals = extracted.proposals.filter(proposal => !known.has(proposal.content)).map(proposal => ({ id: newId('proposal'), ...proposal }))
   if (proposals.length > 0) reply.memoryProposals = proposals
   return proposals.length
 }
 
-// Removes one proposal from its message, once the user saved or dismissed it.
+// Removes one proposal from its message, once the user saved or dismissed it, and remembers its
+// text there as answered.
 export function resolveMemoryProposal(message: GroupMessage | undefined, proposalId: string): MemoryProposal | undefined {
   const proposal = message?.memoryProposals?.find(candidate => candidate.id === proposalId)
   if (!message || !proposal) return undefined
   const rest = message.memoryProposals?.filter(candidate => candidate.id !== proposalId) ?? []
   if (rest.length > 0) message.memoryProposals = rest
   else delete message.memoryProposals
+  message.memoryProposalsHandled = [...new Set([...(message.memoryProposalsHandled ?? []), proposal.content])]
   return proposal
 }
 

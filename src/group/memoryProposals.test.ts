@@ -123,6 +123,20 @@ describe('taking proposals off a finished reply', () => {
     expect(reply.memoryProposals).toBeUndefined()
   })
 
+  it('does not offer again what the user saved or dismissed, when the reply is read in full again', () => {
+    const { store, chat, reply } = makeStore()
+    const full = '用 PostgreSQL。\n\n记忆提议（决定）：数据库用 PostgreSQL 15。\n记忆提议（备注）：主键用 UUID。'
+    reply.content = full
+    takeMemoryProposals(store, chat, reply, ids())
+    const [decision] = reply.memoryProposals!
+    resolveMemoryProposal(reply, decision.id)
+    expect(reply.memoryProposalsHandled).toEqual(['数据库用 PostgreSQL 15。'])
+    // 重新同步完整回复 reads the reply with its lines again: only the one not answered comes back.
+    reply.content = full
+    takeMemoryProposals(store, chat, reply, ids())
+    expect(reply.memoryProposals?.map(proposal => proposal.content)).toEqual(['主键用 UUID。'])
+  })
+
   it('reads a reply again from scratch when it is read in full a second time', () => {
     const { store, chat, reply } = makeStore()
     takeMemoryProposals(store, chat, reply, ids())
@@ -140,6 +154,7 @@ describe('saving or dismissing a proposal', () => {
     expect(reply.memoryProposals).toEqual([{ id: 'p2', kind: 'note', content: '二' }])
     expect(resolveMemoryProposal(reply, 'p2')?.content).toBe('二')
     expect('memoryProposals' in reply).toBe(false)
+    expect(reply.memoryProposalsHandled).toEqual(['一', '二'])
     expect(resolveMemoryProposal(reply, 'p2')).toBeUndefined()
     expect(resolveMemoryProposal(undefined, 'p1')).toBeUndefined()
   })

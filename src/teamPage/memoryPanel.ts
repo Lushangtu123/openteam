@@ -2,6 +2,7 @@
 // be edited, kept in every prompt, switched off for now, or deleted here
 // (docs/MEMORY_STORE.zh-CN.md, section 6).
 import { MAX_MEMORY_ITEMS, listMemoryItems } from '../group/memoryStore'
+import { isMemoryItemReadByNobody } from '../group/memoryRetrieval'
 import type { MemoryItem, OpenTeamStore } from '../group/types'
 import { normalizeLanguage, translateUi } from '../shared/i18n'
 import { createIcon, type IconName } from './icons'
@@ -154,9 +155,17 @@ export function openMemoryPanel(deps: MemoryPanelDependencies): void {
     )
     if (item.pinned) meta.append(element('span', 'memory-panel-badge', t('常驻', 'Pinned')))
     if (item.disabled) meta.append(element('span', 'memory-panel-badge memory-panel-off', t('已停用', 'Off')))
+    const readByNobody = isMemoryItemReadByNobody(store, item)
+    if (readByNobody) meta.append(element('span', 'memory-panel-badge memory-panel-off', t('无人可读', 'Read by nobody')))
     meta.append(element('span', 'memory-panel-source', memorySourceLabel(store, item, english)))
     const content = element('p', 'memory-panel-content', item.content)
     row.append(meta, content)
+    if (readByNobody) {
+      row.append(element('p', 'tiny memory-panel-tags', t(
+        '它出自一位已移出的成员的回复；独立模式的群里只有写它的成员读得到。可以改成「全部群聊」或删除。',
+        'It comes from the reply of a member who has left; in an independent group only the member who wrote it reads it. Move it to every group, or delete it.',
+      )))
+    }
     if (item.tags?.length) {
       const tags = element('p', 'tiny memory-panel-tags', `${t('标签：', 'Tags: ')}${item.tags.join(english ? ', ' : '、')}`)
       row.append(tags)

@@ -194,7 +194,7 @@ describe('team page role panel view boundary', () => {
       const store = makeStoreWithRole()
       store.settings.language = language
       const items = Array.from({ length: count }, (_, index) => ({ id: `mem-${index}`, scope: 'role' as const, scopeId: 'role-1', kind: 'fact' as const, content: `第 ${index} 条`, source: { origin: 'user' as const }, createdAt: 1, updatedAt: 1 }))
-      // Kept for the group, not for this member: stays, and is not counted.
+      // Kept for the group from its reply, in an independent group: stays, and nobody will read it.
       const groupItem = { id: 'mem-group', scope: 'chat' as const, scopeId: 'chat-1', kind: 'fact' as const, content: '群的', source: { origin: 'member' as const, roleId: 'role-1' }, createdAt: 1, updatedAt: 1 }
       store.memoryItemsById = Object.fromEntries([...items, groupItem].map(item => [item.id, item]))
       store.memoryOrder = Object.keys(store.memoryItemsById)
@@ -231,9 +231,39 @@ describe('team page role panel view boundary', () => {
       return question
     }
 
-    expect(await remove('zh-CN', 2)).toBe('确定将「产品经理」移出当前群聊吗？历史聊天记录会保留。只为这位成员保存的 2 条记忆会一并删除。')
-    expect(await remove('en', 1)).toBe('Remove "产品经理" from this group? The chat history stays. The 1 memory item saved for this member alone will be deleted.')
-    expect(await remove('en', 0)).toBe('Remove "产品经理" from this group? The chat history stays.')
+    expect(await remove('zh-CN', 2)).toBe('确定将「产品经理」移出当前群聊吗？历史聊天记录会保留。只为这位成员保存的 2 条记忆会一并删除。另有出自它的回复、存为本群的 1 条记忆，之后没有成员会读到：独立模式的群里只有写它的成员读得到。')
+    expect(await remove('en', 1)).toBe('Remove "产品经理" from this group? The chat history stays. The 1 memory item saved for this member alone will be deleted. The 1 memory item saved for the group from its replies will be read by no one: in an independent group only the member who wrote them reads them.')
+    expect(await remove('en', 0)).toBe('Remove "产品经理" from this group? The chat history stays. The 1 memory item saved for the group from its replies will be read by no one: in an independent group only the member who wrote them reads them.')
+  })
+
+  it('says nothing about memory when removing a member leaves none behind, and nothing about unread items in a shared group', async () => {
+    const remove = async (mode: 'independent' | 'collaborative', withGroupItem: boolean) => {
+      const store = makeStoreWithRole()
+      store.chatsById['chat-1'].mode = mode
+      const item = { id: 'g', scope: 'chat' as const, scopeId: 'chat-1', kind: 'fact' as const, content: '群的', source: { origin: 'member' as const, roleId: 'role-1' }, createdAt: 1, updatedAt: 1 }
+      store.memoryItemsById = withGroupItem ? { g: item } : {}
+      store.memoryOrder = withGroupItem ? ['g'] : []
+      const rolePanelEl = document.createElement('aside')
+      const roleSummaryEl = document.createElement('p')
+      const roleListEl = document.createElement('div')
+      rolePanelEl.append(roleSummaryEl, roleListEl)
+      const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+      const view = createRolePanelView({
+        state: createTeamPageState(), getStore: () => store, rolePanelEl, roleSummaryEl, roleListEl, iframeHost: { recoverRole: vi.fn() },
+        getCurrentChat: () => store.chatsById['chat-1'], getCurrentRoles: () => [store.rolesById['role-1']], emptyCard: () => document.createElement('div'),
+        insertMention: vi.fn(), refreshCurrentChat: vi.fn(async () => undefined), focusRoleFrame: vi.fn(), runCommand: vi.fn(async () => undefined), showError: vi.fn(),
+      })
+      view.renderRolePanel()
+      roleListEl.querySelector<HTMLButtonElement>('[data-role-more="role-1"]')?.click()
+      roleListEl.querySelector<HTMLButtonElement>('[data-role-delete="role-1"]')?.click()
+      await Promise.resolve()
+      const question = confirm.mock.calls[0][0] as string
+      confirm.mockRestore()
+      return question
+    }
+    expect(await remove('independent', false)).toBe('确定将「产品经理」移出当前群聊吗？历史聊天记录会保留。')
+    // In a shared group the others read it already.
+    expect(await remove('collaborative', true)).toBe('确定将「产品经理」移出当前群聊吗？历史聊天记录会保留。')
   })
 
   it('opens a member prompt detail dialog from the member card', () => {
