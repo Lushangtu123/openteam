@@ -96,6 +96,8 @@ export type RoleToBackgroundMessage =
       images?: ReplyImageSource[]
       conversationId?: string
       conversationUrl?: string
+      // Taken while the site still said it was writing, its text unchanged for a long while.
+      stalledWhileGenerating?: boolean
     }
   | { type: 'TEAM_SITE_STATUS_UPDATE'; chatId?: string; roleId?: string; siteId: string; status: SiteStatus; reason?: RoleSiteHealthReason; detail?: string }
 

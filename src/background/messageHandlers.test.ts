@@ -3027,3 +3027,50 @@ describe('background message handlers', () => {
     expect(sendRoleMessage).not.toHaveBeenCalled()
   })
 })
+
+describe('a reply taken while its site still said it was writing', () => {
+  it('keeps that on the reply, so the chat can say so', async () => {
+    vi.resetModules()
+    const store = createStoreWithReadyRole()
+    const role = store.rolesById['role-1']
+    Object.assign(role, { chatSite: 'gemini', status: 'thinking', lastPromptMessageId: 'msg-q', replyAttemptId: 'attempt-1' })
+    store.chatsById['chat-1'].messageIds.push('msg-q')
+    store.messagesById['msg-q'] = { id: 'msg-q', chatId: 'chat-1', seq: 1, type: 'user', content: '问题', targetRoleIds: ['role-1'], createdAt: 1, status: 'sent', deliveryStatus: { 'role-1': 'sent' } }
+    vi.doMock('./storeAccess', async importOriginal => {
+      const actual = await importOriginal<typeof import('./storeAccess')>()
+      return {
+        ...actual,
+        mutateStore: async (mutator: (store: OpenTeamStore) => unknown) => ({ store, result: await mutator(store) }),
+      }
+    })
+
+    const { createMessageHandlers } = await import('./messageHandlers')
+    const binding: RuntimeFrameBinding = { chatId: 'chat-1', roleId: 'role-1', tabId: 101, frameId: 7, ready: true, lastSeenAt: 0 }
+    let ids = 0
+    const routes = createMessageHandlers({
+      broadcastStoreUpdated: vi.fn(),
+      getChatStatusFromRoles: () => 'ready',
+      log: { debug: vi.fn(), info: vi.fn(), warn: vi.fn() },
+      newId: vi.fn((prefix: string) => `${prefix}-${++ids}`),
+      now: () => 100,
+      runtimeFrames: { bind: vi.fn(), getByAddress: vi.fn(() => binding), getByRole: vi.fn(() => binding) },
+      sendRoleMessage: vi.fn(),
+      sendError: vi.fn(),
+      sendPrompt: vi.fn(),
+    })
+    const reply = (fields: Record<string, unknown>) => routes.find(route => route.type === 'TEAM_ROLE_REPLY')!.handler({ type: 'TEAM_ROLE_REPLY', chatId: 'chat-1', roleId: 'role-1', replyAttemptId: 'attempt-1', ...fields }, { tab: { id: 101 } as chrome.tabs.Tab, frameId: 7 })
+
+    await reply({ messageId: 'msg-q', content: '三段都写完了。', stalledWhileGenerating: true })
+    const taken = Object.values(store.messagesById).find(message => message.type === 'assistant')!
+    expect(taken).toMatchObject({ content: '三段都写完了。', status: 'received', stalledWhileGenerating: true })
+    expect(store.messagesById['msg-q'].deliveryStatus).toEqual({ 'role-1': 'received' })
+
+    // A reply the site finished as usual has no such mark.
+    Object.assign(role, { status: 'thinking', lastPromptMessageId: 'msg-r', replyAttemptId: 'attempt-1' })
+    store.chatsById['chat-1'].messageIds.push('msg-r')
+    store.messagesById['msg-r'] = { id: 'msg-r', chatId: 'chat-1', seq: 3, type: 'user', content: '再问', targetRoleIds: ['role-1'], createdAt: 2, status: 'sent', deliveryStatus: { 'role-1': 'sent' } }
+    await reply({ messageId: 'msg-r', content: '另一个回答。' })
+    const usual = Object.values(store.messagesById).find(message => message.type === 'assistant' && message.sourceMessageId === 'msg-r')!
+    expect(usual.stalledWhileGenerating).toBeUndefined()
+  })
+})

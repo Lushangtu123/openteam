@@ -296,6 +296,7 @@ export function createMemberPageHandlers(ctx: MessageHandlerContext) {
           sourceMessageId: promptMessageId,
           createdAt: timestamp,
           status: 'received',
+          ...(message.stalledWhileGenerating === true ? { stalledWhileGenerating: true } : {}),
         }
         store.messagesById[reply.id] = reply
         // What the member proposed to remember leaves the reply's text and waits beside it.

@@ -341,6 +341,8 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
       if (usage) name.append(usage)
       const fallback = fallbackLabel(message)
       if (fallback) name.append(fallback)
+      const stalled = stalledLabel(message)
+      if (stalled) name.append(stalled)
       wireMentionShortcut(name, role)
       stack.append(name)
     }
@@ -649,6 +651,19 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     return label
   }
 
+  // A web reply taken while its site still said it was writing (src/content/replyObserver.ts).
+  function stalledLabel(message: GroupMessage): HTMLElement | undefined {
+    if (!message.stalledWhileGenerating) return undefined
+    const en = normalizeLanguage(deps.getStore().settings.language) === 'en'
+    const label = document.createElement('span')
+    label.className = 'message-usage message-stalled'
+    label.textContent = en ? 'Taken as it stood' : '按现有内容收尾'
+    label.title = en
+      ? 'The site kept showing it was still writing, with no new text for 3 minutes, so OpenTeam took the reply as it stood and stopped the site'
+      : '网站一直显示还在生成，3 分钟没有新内容，OpenTeam 按现有内容收尾，并停止了网站的生成'
+    return label
+  }
+
   // How many tokens an API reply used, with the input/output split on hover.
   function usageLabel(message: GroupMessage): HTMLElement | undefined {
     const total = message.usage?.totalTokens
@@ -923,6 +938,7 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
       status: message.status,
       usage: message.usage,
       answeredByFallback: message.answeredByFallback,
+      stalledWhileGenerating: message.stalledWhileGenerating,
       retry: message.retry,
       choicesOpen: choicesOpen(message),
       memoryProposals: message.memoryProposals,

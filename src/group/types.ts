@@ -578,6 +578,9 @@ export interface GroupMessage {
   usage?: MessageTokenUsage
   // The backup model that wrote an API member's reply, when its main model could not.
   answeredByFallback?: string
+  // On a web member's reply its site kept saying it was still writing, with no new text for
+  // STALLED_GENERATING_MS (src/content/replyObserver.ts): taken as it stood, so the chat goes on.
+  stalledWhileGenerating?: boolean
   // On an API member's reply while its request failed and is about to be sent again: which retry
   // this is, of how many, and why the last attempt failed. Gone once text arrives or it ends.
   retry?: { attempt: number; total: number; reason: string }

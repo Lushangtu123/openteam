@@ -21,6 +21,12 @@ const REPLY_TIMEOUT_MS = REPLY_SIGNAL_INTERVAL_MS
 const REPLY_RECENT_CHANGE_MS = 2 * REPLY_POLL_INTERVAL_MS + RESPONSE_FINAL_SETTLE_MS
 const SHORT_REPLY_MAX_CHARS = 50
 const SHORT_REPLY_STABLE_SETTLE_MS = 5000
+// A site can go on saying it is writing after its reply is done (Gemini's page has kept its
+// spinner for many minutes with the whole reply on screen), and a discussion or project waits on
+// that one reply. When the reply has text and the text has not changed for this long, it is taken
+// as it stands, marked so, and the site is stopped so its next prompt can go in. A model still
+// thinking has no text yet and is left to it.
+export const STALLED_GENERATING_MS = 3 * 60_000
 // How often the reply written so far is sent to the chat while the site is still writing. The
 // team page smooths the text between updates.
 export const REPLY_PROGRESS_INTERVAL_MS = 500
@@ -324,11 +330,13 @@ export function createReplyObserver(options: {
         schedule()
         return
       }
-      if (generating) {
+      const stalled = generating && stableDuration >= STALLED_GENERATING_MS && normalizedReplyLength(candidate.text) > 0
+      if (generating && !stalled) {
         log.debug('reply-poll:defer-generating', { messageId, stableDuration, textLength: candidate.text.length })
         schedule()
         return
       }
+      if (stalled) log.warn('reply-poll:stalled-generating', { messageId, stableDuration, textLength: candidate.text.length })
       if (candidate.text && isVeryShortReply(candidate.text) && stableDuration < SHORT_REPLY_STABLE_SETTLE_MS) {
         log.debug('reply-poll:defer-short', {
           messageId,
@@ -351,8 +359,8 @@ export function createReplyObserver(options: {
             schedule()
             return
           }
-          log.warn('reply-poll:compensated', { messageId, textLength: reply.text.length, roleId: assignedRole?.roleId })
-          reportAcceptedReply(messageId, reply, 'polling-compensation')
+          log.warn('reply-poll:compensated', { messageId, textLength: reply.text.length, roleId: assignedRole?.roleId, stalled })
+          reportAcceptedReply(messageId, reply, 'polling-compensation', stalled)
         })
         .catch(error => {
           log.warn('reply-poll:resolve-failed', { messageId, error: error instanceof Error ? error.message : String(error) })
@@ -367,7 +375,7 @@ export function createReplyObserver(options: {
     schedule()
   }
 
-  function reportAcceptedReply(messageId: string, reply: ReportableReplyText, source: ReplySource): void {
+  function reportAcceptedReply(messageId: string, reply: ReportableReplyText, source: ReplySource, stalledWhileGenerating = false): void {
     const assignedRole = roleSession.getAssignedRole()
     if (!assignedRole) return
 
@@ -393,8 +401,11 @@ export function createReplyObserver(options: {
         images,
         conversationId: snapshot.conversationId,
         conversationUrl: snapshot.conversationUrl,
+        ...(stalledWhileGenerating ? { stalledWhileGenerating: true } : {}),
       }))
-      .then(() => {
+      .then(async () => {
+        // The reply is taken; the site's spinner would hold back its next prompt (siteBusy.ts).
+        if (stalledWhileGenerating) await siteAdapter.stopGenerating().catch(error => log.warn('reply:stalled-stop-failed', { error: error instanceof Error ? error.message : String(error) }))
         const activePrompt = roleSession.getActivePrompt()
         if (activePrompt) {
           log.info('reply:skip-idle-active-prompt', { completedMessageId: messageId, activeMessageId: activePrompt.messageId })

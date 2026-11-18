@@ -195,6 +195,25 @@ describe('team page messages view boundary', () => {
     expect(label()?.textContent).toBe('Backup lite')
   })
 
+  it('says on a web reply that it was taken while its site still said it was writing', () => {
+    const { messagesEl, messages, view, deps } = createLongChatView(2)
+    deps.getStore().settings.language = 'zh-CN'
+    const label = () => messagesEl.querySelector<HTMLElement>('.message-row.assistant .message-stalled')
+    view.renderMessages()
+    expect(label()).toBeNull()
+
+    messages[1] = { ...messages[1], stalledWhileGenerating: true }
+    view.renderMessages()
+    expect(label()?.textContent).toBe('按现有内容收尾')
+    expect(label()?.title).toContain('3 分钟没有新内容')
+
+    const english = createLongChatView(2)
+    english.deps.getStore().settings.language = 'en'
+    english.messages[1] = { ...english.messages[1], stalledWhileGenerating: true }
+    english.view.renderMessages()
+    expect(english.messagesEl.querySelector<HTMLElement>('.message-row.assistant .message-stalled')?.textContent).toBe('Taken as it stood')
+  })
+
   it('offers the three ways to start a group when none is open', () => {
     const { messagesEl, deps } = createLongChatView(0)
     const startNewChat = vi.fn()

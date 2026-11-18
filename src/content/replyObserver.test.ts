@@ -2,7 +2,7 @@
 
 import { describe, expect, it, vi } from 'vitest'
 import type { RoleToBackgroundMessage } from '../group/runtimeProtocol'
-import { createReplyObserver } from './replyObserver'
+import { createReplyObserver, STALLED_GENERATING_MS } from './replyObserver'
 import type { RoleSession } from './roleSession'
 import { createChatGptAdapter } from './sites/chatgpt'
 import { createDeepSeekAdapter } from './sites/deepseek'
@@ -632,6 +632,109 @@ describe('createReplyObserver', () => {
       content: '先输出的一段内容，仍在思考后续。现在补充完成。',
     }))
     expect(sentMessages).not.toContainEqual(expect.objectContaining({ type: 'TEAM_ROLE_STATUS', status: 'error' }))
+    expect(reportRoleError).not.toHaveBeenCalled()
+
+    vi.useRealTimers()
+  })
+
+  it('takes a reply whose text has not changed for 3 minutes while the site still says it is writing, and stops the site', async () => {
+    vi.useFakeTimers()
+    document.body.innerHTML = '<message-content id="new">三段都写完了。@甲 请你接着写初稿。</message-content>'
+
+    const sentMessages: RoleToBackgroundMessage[] = []
+    const roleSession = createFakeRoleSession()
+    const reportRoleError = vi.fn()
+    const adapter = createFakeAdapter({ isGenerating: () => true })
+    const observer = createReplyObserver({
+      siteAdapter: adapter,
+      roleSession,
+      log: createFakeLog(),
+      sendRuntimeMessage: async message => {
+        sentMessages.push(message)
+        return { ok: true } as never
+      },
+      reportRoleError,
+    })
+
+    roleSession.startPrompt('msg-1', 'attempt-1')
+    observer.startReplyPolling('msg-1', 'attempt-1')
+
+    await vi.advanceTimersByTimeAsync(STALLED_GENERATING_MS - 10_000)
+    expect(sentMessages).not.toContainEqual(expect.objectContaining({ type: 'TEAM_ROLE_REPLY' }))
+    expect(adapter.stopGenerating).not.toHaveBeenCalled()
+
+    await vi.advanceTimersByTimeAsync(20_000)
+    expect(sentMessages).toContainEqual(expect.objectContaining({
+      type: 'TEAM_ROLE_REPLY',
+      messageId: 'msg-1',
+      replyAttemptId: 'attempt-1',
+      content: '三段都写完了。@甲 请你接着写初稿。',
+      stalledWhileGenerating: true,
+    }))
+    expect(adapter.stopGenerating).toHaveBeenCalledTimes(1)
+    expect(reportRoleError).not.toHaveBeenCalled()
+
+    vi.useRealTimers()
+  })
+
+  it('keeps waiting while the site is writing and its text still changes now and then', async () => {
+    vi.useFakeTimers()
+    document.body.innerHTML = '<message-content id="new">第一段。</message-content>'
+
+    const sentMessages: RoleToBackgroundMessage[] = []
+    const roleSession = createFakeRoleSession()
+    const adapter = createFakeAdapter({ isGenerating: () => true })
+    const observer = createReplyObserver({
+      siteAdapter: adapter,
+      roleSession,
+      log: createFakeLog(),
+      sendRuntimeMessage: async message => {
+        sentMessages.push(message)
+        return { ok: true } as never
+      },
+      reportRoleError: vi.fn(),
+    })
+
+    roleSession.startPrompt('msg-1', 'attempt-1')
+    observer.startReplyPolling('msg-1', 'attempt-1')
+
+    for (let minute = 1; minute <= 6; minute++) {
+      await vi.advanceTimersByTimeAsync(STALLED_GENERATING_MS - 30_000)
+      document.querySelector('message-content')!.textContent += `第 ${minute} 次补充。`
+    }
+
+    expect(sentMessages).not.toContainEqual(expect.objectContaining({ type: 'TEAM_ROLE_REPLY' }))
+    expect(adapter.stopGenerating).not.toHaveBeenCalled()
+
+    vi.useRealTimers()
+  })
+
+  it('keeps waiting while the site is writing and has no text yet (a model thinking for long)', async () => {
+    vi.useFakeTimers()
+    document.body.innerHTML = '<message-content id="new"></message-content>'
+
+    const sentMessages: RoleToBackgroundMessage[] = []
+    const roleSession = createFakeRoleSession()
+    const reportRoleError = vi.fn()
+    const adapter = createFakeAdapter({ isGenerating: () => true })
+    const observer = createReplyObserver({
+      siteAdapter: adapter,
+      roleSession,
+      log: createFakeLog(),
+      sendRuntimeMessage: async message => {
+        sentMessages.push(message)
+        return { ok: true } as never
+      },
+      reportRoleError,
+    })
+
+    roleSession.startPrompt('msg-1', 'attempt-1')
+    observer.startReplyPolling('msg-1', 'attempt-1')
+
+    await vi.advanceTimersByTimeAsync(3 * STALLED_GENERATING_MS)
+
+    expect(sentMessages).not.toContainEqual(expect.objectContaining({ type: 'TEAM_ROLE_REPLY' }))
+    expect(adapter.stopGenerating).not.toHaveBeenCalled()
     expect(reportRoleError).not.toHaveBeenCalled()
 
     vi.useRealTimers()
