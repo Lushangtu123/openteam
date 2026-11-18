@@ -160,12 +160,19 @@ export function createComposerView(deps: ComposerViewDependencies): ComposerView
     deps.referenceDraftEl.append(preview, cancel)
   }
 
+  let shownMentionKey: string | undefined
+
   function renderMentionPanel(): void {
     const roles = deps.getCurrentRoles()
     const show = shouldShowMentionPanel(deps.messageInputEl.value) && roles.length > 0
     const options = createMentionOptions(roles)
     deps.state.mentionIndex = clampMentionIndex(deps.state.mentionIndex, options)
     deps.mentionPanelEl.hidden = !show
+    // The page renders again on every store update, and member pages report often: rebuilt each
+    // time, a button could be replaced between the press and the release, and the click lost.
+    const key = show ? JSON.stringify([deps.state.mentionIndex, deps.getStore().settings, options.map(option => option.type === 'all' ? 'all' : [option.role.id, option.role.name, option.role.chatSite, option.role.modelSource, option.role.externalModelId, option.role.avatarText, option.role.avatarImage?.length, option.role.avatarImage?.slice(-32)])]) : undefined
+    if (key !== undefined && key === shownMentionKey) return
+    shownMentionKey = key
     deps.mentionPanelEl.replaceChildren()
     if (!show) return
 
@@ -183,17 +190,36 @@ export function createComposerView(deps: ComposerViewDependencies): ComposerView
         avatar.textContent = '全'
         name.textContent = '所有人'
         site.textContent = '全员'
-        option.addEventListener('click', () => insertAllMention())
+        chooseOn(option, insertAllMention)
       } else {
         const role = mentionOption.role
         paintRoleAvatar(avatar, 'mention-avatar', role)
         name.textContent = role.name
         site.className = `mention-site-badge ${role.modelSource === 'external' ? 'site-pill-external' : `site-pill-${role.chatSite ?? 'gemini'}`}`
         site.textContent = roleModelLabel(role, mentionLabelOptions())
-        option.addEventListener('click', () => insertMention(role))
+        chooseOn(option, () => insertMention(role))
       }
       option.append(avatar, name, site)
       deps.mentionPanelEl.append(option)
+    })
+  }
+
+  // Chosen on the press, which keeps the cursor in the message box; the click that follows the
+  // press is then ignored. A click from the keyboard still chooses.
+  function chooseOn(option: HTMLButtonElement, choose: () => void): void {
+    let pressed = false
+    option.addEventListener('mousedown', event => {
+      if (event.button !== 0) return
+      event.preventDefault()
+      pressed = true
+      choose()
+    })
+    option.addEventListener('click', () => {
+      if (pressed) {
+        pressed = false
+        return
+      }
+      choose()
     })
   }
 
@@ -341,7 +367,9 @@ export function createComposerView(deps: ComposerViewDependencies): ComposerView
   function shouldShowMentionPanel(value: string): boolean {
     const cursor = deps.messageInputEl.selectionStart ?? value.length
     const beforeCursor = value.slice(0, cursor)
-    const atIndex = beforeCursor.lastIndexOf('@')
+    // Only an @ still being typed (nothing after it but a name's first letters) is completed.
+    const typing = beforeCursor.match(/@[^\s@]*$/)
+    const atIndex = typing ? beforeCursor.length - typing[0].length : -1
     if (atIndex < 0) return false
     const mentionText = beforeCursor.slice(atIndex + 1)
     return !/\s/.test(mentionText)
@@ -359,7 +387,9 @@ export function createComposerView(deps: ComposerViewDependencies): ComposerView
     const value = deps.messageInputEl.value
     const cursor = deps.messageInputEl.selectionStart ?? value.length
     const beforeCursor = value.slice(0, cursor)
-    const atIndex = beforeCursor.lastIndexOf('@')
+    // Only an @ still being typed (nothing after it but a name's first letters) is completed.
+    const typing = beforeCursor.match(/@[^\s@]*$/)
+    const atIndex = typing ? beforeCursor.length - typing[0].length : -1
     const rawPrefix = atIndex >= 0 ? value.slice(0, atIndex) : value.slice(0, cursor)
     const prefix = rawPrefix && !/\s$/.test(rawPrefix) ? `${rawPrefix} ` : rawPrefix
     const suffix = value.slice(cursor)

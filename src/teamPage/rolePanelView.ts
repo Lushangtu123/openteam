@@ -34,6 +34,8 @@ export interface RolePanelViewDependencies {
   // Live health of a web role's page; without it the card falls back to the stored connection info.
   getRoleHealth?(role: GroupRole): RolePageHealth
   openRoleSite?(role: GroupRole): void
+  // A card was chosen (the side panel shows that member's AI page in the OpenTeam tab).
+  onSelectRole?(role: GroupRole): void
 }
 
 export interface RolePanelView {
@@ -66,6 +68,7 @@ export function createRolePanelView(deps: RolePanelViewDependencies): RolePanelV
       deps.state.roleSiteMenuRoleId = undefined
       deps.state.roleActionMenuRoleId = undefined
       renderRolePanel()
+      deps.onSelectRole?.(role)
     })
 
     const avatar = document.createElement('div')

@@ -17,7 +17,9 @@ import {
   type RuntimeMessage,
   onHostTabsChanged,
   listHostTabIds,
+  addPanelPort,
 } from './runtimeClient'
+import { PANEL_PORT_NAME } from '../group/runtimeProtocol'
 import { createMessageRouter } from './messageRouter'
 import { classifyRuntimeSender, isRuntimeMessageAllowed, responseForSender } from './senderPolicy'
 import { createExternalModelHandlers } from './externalModelHandlers'
@@ -44,7 +46,7 @@ import { createSiteCheckHandlers } from './siteCheckHandlers'
 import { keepLogsAcrossRestarts } from './diagnosticsLogs'
 import { recentLogs } from '../shared/logger'
 import { createControlClient } from './controlClient'
-import { createTeamPageShower } from './teamPageTab'
+import { createTeamPageHostKeeper, createTeamPageShower } from './teamPageTab'
 import { createImageAttachmentService } from './imageAttachments'
 import { createWebSocketCookieSync } from './websocketCookies'
 import { chatIdFromNotificationId, createReplyNotifier } from './replyNotifications'
@@ -143,6 +145,7 @@ async function broadcastStoreUpdated(store: OpenTeamStore, excludeTabId?: number
   cachedLanguage = store.settings.language
   await broadcastRuntimeStoreUpdated(store, { excludeTabId })
 }
+
 
 async function broadcastAutoGenerateStream(message: OrchestrationAutoStreamMessage): Promise<void> {
   try {
@@ -263,6 +266,23 @@ const routeMessage = createMessageRouter([
   // The background's recent log entries, for 导出诊断信息 (already cleaned: src/shared/logger.ts).
   { type: 'DIAGNOSTICS_LOGS_GET', handler: async () => ({ ok: true, logs: recentLogs() }) },
   ...webPageOffers.handlers,
+  // OpenTeam in the side panel (see openSidePanel below).
+  {
+    type: 'TEAM_PAGE_HOST_ENSURE',
+    handler: async message => ({ ok: true, ...await keepTeamPageHost({ windowId: typeof message.windowId === 'number' ? message.windowId : undefined }) }),
+  },
+  {
+    type: 'TEAM_PAGE_SHOW',
+    handler: async message => {
+      await showTeamPage({ fromWindowId: typeof message.windowId === 'number' ? message.windowId : undefined, focusWindow: true })
+      // A member's page asked for from the side panel: the OpenTeam tab holding it shows it.
+      if (typeof message.chatId === 'string' && typeof message.roleId === 'string') {
+        const focus = { type: 'TEAM_ROLE_FOCUS', chatId: message.chatId, roleId: message.roleId }
+        for (const tabId of listHostTabIds()) await chrome.tabs.sendMessage(tabId, focus, { frameId: 0 }).catch(() => undefined)
+      }
+      return { ok: true }
+    },
+  },
   ...createChatHandlers({ broadcastStoreUpdated, getChatStatusFromRoles, imageAttachments: imageAttachmentRepository, log, newId, now, runtimeFrames }),
   { type: 'GROUP_SETTINGS_UPDATE', handler: handleSettingsUpdate },
   ...createBackupHandlers({ broadcastStoreUpdated, log, imageAttachments: imageAttachmentRepository }),
@@ -303,6 +323,12 @@ const interruptedReplies = createInterruptedReplySweeper({
 
 // The OpenTeam page, reused when it is open (see teamPageTab.ts).
 const showTeamPage = createTeamPageShower(chrome.tabs, chrome.runtime.getURL('team.html'), chrome.windows)
+// The tab that holds members' AI pages while OpenTeam is in the side panel.
+const keepTeamPageHost = createTeamPageHostKeeper(chrome.tabs, chrome.runtime.getURL('team.html'))
+
+chrome.runtime.onConnect?.addListener(port => {
+  if (port.name === PANEL_PORT_NAME) addPanelPort(port)
+})
 
 const executeControlCommand = createControlActionExecutor({
   loadStore,
@@ -488,7 +514,9 @@ chrome.runtime.onMessage.addListener((message: RuntimeMessage, sender, sendRespo
 })
 
 // The toolbar icon: the OpenTeam tab already open, preferably in this window, or a new one here.
-// The page it was clicked on is offered to the composer (webPageOffers.ts) before the page shows.
+// The toolbar icon and 发到 OpenTeam open OpenTeam in the side panel, beside the page they were used
+// on, and offer that page to the composer (webPageOffers.ts). Without a side panel (an older Chrome)
+// the OpenTeam tab is shown instead.
 chrome.action.onClicked.addListener(tab => {
   openTeamPageFrom(tab)
 })
@@ -499,10 +527,19 @@ chrome.contextMenus?.onClicked.addListener((info, tab) => {
 })
 
 function openTeamPageFrom(tab: chrome.tabs.Tab, selection?: string): void {
-  webPageOffers.offer(tab, selection)
-    .catch(error => logBackgroundFailure('web-page-offer:failed', error))
-    .then(() => showTeamPage({ fromWindowId: tab.windowId, focusWindow: true }))
+  // Chrome opens the side panel only straight from the click, before anything is awaited.
+  const panel = openSidePanel(tab.windowId)
+  const offered = webPageOffers.offer(tab, selection).catch(error => logBackgroundFailure('web-page-offer:failed', error))
+  panel.then(opened => opened ? undefined : offered.then(() => showTeamPage({ fromWindowId: tab.windowId, focusWindow: true })))
     .catch(error => logBackgroundFailure('open-team-page:failed', error))
+}
+
+function openSidePanel(windowId: number | undefined): Promise<boolean> {
+  if (!chrome.sidePanel?.open || windowId === undefined) return Promise.resolve(false)
+  return chrome.sidePanel.open({ windowId }).then(() => true, error => {
+    logBackgroundFailure('side-panel:open-failed', error)
+    return false
+  })
 }
 
 // Grok's chat WebSocket from the team page's frames: see websocketCookies.ts. Skipped when the

@@ -621,7 +621,7 @@ describe('team.html chat creation UI', () => {
     expect(source).toContain("togglePeopleDrawerEl.textContent = ui('成员 0')")
     expect(source).toContain('deps.togglePeopleDrawerEl.textContent = ui(`成员 ${roles.length}`)')
     expect(source).toContain("deps.togglePeopleDrawerEl.setAttribute('aria-expanded', String(deps.state.peopleDrawerOpen))")
-    expect(uiSource).toContain('deps.state.peopleDrawerOpen && target && !memberPanelDocked() && !deps.rolePanelEl.contains(target) && !deps.togglePeopleDrawerEl.contains(target)')
+    expect(uiSource).toContain('deps.state.peopleDrawerOpen && target?.isConnected && !memberPanelDocked() && !deps.rolePanelEl.contains(target) && !deps.togglePeopleDrawerEl.contains(target)')
     expect(uiSource).toContain('deps.state.peopleDrawerOpen = false')
     expect(source).not.toContain('人回复中')
   })

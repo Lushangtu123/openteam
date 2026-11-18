@@ -1,6 +1,10 @@
 import { isChatSite } from './chatSites'
 import type { ChatSite, GroupRole, OpenTeamStore, ReplyImageSource, RoleSiteHealthReason, RoleSiteHealthStatus, RoleStatus } from './types'
 
+// The side panel's port to the background (src/teamPage/sidePanel.ts): what OpenTeam tabs are
+// sent by message, the panel is sent over it.
+export const PANEL_PORT_NAME = 'openteam-panel'
+
 export type RuntimeRoleStatus =
   | 'opening'
   | 'online'

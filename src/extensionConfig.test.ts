@@ -114,6 +114,16 @@ describe('extension security configuration', () => {
     expect(manifest.action?.default_popup).toBeUndefined()
   })
 
+  it('opens OpenTeam in the side panel as the panel view of the team page', () => {
+    const manifest = JSON.parse(readFileSync(resolve(process.cwd(), 'public/manifest.json'), 'utf8')) as {
+      permissions?: string[]
+      side_panel?: { default_path?: string }
+    }
+
+    expect(manifest.permissions).toContain('sidePanel')
+    expect(manifest.side_panel?.default_path).toBe('team.html?view=panel')
+  })
+
   it('limits iframe header overrides to supported AI chat subframes', () => {
     const rules = JSON.parse(readFileSync(resolve(process.cwd(), 'public/openteam-frame-rules.json'), 'utf8')) as Array<{
       condition?: {

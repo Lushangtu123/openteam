@@ -51,6 +51,7 @@ export interface TeamPageDomRefs {
   backupIncludeKeysEl: HTMLInputElement
   attachmentTrayEl: HTMLElement
   webPageOfferEl: HTMLElement
+  openInTabEl: HTMLButtonElement
   attachFileEl: HTMLButtonElement
   attachFileInputEl: HTMLInputElement
   voiceInputEl: HTMLButtonElement
@@ -239,6 +240,7 @@ export function createTeamPageDomRefs(): TeamPageDomRefs {
     backupIncludeKeysEl: requireElement<HTMLInputElement>('#backup-include-keys'),
     attachmentTrayEl: requireElement<HTMLElement>('#attachment-tray'),
     webPageOfferEl: requireElement<HTMLElement>('#web-page-offer'),
+    openInTabEl: requireElement<HTMLButtonElement>('#open-in-tab'),
     attachFileEl: requireElement<HTMLButtonElement>('#attach-file'),
     attachFileInputEl: requireElement<HTMLInputElement>('#attach-file-input'),
     voiceInputEl: requireElement<HTMLButtonElement>('#voice-input'),

@@ -11,8 +11,8 @@ interface TeamPageTab {
 
 export interface TeamPageTabsApi {
   query(queryInfo: { url: string }): Promise<TeamPageTab[]>
-  create(properties: { url: string; active: boolean; windowId?: number }): Promise<unknown>
-  update(tabId: number, properties: { active: boolean }): Promise<unknown>
+  create(properties: { url: string; active: boolean; windowId?: number }): Promise<TeamPageTab | unknown>
+  update(tabId: number, properties: { active?: boolean; autoDiscardable?: boolean }): Promise<unknown>
 }
 
 export interface TeamPageWindowsApi {
@@ -38,5 +38,23 @@ export function createTeamPageShower(tabs: TeamPageTabsApi, teamPageUrl: string,
     }
     await tabs.update(tab.id, { active: true })
     if (options.focusWindow && tab.windowId !== undefined) await windows?.update(tab.windowId, { focused: true })
+  }
+}
+
+// OpenTeam in the side panel shows a group, but its members' AI pages load in an OpenTeam tab:
+// Chrome reaches a page inside a frame only through the tab it is in. When the panel needs one and
+// none is open, one is opened behind the current tab. Chrome's memory saver may unload a tab left
+// in the background, which would close the member pages, so OpenTeam tabs are kept from that.
+export function createTeamPageHostKeeper(tabs: TeamPageTabsApi, teamPageUrl: string): (options?: { windowId?: number }) => Promise<{ opened: boolean }> {
+  return async (options = {}) => {
+    const open = (await tabs.query({ url: `${teamPageUrl}*` })).filter(tab => tab.id !== undefined)
+    let opened = false
+    if (open.length === 0) {
+      const created = await tabs.create({ url: teamPageUrl, active: false, ...(options.windowId !== undefined ? { windowId: options.windowId } : {}) }) as TeamPageTab | undefined
+      if (created?.id !== undefined) open.push(created)
+      opened = true
+    }
+    for (const tab of open) await tabs.update(tab.id!, { autoDiscardable: false }).catch(() => undefined)
+    return { opened }
   }
 }

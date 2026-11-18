@@ -27,6 +27,43 @@ describe('team page composer targeting', () => {
     expect(deps.targetPreviewEl.textContent).toBe('将发送给：工程师（DeepSeek）')
   })
 
+  it('keeps the @ list’s buttons while the page updates, and picks a member as soon as it is pressed', () => {
+    const roles = [makeRole('chat-1', 'role-1', '工程师', 'ready'), makeRole('chat-1', 'role-2', '设计师', 'ready')]
+    const { view, deps } = createComposerHarness({ roles })
+    deps.messageInputEl.value = '@'
+    view.renderComposerState()
+    const designer = deps.mentionPanelEl.querySelectorAll<HTMLButtonElement>('.mention-option')[2]
+
+    // A store update arrives between pressing and releasing (member pages report often).
+    view.renderComposerState()
+    expect(deps.mentionPanelEl.querySelectorAll('.mention-option')[2]).toBe(designer)
+
+    const press = new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })
+    designer.dispatchEvent(press)
+    expect(press.defaultPrevented).toBe(true)
+    expect(deps.messageInputEl.value).toBe('@设计师（DeepSeek） ')
+    expect(deps.mentionPanelEl.hidden).toBe(true)
+    // The click that follows the press adds nothing more.
+    designer.click()
+    expect(deps.messageInputEl.value).toBe('@设计师（DeepSeek） ')
+  })
+
+  it('adds a member chosen from the member list without touching what was written', () => {
+    const roles = [makeRole('chat-1', 'role-1', '工程师', 'ready'), makeRole('chat-1', 'role-2', '设计师', 'ready')]
+    const { view, deps } = createComposerHarness({ roles })
+    deps.messageInputEl.value = '@工程师（DeepSeek） 看看这个'
+    deps.messageInputEl.setSelectionRange(deps.messageInputEl.value.length, deps.messageInputEl.value.length)
+
+    view.insertMention(roles[1])
+    expect(deps.messageInputEl.value).toBe('@工程师（DeepSeek） 看看这个 @设计师（DeepSeek） ')
+
+    // A mention being typed is completed, as from the @ list.
+    deps.messageInputEl.value = '请 @设'
+    deps.messageInputEl.setSelectionRange(5, 5)
+    view.insertMention(roles[1])
+    expect(deps.messageInputEl.value).toBe('请 @设计师（DeepSeek） ')
+  })
+
   it('puts a sent message back in the input box with its mentions, to send again', () => {
     const { view, deps } = createComposerHarness()
     const message: GroupMessage = { id: 'msg-1', chatId: 'chat-1', seq: 1, type: 'user', content: '再评审一次', targetRoleIds: ['role-1'], createdAt: 1, status: 'sent' }

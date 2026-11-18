@@ -87,6 +87,38 @@ describe('team page role panel view boundary', () => {
     expect(runCommand).toHaveBeenCalledWith('GROUP_ROLE_RECOVER', { chatId: 'chat-1', roleId: 'role-1' })
   })
 
+  it('tells whoever asked when a member card is chosen (the side panel shows its page)', () => {
+    const store = makeStoreWithRole()
+    const rolePanelEl = document.createElement('aside')
+    const roleListEl = document.createElement('div')
+    const roleSummaryEl = document.createElement('p')
+    rolePanelEl.append(roleSummaryEl, roleListEl)
+    const onSelectRole = vi.fn()
+    const state = createTeamPageState()
+    const view = createRolePanelView({
+      state,
+      getStore: () => store,
+      rolePanelEl,
+      roleSummaryEl,
+      roleListEl,
+      iframeHost: { recoverRole: vi.fn() },
+      getCurrentChat: () => store.chatsById['chat-1'],
+      getCurrentRoles: () => [store.rolesById['role-1']],
+      emptyCard: () => document.createElement('div'),
+      insertMention: vi.fn(),
+      refreshCurrentChat: vi.fn(async () => undefined),
+      focusRoleFrame: vi.fn(),
+      runCommand: vi.fn(async () => undefined),
+      showError: vi.fn(),
+      onSelectRole,
+    })
+
+    view.renderRolePanel()
+    roleListEl.querySelector<HTMLElement>('.role-card')!.click()
+    expect(state.selectedRoleId).toBe('role-1')
+    expect(onSelectRole).toHaveBeenCalledWith(store.rolesById['role-1'])
+  })
+
   it('shows live page health and offers fixes when the page cannot take messages', async () => {
     const store = makeStoreWithRole()
     const rolePanelEl = document.createElement('aside')

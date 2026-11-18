@@ -61,6 +61,25 @@ export function listHostTabIds(): number[] {
 // The store is the largest message OpenTeam sends, so it only goes to the team page itself (the
 // host tab's top frame). Without a frameId, Chrome would also copy it into every AI-site frame
 // embedded in that tab, whose content scripts ignore it.
+// OpenTeam in Chrome's side panel: it is no tab, so what tabs are sent goes to it over its port.
+// It hosts no member pages; those stay in an OpenTeam tab.
+const panelPorts = new Set<chrome.runtime.Port>()
+
+export function addPanelPort(port: chrome.runtime.Port): void {
+  panelPorts.add(port)
+  port.onDisconnect.addListener(() => panelPorts.delete(port))
+}
+
+function postToPanels(message: unknown): void {
+  for (const port of panelPorts) {
+    try {
+      port.postMessage(message)
+    } catch {
+      panelPorts.delete(port)
+    }
+  }
+}
+
 export async function broadcastStoreUpdated(store: OpenTeamStore, options: BroadcastStoreUpdatedOptions = {}): Promise<void> {
   for (const tabId of listHostTabIds()) {
     if (tabId === options.excludeTabId) continue
@@ -74,6 +93,7 @@ export async function broadcastStoreUpdated(store: OpenTeamStore, options: Broad
       forgetHostTab(tabId)
     }
   }
+  postToPanels({ type: 'GROUP_STORE_UPDATED', store })
 }
 
 // Replaces the store in a response to the team page with a store-sync payload, when the page asked
@@ -99,6 +119,8 @@ export async function broadcastControlStatusUpdated(controlStatus: OpenTeamContr
     }
   }
 
+  postToPanels(message)
+
   try {
     await chrome.runtime.sendMessage({ type: GROUP_PUSH_TYPE, payload: message })
   } catch (error) {
@@ -115,6 +137,8 @@ export async function sendError(message: string): Promise<void> {
       forgetHostTab(tabId)
     }
   }
+
+  postToPanels(payload)
 
   try {
     await chrome.runtime.sendMessage({ type: GROUP_PUSH_TYPE, payload })

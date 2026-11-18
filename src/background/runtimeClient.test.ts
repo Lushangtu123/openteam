@@ -64,6 +64,44 @@ describe('background runtime client', () => {
     expect(runtimeSendMessage).toHaveBeenCalledWith({ type: 'OPENTEAM_GROUP_PUSH', payload: { type: 'GROUP_CONTROL_STATUS_UPDATED', controlStatus } })
   })
 
+  it('sends the side panel what OpenTeam tabs get, over its port, until it closes', async () => {
+    vi.resetModules()
+    vi.stubGlobal('chrome', { tabs: { sendMessage: vi.fn().mockResolvedValue({ ok: true }) }, runtime: { sendMessage: vi.fn().mockResolvedValue({ ok: true }) } })
+    const { addPanelPort, broadcastControlStatusUpdated, broadcastStoreUpdated, listHostTabIds, sendError } = await import('./runtimeClient')
+    let disconnect: (() => void) | undefined
+    const posted: unknown[] = []
+    const port = { postMessage: (message: unknown) => posted.push(message), onDisconnect: { addListener: (listener: () => void) => { disconnect = listener } } }
+    addPanelPort(port as unknown as chrome.runtime.Port)
+    const store = createDefaultStore()
+    const controlStatus: OpenTeamControlConnectionStatus = { state: 'connected', port: 19305 }
+
+    await broadcastStoreUpdated(store)
+    await broadcastControlStatusUpdated(controlStatus)
+    await sendError('发送失败')
+    expect(posted).toEqual([
+      { type: 'GROUP_STORE_UPDATED', store },
+      { type: 'GROUP_CONTROL_STATUS_UPDATED', controlStatus },
+      { type: 'GROUP_DELIVERY_ERROR', message: '发送失败' },
+    ])
+    // The panel is not a tab that hosts member pages.
+    expect(listHostTabIds()).toEqual([])
+
+    disconnect?.()
+    await broadcastStoreUpdated(store)
+    expect(posted).toHaveLength(3)
+  })
+
+  it('drops a panel port that can no longer be posted to', async () => {
+    vi.resetModules()
+    vi.stubGlobal('chrome', { tabs: { sendMessage: vi.fn() }, runtime: { sendMessage: vi.fn() } })
+    const { addPanelPort, broadcastStoreUpdated } = await import('./runtimeClient')
+    const postMessage = vi.fn(() => { throw new Error('Attempting to use a disconnected port object') })
+    addPanelPort({ postMessage, onDisconnect: { addListener: vi.fn() } } as unknown as chrome.runtime.Port)
+    await broadcastStoreUpdated(createDefaultStore())
+    await broadcastStoreUpdated(createDefaultStore())
+    expect(postMessage).toHaveBeenCalledTimes(1)
+  })
+
   it('sends store-sync payloads to team pages that ask for them and full stores to everyone else', async () => {
     vi.resetModules()
     const tabsSendMessage = vi.fn().mockResolvedValue({ ok: true })

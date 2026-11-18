@@ -22,6 +22,8 @@ export type StorePushMessage =
   | { type: 'GROUP_DELIVERY_ERROR'; store?: OpenTeamStore; error?: string; message?: string }
   | { type: 'GROUP_ROLE_RECOVERY_REQUEST'; chatId: string; roleId: string; reason?: string }
   | { type: 'TEAM_FRAME_ROLE_READY'; chatId: string; roleId: string; store?: OpenTeamStore }
+  // From the side panel, through the background: show this member's AI page here.
+  | { type: 'TEAM_ROLE_FOCUS'; chatId: string; roleId: string }
   | { type: 'TEAM_SITE_STATUS_UPDATE'; chatId?: string; roleId?: string; status: RoleSiteHealthStatus; reason?: RoleSiteHealthReason; detail?: string }
 
 export interface TeamPageRuntimeClientDependencies {

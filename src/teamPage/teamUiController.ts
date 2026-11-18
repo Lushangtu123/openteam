@@ -140,7 +140,8 @@ export function createTeamUiController(deps: TeamUiControllerDependencies): Team
         deps.settingsMenuEl.hidden = true
         deps.settingsButtonEl.setAttribute('aria-expanded', 'false')
       }
-      if (deps.state.peopleDrawerOpen && target && !memberPanelDocked() && !deps.rolePanelEl.contains(target) && !deps.togglePeopleDrawerEl.contains(target)) {
+      // A click that rebuilt what it landed on (a member card) has a target no longer in the page.
+      if (deps.state.peopleDrawerOpen && target?.isConnected && !memberPanelDocked() && !deps.rolePanelEl.contains(target) && !deps.togglePeopleDrawerEl.contains(target)) {
         deps.state.peopleDrawerOpen = false
         deps.render()
       }

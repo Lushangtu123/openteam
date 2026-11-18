@@ -58,6 +58,9 @@ import { agentControlStatusState, agentControlStatusText } from './agentControlS
 import { createIndexedDbImageAttachmentRepository } from '../shared/imageAttachmentRepository'
 import { getSafeSupportedChatIframeSrcForRole } from '../group/conversationUrl'
 import { normalizeLanguage, translateUi } from '../shared/i18n'
+import { createSidePanel, isSidePanel } from './sidePanel'
+import { PANEL_PORT_NAME } from '../group/runtimeProtocol'
+import type { RolePageHealth } from './roleHealth'
 
 const SITE_HEALTH_STATUSES: ReadonlySet<string> = new Set(['ready', 'generating', 'loading', 'error', 'blocked', 'unauthorized'])
 
@@ -107,6 +110,11 @@ createVoiceInput({
 })
 
 let roleHealthRenderPending = false
+// OpenTeam in Chrome's side panel (sidePanel.ts): it shows and sends, while members' AI pages load
+// in an OpenTeam tab.
+const inSidePanel = isSidePanel(location.search)
+if (inSidePanel) document.body.dataset.view = 'panel'
+
 const roleHealth = createRoleHealthTracker({
   onChange() {
     if (roleHealthRenderPending) return
@@ -214,12 +222,14 @@ const rolePanelView = createRolePanelView({
   getCurrentChat,
   getCurrentRoles,
   emptyCard,
-  insertMention: role => insertMention(role),
+  insertMention: role => inSidePanel ? pickMember(role) : insertMention(role),
   refreshCurrentChat: () => roleRecoveryController.refreshCurrentChat(),
-  focusRoleFrame: (chatId, roleId) => roleRecoveryController.focusRoleFrame(chatId, roleId),
+  focusRoleFrame: (chatId, roleId) => showMemberPage(chatId, roleId),
+  // In the side panel the member list covers the message box: choosing a member there @-mentions it.
+  onSelectRole: inSidePanel ? role => pickMember(role) : undefined,
   runCommand,
   showError,
-  getRoleHealth: role => roleHealth.get(role.chatId, role.id),
+  getRoleHealth: inSidePanel ? undefined : role => roleHealth.get(role.chatId, role.id),
   openRoleSite: role => {
     chrome.tabs.create({ url: getSafeSupportedChatIframeSrcForRole(undefined, role), active: true })
       .catch(error => showError(error instanceof Error ? error.message : String(error)))
@@ -296,7 +306,19 @@ const roleRecoveryController = createRoleRecoveryController({
 })
 const notifyRoleReadyWaiters = roleRecoveryController.notifyRoleReadyWaiters
 const reconnectRolesForSend = roleRecoveryController.reconnectRolesForSend
-const focusRoleFrame = roleRecoveryController.focusRoleFrame
+// In the side panel, choosing a member in the member list: it is @-mentioned in the message box,
+// and the list, which covers that box, closes. (Its AI page is in the card's menu, 查看网页.)
+function pickMember(role: GroupRole): void {
+  appState.peopleDrawerOpen = false
+  render()
+  insertMention(role)
+}
+
+// A member's AI page: here, or, from the side panel, in the OpenTeam tab (sidePanel.ts).
+function showMemberPage(chatId: string, roleId: string | undefined): void {
+  if (!inSidePanel) return roleRecoveryController.focusRoleFrame(chatId, roleId)
+  if (roleId) void sidePanel?.showMemberPage(chatId, roleId)
+}
 const resyncMessageReply = roleRecoveryController.resyncMessageReply
 const retryRoleReply = roleRecoveryController.retryRoleReply
 const stopRoleReply = roleRecoveryController.stopRoleReply
@@ -325,7 +347,7 @@ const composerView = createComposerView({
   reconnectRolesForSend,
   runCommand,
   showError,
-  getRoleHealth: role => roleHealth.get(role.chatId, role.id),
+  getRoleHealth: inSidePanel ? undefined : role => roleHealth.get(role.chatId, role.id),
   localize: root => applyTeamLanguage(normalizeLanguage(store.settings.language), root),
   attachments: composerAttachments,
 })
@@ -518,7 +540,7 @@ const messagesView = createMessagesView({
   },
   startSiteCheck: () => startSiteCheck(),
   messageTitle,
-  focusRoleFrame,
+  focusRoleFrame: showMemberPage,
   insertMention,
   setReference,
   editAndResend: message => composerView.editMessage(message),
@@ -611,6 +633,7 @@ function applyStore(nextStore: OpenTeamStore): void {
   syncIframeHost()
   render()
   notifyRoleReadyWaiters()
+  sidePanel?.refresh()
 }
 
 function getCurrentChat(): GroupChat | undefined {
@@ -747,8 +770,18 @@ function renderSelectedChat(): void {
 }
 
 function registerRuntimePush(): void {
-  chrome.runtime.onMessage.addListener((message: StorePushMessage, sender, sendResponse) => {
+  chrome.runtime.onMessage.addListener((message: StorePushMessage, sender, sendResponse) => handlePush(message, sender, sendResponse))
+}
+
+// News from the background (and from member pages): over runtime messages, and in the side panel
+// also over its port.
+function handlePush(message: StorePushMessage, sender: chrome.runtime.MessageSender, sendResponse: (response?: unknown) => void): boolean {
+  {
     if (!message || typeof message.type !== 'string') return false
+    if (message.type === 'TEAM_ROLE_FOCUS') {
+      if (!inSidePanel && primaryCoordinator.isPrimary()) showMemberPage(message.chatId, message.roleId)
+      return false
+    }
     if (message.type === 'TEAM_SITE_STATUS_UPDATE') recordSiteStatus(message, sender)
     if (message.type === 'GROUP_ROLE_RECOVERY_REQUEST') {
       handleRoleRecoveryRequest(message, sendResponse)
@@ -775,7 +808,7 @@ function registerRuntimePush(): void {
       if (errorMessage) showError(errorMessage)
     }
     return false
-  })
+  }
 }
 
 // Role frames report their page health to every extension page; only frames in this tab are ours.
@@ -900,8 +933,8 @@ const teamFormationView = createTeamFormationView({
   getStore: () => store,
   getCurrentChatId: () => appState.selectedChatId,
   runCommand,
-  getRoleHealth: role => roleHealth.get(role.chatId, role.id),
-  focusRoleFrame: (chatId, roleId) => focusRoleFrame(chatId, roleId),
+  getRoleHealth: role => pageHealth(role) ?? { status: role.status === 'error' ? 'error' : 'ready' },
+  focusRoleFrame: (chatId, roleId) => showMemberPage(chatId, roleId),
   showError,
   showSuccess,
   openAutoPlan: (task, instruction) => orchestrationModalView.openAutoPlan(task, instruction),
@@ -952,11 +985,28 @@ function openMessageInChat(chatId: string, messageId: string): void {
   })
 }
 
+const sidePanel = inSidePanel ? createSidePanel({
+  connect: () => chrome.runtime.connect({ name: PANEL_PORT_NAME }),
+  onPush: message => handlePush(message as StorePushMessage, {}, () => undefined),
+  onReconnected: () => void refreshStore(false),
+  sendRuntimeMessage: (type, payload) => sendRuntimeMessage(type, payload),
+  getWindowId: async () => (await chrome.windows.getCurrent()).id,
+  memberPagesFor: () => {
+    const chat = getCurrentChat()
+    return chat && getCurrentRoles().some(role => role.modelSource !== 'external') ? chat.id : undefined
+  },
+  openInTabButton: teamDomRefs.openInTabEl,
+  closeWindow: () => window.close(),
+}) : undefined
+
 async function boot(): Promise<void> {
   await resolveHostTabId()
-  await primaryCoordinator.start()
+  // The side panel never holds member pages, so it never takes them from the OpenTeam tab.
+  if (inSidePanel) iframeHost.setEnabled(false)
+  else await primaryCoordinator.start()
   window.addEventListener('pagehide', () => primaryCoordinator.dispose(), { once: true })
   registerRuntimePush()
+  await sidePanel?.start()
   themeController.registerThemeEvents()
   uiStyleController.registerStyleEvents()
   aiPagesView.registerAiPagesControls()
@@ -1018,3 +1068,9 @@ async function boot(): Promise<void> {
 }
 
 boot().catch(error => showError(error instanceof Error ? error.message : String(error)))
+
+// A member page's health as this page sees it. The side panel holds no member pages: it goes by
+// what the store says of each member (its status there, shown when this gives nothing).
+function pageHealth(role: GroupRole): RolePageHealth | undefined {
+  return inSidePanel ? undefined : roleHealth.get(role.chatId, role.id)
+}
