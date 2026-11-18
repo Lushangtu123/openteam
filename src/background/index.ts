@@ -49,6 +49,8 @@ import { createImageAttachmentService } from './imageAttachments'
 import { createWebSocketCookieSync } from './websocketCookies'
 import { chatIdFromNotificationId, createReplyNotifier } from './replyNotifications'
 import { createIndexedDbImageAttachmentRepository } from '../shared/imageAttachmentRepository'
+import { createWebPageOffers, readPageInTab } from './webPageOffers'
+import type { CapturedWebPage } from '../group/webPage'
 
 const runtimeFrames = createRuntimeFrameRegistry()
 const log = createLogger('background')
@@ -179,6 +181,7 @@ async function handleSettingsUpdate(message: RuntimeMessage) {
     const language = readOptionalString(message.language)
     if (language === 'en' || language === 'zh-CN') {
       store.settings.language = language
+      syncPageMenu(language)
     }
     if (typeof message.replyNotifications === 'boolean') {
       if (message.replyNotifications) delete store.settings.replyNotifications
@@ -225,10 +228,41 @@ function sendResponseSafely(sendResponse: (response?: unknown) => void, response
   }
 }
 
+// 附上网页: the page the icon or 发到 OpenTeam was used on (see webPageOffers.ts).
+const webPageOffers = createWebPageOffers({
+  extensionOrigin: chrome.runtime.getURL(''),
+  storage: {
+    get: key => chrome.storage.session.get(key),
+    set: items => chrome.storage.session.set(items),
+    remove: key => chrome.storage.session.remove(key),
+  },
+  getTab: tabId => chrome.tabs.get(tabId).catch(() => undefined),
+  async readTab(tabId) {
+    const [result] = await chrome.scripting.executeScript({ target: { tabId }, func: readPageInTab })
+    if (!result?.result) throw new Error('the page gave no text')
+    return result.result as CapturedWebPage
+  },
+  language: async () => (await loadStore()).settings.language === 'en' ? 'en' : 'zh-CN',
+  now,
+})
+
+const PAGE_MENU_ID = 'openteam-send-page'
+
+// 发到 OpenTeam in a page's right-click menu, in the page's language. Made again on each install
+// and update, and renamed when the language changes.
+function syncPageMenu(language: string | undefined): void {
+  if (!chrome.contextMenus) return
+  const title = language === 'en' ? 'Send this page to OpenTeam' : '把这个网页发到 OpenTeam'
+  chrome.contextMenus.removeAll(() => {
+    chrome.contextMenus.create({ id: PAGE_MENU_ID, title, contexts: ['page', 'selection'] }, () => void chrome.runtime.lastError)
+  })
+}
+
 const routeMessage = createMessageRouter([
   { type: 'GROUP_STORE_GET', handler: handleStoreGet },
   // The background's recent log entries, for 导出诊断信息 (already cleaned: src/shared/logger.ts).
   { type: 'DIAGNOSTICS_LOGS_GET', handler: async () => ({ ok: true, logs: recentLogs() }) },
+  ...webPageOffers.handlers,
   ...createChatHandlers({ broadcastStoreUpdated, getChatStatusFromRoles, imageAttachments: imageAttachmentRepository, log, newId, now, runtimeFrames }),
   { type: 'GROUP_SETTINGS_UPDATE', handler: handleSettingsUpdate },
   ...createBackupHandlers({ broadcastStoreUpdated, log, imageAttachments: imageAttachmentRepository }),
@@ -400,6 +434,7 @@ chrome.runtime.onInstalled.addListener(() => {
   try {
     log.info('extension-installed')
     initializeControlClient()
+    loadStore().then(store => syncPageMenu(store.settings.language), () => syncPageMenu(undefined))
   } catch (error) {
     logBackgroundFailure('extension-installed:failed', error)
   }
@@ -453,15 +488,22 @@ chrome.runtime.onMessage.addListener((message: RuntimeMessage, sender, sendRespo
 })
 
 // The toolbar icon: the OpenTeam tab already open, preferably in this window, or a new one here.
+// The page it was clicked on is offered to the composer (webPageOffers.ts) before the page shows.
 chrome.action.onClicked.addListener(tab => {
-  try {
-    showTeamPage({ fromWindowId: tab.windowId, focusWindow: true }).catch(error => {
-      logBackgroundFailure('open-team-page:failed', error)
-    })
-  } catch (error) {
-    logBackgroundFailure('open-team-page:failed', error)
-  }
+  openTeamPageFrom(tab)
 })
+
+chrome.contextMenus?.onClicked.addListener((info, tab) => {
+  if (info.menuItemId !== PAGE_MENU_ID || !tab) return
+  openTeamPageFrom(tab, info.selectionText)
+})
+
+function openTeamPageFrom(tab: chrome.tabs.Tab, selection?: string): void {
+  webPageOffers.offer(tab, selection)
+    .catch(error => logBackgroundFailure('web-page-offer:failed', error))
+    .then(() => showTeamPage({ fromWindowId: tab.windowId, focusWindow: true }))
+    .catch(error => logBackgroundFailure('open-team-page:failed', error))
+}
 
 // Grok's chat WebSocket from the team page's frames: see websocketCookies.ts. Skipped when the
 // cookies permission or session rules are not available.

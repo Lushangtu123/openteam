@@ -29,6 +29,8 @@ import { createProjectView } from './projectView'
 import { createSiteCheckView } from './siteCheckView'
 import { createUpdateNotice } from './updateNotice'
 import { createBackupReminderView } from './backupReminderView'
+import { createWebPageOfferView } from './webPageOfferView'
+import { WEB_PAGE_OFFER_KEY } from '../group/webPage'
 import { BACKUP_REMINDER_STORAGE_KEY, type BackupReminderState } from '../shared/backupReminder'
 import { exportDiagnostics, saveTextFile } from './diagnosticsExport'
 import type { RecentLogEntry } from '../shared/logger'
@@ -298,6 +300,16 @@ const focusRoleFrame = roleRecoveryController.focusRoleFrame
 const resyncMessageReply = roleRecoveryController.resyncMessageReply
 const retryRoleReply = roleRecoveryController.retryRoleReply
 const stopRoleReply = roleRecoveryController.stopRoleReply
+const composerAttachments = createComposerAttachments({
+  trayEl: teamDomRefs.attachmentTrayEl,
+  attachButtonEl: teamDomRefs.attachFileEl,
+  fileInputEl: teamDomRefs.attachFileInputEl,
+  pasteTargetEl: messageInputEl,
+  dropTargetEl: composerFormEl,
+  ui: source => translateUi(source, normalizeLanguage(store.settings.language)),
+  showError,
+  onChange: () => renderComposerState(),
+})
 const composerView = createComposerView({
   state: appState,
   composerFormEl,
@@ -315,16 +327,7 @@ const composerView = createComposerView({
   showError,
   getRoleHealth: role => roleHealth.get(role.chatId, role.id),
   localize: root => applyTeamLanguage(normalizeLanguage(store.settings.language), root),
-  attachments: createComposerAttachments({
-    trayEl: teamDomRefs.attachmentTrayEl,
-    attachButtonEl: teamDomRefs.attachFileEl,
-    fileInputEl: teamDomRefs.attachFileInputEl,
-    pasteTargetEl: messageInputEl,
-    dropTargetEl: composerFormEl,
-    ui: source => translateUi(source, normalizeLanguage(store.settings.language)),
-    showError,
-    onChange: () => renderComposerState(),
-  }),
+  attachments: composerAttachments,
 })
 renderComposerState = composerView.renderComposerState
 insertMention = composerView.insertMention
@@ -672,6 +675,7 @@ function render(): void {
   // In the language chosen now.
   updateNotice.render()
   backupReminderView.render()
+  webPageOfferView.render()
   replyComparisonView.refresh()
   teamFormationView.refresh()
   renderTemplates()
@@ -825,6 +829,30 @@ function handleRoleRecoveryRequest(message: Extract<StorePushMessage, { type: 'G
     })
 }
 
+// 附上网页: the page the OpenTeam icon or 发到 OpenTeam was used on (webPageOffers.ts).
+const webPageOfferView = createWebPageOfferView({
+  element: teamDomRefs.webPageOfferEl,
+  ui: source => translateUi(source, normalizeLanguage(store.settings.language)),
+  storage: {
+    get: async () => (await chrome.storage.session.get(WEB_PAGE_OFFER_KEY))[WEB_PAGE_OFFER_KEY],
+    onChange: listener => chrome.storage.onChanged.addListener((changes, area) => {
+      if (area === 'session' && WEB_PAGE_OFFER_KEY in changes) listener(changes[WEB_PAGE_OFFER_KEY].newValue)
+    }),
+  },
+  async readPage() {
+    const response = await sendRuntimeMessage('WEB_PAGE_READ') as { ok?: boolean; error?: string; upload?: { fileName: string; mimeType: string; text: string } }
+    if (response.ok === false || !response.upload) throw new Error(response.error || '读不了这个网页')
+    return response.upload
+  },
+  dismiss: async () => { await sendRuntimeMessage('WEB_PAGE_DISMISS') },
+  addFile: file => {
+    composerAttachments.addFiles([file])
+    messageInputEl.focus()
+  },
+  showError,
+  now: () => Date.now(),
+})
+
 // 备份提醒: kept in its own storage key, outside the store and its backups.
 const backupReminderView = createBackupReminderView({
   document,
@@ -935,6 +963,7 @@ async function boot(): Promise<void> {
   registerSettingsWindow({ windowEl: settingsMenuEl, settingsButtonEl })
   void updateNotice.start()
   void backupReminderView.start()
+  void webPageOfferView.start()
   // The memory store's list takes the settings window's place, as the models window does.
   teamDomRefs.openMemoryPanelEl.addEventListener('click', () => {
     settingsMenuEl.hidden = true

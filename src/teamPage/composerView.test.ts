@@ -186,7 +186,7 @@ describe('team page composer targeting', () => {
     const { view, deps, runCommand } = createComposerHarness()
     const uploads = [{ kind: 'text' as const, fileName: 'notes.md', mimeType: 'text/markdown', size: 4, text: '目标' }]
     const taken = [{ key: 'attachment-1', file: new File(['目标'], 'notes.md'), kind: 'text' as const }]
-    const attachments = { register: vi.fn(), list: vi.fn(() => taken), readUploads: vi.fn(async () => uploads), take: vi.fn(() => taken), restore: vi.fn() }
+    const attachments = { register: vi.fn(), list: vi.fn(() => taken), addFiles: vi.fn(), readUploads: vi.fn(async () => uploads), take: vi.fn(() => taken), restore: vi.fn() }
     deps.attachments = attachments
     deps.messageInputEl.value = '先记录这个背景'
 

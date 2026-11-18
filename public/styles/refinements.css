@@ -1318,3 +1318,78 @@
 :root[data-theme] .group-template-footer .collaboration-choice select {
   width: auto;
 }
+
+/* 附上网页: the page the OpenTeam icon was clicked on, offered over the message box. */
+:root[data-theme] .web-page-offer:not([hidden]) {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 6px 6px 6px 10px;
+  background: var(--chip-bg, var(--surface));
+}
+
+:root[data-theme] .web-page-offer-icon {
+  color: var(--brand);
+}
+
+:root[data-theme] .web-page-offer-text {
+  display: flex;
+  flex: 1;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  font-size: 12.5px;
+}
+
+:root[data-theme] .web-page-offer-label,
+:root[data-theme] .web-page-offer-host {
+  flex: none;
+  color: var(--subtle);
+}
+
+:root[data-theme] .web-page-offer-title {
+  overflow: hidden;
+  color: var(--text);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:root[data-theme] .web-page-offer-attach {
+  flex: none;
+  min-height: 28px;
+  padding: 0 12px;
+  font-size: 12.5px;
+}
+
+:root[data-theme] .web-page-offer-close {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+:root[data-theme] .web-page-offer-close:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+:root[data-theme] .web-page-offer-close .ui-icon {
+  width: 16px;
+  height: 16px;
+}
+
+@media (max-width: 560px) {
+  :root[data-theme] .web-page-offer-label,
+  :root[data-theme] .web-page-offer-host {
+    display: none;
+  }
+}

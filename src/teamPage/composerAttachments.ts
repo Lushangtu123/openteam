@@ -29,6 +29,8 @@ export interface PendingAttachment {
 export interface ComposerAttachments {
   register(): void
   list(): PendingAttachment[]
+  // Files added from elsewhere (附上网页), checked like files the user picked.
+  addFiles(files: File[]): void
   // Reads the files for sending. Throws when a text file is not readable text, or a PDF or Office
   // file could not be read.
   readUploads(): Promise<MessageUpload[]>
@@ -211,7 +213,7 @@ export function createComposerAttachments(deps: ComposerAttachmentsDependencies)
     changed()
   }
 
-  return { register, list: () => items, readUploads, take, restore }
+  return { register, list: () => items, addFiles: add, readUploads, take, restore }
 }
 
 function readBase64(file: Blob): Promise<string> {

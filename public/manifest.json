@@ -21,7 +21,10 @@
     "clipboardRead",
     "clipboardWrite",
     "cookies",
-    "notifications"
+    "notifications",
+    "activeTab",
+    "scripting",
+    "contextMenus"
   ],
   "host_permissions": [
     "https://gemini.google.com/*",

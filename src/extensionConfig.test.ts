@@ -103,6 +103,17 @@ describe('extension security configuration', () => {
     expect(manifest.permissions).toContain('unlimitedStorage')
   })
 
+  it('reads the page the user is on only when they use the icon or the menu on it (附上网页)', () => {
+    const manifest = JSON.parse(readFileSync(resolve(process.cwd(), 'public/manifest.json'), 'utf8')) as {
+      permissions?: string[]
+      action?: { default_popup?: string }
+    }
+
+    for (const permission of ['activeTab', 'scripting', 'contextMenus']) expect(manifest.permissions).toContain(permission)
+    // A popup would take the icon's click, and with it the page it grants.
+    expect(manifest.action?.default_popup).toBeUndefined()
+  })
+
   it('limits iframe header overrides to supported AI chat subframes', () => {
     const rules = JSON.parse(readFileSync(resolve(process.cwd(), 'public/openteam-frame-rules.json'), 'utf8')) as Array<{
       condition?: {

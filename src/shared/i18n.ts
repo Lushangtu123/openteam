@@ -440,6 +440,14 @@ const UI_TRANSLATIONS: Record<string, string> = {
   '读取中…': 'Reading…',
   '附件只在发送时上传给对应的 AI 网站或模型。PDF 和 Office 文件发送的是读出的文字。': 'Attachments are uploaded to the AI site or model only when you send them. PDF and Office files are sent as the text read from them.',
   '移除附件': 'Remove attachment',
+  '刚才的网页': 'The page you were on',
+  '附上': 'Attach',
+  '不附上': 'Don’t attach',
+  '网页的标题、网址和正文会作为附件，随这条消息发给成员': 'The page’s title, address and text go with this message as an attachment',
+  '没有可以附上的网页。在要附上的网页上点一次 OpenTeam 图标。': 'There is no page to attach. Click the OpenTeam icon on the page you want to attach.',
+  '那个网页已经关掉了': 'That page has been closed',
+  '那个网页已经换了。回到要附上的网页，再点一次 OpenTeam 图标。': 'That tab is on another page now. Go back to the page you want to attach and click the OpenTeam icon again.',
+  '读不了这个网页': 'This page could not be read',
   '数据备份': 'Data backup',
   '导出全部数据': 'Export all data',
   '从备份恢复…': 'Restore from backup…',
@@ -1102,6 +1110,8 @@ export function localizeRoleTemplate(template: RoleTemplate, language: TeamLangu
 }
 
 function translateUiPattern(source: string): string | undefined {
+  const pageUnreadable = source.match(/^读不了这个网页：(.+)$/s)
+  if (pageUnreadable) return `This page could not be read: ${pageUnreadable[1]}`
   const storeSummary = source.match(/^(\d+) 个群聊 · (\d+) 个角色$/)
   if (storeSummary) return `${storeSummary[1]} chats · ${storeSummary[2]} people`
   const agentControlPort = source.match(/^端口 (\d+)，仅允许本机连接。(?:开启后本机工具可创建群聊并发送任务。)?$/)
