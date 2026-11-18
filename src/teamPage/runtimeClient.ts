@@ -24,6 +24,8 @@ export type StorePushMessage =
   | { type: 'TEAM_FRAME_ROLE_READY'; chatId: string; roleId: string; store?: OpenTeamStore }
   // From the side panel, through the background: show this member's AI page here.
   | { type: 'TEAM_ROLE_FOCUS'; chatId: string; roleId: string }
+  // Whether a side panel holds the members' AI pages now (teamPagePrimary.ts yieldToPanel).
+  | { type: 'TEAM_PANEL_PRESENCE'; open: boolean }
   | { type: 'TEAM_SITE_STATUS_UPDATE'; chatId?: string; roleId?: string; status: RoleSiteHealthStatus; reason?: RoleSiteHealthReason; detail?: string }
 
 export interface TeamPageRuntimeClientDependencies {

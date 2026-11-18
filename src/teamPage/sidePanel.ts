@@ -1,8 +1,9 @@
 // OpenTeam in Chrome's side panel (team.html?view=panel), beside the page the user is reading. It
-// shows and sends like the OpenTeam tab, but hosts no member pages: Chrome reaches a page inside a
-// frame only through the tab it is in, so members' AI pages load in an OpenTeam tab, which the
-// background opens behind the current one when needed. Being no tab, the panel hears the store
-// and other news from the background over a port.
+// shows and sends like the OpenTeam tab, and while open it holds the members' AI pages: they stay
+// visible to Chrome there, so they keep working while the user reads another tab (a tab in the
+// background is held back after a few minutes). An OpenTeam tab lets them go while a panel is open
+// (teamPagePrimary.ts). The member pages talk to the background over ports (memberLink.ts), and
+// the panel, being no tab either, hears the store and other news over its own port.
 
 // How soon the panel connects again after the background stopped (it is woken by connecting).
 export const PANEL_RECONNECT_DELAY_MS = 500
@@ -23,23 +24,19 @@ export interface SidePanelDependencies {
   onReconnected(): void
   sendRuntimeMessage(type: string, payload?: Record<string, unknown>): Promise<unknown>
   getWindowId(): Promise<number | undefined>
-  // The current group's id when it has members on AI sites, whose pages need an OpenTeam tab.
-  memberPagesFor(): string | undefined
   openInTabButton: HTMLButtonElement
   closeWindow(): void
 }
 
 export interface SidePanel {
   start(): Promise<void>
-  // After the store changed: another group may need member pages.
-  refresh(): void
-  // A member's AI page, which lives in the OpenTeam tab: that tab is brought forward showing it.
+  // A member's AI page held by an OpenTeam tab (another window's panel holds them, say): that tab
+  // is brought forward showing it.
   showMemberPage(chatId: string, roleId: string): Promise<void>
 }
 
 export function createSidePanel(deps: SidePanelDependencies): SidePanel {
   let windowId: number | undefined
-  let ensuredFor: string | undefined
 
   function connect(reconnected: boolean): void {
     let port: PanelPort
@@ -54,15 +51,6 @@ export function createSidePanel(deps: SidePanelDependencies): SidePanel {
     if (reconnected) deps.onReconnected()
   }
 
-  function ensureMemberPages(force: boolean): void {
-    const chatId = deps.memberPagesFor()
-    if (!chatId || (!force && chatId === ensuredFor)) return
-    ensuredFor = chatId
-    deps.sendRuntimeMessage('TEAM_PAGE_HOST_ENSURE', { windowId }).catch(() => {
-      ensuredFor = undefined
-    })
-  }
-
   return {
     async start() {
       windowId = await deps.getWindowId().catch(() => undefined)
@@ -73,13 +61,6 @@ export function createSidePanel(deps: SidePanelDependencies): SidePanel {
           .catch(() => undefined)
           .then(() => deps.closeWindow())
       })
-      document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible') ensureMemberPages(true)
-      })
-      ensureMemberPages(false)
-    },
-    refresh() {
-      ensureMemberPages(false)
     },
     async showMemberPage(chatId, roleId) {
       await deps.sendRuntimeMessage('TEAM_PAGE_SHOW', { windowId, chatId, roleId }).catch(() => undefined)

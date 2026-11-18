@@ -52,4 +52,47 @@ describe('team page primary coordinator', () => {
     expect(coordinator.isPrimary()).toBe(true)
     expect(onPrimaryChange).toHaveBeenCalledWith(true)
   })
+
+  it('lets go for the side panel without counting as pushed aside, and takes over again after it', async () => {
+    // One lock, as the browser keeps it: whoever asks while it is free gets it.
+    let holder: (() => void) | undefined
+    const lockRequest = vi.fn((_name, _options, callback: (lock: object | null) => unknown) => {
+      if (holder) return Promise.resolve(callback(null))
+      const held = callback({}) as Promise<void>
+      holder = () => undefined
+      void held.then(() => { holder = undefined })
+      return Promise.resolve()
+    })
+    const onPrimaryChange = vi.fn()
+    const coordinator = createTeamPagePrimaryCoordinator({
+      navigator: { locks: { request: lockRequest } } as never,
+      window: { setTimeout: vi.fn(() => 1), clearTimeout: vi.fn() } as never,
+      onPrimaryChange,
+    })
+    expect(await coordinator.start()).toBe(true)
+
+    coordinator.yieldToPanel(true)
+    expect(coordinator.isPrimary()).toBe(false)
+    expect(onPrimaryChange).toHaveBeenLastCalledWith(false, 'yielded')
+    await vi.waitFor(() => expect(holder).toBeUndefined())
+
+    coordinator.yieldToPanel(false)
+    await vi.waitFor(() => expect(coordinator.isPrimary()).toBe(true))
+    expect(onPrimaryChange).toHaveBeenLastCalledWith(true)
+    coordinator.dispose()
+  })
+
+  it('does not take the lock while it has yielded', async () => {
+    const lockRequest = vi.fn((_name, _options, callback) => Promise.resolve(callback(null)))
+    const setTimeout = vi.fn(() => 1)
+    const coordinator = createTeamPagePrimaryCoordinator({
+      navigator: { locks: { request: lockRequest } } as never,
+      window: { setTimeout, clearTimeout: vi.fn() } as never,
+      onPrimaryChange: vi.fn(),
+    })
+    coordinator.yieldToPanel(true)
+    expect(await coordinator.start()).toBe(false)
+    expect(lockRequest).not.toHaveBeenCalled()
+    expect(setTimeout).not.toHaveBeenCalled()
+  })
 })

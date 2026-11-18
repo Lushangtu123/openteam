@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createTeamPageHostKeeper, createTeamPageShower } from './teamPageTab'
+import { createTeamPageShower } from './teamPageTab'
 
 const TEAM_URL = 'chrome-extension://test/team.html'
 
@@ -7,7 +7,7 @@ function setup(openTabs: Array<{ id?: number; windowId?: number; lastAccessed?: 
   const tabs = {
     query: vi.fn(async (_queryInfo: { url: string }) => openTabs),
     create: vi.fn(async (_properties: { url: string; active: boolean; windowId?: number }) => ({ id: 99 })),
-    update: vi.fn(async (_tabId: number, _properties: { active?: boolean; autoDiscardable?: boolean }) => undefined),
+    update: vi.fn(async (_tabId: number, _properties: { active: boolean }) => undefined),
   }
   const windows = { update: vi.fn(async (_windowId: number, _info: { focused: boolean }) => undefined) }
   return { tabs, windows, show: createTeamPageShower(tabs, TEAM_URL, windows) }
@@ -69,25 +69,5 @@ describe('showing the OpenTeam page from the toolbar icon', () => {
 
     expect(tabs.create).toHaveBeenCalledWith({ url: TEAM_URL, active: true, windowId: 4 })
     expect(windows.update).not.toHaveBeenCalled()
-  })
-})
-
-describe('keeping an OpenTeam tab for the side panel’s member pages', () => {
-  it('opens one behind the current tab when none is open, and keeps Chrome from unloading it', async () => {
-    const { tabs } = setup([])
-    const keep = createTeamPageHostKeeper(tabs, TEAM_URL)
-
-    expect(await keep({ windowId: 3 })).toEqual({ opened: true })
-    expect(tabs.create).toHaveBeenCalledWith({ url: TEAM_URL, active: false, windowId: 3 })
-    expect(tabs.update).toHaveBeenCalledWith(99, { autoDiscardable: false })
-  })
-
-  it('uses the tabs already open, without bringing them forward', async () => {
-    const { tabs } = setup([{ id: 7 }, { id: 8 }])
-    const keep = createTeamPageHostKeeper(tabs, TEAM_URL)
-
-    expect(await keep()).toEqual({ opened: false })
-    expect(tabs.create).not.toHaveBeenCalled()
-    expect(tabs.update.mock.calls).toEqual([[7, { autoDiscardable: false }], [8, { autoDiscardable: false }]])
   })
 })

@@ -1393,3 +1393,55 @@
     display: none;
   }
 }
+
+/* OpenTeam in the side panel holds the members' AI pages itself (src/teamPage/sidePanel.ts). They
+   run on top of each other at desktop size under the chat, each overlapping the visible area, so
+   Chrome keeps them going while the user reads another tab. Shown (查看网页), they fill the panel,
+   the one asked for in front. */
+:root[data-theme] body[data-view="panel"] #iframe-host {
+  inset: 0 auto auto 0;
+  display: block;
+  width: 1100px;
+  height: 900px;
+  overflow: hidden;
+  padding: 0;
+  scroll-snap-type: none;
+}
+
+:root[data-theme] body[data-view="panel"].pages-shown #iframe-host {
+  width: 100vw;
+  height: 100vh;
+}
+
+:root[data-theme] body[data-view="panel"] #iframe-host .chat-frame-group {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+}
+
+:root[data-theme] body[data-view="panel"] #iframe-host .chat-frame-group.active {
+  z-index: 1;
+}
+
+:root[data-theme] body[data-view="panel"] #iframe-host .chat-frame-group-title {
+  display: none;
+}
+
+:root[data-theme] body[data-view="panel"] #iframe-host .role-frame-shell {
+  position: absolute;
+  inset: 0;
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+:root[data-theme] body[data-view="panel"] #iframe-host .role-frame-shell.focused {
+  z-index: 1;
+}

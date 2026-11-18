@@ -1,7 +1,8 @@
-import type { BackgroundToRoleMessage, PromptFile, RoleToBackgroundMessage } from '../group/runtimeProtocol'
+import { MEMBER_PORT_NAME, type BackgroundToRoleMessage, type PromptFile, type RoleToBackgroundMessage } from '../group/runtimeProtocol'
 import { createConversationMonitor, type ConversationMonitor } from './conversationMonitor'
 import { attachFilesToComposer } from './fileUpload'
-import { registerFrameRoleHandshake } from './frameHandshake'
+import { registerFrameRoleHandshake, type FrameRoleHandshake } from './frameHandshake'
+import { createMemberLink } from './memberLink'
 import { materializeReplyImages } from './replyImages'
 import { isDirectEmbeddedFrame, isEmbeddedFrame } from './frameEnvironment'
 import { waitBeforePromptInput, PROMPT_INPUT_DELAY_MS } from './promptDelay'
@@ -63,8 +64,16 @@ function collectPromptDiagnostics(): Record<string, unknown> {
 }
 
 function sendBackgroundMessage<T>(message: RoleToBackgroundMessage): Promise<T> {
-  return sendRuntimeMessage<T>(message, log)
+  return memberLink.active() ? memberLink.send<T>(message) : sendRuntimeMessage<T>(message, log)
 }
+
+// In OpenTeam's side panel, this page talks to the background over a port (memberLink.ts).
+let frameHandshake: FrameRoleHandshake | undefined
+const memberLink = createMemberLink({
+  connect: () => chrome.runtime.connect({ name: MEMBER_PORT_NAME }),
+  dispatch: (message, respond) => dispatchBackgroundMessage(message as ContentRuntimeMessage, respond),
+  onRelinked: () => frameHandshake?.announceAgain(),
+})
 
 function startStatusHeartbeat(): void {
   const HEARTBEAT_INTERVAL_MS = 3000
@@ -169,7 +178,12 @@ function reportRoleError(
 }
 
 function registerMessageHandlers(): void {
-  chrome.runtime.onMessage.addListener((message: ContentRuntimeMessage, _sender, sendResponse) => {
+  chrome.runtime.onMessage.addListener((message: ContentRuntimeMessage, _sender, sendResponse) => dispatchBackgroundMessage(message, sendResponse))
+}
+
+// What the background asks of this page; true when the answer comes later.
+function dispatchBackgroundMessage(message: ContentRuntimeMessage, sendResponse: (response?: unknown) => void): boolean {
+  {
     if (message?.type === 'TEAM_SEND_PROMPT') {
       handleSendPromptMessage(message, sendResponse)
       return true
@@ -186,7 +200,7 @@ function registerMessageHandlers(): void {
     }
 
     return false
-  })
+  }
 }
 
 function handleResyncReplyMessage(message: Extract<BackgroundToRoleMessage, { type: 'TEAM_RESYNC_REPLY' }>, sendResponse: (response?: unknown) => void): void {
@@ -408,13 +422,14 @@ function startOpenTeam(): void {
     if (directEmbedded) {
       conversationMonitor?.start()
       replyObserver?.startReplyReporting()
-      registerFrameRoleHandshake({
+      frameHandshake = registerFrameRoleHandshake({
         siteAdapter,
         roleSession,
         log,
         extensionOrigin: chrome.runtime.getURL('').replace(/\/$/, ''),
         seedStoredRoleReplies: replies => replyObserver?.seedStoredRoleReplies(replies),
         sendRuntimeMessage: message => sendBackgroundMessage(message),
+        linkOverPort: () => memberLink.start(),
       })
       startStatusHeartbeat()
     }

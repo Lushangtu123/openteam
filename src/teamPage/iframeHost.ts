@@ -13,6 +13,9 @@ export interface FrameAssignmentMessage {
   chatId: string
   roleId: string
   hostTabId?: number
+  // OpenTeam in the side panel is no tab: its member pages talk to the background over a port
+  // (src/content/memberLink.ts).
+  transport?: 'port'
 }
 
 export type RoleFrameStatus = 'loading' | 'assigned'
@@ -143,6 +146,8 @@ export class IframeHost {
     this.activeChatSignature = undefined
     this.highlightChatGroup(chatId)
     this.preserveOtherChatGroups(chatId)
+    // The page asked for stays the one in front (in the side panel the pages lie on top of each other).
+    for (const other of this.framesByRoleKey.values()) other.shell.classList.toggle('focused', other === record)
     record.shell.classList.remove('jump-highlight')
     void record.shell.offsetWidth
     record.shell.classList.add('jump-highlight')
@@ -478,6 +483,7 @@ export class IframeHost {
         chatId: record.chatId,
         roleId: record.roleId,
         hostTabId: this.hostTabId,
+        ...(this.hostTabId === undefined ? { transport: 'port' as const } : {}),
       } satisfies FrameAssignmentMessage, getSupportedChatOrigin(record.src))
     } catch {
       return

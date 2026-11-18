@@ -32,7 +32,7 @@ export interface RolePanelViewDependencies {
   runCommand(type: string, payload?: Record<string, unknown>): Promise<void>
   showError(message: string): void
   // Live health of a web role's page; without it the card falls back to the stored connection info.
-  getRoleHealth?(role: GroupRole): RolePageHealth
+  getRoleHealth?(role: GroupRole): RolePageHealth | undefined
   openRoleSite?(role: GroupRole): void
   // A card was chosen (the side panel shows that member's AI page in the OpenTeam tab).
   onSelectRole?(role: GroupRole): void

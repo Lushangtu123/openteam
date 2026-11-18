@@ -110,8 +110,8 @@ createVoiceInput({
 })
 
 let roleHealthRenderPending = false
-// OpenTeam in Chrome's side panel (sidePanel.ts): it shows and sends, while members' AI pages load
-// in an OpenTeam tab.
+// OpenTeam in Chrome's side panel (sidePanel.ts): while open, it holds the members' AI pages, which
+// keep working there while the user reads another tab; an OpenTeam tab lets them go until it closes.
 const inSidePanel = isSidePanel(location.search)
 if (inSidePanel) document.body.dataset.view = 'panel'
 
@@ -229,7 +229,7 @@ const rolePanelView = createRolePanelView({
   onSelectRole: inSidePanel ? role => pickMember(role) : undefined,
   runCommand,
   showError,
-  getRoleHealth: inSidePanel ? undefined : role => roleHealth.get(role.chatId, role.id),
+  getRoleHealth: role => pageHealth(role),
   openRoleSite: role => {
     chrome.tabs.create({ url: getSafeSupportedChatIframeSrcForRole(undefined, role), active: true })
       .catch(error => showError(error instanceof Error ? error.message : String(error)))
@@ -314,9 +314,10 @@ function pickMember(role: GroupRole): void {
   insertMention(role)
 }
 
-// A member's AI page: here, or, from the side panel, in the OpenTeam tab (sidePanel.ts).
+// A member's AI page: here, where this page holds them; else (a side panel while another holds
+// them) in the OpenTeam tab (sidePanel.ts).
 function showMemberPage(chatId: string, roleId: string | undefined): void {
-  if (!inSidePanel) return roleRecoveryController.focusRoleFrame(chatId, roleId)
+  if (!inSidePanel || primaryCoordinator.isPrimary()) return roleRecoveryController.focusRoleFrame(chatId, roleId)
   if (roleId) void sidePanel?.showMemberPage(chatId, roleId)
 }
 const resyncMessageReply = roleRecoveryController.resyncMessageReply
@@ -347,7 +348,7 @@ const composerView = createComposerView({
   reconnectRolesForSend,
   runCommand,
   showError,
-  getRoleHealth: inSidePanel ? undefined : role => roleHealth.get(role.chatId, role.id),
+  getRoleHealth: role => pageHealth(role),
   localize: root => applyTeamLanguage(normalizeLanguage(store.settings.language), root),
   attachments: composerAttachments,
 })
@@ -633,7 +634,6 @@ function applyStore(nextStore: OpenTeamStore): void {
   syncIframeHost()
   render()
   notifyRoleReadyWaiters()
-  sidePanel?.refresh()
 }
 
 function getCurrentChat(): GroupChat | undefined {
@@ -675,16 +675,20 @@ function syncIframeHost(): void {
   iframeHost.activateChat({ ...chat, roleIds: siteRoles.map(role => role.id) }, siteRoles)
 }
 
-function handlePrimaryModeChange(isPrimary: boolean): void {
+function handlePrimaryModeChange(isPrimary: boolean, reason?: 'yielded'): void {
   iframeHost.setEnabled(isPrimary)
   document.body.dataset.teamPagePrimary = String(isPrimary)
   if (isPrimary) {
-    log.info('team-page-primary:enabled', { hostTabId: appState.hostTabId })
+    log.info('team-page-primary:enabled', { hostTabId: appState.hostTabId, panel: inSidePanel })
     syncIframeHost()
+    render()
     return
   }
 
-  log.warn('team-page-primary:passive', { hostTabId: appState.hostTabId })
+  log.warn('team-page-primary:passive', { hostTabId: appState.hostTabId, panel: inSidePanel, reason })
+  render()
+  // Letting the side panel hold the member pages is expected; so is a second panel (another window).
+  if (reason === 'yielded' || inSidePanel) return
   showError('已检测到另一个 OpenTeam 页面正在运行。当前页面已暂停 AI iframe，避免两个页面同时加载导致卡死。')
 }
 
@@ -778,6 +782,10 @@ function registerRuntimePush(): void {
 function handlePush(message: StorePushMessage, sender: chrome.runtime.MessageSender, sendResponse: (response?: unknown) => void): boolean {
   {
     if (!message || typeof message.type !== 'string') return false
+    if (message.type === 'TEAM_PANEL_PRESENCE') {
+      if (!inSidePanel) primaryCoordinator.yieldToPanel(message.open)
+      return false
+    }
     if (message.type === 'TEAM_ROLE_FOCUS') {
       if (!inSidePanel && primaryCoordinator.isPrimary()) showMemberPage(message.chatId, message.roleId)
       return false
@@ -813,7 +821,8 @@ function handlePush(message: StorePushMessage, sender: chrome.runtime.MessageSen
 
 // Role frames report their page health to every extension page; only frames in this tab are ours.
 function recordSiteStatus(message: Extract<StorePushMessage, { type: 'TEAM_SITE_STATUS_UPDATE' }>, sender: chrome.runtime.MessageSender): void {
-  if (appState.hostTabId === undefined || sender.tab?.id !== appState.hostTabId) return
+  // The side panel hears its member pages through the background, with no tab (memberPorts.ts).
+  if (inSidePanel ? sender.tab !== undefined : appState.hostTabId === undefined || sender.tab?.id !== appState.hostTabId) return
   if (typeof message.chatId !== 'string' || typeof message.roleId !== 'string') return
   if (!SITE_HEALTH_STATUSES.has(message.status)) return
   roleHealth.siteReported(message.chatId, message.roleId, {
@@ -991,22 +1000,22 @@ const sidePanel = inSidePanel ? createSidePanel({
   onReconnected: () => void refreshStore(false),
   sendRuntimeMessage: (type, payload) => sendRuntimeMessage(type, payload),
   getWindowId: async () => (await chrome.windows.getCurrent()).id,
-  memberPagesFor: () => {
-    const chat = getCurrentChat()
-    return chat && getCurrentRoles().some(role => role.modelSource !== 'external') ? chat.id : undefined
-  },
   openInTabButton: teamDomRefs.openInTabEl,
   closeWindow: () => window.close(),
 }) : undefined
 
 async function boot(): Promise<void> {
   await resolveHostTabId()
-  // The side panel never holds member pages, so it never takes them from the OpenTeam tab.
-  if (inSidePanel) iframeHost.setEnabled(false)
-  else await primaryCoordinator.start()
+  // An OpenTeam tab opened while a side panel holds the member pages leaves them to it.
+  if (!inSidePanel) {
+    const presence = await sendRuntimeMessage<unknown>('TEAM_PANEL_PRESENCE_GET').catch(() => undefined) as { open?: boolean } | undefined
+    if (presence?.open) primaryCoordinator.yieldToPanel(true)
+  }
   window.addEventListener('pagehide', () => primaryCoordinator.dispose(), { once: true })
   registerRuntimePush()
+  // The panel's port tells OpenTeam tabs to let go of the member pages; the panel then takes them.
   await sidePanel?.start()
+  await primaryCoordinator.start()
   themeController.registerThemeEvents()
   uiStyleController.registerStyleEvents()
   aiPagesView.registerAiPagesControls()
@@ -1069,8 +1078,8 @@ async function boot(): Promise<void> {
 
 boot().catch(error => showError(error instanceof Error ? error.message : String(error)))
 
-// A member page's health as this page sees it. The side panel holds no member pages: it goes by
-// what the store says of each member (its status there, shown when this gives nothing).
+// A member page's health as this page sees it, where it holds the member pages. Otherwise (a tab
+// that let the side panel have them) it goes by what the store says of each member.
 function pageHealth(role: GroupRole): RolePageHealth | undefined {
-  return inSidePanel ? undefined : roleHealth.get(role.chatId, role.id)
+  return primaryCoordinator.isPrimary() ? roleHealth.get(role.chatId, role.id) : undefined
 }

@@ -43,7 +43,8 @@ export function onHostTabsChanged(listener: () => void): void {
 
 export function rememberHost(sender: chrome.runtime.MessageSender, explicitTabIdValue?: unknown): void {
   const tabId = senderTabId(sender) ?? explicitTabId(explicitTabIdValue)
-  if (tabId === undefined || hostTabIds.has(tabId)) return
+  // Member pages in the side panel have addresses below zero (memberPorts.ts); they are no tab.
+  if (tabId === undefined || tabId < 0 || hostTabIds.has(tabId)) return
   hostTabIds.add(tabId)
   for (const listener of hostTabListeners) listener()
 }
@@ -67,10 +68,31 @@ const panelPorts = new Set<chrome.runtime.Port>()
 
 export function addPanelPort(port: chrome.runtime.Port): void {
   panelPorts.add(port)
-  port.onDisconnect.addListener(() => panelPorts.delete(port))
+  void tellTabsAboutPanels()
+  port.onDisconnect.addListener(() => {
+    panelPorts.delete(port)
+    void tellTabsAboutPanels()
+  })
 }
 
-function postToPanels(message: unknown): void {
+// Whether OpenTeam is open in a side panel: an OpenTeam tab then lets the panel hold the members'
+// AI pages (teamPagePrimary.ts), and takes them back when none is open.
+export function panelOpen(): boolean {
+  return panelPorts.size > 0
+}
+
+async function tellTabsAboutPanels(): Promise<void> {
+  const message = { type: 'TEAM_PANEL_PRESENCE', open: panelOpen() }
+  for (const tabId of listHostTabIds()) {
+    try {
+      await chrome.tabs.sendMessage(tabId, message, { frameId: 0 })
+    } catch {
+      forgetHostTab(tabId)
+    }
+  }
+}
+
+export function postToPanels(message: unknown): void {
   for (const port of panelPorts) {
     try {
       port.postMessage(message)

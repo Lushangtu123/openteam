@@ -16,7 +16,7 @@ function fakePort() {
   }
 }
 
-function setup(options: { memberPagesFor?: () => string | undefined } = {}) {
+function setup() {
   document.body.innerHTML = '<button id="open-in-tab" hidden></button>'
   const ports: Array<ReturnType<typeof fakePort>> = []
   const connect = vi.fn(() => {
@@ -34,7 +34,6 @@ function setup(options: { memberPagesFor?: () => string | undefined } = {}) {
     onReconnected,
     sendRuntimeMessage,
     getWindowId: async () => 4,
-    memberPagesFor: options.memberPagesFor ?? (() => 'chat-1'),
     openInTabButton: document.getElementById('open-in-tab') as HTMLButtonElement,
     closeWindow,
   })
@@ -74,31 +73,8 @@ describe('OpenTeam in the side panel', () => {
     }
   })
 
-  it('asks for a tab to hold the members’ AI pages once per group that has any', async () => {
-    let chat: string | undefined = 'chat-1'
-    const { panel, sendRuntimeMessage } = setup({ memberPagesFor: () => chat })
-    await panel.start()
-    expect(sendRuntimeMessage).toHaveBeenCalledWith('TEAM_PAGE_HOST_ENSURE', { windowId: 4 })
-    panel.refresh()
-    panel.refresh()
-    expect(sendRuntimeMessage).toHaveBeenCalledTimes(1)
-    chat = undefined
-    panel.refresh()
-    expect(sendRuntimeMessage).toHaveBeenCalledTimes(1)
-    chat = 'chat-2'
-    panel.refresh()
-    expect(sendRuntimeMessage).toHaveBeenCalledTimes(2)
-  })
-
-  it('asks again when it is looked at, in case that tab was closed', async () => {
-    const { panel, sendRuntimeMessage } = setup()
-    await panel.start()
-    document.dispatchEvent(new Event('visibilitychange'))
-    expect(sendRuntimeMessage).toHaveBeenCalledTimes(2)
-  })
-
   it('shows a member’s AI page in the OpenTeam tab, and stays open', async () => {
-    const { panel, sendRuntimeMessage, closeWindow } = setup({ memberPagesFor: () => undefined })
+    const { panel, sendRuntimeMessage, closeWindow } = setup()
     await panel.start()
     await panel.showMemberPage('chat-1', 'role-1')
     expect(sendRuntimeMessage).toHaveBeenCalledWith('TEAM_PAGE_SHOW', { windowId: 4, chatId: 'chat-1', roleId: 'role-1' })
@@ -106,7 +82,7 @@ describe('OpenTeam in the side panel', () => {
   })
 
   it('opens OpenTeam in a tab and closes the panel', async () => {
-    const { panel, sendRuntimeMessage, closeWindow } = setup({ memberPagesFor: () => undefined })
+    const { panel, sendRuntimeMessage, closeWindow } = setup()
     await panel.start()
     const button = document.getElementById('open-in-tab') as HTMLButtonElement
     expect(button.hidden).toBe(false)

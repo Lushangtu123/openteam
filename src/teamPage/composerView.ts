@@ -24,7 +24,7 @@ export interface ComposerViewDependencies {
   reconnectRolesForSend(chat: GroupChat, roles: GroupRole[]): Promise<void>
   runCommand(type: string, payload?: Record<string, unknown>): Promise<void>
   showError(message: string): void
-  getRoleHealth?(role: GroupRole): RolePageHealth
+  getRoleHealth?(role: GroupRole): RolePageHealth | undefined
   // Translates the composer after it re-renders on its own (while typing), between full renders.
   localize?(root: HTMLElement): void
   attachments?: ComposerAttachments

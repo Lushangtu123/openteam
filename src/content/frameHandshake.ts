@@ -5,6 +5,11 @@ import type { ChatSiteAdapter } from './sites/types'
 
 const FRAME_ASSIGN_MESSAGE = 'OPENTEAM_ASSIGN_FRAME_ROLE'
 
+export interface FrameRoleHandshake {
+  // After the link to the background was made again (it restarted): this page's member, again.
+  announceAgain(): void
+}
+
 export function registerFrameRoleHandshake(options: {
   siteAdapter: ChatSiteAdapter
   roleSession: RoleSession
@@ -12,7 +17,11 @@ export function registerFrameRoleHandshake(options: {
   extensionOrigin: string
   seedStoredRoleReplies(replies: string[] | undefined): void
   sendRuntimeMessage<T>(message: RoleToBackgroundMessage): Promise<T>
-}): void {
+  // OpenTeam in the side panel asks its pages to link over a port (memberLink.ts); resolves once linked.
+  linkOverPort(): Promise<void>
+}): FrameRoleHandshake {
+  let lastAssignment: { chatId: string; roleId: string; hostTabId?: number } | undefined
+
   window.addEventListener('message', event => {
     // Only the OpenTeam page that embeds this frame may assign it a role.
     if (event.source !== window.parent || event.origin !== options.extensionOrigin) return
@@ -24,8 +33,14 @@ export function registerFrameRoleHandshake(options: {
     const hostTabId = typeof event.data.hostTabId === 'number' ? event.data.hostTabId : undefined
     if (!roleId) return
 
+    options.log.info('frame-role:assignment-received', { chatId, roleId, hostTabId, transport: event.data.transport, conversationId: options.siteAdapter.getConversationSnapshot().conversationId })
+    lastAssignment = { chatId, roleId, ...(hostTabId !== undefined ? { hostTabId } : {}) }
+    const linked = event.data.transport === 'port' ? options.linkOverPort() : Promise.resolve()
+    linked.then(() => announce(chatId, roleId, hostTabId))
+  })
+
+  function announce(chatId: string, roleId: string, hostTabId: number | undefined): void {
     const snapshot = options.siteAdapter.getConversationSnapshot()
-    options.log.info('frame-role:assignment-received', { chatId, roleId, hostTabId, conversationId: snapshot.conversationId })
     options
       .sendRuntimeMessage<FrameRoleReadyResponse>({
         type: 'TEAM_FRAME_ROLE_READY',
@@ -50,5 +65,11 @@ export function registerFrameRoleHandshake(options: {
         })
       })
       .catch(error => options.log.warn('frame-role:ready-error', { roleId, error: error instanceof Error ? error.message : String(error) }))
-  })
+  }
+
+  return {
+    announceAgain() {
+      if (lastAssignment) announce(lastAssignment.chatId, lastAssignment.roleId, lastAssignment.hostTabId)
+    },
+  }
 }

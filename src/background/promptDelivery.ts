@@ -19,9 +19,12 @@ export interface PromptSenderDependencies {
     warn(event: string, details?: Record<string, unknown>): void
   }
   loadImages?(ids: string[]): Promise<PromptFile[]>
+  // How a message reaches a member's page; by default through its tab. Pages in the side panel are
+  // reached over their ports (memberPorts.ts).
+  sendToFrame?(tabId: number, frameId: number, message: unknown): Promise<unknown>
 }
 
-export function createPromptSender({ log, loadImages }: PromptSenderDependencies): PromptSender {
+export function createPromptSender({ log, loadImages, sendToFrame = (tabId, frameId, message) => chrome.tabs.sendMessage(tabId, message, { frameId }) }: PromptSenderDependencies): PromptSender {
   return async (delivery, isTest = false) => {
     if (isTest) {
       log.info('prompt:send:test-mode', {
@@ -49,7 +52,7 @@ export function createPromptSender({ log, loadImages }: PromptSenderDependencies
       const imageIds = delivery.imageAttachmentIds ?? []
       if (imageIds.length > 0 && !loadImages) throw new Error('当前环境不支持发送图片')
       const message = imageIds.length > 0 && loadImages ? { ...delivery.message, files: await loadImages(imageIds) } : delivery.message
-      const response = await chrome.tabs.sendMessage(delivery.tabId, message, { frameId: delivery.frameId })
+      const response = await sendToFrame(delivery.tabId, delivery.frameId, message)
       if (isRecord(response) && response.ok === false) {
         throw new Error(readOptionalString(response.error) ?? readOptionalString(response.message) ?? 'Gemini prompt delivery failed')
       }

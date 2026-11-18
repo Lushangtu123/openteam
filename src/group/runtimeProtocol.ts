@@ -4,6 +4,9 @@ import type { ChatSite, GroupRole, OpenTeamStore, ReplyImageSource, RoleSiteHeal
 // The side panel's port to the background (src/teamPage/sidePanel.ts): what OpenTeam tabs are
 // sent by message, the panel is sent over it.
 export const PANEL_PORT_NAME = 'openteam-panel'
+// A member's AI page held by the side panel: its port to the background, both ways over it
+// (src/content/memberLink.ts, src/background/memberPorts.ts).
+export const MEMBER_PORT_NAME = 'openteam-member'
 
 export type RuntimeRoleStatus =
   | 'opening'

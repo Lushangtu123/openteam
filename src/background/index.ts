@@ -18,8 +18,12 @@ import {
   onHostTabsChanged,
   listHostTabIds,
   addPanelPort,
+  panelOpen,
+  postToPanels,
 } from './runtimeClient'
-import { PANEL_PORT_NAME } from '../group/runtimeProtocol'
+import { MEMBER_PORT_NAME, PANEL_PORT_NAME } from '../group/runtimeProtocol'
+import { createMemberPorts, isMemberPortTabId } from './memberPorts'
+import { chatSiteForUrl } from '../group/chatSites'
 import { createMessageRouter } from './messageRouter'
 import { classifyRuntimeSender, isRuntimeMessageAllowed, responseForSender } from './senderPolicy'
 import { createExternalModelHandlers } from './externalModelHandlers'
@@ -46,7 +50,7 @@ import { createSiteCheckHandlers } from './siteCheckHandlers'
 import { keepLogsAcrossRestarts } from './diagnosticsLogs'
 import { recentLogs } from '../shared/logger'
 import { createControlClient } from './controlClient'
-import { createTeamPageHostKeeper, createTeamPageShower } from './teamPageTab'
+import { createTeamPageShower } from './teamPageTab'
 import { createImageAttachmentService } from './imageAttachments'
 import { createWebSocketCookieSync } from './websocketCookies'
 import { chatIdFromNotificationId, createReplyNotifier } from './replyNotifications'
@@ -63,6 +67,7 @@ const CONTROL_KEEPALIVE_PERIOD_MINUTES = 0.4
 
 const sendPrompt = createPromptSender({
   log,
+  sendToFrame: (tabId, frameId, message) => sendToMemberFrame(tabId, frameId, message),
   loadImages: async ids => (await imageAttachments.loadUploads(ids)).map(({ fileName, mimeType, data }) => ({ fileName, mimeType, data })),
 })
 const promptDeliveryLimiter = createSitePromptDeliveryLimiter({ log })
@@ -129,6 +134,12 @@ const imageAttachments = createImageAttachmentService({
 })
 
 function sendRoleMessage(tabId: number, frameId: number, message: BackgroundToRoleMessage): Promise<unknown> {
+  return sendToMemberFrame(tabId, frameId, message)
+}
+
+// A member's page: in a frame of an OpenTeam tab, or in the side panel, reached over its port.
+function sendToMemberFrame(tabId: number, frameId: number, message: unknown): Promise<unknown> {
+  if (isMemberPortTabId(tabId)) return memberPorts.send(tabId, message as BackgroundToRoleMessage)
   return chrome.tabs.sendMessage(tabId, message, { frameId })
 }
 
@@ -266,11 +277,9 @@ const routeMessage = createMessageRouter([
   // The background's recent log entries, for 导出诊断信息 (already cleaned: src/shared/logger.ts).
   { type: 'DIAGNOSTICS_LOGS_GET', handler: async () => ({ ok: true, logs: recentLogs() }) },
   ...webPageOffers.handlers,
-  // OpenTeam in the side panel (see openSidePanel below).
-  {
-    type: 'TEAM_PAGE_HOST_ENSURE',
-    handler: async message => ({ ok: true, ...await keepTeamPageHost({ windowId: typeof message.windowId === 'number' ? message.windowId : undefined }) }),
-  },
+  // OpenTeam in the side panel (see openSidePanel below): an OpenTeam tab asks on opening whether a
+  // panel holds the members' pages now.
+  { type: 'TEAM_PANEL_PRESENCE_GET', handler: async () => ({ ok: true, open: panelOpen() }) },
   {
     type: 'TEAM_PAGE_SHOW',
     handler: async message => {
@@ -323,11 +332,10 @@ const interruptedReplies = createInterruptedReplySweeper({
 
 // The OpenTeam page, reused when it is open (see teamPageTab.ts).
 const showTeamPage = createTeamPageShower(chrome.tabs, chrome.runtime.getURL('team.html'), chrome.windows)
-// The tab that holds members' AI pages while OpenTeam is in the side panel.
-const keepTeamPageHost = createTeamPageHostKeeper(chrome.tabs, chrome.runtime.getURL('team.html'))
 
 chrome.runtime.onConnect?.addListener(port => {
   if (port.name === PANEL_PORT_NAME) addPanelPort(port)
+  if (port.name === MEMBER_PORT_NAME) memberPorts.connect(port)
 })
 
 const executeControlCommand = createControlActionExecutor({
@@ -475,6 +483,40 @@ chrome.alarms?.onAlarm?.addListener(alarm => {
   syncControlClient().catch(error => log.warn('control-client:keepalive-sync-failed', { error: errorReason(error) }))
 })
 
+// A message from an OpenTeam page or a member's page, checked against who sent it, then handled.
+async function processMessage(message: RuntimeMessage, sender: chrome.runtime.MessageSender): Promise<unknown> {
+  const senderKind = classifyRuntimeSender(sender, chrome.runtime.getURL('').replace(/\/$/, ''))
+  if (!isRuntimeMessageAllowed(message?.type, senderKind)) {
+    log.debug('message-handler:sender-rejected', { type: message?.type, senderKind, senderUrl: sender.url, tabUrl: sender.tab?.url })
+    return { ok: false, error: 'OpenTeam rejected a message from an untrusted context' }
+  }
+  try {
+    const response = await routeMessage(message, sender)
+    const allowed = responseForSender(response, senderKind)
+    return senderKind === 'extension-page' ? encodeStoreResponse(allowed, message, sender) : allowed
+  } catch (error) {
+    const reason = errorReason(error)
+    log.warn('message-handler:failed', { type: message?.type, error: reason })
+    // Chrome's wording for a member page that is gone is put in plain words; the log keeps it.
+    const shown = backgroundErrorForUser(reason)
+    sendError(shown).catch(() => undefined)
+    return { ok: false, error: shown }
+  }
+}
+
+// Members' AI pages in the side panel (memberPorts.ts). What they report that the OpenTeam page
+// itself watches (a page ready, a site's state) reaches a tab's page directly; the panel is told.
+const memberPorts = createMemberPorts({
+  panelPageUrl: chrome.runtime.getURL('team.html?view=panel'),
+  isMemberPageUrl: url => Boolean(chatSiteForUrl(url)),
+  async handle(message, sender) {
+    const response = await processMessage(message as RuntimeMessage, sender)
+    if (message.type === 'TEAM_FRAME_ROLE_READY' || message.type === 'TEAM_SITE_STATUS_UPDATE') postToPanels(message)
+    return response
+  },
+  onGone: tabId => memberPageTabGone(tabId),
+})
+
 chrome.runtime.onMessage.addListener((message: RuntimeMessage, sender, sendResponse) => {
   try {
     if (message?.type === 'OPENTEAM_PING') {
@@ -482,27 +524,7 @@ chrome.runtime.onMessage.addListener((message: RuntimeMessage, sender, sendRespo
       return true
     }
 
-    const senderKind = classifyRuntimeSender(sender, chrome.runtime.getURL('').replace(/\/$/, ''))
-    if (!isRuntimeMessageAllowed(message?.type, senderKind)) {
-      log.debug('message-handler:sender-rejected', { type: message?.type, senderKind, senderUrl: sender.url, tabUrl: sender.tab?.url })
-      sendResponseSafely(sendResponse, { ok: false, error: 'OpenTeam rejected a message from an untrusted context' })
-      return true
-    }
-
-    Promise.resolve()
-      .then(() => routeMessage(message, sender))
-      .then(response => {
-        const allowed = responseForSender(response, senderKind)
-        sendResponseSafely(sendResponse, senderKind === 'extension-page' ? encodeStoreResponse(allowed, message, sender) : allowed)
-      })
-      .catch((error: unknown) => {
-        const reason = errorReason(error)
-        log.warn('message-handler:failed', { type: message?.type, error: reason })
-        // Chrome's wording for a member page that is gone is put in plain words; the log keeps it.
-        const shown = backgroundErrorForUser(reason)
-        sendError(shown).catch(() => undefined)
-        sendResponseSafely(sendResponse, { ok: false, error: shown })
-      })
+    processMessage(message, sender).then(response => sendResponseSafely(sendResponse, response))
   } catch (error) {
     const reason = errorReason(error)
     logBackgroundFailure('message-listener:failed', error, { type: message?.type })
@@ -567,7 +589,10 @@ if (chrome.cookies?.onChanged && chrome.declarativeNetRequest?.updateSessionRule
   webSocketCookies.schedule()
 }
 
-chrome.tabs.onRemoved.addListener(tabId => {
+chrome.tabs.onRemoved.addListener(tabId => memberPageTabGone(tabId))
+
+// A tab closed, or a side panel member page's port closed: its member pages are gone.
+function memberPageTabGone(tabId: number): void {
   try {
     forgetHostTab(tabId)
     const removed = runtimeFrames.removeTab(tabId)
@@ -588,7 +613,7 @@ chrome.tabs.onRemoved.addListener(tabId => {
   } catch (error) {
     logBackgroundFailure('tab-removed:failed', error, { tabId })
   }
-})
+}
 
 // The extension's storage is for its own pages and background only (see storageAccess.ts).
 if (chrome.storage) void restrictStorageToExtension({ local: chrome.storage.local, sync: chrome.storage.sync, session: chrome.storage.session }, log)

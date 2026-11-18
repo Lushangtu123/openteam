@@ -91,6 +91,21 @@ describe('background runtime client', () => {
     expect(posted).toHaveLength(3)
   })
 
+  it('tells OpenTeam tabs when a side panel opens and when the last one closes', async () => {
+    vi.resetModules()
+    const tabsSendMessage = vi.fn().mockResolvedValue({ ok: true })
+    vi.stubGlobal('chrome', { tabs: { sendMessage: tabsSendMessage }, runtime: { sendMessage: vi.fn() } })
+    const { addPanelPort, panelOpen, rememberHost } = await import('./runtimeClient')
+    rememberHost({}, 101)
+    let disconnect: (() => void) | undefined
+    addPanelPort({ postMessage: vi.fn(), onDisconnect: { addListener: (listener: () => void) => { disconnect = listener } } } as unknown as chrome.runtime.Port)
+    await vi.waitFor(() => expect(tabsSendMessage).toHaveBeenCalledWith(101, { type: 'TEAM_PANEL_PRESENCE', open: true }, { frameId: 0 }))
+    expect(panelOpen()).toBe(true)
+    disconnect?.()
+    await vi.waitFor(() => expect(tabsSendMessage).toHaveBeenCalledWith(101, { type: 'TEAM_PANEL_PRESENCE', open: false }, { frameId: 0 }))
+    expect(panelOpen()).toBe(false)
+  })
+
   it('drops a panel port that can no longer be posted to', async () => {
     vi.resetModules()
     vi.stubGlobal('chrome', { tabs: { sendMessage: vi.fn() }, runtime: { sendMessage: vi.fn() } })
