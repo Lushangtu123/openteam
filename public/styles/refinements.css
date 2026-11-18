@@ -1468,3 +1468,66 @@
   flex: 1 1 auto;
   min-width: 0;
 }
+
+/* The side panel shows no rail, which took an eighth of its width: the chat gets the whole width,
+   the group list slides in from the edge, and the rail's buttons sit in a row at the bottom of the
+   list (panelTools.ts). */
+:root[data-theme] body[data-view="panel"] .rail {
+  display: none;
+}
+
+:root[data-theme] body[data-view="panel"] .app-shell {
+  grid-template-columns: minmax(250px, 306px) minmax(0, 1fr);
+}
+
+@media (max-width: 860px) {
+  :root[data-theme] body[data-view="panel"] .app-shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  :root[data-theme] body[data-view="panel"] .app-shell > .sidebar {
+    left: 0;
+    width: min(300px, 100vw);
+    transform: translateX(-100%);
+  }
+
+  :root[data-theme] body[data-view="panel"] .app-shell.chat-list-open > .sidebar {
+    transform: none;
+  }
+
+  :root[data-theme] body[data-view="panel"] .app-shell.chat-list-open::after {
+    inset: 0;
+  }
+}
+
+:root[data-theme] body[data-view="panel"] .sidebar {
+  padding-bottom: 56px;
+}
+
+:root[data-theme] .panel-tools {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  height: 56px;
+  border-top: 1px solid var(--line);
+  padding: 0 8px;
+  background: inherit;
+}
+
+/* Their names show above them, the row being at the bottom. */
+:root[data-theme] .panel-tools .rail-btn[data-tooltip]::after,
+:root[data-theme] .panel-tools .rail-btn[data-tooltip]:hover::after,
+:root[data-theme] .panel-tools .rail-btn[data-tooltip]:focus-visible::after {
+  top: auto;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+:root[data-theme] .panel-tools .rail-btn[data-tooltip]::before {
+  display: none;
+}

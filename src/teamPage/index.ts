@@ -59,6 +59,7 @@ import { createIndexedDbImageAttachmentRepository } from '../shared/imageAttachm
 import { getSafeSupportedChatIframeSrcForRole } from '../group/conversationUrl'
 import { normalizeLanguage, translateUi } from '../shared/i18n'
 import { createSidePanel, isSidePanel } from './sidePanel'
+import { movePanelTools } from './panelTools'
 import { PANEL_PORT_NAME } from '../group/runtimeProtocol'
 import type { RolePageHealth } from './roleHealth'
 
@@ -1031,12 +1032,21 @@ async function boot(): Promise<void> {
   })
   registerHeaderMenus(teamDomRefs.chatHeaderEl)
   registerHeaderMenus(teamDomRefs.composerModesEl)
-  registerChatListDrawer({
+  const chatListDrawer = registerChatListDrawer({
     appShellEl,
     sidebarEl: teamDomRefs.chatSidebarEl,
     toggles: [teamDomRefs.openChatListEl, teamDomRefs.railChatsEl],
     narrowQuery: window.matchMedia(NARROW_LAYOUT_QUERY),
   })
+  // The side panel shows no rail; its buttons are at the bottom of the group list (panelTools.ts).
+  if (inSidePanel) {
+    movePanelTools({
+      sidebarEl: teamDomRefs.chatSidebarEl,
+      buttons: [teamDomRefs.openMessageSearchEl, teamDomRefs.openAllNotesEl, teamDomRefs.openPeopleLibraryEl, teamDomRefs.openInTabEl, settingsButtonEl],
+      label: '工具',
+      onUse: () => chatListDrawer.close(),
+    })
+  }
   document.querySelector<HTMLButtonElement>('#open-project')?.addEventListener('click', () => projectView.openSetup())
   showAiPagesEl.addEventListener('click', () => {
     settingsMenuEl.hidden = true

@@ -442,6 +442,7 @@ const UI_TRANSLATIONS: Record<string, string> = {
   '移除附件': 'Remove attachment',
   '刚才的网页': 'The page you were on',
   '在标签页中打开': 'Open in a tab',
+  '工具': 'Tools',
   '附上': 'Attach',
   '不附上': 'Don’t attach',
   '网页的标题、网址和正文会作为附件，随这条消息发给成员': 'The page’s title, address and text go with this message as an attachment',
