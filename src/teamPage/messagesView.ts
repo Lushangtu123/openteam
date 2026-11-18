@@ -104,6 +104,19 @@ function isStructuredFailureReason(value: string): boolean {
 export function createMessagesView(deps: MessagesViewDependencies): MessagesView {
   // What the chat area shows with no group open.
   const startCards = createStartCards(deps)
+  // While the pointer is on a message's buttons, the list does not scroll to follow a reply coming
+  // in, which would move the buttons from under it; it follows again once the pointer leaves.
+  let pointerOnTools = false
+  let followWhenFree = false
+  deps.messagesEl.addEventListener('pointerover', event => {
+    pointerOnTools = Boolean((event.target as Element | null)?.closest?.('.message-tools'))
+  })
+  deps.messagesEl.addEventListener('pointerleave', () => {
+    pointerOnTools = false
+  })
+  // The cards of members replying (正在回复中 and the text so far), kept while only their text
+  // changes, so their 停止 button is not replaced under the pointer as the reply comes in.
+  const replyCards = new Map<string, { signature: string; node: HTMLElement }>()
   // Image tiles and file chips under a message.
   const attachmentsView = createMessageAttachmentsView({
     loadImageAttachment: deps.loadImageAttachment,
@@ -151,7 +164,10 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     attachmentsView.releaseUnused(messages)
     const preserveScroll = deps.state.preserveNextMessageScroll
     const previousScrollTop = deps.messagesEl.scrollTop
-    const shouldFollowNewReplies = isScrolledNearBottom(deps.messagesEl)
+    const nearBottom = isScrolledNearBottom(deps.messagesEl) || followWhenFree
+    const holdStill = pointerOnTools
+    followWhenFree = holdStill && nearBottom
+    const shouldFollowNewReplies = nearBottom && !holdStill
 
     if (!chat) {
       reconcileChildren(deps.messagesEl, [startCards.noChatCard()])
@@ -1022,6 +1038,22 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
   function replyControlBubble(role: GroupRole, showName = true, showAvatar = true): HTMLElement {
     const stopped = role.status === 'stopped'
     const liveText = stopped ? undefined : liveReplyText(role)
+    const signature = JSON.stringify([role.id, role.name, role.chatSite, role.modelSource, role.externalModelId, role.avatarText, role.avatarImage?.length, stopped, Boolean(liveText), showName, showAvatar, normalizeLanguage(deps.getStore().settings.language)])
+    const cached = replyCards.get(role.id)
+    if (cached?.signature === signature) {
+      const body = cached.node.querySelector<HTMLElement>('.message-body')
+      if (body) {
+        if (liveText) reveal.show(liveRevealKey(role), body, liveText)
+        else body.textContent = waitingBubbleText(role, stopped)
+        return cached.node
+      }
+    }
+    const article = buildReplyControlBubble(role, stopped, liveText, showName, showAvatar)
+    replyCards.set(role.id, { signature, node: article })
+    return article
+  }
+
+  function buildReplyControlBubble(role: GroupRole, stopped: boolean, liveText: string | undefined, showName: boolean, showAvatar: boolean): HTMLElement {
     const article = document.createElement('article')
     article.className = `message-row message assistant ${stopped ? 'stopped' : 'thinking'}${liveText ? ' live' : ''}${showName ? '' : ' compact'}${showAvatar ? '' : ' no-avatar'}`
     const inner = document.createElement('div')

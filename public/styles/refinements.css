@@ -1445,3 +1445,26 @@
 :root[data-theme] body[data-view="panel"] #iframe-host .role-frame-shell.focused {
   z-index: 1;
 }
+
+/* The @ list's site label, with its text in the middle of the pill. */
+:root[data-theme] .mention-site-badge {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* A file under a sent message stays inside its bubble, however narrow (the side panel), its name
+   cut short. */
+:root[data-theme] .message-file-list {
+  min-width: 0;
+  max-width: 100%;
+}
+
+:root[data-theme] .message-file-chip {
+  min-width: 0;
+  max-width: min(260px, 100%);
+}
+
+:root[data-theme] .message-file-name {
+  flex: 1 1 auto;
+  min-width: 0;
+}

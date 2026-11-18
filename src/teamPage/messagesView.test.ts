@@ -1680,12 +1680,76 @@ describe('team page messages view boundary', () => {
     expect(row?.querySelector('.message-body')?.textContent).toContain('可以上线')
     expect(row?.querySelector('[aria-label="停止回复"]')).not.toBeNull()
 
+    // As more text arrives the card is kept, with its button, so the button stays under the pointer.
+    const stop = row?.querySelector('[aria-label="停止回复"]')
+    role.liveReply = { ...role.liveReply!, content: '**结论**：可以上线，再补一句' }
+    view.renderMessages()
+    expect(messagesEl.querySelector('.message-row.thinking')).toBe(row)
+    expect(row?.querySelector('[aria-label="停止回复"]')).toBe(stop)
+    expect(row?.querySelector('.message-body')?.textContent).toContain('再补一句')
+
     // Live text left over from another question is not shown.
     role.liveReply = { ...role.liveReply!, promptMessageId: 'msg-earlier' }
     view.renderMessages()
     const waiting = messagesEl.querySelector('.message-row.thinking')
     expect(waiting?.classList.contains('live')).toBe(false)
     expect(waiting?.querySelector('.message-body')?.textContent).toContain('正在回复中')
+  })
+
+  it('holds still while the pointer is on a message’s buttons, and follows new text again after', () => {
+    const now = Date.now()
+    const chat: GroupChat = { id: 'chat-1', name: '群聊', mode: 'independent', roleIds: ['role-1'], messageIds: ['msg-1'], nextMessageSeq: 2, status: 'running', createdAt: now, updatedAt: now }
+    const role: GroupRole = { id: 'role-1', chatId: chat.id, name: '工程师', chatSite: 'gemini', status: 'ready', contextCursor: 0, createdAt: now, updatedAt: now }
+    const reply: GroupMessage = { id: 'msg-1', chatId: chat.id, seq: 1, type: 'assistant', roleId: role.id, roleName: role.name, content: '第一条回复', createdAt: now, status: 'received' }
+    const store: OpenTeamStore = { ...createDefaultStore(), currentChatId: chat.id, chatOrder: [chat.id], chatsById: { [chat.id]: chat }, rolesById: { [role.id]: role }, messagesById: { [reply.id]: reply } }
+    const messagesEl = document.createElement('section')
+    document.body.append(messagesEl)
+    // A list scrolled to its bottom, which grows while it is rendered (new reply text).
+    let height = 1000
+    let growing = false
+    Object.defineProperty(messagesEl, 'scrollHeight', { get: () => height, configurable: true })
+    Object.defineProperty(messagesEl, 'clientHeight', { get: () => 400, configurable: true })
+    const view = createMessagesView({
+      state: createTeamPageState(),
+      getStore: () => store,
+      messagesEl,
+      getCurrentChat: () => chat,
+      getCurrentRoles: () => {
+        if (growing) height += 100
+        growing = false
+        return [role]
+      },
+      getCurrentMessages: () => [reply],
+      emptyCard: () => document.createElement('div'),
+      openAddPersonDialog: vi.fn(),
+      messageTitle: message => message.roleName ?? 'AI 成员',
+      focusRoleFrame: vi.fn(),
+      insertMention: vi.fn(),
+      setReference: vi.fn(),
+      resyncMessageReply: vi.fn(async () => undefined),
+      retryRoleReply: vi.fn(async () => undefined),
+      stopRoleReply: vi.fn(async () => undefined),
+      runCommand: vi.fn(async () => undefined),
+      render: vi.fn(),
+      showError: vi.fn(),
+      showSuccess: vi.fn(),
+      log: { warn: vi.fn() },
+    })
+    view.renderMessages()
+    messagesEl.scrollTop = 600
+    const tools = messagesEl.querySelector('.message-tools')!
+    tools.dispatchEvent(new Event('pointerover', { bubbles: true }))
+    growing = true
+    view.renderMessages()
+    expect(height).toBe(1100)
+    expect(messagesEl.scrollTop).toBe(600)
+
+    // Away from the buttons, the list catches up with the reply, though it is no longer at the bottom.
+    messagesEl.dispatchEvent(new Event('pointerleave'))
+    growing = true
+    view.renderMessages()
+    expect(messagesEl.scrollTop).toBe(height)
+    messagesEl.remove()
   })
 
   it('requests a full reply resync for the current assistant message without retrying the prompt', async () => {
