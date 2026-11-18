@@ -52,6 +52,8 @@ OpenTeam 是一个 Manifest V3 Chrome 扩展。大多数成员不需要 API Key�
 **工作台**
 
 - **实时回复**：网页成员的回复边写边显示，停止时保留已写的内容。成员页面中途刷新或换了模型，这条回复会正常收尾，成员也会重新跟上群里的进度。
+- **侧边栏**：点 OpenTeam 图标，群聊会在 Chrome 侧边栏里打开，可以一边看网页一边聊。成员的 AI 页面也放在侧边栏里，你去别的标签页看东西时它们照样回复（放在后台标签页里的 AI 页面，过几分钟会被 Chrome 放慢，回复会卡住）。搜索、笔记、人员库、设置和「在标签页中打开」都在 ☰ 群聊列表的底部。没有侧边栏的旧版 Chrome 会改为打开一个标签页。
+- **附上网页**：在任意网页上点 OpenTeam 图标，或者右键选「把这个网页发到 OpenTeam」，输入框上方会出现这个网页。点「附上」后，网页正文（以及你选中的文字）会作为一个 Markdown 文件随消息发给成员，最多 3 万字。不点「附上」，OpenTeam 不会读取这个网页。
 - **图片与文件**：可附加图片、PDF、Word、PowerPoint、Excel 和文本文件；ChatGPT、Gemini、Grok、Qwen 画出的图片会复制到群聊。
 - **对比回复**：把同一问题的所有回答并排显示，再请一位成员总结异同。
 - **一键作答**：回复以选项（A / B / C）结尾时，点一下就能回答。
@@ -127,7 +129,7 @@ OpenTeam 通过你自己登录的浏览器会话和页面自动化与 AI 网站�
 
 1. 从 [最新发布](https://github.com/Lushangtu123/openteam/releases/latest) 下载 `openteam-extension-v<版本>.zip`，解压到一个会长期保留的文件夹（Chrome 从这个文件夹加载扩展）。
 2. 打开 `chrome://extensions/`，开启开发者模式，点击「加载已解压的扩展程序」，选择该文件夹。
-3. 点击 OpenTeam 图标。第一次打开时会有引导：登录 AI 网站、检查能不能用、建第一个群。
+3. 点击 OpenTeam 图标，它会在侧边栏里打开（想用整页，点 ☰ 群聊列表里的「在标签页中打开」）。第一次打开时会有引导：登录 AI 网站、检查能不能用、建第一个群。
 
 ![上手引导：登录 AI 网站、检查能不能用、建第一个群](docs/assets/screenshots/first-run-guide.png)
 
@@ -187,6 +189,9 @@ npm run package   # 构建后运行：在 release/ 里生成扩展 zip、CLI 包
 - `clipboardRead` / `clipboardWrite`：复制和粘贴。
 - `cookies`：读取 Grok 的会话 Cookie，让它的实时连接在工作台里可用（只作用于 OpenTeam 自己的标签页）。
 - `notifications`：所有人答完时提醒你（可在设置里关闭）。
+- `sidePanel`：在 Chrome 侧边栏里打开 OpenTeam。
+- `activeTab` / `scripting`：用于附上网页。点 OpenTeam 图标或右键菜单时，Chrome 允许 OpenTeam 读取当前这一个网页；只有你点「附上」才会读取，换到别的网页后就不再允许。
+- `contextMenus`：网页右键菜单里的「把这个网页发到 OpenTeam」。
 - 网站权限：只包括受支持的 AI 网站、它们的图片域名和本机守护进程。每个 API 模型的地址单独授权，在该模型上点「允许访问」即可。
 - 麦克风（不在 manifest 中申请）：语音输入使用 Chrome 的在线语音识别，首次使用时由 Chrome 询问。
 
@@ -199,6 +204,8 @@ npm run package   # 构建后运行：在 release/ 里生成扩展 zip、CLI 包
 - 在工作台里嵌入网站需要通过 `declarativeNetRequest` 修改响应头，权限比普通扩展更重。
 - 网站可能拒绝在其他页面里运行。遇到时 OpenTeam 会在成员状态上说明，不会绕过；这样的模型仍可以作为 API 成员加入。
 - 未登录的会话有限制：未登录的 Gemini 不能发送图片，未登录的 Grok 画图前会要求登录。
+- 打开或关闭侧边栏时，成员的 AI 页面会重新加载，正在写的回复会中断，和刷新页面一样。
+- Chrome 不允许扩展读取 `chrome://` 页面、其他扩展的页面和 Chrome 应用商店，这些页面不能附上。
 - 语音输入需要联网。
 - 名人顾问模板是受公开思想启发的提示词，不是真人。
 - 医疗、法律、金融等高风险问题的回答仍需要人工判断和专业意见。

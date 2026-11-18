@@ -52,6 +52,8 @@ Use it for learning, research and personal non-commercial work where one answer 
 **Workspace**
 
 - **Live replies**: a web member's reply appears while the site is still writing it; stopping keeps what was written. If a member's page reloads or the member moves to another model mid-reply, the reply is closed properly and the member is brought back up to date.
+- **Side panel**: click the OpenTeam icon and the group opens in Chrome's side panel, so you can chat beside the page you are reading. Members' AI pages are kept in the side panel too, so they keep replying while you are in other tabs (an AI page left in a background tab is slowed by Chrome after a few minutes, and its reply stalls). Search, notes, the people library, settings and **Open in a tab** are at the bottom of the ☰ group list. On an older Chrome without a side panel, OpenTeam opens in a tab instead.
+- **Attach the page**: on any web page, click the OpenTeam icon or right-click and choose **Send this page to OpenTeam**, and that page appears above the message box. Click **Attach** and the page's text (with any text you selected) goes with your message as a Markdown file, up to 30,000 characters. Until you click **Attach**, OpenTeam does not read the page.
 - **Images and files**: attach images, PDF, Word, PowerPoint, Excel and text files; images that ChatGPT, Gemini, Grok or Qwen draw are copied into the chat.
 - **Compare replies**: put every answer to one question side by side, then ask a member to summarise where they agree and differ.
 - **Clickable choices**: when a reply ends with options (A / B / C), answer with one click.
@@ -127,7 +129,7 @@ Use it at your own risk. The maintainers are not responsible for account restric
 
 1. Download `openteam-extension-v<version>.zip` from the [latest release](https://github.com/Lushangtu123/openteam/releases/latest) and unzip it into a folder you will keep (Chrome loads the extension from that folder).
 2. Open `chrome://extensions/`, turn on Developer mode, click **Load unpacked** and choose the folder.
-3. Click the OpenTeam icon. The first screen walks you through signing in to the AI websites, checking they work, and making a first group.
+3. Click the OpenTeam icon; it opens in the side panel (for a full page, use **Open in a tab** in the ☰ group list). The first screen walks you through signing in to the AI websites, checking they work, and making a first group.
 
 ![The first-run guide: sign in to the AI sites, check they work, make a first group](docs/assets/screenshots/first-run-guide.png)
 
@@ -187,6 +189,9 @@ To publish a release, set the same version in `package.json` and `public/manifes
 - `clipboardRead` / `clipboardWrite`: copy and paste.
 - `cookies`: Grok's session cookies, so its live connection works inside the workspace (OpenTeam's own tabs only).
 - `notifications`: tell you when everyone has answered (can be turned off).
+- `sidePanel`: open OpenTeam in Chrome's side panel.
+- `activeTab` / `scripting`: attaching a page. Clicking the OpenTeam icon or the right-click menu lets OpenTeam read that one page; it reads it only when you click **Attach**, and loses access once you move to another page.
+- `contextMenus`: **Send this page to OpenTeam** in a page's right-click menu.
 - Host permissions: only the supported AI websites, their image hosts and the local daemon. Each API model address is allowed separately, when you click **Allow access** on that model.
 - Microphone (no manifest permission): voice input uses Chrome's online speech recognition; Chrome asks the first time.
 
@@ -199,6 +204,8 @@ Attached images are stored in the browser (IndexedDB) and uploaded only when you
 - Embedding sites needs response-header changes through `declarativeNetRequest`, a heavier permission than a normal extension.
 - A site can refuse to run inside other pages. OpenTeam shows this on the member's status and does not work around it; such a model can still join as an API member.
 - Signed-out sessions have limits: signed-out Gemini does not send images, and signed-out Grok asks you to sign in before drawing.
+- Opening or closing the side panel reloads members' AI pages, so a reply being written is cut off, as when a page is refreshed.
+- Chrome lets no extension read `chrome://` pages, other extensions' pages or the Chrome Web Store, so those pages cannot be attached.
 - Voice input needs a network connection.
 - Famous-person advisor templates are prompts inspired by public ideas, not real people.
 - Medical, legal, financial and other high-stakes answers still need human judgment and qualified advice.
