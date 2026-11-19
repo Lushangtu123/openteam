@@ -4,7 +4,9 @@
 // needs its Lax cookies, so in the team page Grok reports "your network or security software is
 // blocking Grok's real-time connection". For the team page's own tabs, a session rule puts the
 // cookies Chrome would send to that URL in a normal tab onto the handshake. Normal Grok tabs and the
-// cookies themselves are left alone.
+// cookies themselves are left alone. OpenTeam in the side panel holds its member pages in no tab, so
+// while it is open the rule also covers requests from no tab (memberPageTabIds); it still applies
+// only to Grok's own WebSocket, started by a grok.com page.
 
 export interface WebSocketCookieSite {
   // Session rule id; session rules are separate from the static frame rules.
@@ -18,6 +20,14 @@ export interface WebSocketCookieSite {
 export const WEBSOCKET_COOKIE_SITES: readonly WebSocketCookieSite[] = [
   { ruleId: 9001, cookieUrl: 'https://grok.com/ws/mgw/', urlFilter: '||grok.com/ws/', initiatorDomain: 'grok.com' },
 ]
+
+// The tab id of requests that come from no tab, such as the side panel's frames.
+export const NO_TAB_ID = -1
+
+// Where the member pages are: the OpenTeam tabs, and no tab while OpenTeam is open in the side panel.
+export function memberPageTabIds(hostTabIds: number[], panelOpen: boolean): number[] {
+  return panelOpen ? [...hostTabIds, NO_TAB_ID] : [...hostTabIds]
+}
 
 export interface CookieLike {
   name: string

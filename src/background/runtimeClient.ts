@@ -36,7 +36,7 @@ export function messageTabId(message: RuntimeMessage, sender: chrome.runtime.Mes
 
 const hostTabListeners = new Set<() => void>()
 
-// Called when a team page tab is first seen or goes away.
+// Called when a team page tab is first seen or goes away, and when a side panel opens or closes.
 export function onHostTabsChanged(listener: () => void): void {
   hostTabListeners.add(listener)
 }
@@ -69,9 +69,12 @@ const panelPorts = new Set<chrome.runtime.Port>()
 export function addPanelPort(port: chrome.runtime.Port): void {
   panelPorts.add(port)
   void tellTabsAboutPanels()
+  // Where member pages may live changed, as when a team page tab comes or goes.
+  for (const listener of hostTabListeners) listener()
   port.onDisconnect.addListener(() => {
     panelPorts.delete(port)
     void tellTabsAboutPanels()
+    for (const listener of hostTabListeners) listener()
   })
 }
 

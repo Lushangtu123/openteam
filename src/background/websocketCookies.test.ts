@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { buildWebSocketCookieRule, cookieHeader, createWebSocketCookieSync, WEBSOCKET_COOKIE_SITES } from './websocketCookies'
+import { buildWebSocketCookieRule, cookieHeader, createWebSocketCookieSync, memberPageTabIds, NO_TAB_ID, WEBSOCKET_COOKIE_SITES } from './websocketCookies'
 
 const log = { info: vi.fn(), warn: vi.fn() }
 
@@ -20,6 +20,13 @@ describe('WebSocket handshake cookies for framed sites', () => {
       action: { type: 'modifyHeaders', requestHeaders: [{ header: 'cookie', operation: 'set', value: 'sso=abc' }] },
       condition: { urlFilter: '||grok.com/ws/', resourceTypes: ['websocket'], initiatorDomains: ['grok.com'], tabIds: [12, 40] },
     })
+  })
+
+  it('also covers requests from no tab while OpenTeam is open in the side panel, whose member pages are in no tab', () => {
+    expect(memberPageTabIds([12, 40], false)).toEqual([12, 40])
+    expect(memberPageTabIds([12, 40], true)).toEqual([12, 40, NO_TAB_ID])
+    expect(memberPageTabIds([], true)).toEqual([NO_TAB_ID])
+    expect(NO_TAB_ID).toBe(-1)
   })
 
   it('adds the rule while a team page is open, and removes it when none is', async () => {

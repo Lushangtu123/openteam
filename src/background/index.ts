@@ -52,7 +52,7 @@ import { recentLogs } from '../shared/logger'
 import { createControlClient } from './controlClient'
 import { createTeamPageShower } from './teamPageTab'
 import { createImageAttachmentService } from './imageAttachments'
-import { createWebSocketCookieSync } from './websocketCookies'
+import { createWebSocketCookieSync, memberPageTabIds } from './websocketCookies'
 import { chatIdFromNotificationId, createReplyNotifier } from './replyNotifications'
 import { createIndexedDbImageAttachmentRepository } from '../shared/imageAttachmentRepository'
 import { createWebPageOffers, readPageInTab } from './webPageOffers'
@@ -579,7 +579,7 @@ if (chrome.cookies?.onChanged && chrome.declarativeNetRequest?.updateSessionRule
       return [...unpartitioned, ...partitioned]
     },
     updateSessionRules: update => chrome.declarativeNetRequest.updateSessionRules(update),
-    listTabIds: listHostTabIds,
+    listTabIds: () => memberPageTabIds(listHostTabIds(), panelOpen()),
     log,
   })
   onHostTabsChanged(() => webSocketCookies.schedule())
