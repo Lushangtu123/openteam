@@ -24,8 +24,9 @@ export interface PromptDeliveryRetryDependencies {
   markDeliveryError(chatId: string, roleId: string, messageId: string, reason: string): Promise<void>
   requestRoleRecovery?(chatId: string, roleId: string, reason: string): Promise<boolean>
   waitForRetry?(ms: number): Promise<void>
-  // No more tries: something else answers for the member now (its backup, when its site is blocked).
-  stopRetrying?(chatId: string, roleId: string): Promise<boolean>
+  // No more tries: something else answers for the member now (its backup, when its site is blocked
+  // or its page refused the prompt). `reason` is why the last try failed.
+  stopRetrying?(chatId: string, roleId: string, reason: string): Promise<boolean>
 }
 
 /**
@@ -124,7 +125,7 @@ export async function sendPromptDeliveryWithRetry(
       }
 
       if (!canRetry) break
-      if (await deps.stopRetrying?.(input.chatId, input.delivery.roleId)) {
+      if (await deps.stopRetrying?.(input.chatId, input.delivery.roleId, lastReason)) {
         deps.log.warn('delivery:retry-stopped', { chatId: input.chatId, roleId: input.delivery.roleId, messageId: input.messageId, reason: lastReason })
         break
       }

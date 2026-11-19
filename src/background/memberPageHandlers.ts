@@ -9,6 +9,7 @@ import { mapRuntimeRoleStatus } from '../group/runtimeProtocol'
 import type { GroupMessage, GroupRole, OpenTeamStore } from '../group/types'
 import type { ResumeReply } from '../group/runtimeProtocol'
 import { isExternalModelRole } from './rolePromptDelivery'
+import { backupModelFor } from './memberBackup'
 import { messageTabId, rememberHost, type RuntimeMessage, senderFrameId, senderTabId } from './runtimeClient'
 import { mutateStore, requireChat, requireRole } from './storeAccess'
 import { markOrchestrationRoleError, maybeAdvanceOrchestrationRun } from './orchestrationRuntime'
@@ -540,6 +541,21 @@ export function createMemberPageHandlers(ctx: MessageHandlerContext) {
     const promptMessageId = readOptionalString(message.messageId)
     const replyAttemptId = readOptionalString(message.replyAttemptId)
     deps.log.warn('role-error:received', { ...identity, promptMessageId, replyAttemptId, reason, senderUrl: sender.url, tabId: messageTabId(message, sender), frameId: senderFrameId(sender) })
+
+    // The page could not send a prompt that has a backup to answer it: the same refusal reaches the
+    // delivery, which hands the prompt to the backup (siteDeliveries.ts). The member is not failed.
+    if (promptMessageId && deps.answerForMember) {
+      const { result: leftToBackup } = await mutateStore(store => {
+        const chat = requireChat(store, identity.chatId)
+        const role = requireRole(store, chat.id, identity.roleId)
+        if (!backupModelFor(store, role) || staleReplyReason(store, chat, role, promptMessageId, replyAttemptId)) return false
+        return store.messagesById[promptMessageId]?.deliveryStatus?.[role.id] === 'pending'
+      })
+      if (leftToBackup) {
+        deps.log.warn('role-error:left-to-backup', { ...identity, promptMessageId, reason })
+        return { ok: true, leftToBackup: true }
+      }
+    }
 
     const retry = promptMessageId
       ? await prepareRoleErrorRetry(deps, roleErrorRetryCounts, identity.chatId, identity.roleId, promptMessageId, replyAttemptId, reason)

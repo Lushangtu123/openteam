@@ -7,6 +7,7 @@ import { mutateStore, requireChat, requireRole } from './storeAccess'
 import type { MessageHandlersDependencies } from './messageHandlerDeps'
 import { hasAssistantReplyAfterPrompt, staleReplyReason } from './replyMessages'
 import { backupDeliveryFor, backupModelFor, siteBlocksMember } from './memberBackup'
+import { isReceiverGoneError } from '../shared/connectionErrors'
 
 export async function markDeliveryError(deps: MessageHandlersDependencies, chatId: string, roleId: string, messageId: string, reason: string): Promise<OpenTeamStore> {
   deps.log.warn('delivery:error', { chatId, roleId, messageId, reason })
@@ -79,9 +80,13 @@ export async function sendPromptDelivery(deps: MessageHandlersDependencies, chat
     sendPrompt: deps.sendPrompt,
     getLatestBinding: (targetChatId, roleId) => deps.runtimeFrames.getByRole(targetChatId, roleId),
     isDeliveryStillActive: isPromptDeliveryStillActive,
-    // A site that blocks the prompt (a pop-up, a login page) is not tried again for minutes when a
-    // backup can answer now.
-    stopRetrying: async (targetChatId, roleId) => delivery.hasBackup === true && deps.answerForMember !== undefined && await blockedWithBackup(targetChatId, roleId),
+    // A page that refused the prompt (not signed in, used up, a pop-up) or a site that says it is
+    // blocked is not tried again for minutes when a backup can answer now. A page that is only gone
+    // (the side panel opened or closed, a reload) is brought back and tried again as usual.
+    stopRetrying: async (targetChatId, roleId, reason) => {
+      if (delivery.hasBackup !== true || deps.answerForMember === undefined) return false
+      return !isReceiverGoneError(reason) ? await hasUsableBackup(targetChatId, roleId) : await blockedWithBackup(targetChatId, roleId)
+    },
     markDeliveryError: async (targetChatId, roleId, targetMessageId, reason) => {
       if (await answerWithBackup(deps, targetChatId, targetMessageId, delivery, 'send-failed')) return
       await markDeliveryError(deps, targetChatId, roleId, targetMessageId, reason)
@@ -102,6 +107,11 @@ export function reportPromptSettled(deps: MessageHandlersDependencies, store: Op
   } catch (error) {
     deps.log.warn('prompt-settled:failed', { error: error instanceof Error ? error.message : String(error) })
   }
+}
+
+async function hasUsableBackup(chatId: string, roleId: string): Promise<boolean> {
+  const { result } = await mutateStore(store => Boolean(backupModelFor(store, requireRole(store, requireChat(store, chatId).id, roleId))))
+  return result
 }
 
 async function blockedWithBackup(chatId: string, roleId: string): Promise<boolean> {

@@ -79,6 +79,26 @@ describe('a web member\'s prompt and its backup', () => {
     expect(ctx.store.rolesById['role-1'].status).toBe('thinking')
   })
 
+  it('goes to the backup at once when the page refuses the prompt (not signed in), though its site said it was usable', async () => {
+    const sendPrompt = vi.fn(async () => { throw new Error('Kimi 没有发出这条消息：这个页面还没有登录 Kimi，请先在 Kimi 页面登录') })
+    const { send, answerForMember, sendError, store } = await setup({ backupModelId: 'api', siteHealth: { siteId: 'kimi', status: 'ready', reason: 'guest', updatedAt: 1 } }, sendPrompt)
+    await expect(send()).resolves.toBe(false)
+    expect(sendPrompt).toHaveBeenCalledTimes(1)
+    expect(answerForMember).toHaveBeenCalledTimes(1)
+    expect(sendError).not.toHaveBeenCalled()
+    expect(store.rolesById['role-1'].status).toBe('thinking')
+  })
+
+  it('keeps trying, and does not hand over, while the member\'s page is only gone for a moment', async () => {
+    const sendPrompt = vi.fn()
+      .mockRejectedValueOnce(new Error('Could not establish connection. Receiving end does not exist.'))
+      .mockResolvedValueOnce(undefined)
+    const { send, answerForMember } = await setup({ backupModelId: 'api' }, sendPrompt)
+    await expect(send()).resolves.toBe(true)
+    expect(sendPrompt).toHaveBeenCalledTimes(2)
+    expect(answerForMember).not.toHaveBeenCalled()
+  })
+
   it('fails as before when the member has no backup', async () => {
     const sendPrompt = vi.fn(async () => { throw new Error('Kimi 页面上有弹窗挡住了发送') })
     const { send, answerForMember, sendError, store } = await setup(blocked, sendPrompt)

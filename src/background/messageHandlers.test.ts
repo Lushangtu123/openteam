@@ -3175,3 +3175,47 @@ describe('a web member whose site is blocked', () => {
     expect(request.targetRoleIds).toEqual(['role-3'])
   })
 })
+
+describe('a web member\'s page reporting that it could not send', () => {
+  async function report(role: Partial<GroupRole>, delivered: 'pending' | 'sent') {
+    vi.resetModules()
+    const store = createStoreWithTwoApiRoles()
+    store.rolesById['role-3'] = { id: 'role-3', chatId: 'chat-1', name: '研究员', systemPrompt: '', modelSource: 'site', chatSite: 'kimi', status: 'thinking', lastPromptMessageId: 'msg-q', replyAttemptId: 'attempt-1', contextCursor: 0, createdAt: 0, updatedAt: 0, ...role }
+    store.chatsById['chat-1'].roleIds = ['role-1', 'role-2', 'role-3']
+    store.chatsById['chat-1'].messageIds = ['msg-q']
+    store.messagesById['msg-q'] = { id: 'msg-q', chatId: 'chat-1', seq: 1, type: 'user', content: '问题', targetRoleIds: ['role-3'], createdAt: 0, status: delivered, deliveryStatus: { 'role-3': delivered } }
+    vi.doMock('./storeAccess', async importOriginal => {
+      const actual = await importOriginal<typeof import('./storeAccess')>()
+      return { ...actual, mutateStore: async (mutator: (store: OpenTeamStore) => unknown) => ({ store, result: await mutator(store) }) }
+    })
+    const { createMessageHandlers } = await import('./messageHandlers')
+    const routes = createMessageHandlers({
+      broadcastStoreUpdated: vi.fn(),
+      getChatStatusFromRoles: () => 'ready',
+      log: { debug: vi.fn(), info: vi.fn(), warn: vi.fn() },
+      newId: vi.fn((prefix: string) => `${prefix}-x`),
+      now: () => 100,
+      roleErrorRetryDelaysMs: [],
+      runtimeFrames: { bind: vi.fn(), getByAddress: vi.fn(), getByRole: vi.fn() },
+      sendRoleMessage: vi.fn(),
+      sendError: vi.fn(),
+      sendPrompt: vi.fn(),
+    })
+    await routes.find(route => route.type === 'TEAM_ROLE_ERROR')!.handler({ type: 'TEAM_ROLE_ERROR', chatId: 'chat-1', roleId: 'role-3', messageId: 'msg-q', replyAttemptId: 'attempt-1', reason: 'Kimi 没有发出这条消息：这个页面还没有登录 Kimi，请先在 Kimi 页面登录' }, {})
+    const replies = Object.values(store.messagesById).filter(message => message.type === 'assistant')
+    return { role: store.rolesById['role-3'], question: store.messagesById['msg-q'], replies }
+  }
+
+  it('leaves a prompt that never reached the site to its backup: the member is not failed', async () => {
+    const { role, question, replies } = await report({ backupModelId: 'model-1' }, 'pending')
+    expect(role).toMatchObject({ status: 'thinking', lastPromptMessageId: 'msg-q', replyAttemptId: 'attempt-1' })
+    expect(question.deliveryStatus).toEqual({ 'role-3': 'pending' })
+    expect(replies).toEqual([])
+  })
+
+  it('fails the member as before once the prompt had reached the site, backup or not', async () => {
+    const { role, question } = await report({ backupModelId: 'model-1' }, 'sent')
+    expect(role.status).toBe('error')
+    expect(question.deliveryStatus).toEqual({ 'role-3': 'error' })
+  })
+})
