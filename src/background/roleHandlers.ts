@@ -229,7 +229,10 @@ export function createRoleHandlers(deps: RoleHandlersDependencies): BackgroundMe
       const wasThinking = role.status === 'thinking'
       const wasStopped = role.status === 'stopped'
       role.status = 'loading'
-      if (wasThinking && role.lastPromptMessageId) role.replyAttemptId = deps.newId('attempt')
+      // The reply under way no longer counts: its page is loaded again. Except when the prompt is
+      // being sent again because its page had gone (promptDeliveryRetry.ts): that prompt goes out
+      // with the attempt it had, and its reply counts.
+      if (wasThinking && role.lastPromptMessageId && message.keepReplyAttempt !== true) role.replyAttemptId = deps.newId('attempt')
       if (wasStopped) {
         delete role.lastPromptMessageId
         delete role.replyAttemptId

@@ -16,12 +16,17 @@ export interface RuntimeFrameRegistry {
   removeRole(chatId: string, roleId: string): void
   removeAddress(tabId: number, frameId: number): void
   removeTab(tabId: number): RuntimeFrameBinding[]
+  // The member's page closed (its tab, or the side panel holding it) and no page was bound for it
+  // since. Kept in memory only: a background started again does not know, and the pages still open
+  // then simply report again.
+  lostPage(chatId: string, roleId: string): boolean
   list(): RuntimeFrameBinding[]
 }
 
 export function createRuntimeFrameRegistry(): RuntimeFrameRegistry {
   const bindingByRoleKey = new Map<RuntimeFrameBindingKey, RuntimeFrameBinding>()
   const roleKeyByFrameAddress = new Map<RuntimeFrameAddressKey, RuntimeFrameBindingKey>()
+  const lostPages = new Set<RuntimeFrameBindingKey>()
 
   function removeRoleKey(key: RuntimeFrameBindingKey): void {
     const existing = bindingByRoleKey.get(key)
@@ -42,6 +47,7 @@ export function createRuntimeFrameRegistry(): RuntimeFrameRegistry {
       }
 
       removeRoleKey(roleKey)
+      lostPages.delete(roleKey)
       bindingByRoleKey.set(roleKey, { ...binding })
       roleKeyByFrameAddress.set(addressKey, roleKey)
       return bindingByRoleKey.get(roleKey)!
@@ -83,9 +89,15 @@ export function createRuntimeFrameRegistry(): RuntimeFrameRegistry {
       for (const binding of [...bindingByRoleKey.values()]) {
         if (binding.tabId !== tabId) continue
         removed.push(binding)
-        removeRoleKey(roleBindingKey(binding.chatId, binding.roleId))
+        const key = roleBindingKey(binding.chatId, binding.roleId)
+        removeRoleKey(key)
+        lostPages.add(key)
       }
       return removed
+    },
+
+    lostPage(chatId, roleId) {
+      return lostPages.has(roleBindingKey(chatId, roleId))
     },
 
     list() {

@@ -49,3 +49,23 @@ describe('runtime frame registry', () => {
     expect(registry.list()).toEqual([])
   })
 })
+
+describe('members whose page closed', () => {
+  it('are remembered until a page is bound for them again', () => {
+    const registry = createRuntimeFrameRegistry()
+    registry.bind({ chatId: 'chat-1', roleId: 'role-1', tabId: -1000, frameId: 0, ready: true, lastSeenAt: 1 })
+    registry.bind({ chatId: 'chat-1', roleId: 'role-2', tabId: 7, frameId: 3, ready: true, lastSeenAt: 1 })
+    expect(registry.lostPage('chat-1', 'role-1')).toBe(false)
+
+    registry.removeTab(-1000)
+    expect(registry.lostPage('chat-1', 'role-1')).toBe(true)
+    expect(registry.lostPage('chat-1', 'role-2')).toBe(false)
+
+    registry.bind({ chatId: 'chat-1', roleId: 'role-1', tabId: 7, frameId: 4, ready: true, lastSeenAt: 2 })
+    expect(registry.lostPage('chat-1', 'role-1')).toBe(false)
+  })
+
+  it('are not known to a registry made afresh (the background started again)', () => {
+    expect(createRuntimeFrameRegistry().lostPage('chat-1', 'role-1')).toBe(false)
+  })
+})

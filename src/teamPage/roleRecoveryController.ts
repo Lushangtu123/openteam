@@ -31,7 +31,7 @@ export interface RoleRecoveryDependencies {
 export interface RoleRecoveryController {
   focusRoleFrame(chatId: string, roleId: string | undefined): void
   notifyRoleReadyWaiters(): void
-  reconnectRolesForSend(chat: GroupChat, roles: GroupRole[]): Promise<void>
+  reconnectRolesForSend(chat: GroupChat, roles: GroupRole[], options?: { keepReplyAttempt?: boolean }): Promise<void>
   refreshCurrentChat(): Promise<void>
   resyncMessageReply(message: GroupMessage): Promise<void>
   retryRoleReply(role: GroupRole, messageId?: string): Promise<void>
@@ -111,7 +111,9 @@ export function createRoleRecoveryController(deps: RoleRecoveryDependencies): Ro
     })
   }
 
-  async function reconnectRolesForSend(chat: GroupChat, roles: GroupRole[]): Promise<void> {
+  // keepReplyAttempt: a prompt is being sent again to these members (their pages had gone), so the
+  // reply it gets still counts.
+  async function reconnectRolesForSend(chat: GroupChat, roles: GroupRole[], options: { keepReplyAttempt?: boolean } = {}): Promise<void> {
     const uniqueRoles = [...new Map(roles.filter(role => role.modelSource !== 'external').map(role => [role.id, role])).values()]
     if (uniqueRoles.length === 0) return
 
@@ -120,7 +122,7 @@ export function createRoleRecoveryController(deps: RoleRecoveryDependencies): Ro
 
     try {
       deps.log.info('roles:auto-reconnect:start', { chatId: chat.id, roleIds: uniqueRoles.map(role => role.id) })
-      await Promise.all(uniqueRoles.map(role => deps.runCommand('GROUP_ROLE_RECOVER', { chatId: chat.id, roleId: role.id })))
+      await Promise.all(uniqueRoles.map(role => deps.runCommand('GROUP_ROLE_RECOVER', { chatId: chat.id, roleId: role.id, ...(options.keepReplyAttempt ? { keepReplyAttempt: true } : {}) })))
       for (const role of uniqueRoles) deps.iframeHost.recoverRole(role)
       await waitForRolesReady(chat.id, uniqueRoles.map(role => role.id))
       deps.log.info('roles:auto-reconnect:ready', { chatId: chat.id, roleIds: uniqueRoles.map(role => role.id) })

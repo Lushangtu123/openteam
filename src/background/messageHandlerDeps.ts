@@ -33,7 +33,7 @@ export interface MessageHandlersDependencies {
   }
   newId(prefix: string): string
   now(): number
-  runtimeFrames: Pick<RuntimeFrameRegistry, 'bind' | 'getByAddress' | 'getByRole'>
+  runtimeFrames: Pick<RuntimeFrameRegistry, 'bind' | 'getByAddress' | 'getByRole'> & Partial<Pick<RuntimeFrameRegistry, 'lostPage'>>
   sendRoleMessage(tabId: number, frameId: number, message: BackgroundToRoleMessage): Promise<unknown>
   sendError(reason: string): Promise<void> | void
   sendPrompt: PromptSender

@@ -424,3 +424,36 @@ describe('background role handlers', () => {
     })
   })
 })
+
+describe('recovering a member whose reply is under way', () => {
+  async function recover(fields: Record<string, unknown>) {
+    vi.resetModules()
+    const store = createDefaultStore()
+    store.chatsById['chat-1'] = { id: 'chat-1', name: '方案讨论', mode: 'independent', roleIds: ['role-1'], messageIds: [], nextMessageSeq: 1, status: 'running', createdAt: 1, updatedAt: 1 }
+    store.rolesById['role-1'] = { id: 'role-1', chatId: 'chat-1', name: '工程师', status: 'thinking', lastPromptMessageId: 'msg-q', replyAttemptId: 'attempt-1', contextCursor: 0, createdAt: 1, updatedAt: 1 }
+    vi.doMock('./storeAccess', async importOriginal => {
+      const actual = await importOriginal<typeof import('./storeAccess')>()
+      return { ...actual, mutateStore: vi.fn(async (mutator: (store: OpenTeamStore) => unknown) => ({ store, result: await mutator(store) })) }
+    })
+    const { createRoleHandlers } = await import('./roleHandlers')
+    const routes = createRoleHandlers({
+      broadcastStoreUpdated: vi.fn(),
+      log: { info: vi.fn(), warn: vi.fn() },
+      newId: vi.fn((prefix: string) => `${prefix}-2`),
+      now: vi.fn(() => 100),
+      runtimeFrames: { getByRole: vi.fn(), removeRole: vi.fn() },
+      sendPrompt: vi.fn(),
+    })
+    await routes.find(route => route.type === 'GROUP_ROLE_RECOVER')!.handler({ type: 'GROUP_ROLE_RECOVER', chatId: 'chat-1', roleId: 'role-1', ...fields }, {})
+    return store.rolesById['role-1']
+  }
+
+  it('starts a new attempt when the user recovers it: the reply under way no longer counts', async () => {
+    expect((await recover({})).replyAttemptId).toBe('attempt-2')
+  })
+
+  it('keeps the attempt when a prompt being re-sent asked for it, so the reply to that prompt counts', async () => {
+    const role = await recover({ keepReplyAttempt: true })
+    expect(role).toMatchObject({ replyAttemptId: 'attempt-1', lastPromptMessageId: 'msg-q' })
+  })
+})

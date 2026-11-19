@@ -876,7 +876,7 @@ function handleRoleRecoveryRequest(message: Extract<StorePushMessage, { type: 'G
     chatSite: role.chatSite,
     reason: message.reason,
   })
-  reconnectRolesForSend(chat, [role])
+  reconnectRolesForSend(chat, [role], { keepReplyAttempt: true })
     .then(() => {
       log.warn('orchestration-diagnostic:role-recovery:ready', {
         chatId: chat.id,

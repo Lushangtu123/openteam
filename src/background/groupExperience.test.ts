@@ -1980,11 +1980,14 @@ describe('a member page loaded again while its member replies', () => {
 
     await ready('doc-1')
     const sent = await harness.invoke({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@all 写一段说明' }) as { ok: boolean; message: { id: string } }
-    return { harness, frame, ready, promptId: sent.message.id }
+    // The site opened the member's conversation for the prompt: the page loaded again opens it too.
+    const inConversation = () => harness.invoke({ type: 'TEAM_ROLE_CONVERSATION_UPDATED', chatId: 'chat-1', roleId: 'role-1', conversationUrl: 'https://gemini.google.com/app/abc123' }, frame('doc-1'))
+    return { harness, frame, ready, promptId: sent.message.id, inConversation }
   }
 
   it('asks the new page to go on reading the reply, which then arrives as usual; the same page reporting again changes nothing', async () => {
-    const { harness, frame, ready, promptId } = await replyUnderWay()
+    const { harness, frame, ready, promptId, inConversation } = await replyUnderWay()
+    await inConversation()
     await harness.invoke({ type: 'TEAM_SEND_ACK', chatId: 'chat-1', roleId: 'role-1', messageId: promptId }, frame('doc-1'))
     await harness.invoke({ type: 'TEAM_ROLE_REPLY_PROGRESS', chatId: 'chat-1', roleId: 'role-1', messageId: promptId, content: '写到一半' }, frame('doc-1'))
     const attemptId = (await harness.getStore()).rolesById['role-1'].replyAttemptId
@@ -2010,7 +2013,8 @@ describe('a member page loaded again while its member replies', () => {
   })
 
   it('ends the reply, keeping what arrived, when the new page cannot find it on the site', async () => {
-    const { harness, frame, ready, promptId } = await replyUnderWay()
+    const { harness, frame, ready, promptId, inConversation } = await replyUnderWay()
+    await inConversation()
     await harness.invoke({ type: 'TEAM_SEND_ACK', chatId: 'chat-1', roleId: 'role-1', messageId: promptId }, frame('doc-1'))
     await harness.invoke({ type: 'TEAM_ROLE_REPLY_PROGRESS', chatId: 'chat-1', roleId: 'role-1', messageId: promptId, content: '写到一半' }, frame('doc-1'))
     const answer = await ready('doc-2')
@@ -2040,8 +2044,39 @@ describe('a member page loaded again while its member replies', () => {
     expect(after.messagesById[promptId].deliveryStatus?.['role-1']).toBe('error')
   })
 
-  it('asks a page to resume when the member had no page on record (its earlier page closed with the side panel)', async () => {
+  it('ends the reply at once when the site had not yet given the prompt a conversation: the page loaded again opens a new chat', async () => {
     const { harness, frame, ready, promptId } = await replyUnderWay()
+    await harness.invoke({ type: 'TEAM_SEND_ACK', chatId: 'chat-1', roleId: 'role-1', messageId: promptId }, frame('doc-1'))
+    await harness.invoke({ type: 'TEAM_ROLE_REPLY_PROGRESS', chatId: 'chat-1', roleId: 'role-1', messageId: promptId, content: 'OK' }, frame('doc-1'))
+    expect((await ready('doc-2')).resumeReply).toBeUndefined()
+    const after = await harness.getStore()
+    expect(after.rolesById['role-1'].status).toBe('ready')
+    const reply = after.chatsById['chat-1'].messageIds.map(id => after.messagesById[id]).find(message => message.type === 'assistant')!
+    expect(reply.content).toContain('成员页面就关闭或重新加载了')
+  })
+
+  it('ends the reply at once when its page closed and the page after it cannot resume it', async () => {
+    const { harness, frame, ready, promptId } = await replyUnderWay()
+    await harness.invoke({ type: 'TEAM_SEND_ACK', chatId: 'chat-1', roleId: 'role-1', messageId: promptId }, frame('doc-1'))
+    await harness.closeTab(101)
+    expect((await ready('doc-2')).resumeReply).toBeUndefined()
+    const after = await harness.getStore()
+    expect(after.rolesById['role-1'].status).toBe('ready')
+    expect(after.messagesById[promptId].deliveryStatus?.['role-1']).toBe('error')
+  })
+
+  it('leaves a prompt that had not gone out yet to the new page when its page closed', async () => {
+    const { harness, ready, promptId } = await replyUnderWay()
+    await harness.closeTab(101)
+    expect((await ready('doc-2')).resumeReply).toBeUndefined()
+    const after = await harness.getStore()
+    expect(after.rolesById['role-1'].status).toBe('thinking')
+    expect(after.messagesById[promptId].deliveryStatus?.['role-1']).not.toBe('error')
+  })
+
+  it('asks a page to resume when the member had no page on record (its earlier page closed with the side panel)', async () => {
+    const { harness, frame, ready, promptId, inConversation } = await replyUnderWay()
+    await inConversation()
     await harness.invoke({ type: 'TEAM_SEND_ACK', chatId: 'chat-1', roleId: 'role-1', messageId: promptId }, frame('doc-1'))
     await harness.closeTab(101)
     const answer = await ready('doc-2')

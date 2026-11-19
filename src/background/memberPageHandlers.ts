@@ -57,6 +57,9 @@ export function createMemberPageHandlers(ctx: MessageHandlerContext) {
     const documentId = sender.documentId
     const pageLoadedAgain = Boolean(previous?.documentId && documentId && previous.documentId !== documentId)
     const pageClosedBefore = !previous && Boolean(documentId)
+    // Its page closed while this background ran: a reply whose prompt had reached the site and cannot
+    // be read on is over. A prompt still waiting to go out goes to the new page as usual.
+    const pageLost = !previous && deps.runtimeFrames.lostPage?.(chatId, roleId) === true
 
     // Validate the chat and role before trusting this frame as their host.
     const { store, result } = await mutateStore(store => {
@@ -64,7 +67,7 @@ export function createMemberPageHandlers(ctx: MessageHandlerContext) {
       const role = requireRole(store, chat.id, roleId)
       const resumeReply = (pageLoadedAgain || pageClosedBefore) && role.status === 'thinking' ? replyToResume(store, role) : undefined
       if (resumeReply) role.updatedAt = timestamp
-      const settled = pageLoadedAgain && role.status === 'thinking' && !resumeReply
+      const settled = (pageLoadedAgain || (pageLost && promptReachedSite(store, role))) && role.status === 'thinking' && !resumeReply
         ? settleInterruptedReplies(store, { siteMembers: true, apiMembers: false, onlyRole: { chatId, roleId }, timestamp, newId: deps.newId, getChatStatusFromRoles: deps.getChatStatusFromRoles })
         : []
       if (role.status !== 'thinking') {
@@ -87,17 +90,27 @@ export function createMemberPageHandlers(ctx: MessageHandlerContext) {
     return { ok: true, role: result.role, replyHistory: result.replyHistory, ...(result.resumeReply ? { resumeReply: result.resumeReply } : {}), store }
   }
 
-  // The reply a member page loaded again goes on reading, when its prompt reached the site: the site
-  // confirmed it, or the reply had begun to arrive.
+  // The reply a member page loaded again goes on reading, when its prompt reached the site (the site
+  // confirmed it, or the reply had begun to arrive) in a conversation the page opens again. A prompt
+  // that began a new chat which the site had not yet given an address has its reply where the new
+  // page cannot go: it opens a new chat.
   function replyToResume(store: OpenTeamStore, role: GroupRole): ResumeReply | undefined {
-    if (isExternalModelRole(role)) return undefined
+    if (isExternalModelRole(role) || !role.geminiConversationUrl) return undefined
     const promptMessageId = role.lastPromptMessageId
     const prompt = promptMessageId ? store.messagesById[promptMessageId] : undefined
     if (!promptMessageId || prompt?.type !== 'user' || prompt.chatId !== role.chatId) return undefined
+    if (!promptReachedSite(store, role)) return undefined
     const live = role.liveReply?.promptMessageId === promptMessageId ? role.liveReply.content : ''
-    const delivered = prompt.deliveryStatus?.[role.id]
-    if (delivered !== 'sent' && delivered !== 'received' && !live) return undefined
     return { messageId: promptMessageId, ...(role.replyAttemptId ? { replyAttemptId: role.replyAttemptId } : {}), readSoFar: live }
+  }
+
+  // The site confirmed the member's prompt, or its reply had begun to arrive.
+  function promptReachedSite(store: OpenTeamStore, role: GroupRole): boolean {
+    const promptMessageId = role.lastPromptMessageId
+    const prompt = promptMessageId ? store.messagesById[promptMessageId] : undefined
+    if (!promptMessageId || prompt?.type !== 'user') return false
+    const delivered = prompt.deliveryStatus?.[role.id]
+    return delivered === 'sent' || delivered === 'received' || role.liveReply?.promptMessageId === promptMessageId
   }
 
   // The page asked to go on reading a reply did not find it on the site: the reply is ended, keeping
