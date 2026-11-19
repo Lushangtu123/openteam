@@ -1453,6 +1453,44 @@
   z-index: 1;
 }
 
+/* In an OpenTeam tab the members' AI pages run under OpenTeam the same way: on top of each other,
+   each filling the window, so none is off screen. Chrome stops drawing cross-origin frames that are
+   off screen, and a site that puts its reply on the page as it draws then stops updating the text
+   OpenTeam reads: in the grid, a narrow tab (the side panel open) put Grok and Qwen in a row below
+   the window, and OpenTeam took their replies a few hundred characters in. Shown (查看网页), they
+   keep the grid. */
+:root[data-theme] body:not([data-view="panel"]):not(.pages-shown) #iframe-host {
+  display: block;
+  overflow: hidden;
+  padding: 0;
+  scroll-snap-type: none;
+}
+
+:root[data-theme] body:not([data-view="panel"]):not(.pages-shown) #iframe-host .chat-frame-group {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+}
+
+:root[data-theme] body:not([data-view="panel"]):not(.pages-shown) #iframe-host .chat-frame-group-title {
+  display: none;
+}
+
+:root[data-theme] body:not([data-view="panel"]):not(.pages-shown) #iframe-host .role-frame-shell {
+  position: absolute;
+  inset: 0;
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+}
+
 /* The @ list's site label, with its text in the middle of the pill. */
 :root[data-theme] .mention-site-badge {
   display: inline-flex;
