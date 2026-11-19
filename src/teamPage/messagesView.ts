@@ -351,7 +351,8 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     bubble.className = 'message-bubble'
     const orchestrationLabel = renderOrchestrationMessageLabel(message)
     if (orchestrationLabel) bubble.append(orchestrationLabel)
-    const bubbleLabel = message.discussionTopic ? '轮流讨论'
+    const bubbleLabel = message.scheduledTaskId ? '定时任务发出'
+      : message.discussionTopic ? '轮流讨论'
       : message.discussionNoteOf ? '补充给下一位发言的成员'
         : message.projectGoal ? '项目目标'
           : message.projectNoteOf ? '补充给协调员'
@@ -942,6 +943,7 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
       status: message.status,
       usage: message.usage,
       answeredByFallback: message.answeredByFallback,
+      scheduledTaskId: message.scheduledTaskId,
       stalledWhileGenerating: message.stalledWhileGenerating,
       retry: message.retry,
       choicesOpen: choicesOpen(message),

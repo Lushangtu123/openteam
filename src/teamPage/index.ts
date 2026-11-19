@@ -11,6 +11,7 @@ import { NARROW_LAYOUT_QUERY, registerChatListDrawer } from './chatListDrawer'
 import { createComposerModesView } from './composerModesView'
 import { registerHeaderMenus } from './headerMenus'
 import { createChatListView } from './chatListView'
+import { currentScheduledTasksDialog } from './scheduledTasksDialog'
 import { createComposerAttachments } from './composerAttachments'
 import { createComposerView } from './composerView'
 import { createTeamPageDomRefs } from './domRefs'
@@ -727,6 +728,7 @@ function render(): void {
   renderPanelHandoverNote()
   replyComparisonView.refresh()
   teamFormationView.refresh()
+  currentScheduledTasksDialog()?.refresh()
   renderTemplates()
   renderAgentControlSettings()
   renderReplyNotificationSettings()

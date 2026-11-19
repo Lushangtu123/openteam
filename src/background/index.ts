@@ -47,6 +47,8 @@ import { createLogger } from '../shared/logger'
 import type { BackgroundToRoleMessage } from '../group/runtimeProtocol'
 import { createControlActionExecutor } from './controlHandlers'
 import { createSiteCheckHandlers } from './siteCheckHandlers'
+import { createScheduledTaskHandlers } from './scheduledTaskHandlers'
+import { createScheduledTaskRunner, SCHEDULED_TASK_ALARM } from './scheduledTaskRunner'
 import { keepLogsAcrossRestarts } from './diagnosticsLogs'
 import { recentLogs } from '../shared/logger'
 import { createControlClient } from './controlClient'
@@ -272,6 +274,29 @@ function syncPageMenu(language: string | undefined): void {
   })
 }
 
+// 定时任务 (see scheduledTaskRunner.ts). It sends through this router, once it is made.
+const scheduledTasks = createScheduledTaskRunner({
+  loadStore,
+  route: message => Promise.resolve(routeMessage(message, {})),
+  broadcastStoreUpdated,
+  teamPageOpen: () => listHostTabIds().length > 0 || panelOpen(),
+  async openTeamPageInBackground() {
+    // After the background restarts it no longer knows the OpenTeam tab that is open.
+    const open = await chrome.tabs.query({ url: `${chrome.runtime.getURL('team.html')}*` })
+    for (const tab of open) if (tab.id !== undefined) rememberHost({} as chrome.runtime.MessageSender, tab.id)
+    if (open.length === 0) await showTeamPage({ background: true })
+  },
+  requestRoleRecovery,
+  runtimeFrames,
+  alarms: {
+    create: (name, info) => chrome.alarms?.create?.(name, info),
+    clear: name => chrome.alarms?.clear?.(name),
+  },
+  waitFor: ms => new Promise(resolve => globalThis.setTimeout(resolve, ms)),
+  now,
+  log,
+})
+
 const routeMessage = createMessageRouter([
   { type: 'GROUP_STORE_GET', handler: handleStoreGet },
   // The background's recent log entries, for 导出诊断信息 (already cleaned: src/shared/logger.ts).
@@ -297,6 +322,7 @@ const routeMessage = createMessageRouter([
   ...createBackupHandlers({ broadcastStoreUpdated, log, imageAttachments: imageAttachmentRepository }),
   ...createMemoryHandlers({ broadcastStoreUpdated, log, now }),
   // Runs through this router itself, once it is made.
+  ...createScheduledTaskHandlers({ broadcastStoreUpdated, newId, now, log, schedulesChanged: () => scheduledTasks.sync(), runNow: (chatId, taskId) => scheduledTasks.runNow(chatId, taskId) }),
   ...createSiteCheckHandlers({ route: message => Promise.resolve(routeMessage(message, {})), broadcastStoreUpdated, runtimeFrames, waitFor: ms => new Promise(resolve => globalThis.setTimeout(resolve, ms)), now }),
   ...createExternalModelHandlers({ broadcastStoreUpdated, externalModelClient, checkLocalAgent, newId, now }),
   { type: 'LOCAL_AGENT_LIST', handler: async () => ({ ok: true, agents: await listLocalAgents() }) },
@@ -479,6 +505,10 @@ chrome.runtime.onStartup?.addListener(() => {
 })
 
 chrome.alarms?.onAlarm?.addListener(alarm => {
+  if (alarm.name === SCHEDULED_TASK_ALARM) {
+    scheduledTasks.checkDue().catch(error => log.warn('scheduled-task:check-failed', { error: errorReason(error) }))
+    return
+  }
   if (alarm.name !== CONTROL_KEEPALIVE_ALARM) return
   syncControlClient().catch(error => log.warn('control-client:keepalive-sync-failed', { error: errorReason(error) }))
 })
@@ -620,6 +650,8 @@ if (chrome.storage) void restrictStorageToExtension({ local: chrome.storage.loca
 
 initializeControlClient()
 void interruptedReplies.atBackgroundStart()
+// A task due while the browser was closed or the background asleep runs, or is skipped, now.
+scheduledTasks.checkDue().catch(error => log.warn('scheduled-task:check-failed', { error: errorReason(error) }))
 
 // An install that was updated from a version requiring every website gives that access back, once
 // (see allSitesAccess.ts). Skipped where the browser has no way to remove a permission.

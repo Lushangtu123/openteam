@@ -125,6 +125,8 @@ const UI_TRANSLATIONS: Record<string, string> = {
   '采纳为决定': 'Adopt as a decision',
   '采纳': 'Adopt',
   '关闭本群记忆': 'Switch off memory here',
+  '定时任务': 'Scheduled tasks',
+  '定时任务发出': 'Sent by a scheduled task',
   '开启本群记忆': 'Switch on memory here',
   '记忆内容不能为空': 'The memory item has no text',
   '记忆内容不能超过 500 字': 'A memory item can have at most 500 characters',

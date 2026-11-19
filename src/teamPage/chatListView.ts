@@ -7,6 +7,7 @@ import { formatChatExportMarkdown, safeChatExportFilename } from './chatExport'
 import { formatChatListTime } from './chatExperience'
 import { orderChatsForList, shouldShowChatSearch } from './chatListOrder'
 import type { RuntimeResponse } from './runtimeClient'
+import { openScheduledTasksDialog } from './scheduledTasksDialog'
 
 interface ChatListIframeHost {
   removeChat(chatId: string): void
@@ -314,6 +315,18 @@ export function createChatListView(deps: ChatListViewDependencies): ChatListView
       renderChatList()
       deps.runCommand('GROUP_CHAT_UPDATE', { chatId: chat.id, patch: { memoryDisabled: !chat.memoryDisabled } }).catch(error => deps.showError(error.message))
     })
+    // Messages the group sends itself at set times (scheduledTasksDialog.ts).
+    const schedule = document.createElement('button')
+    schedule.type = 'button'
+    schedule.className = 'btn btn-ghost'
+    schedule.dataset.chatSchedule = chat.id
+    const taskCount = chat.scheduledTasks?.length ?? 0
+    schedule.textContent = taskCount > 0 ? `${ui('定时任务')} (${taskCount})` : ui('定时任务')
+    schedule.addEventListener('click', () => {
+      deps.state.chatMenuChatId = undefined
+      renderChatList()
+      openScheduledTasksDialog(chat.id, { getStore: deps.getStore, runCommand: deps.runCommand })
+    })
     const clearMessages = document.createElement('button')
     clearMessages.type = 'button'
     clearMessages.className = 'btn btn-ghost'
@@ -357,7 +370,7 @@ export function createChatListView(deps: ChatListViewDependencies): ChatListView
       if (!window.confirm(question)) return
       deleteChat(chat.id).catch(error => deps.showError(error.message))
     })
-    menu.append(pin, rename, duplicate, exportRecord, memory, clearMessages, closeFrames, select, remove)
+    menu.append(pin, rename, duplicate, exportRecord, memory, schedule, clearMessages, closeFrames, select, remove)
     return menu
   }
 

@@ -425,6 +425,17 @@ describe('team page messages view boundary', () => {
     expect(messagesEl.querySelector('[data-message-id="q1"] .message-summary-btn')).toBeNull()
   })
 
+  it('marks a message a scheduled task sent, also once the mark arrives after it is drawn', () => {
+    const { messagesEl, messages, view } = createLongChatView(0)
+    const sent = { ...makeLongChatMessage(0, '@所有人 总结今天的新闻'), id: 'sched-msg', type: 'user' as const, roleId: undefined, roleName: undefined }
+    messages.push(sent)
+    view.renderMessages()
+    expect(messagesEl.querySelector('[data-message-id="sched-msg"] .discussion-message-label')).toBeNull()
+    messages[messages.length - 1] = { ...sent, scheduledTaskId: 'sched-1' }
+    view.renderMessages()
+    expect(messagesEl.querySelector('[data-message-id="sched-msg"] .discussion-message-label')?.textContent).toBe('定时任务发出')
+  })
+
   it('announces discussion turns and shows the discussion bar with its controls', () => {
     const { messagesEl, messages, view, deps } = createLongChatView(0)
     const runCommand = vi.fn(async () => undefined)

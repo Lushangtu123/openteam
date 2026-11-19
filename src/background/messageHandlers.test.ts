@@ -3170,6 +3170,46 @@ describe('a web member whose site is blocked', () => {
     expect(onPromptSettled).toHaveBeenCalledWith(expect.anything(), 'chat-1', question.id)
   })
 
+  it('marks a scheduled task\'s message, and records the run as sent, while its API member is still answering', async () => {
+    vi.resetModules()
+    const startingStore = createStoreWithTwoApiRoles()
+    startingStore.chatsById['chat-1'].scheduledTasks = [{ id: 'sched-1', content: '@工程师 总结', days: [1], time: '08:30', enabled: true, armedAt: 0, createdAt: 0, updatedAt: 0 }]
+    let currentStore = structuredClone(startingStore)
+    vi.doMock('./storeAccess', async importOriginal => {
+      const actual = await importOriginal<typeof import('./storeAccess')>()
+      return {
+        ...actual,
+        mutateStore: vi.fn(async (mutator: (store: OpenTeamStore) => unknown) => {
+          const result = await mutator(currentStore)
+          currentStore = structuredClone(currentStore)
+          return { store: currentStore, result }
+        }),
+      }
+    })
+    const { createMessageHandlers } = await import('./messageHandlers')
+    // The member never finishes: the run must already count as sent.
+    const complete = vi.fn(() => new Promise<{ content: string }>(() => undefined))
+    let messageIdSeq = 0
+    const routes = createMessageHandlers({
+      broadcastStoreUpdated: vi.fn(),
+      externalModelClient: { complete },
+      getChatStatusFromRoles: () => 'ready',
+      log: { debug: vi.fn(), info: vi.fn(), warn: vi.fn() },
+      newId: vi.fn((prefix: string) => prefix === 'msg' ? `${prefix}-${++messageIdSeq}` : `${prefix}-${messageIdSeq}`),
+      now: vi.fn(() => 500),
+      runtimeFrames: { bind: vi.fn(), getByAddress: vi.fn(), getByRole: vi.fn(() => undefined) },
+      sendRoleMessage: vi.fn(),
+      sendError: vi.fn(),
+      sendPrompt: vi.fn(),
+      waitForRetry: vi.fn(async () => {}),
+    })
+    void routes.find(route => route.type === 'GROUP_MESSAGE_SEND')?.handler({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@工程师 总结', scheduledRun: { taskId: 'sched-1', slotAt: 400 } }, {})
+    await vi.waitFor(() => expect(complete).toHaveBeenCalled())
+    const sent = Object.values(currentStore.messagesById).find(message => message.type === 'user' && message.content === '总结')!
+    expect(sent.scheduledTaskId).toBe('sched-1')
+    expect(currentStore.chatsById['chat-1'].scheduledTasks![0].lastRun).toEqual({ at: 500, status: 'sent', slotAt: 400, messageId: sent.id })
+  })
+
   it('says its backup API model was the one that failed, when the backup cannot answer either', async () => {
     vi.resetModules()
     const startingStore = createStoreWithTwoApiRoles()

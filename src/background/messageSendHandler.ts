@@ -4,6 +4,7 @@ import { readMessageUploads } from '../group/messageUploads'
 import { isProjectActive } from '../group/project'
 import { updateUserMessageDeliveryStatus } from '../group/deliveryStatus'
 import { isDiscussionRunning, startsDiscussion } from '../group/discussion'
+import { readScheduledRunRequest, recordScheduledRunSent } from '../group/scheduledTasks'
 import { defaultMentionTargetForMessage, parseGroupMentions, roleMentionLabelOptionsFromSettings } from '../group/mentionParser'
 import type { GroupMessage, GroupRole } from '../group/types'
 import type { PromptDelivery } from './promptDelivery'
@@ -32,7 +33,7 @@ export function createMessageSendHandler(ctx: MessageHandlerContext, roundHandle
     const uploads = uploadCheck.uploads.map(upload => ({ id: deps.newId('attachment'), upload }))
     deps.log.info('message-send:start', { chatId, rawLength: raw.length, uploads: uploads.length })
 
-    const { store, result } = await mutateStore(store => {
+    const { store: storedStore, result } = await mutateStore(store => {
       const chat = requireChat(store, chatId)
       const roles = getChatRoles(store, chat)
       const parsed = parseGroupMentions(raw, roles, { ...roleMentionLabelOptionsFromSettings(store.settings), defaultTarget: defaultMentionTargetForMessage(raw, chat) })
@@ -195,6 +196,12 @@ export function createMessageSendHandler(ctx: MessageHandlerContext, roundHandle
       return { message: userMessage, deliveries, externalDeliveries }
     })
 
+    // Sent by a 定时任务 (scheduledTaskRunner.ts): marked as soon as it is stored.
+    const scheduledRun = readScheduledRunRequest(message.scheduledRun)
+    const sentMessageId = 'message' in result ? result.message?.id : undefined
+    const store = scheduledRun
+      ? (await mutateStore(store => recordScheduledRunSent(store, chatId, scheduledRun, sentMessageId, deps.now()))).store
+      : storedStore
     const orchestration = 'orchestration' in result ? result.orchestration : undefined
     if (orchestration) {
       deps.log.info('message-send:orchestration-start', { chatId, flowId: orchestration.flowId, taskLength: orchestration.task.length })

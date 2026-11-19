@@ -357,8 +357,41 @@ export interface GroupChat {
   project?: ProjectRun
   // No memory items are sent to this group's members.
   memoryDisabled?: boolean
+  // Messages the group sends itself on set days at a set time (src/group/scheduledTasks.ts).
+  scheduledTasks?: ScheduledTask[]
   createdAt: number
   updatedAt: number
+}
+
+// A message a group sends itself every week on its days at its time (local time), as if the user
+// had typed it: its @mentions pick who answers.
+export interface ScheduledTask {
+  id: string
+  content: string
+  // 0 is Sunday, as Date.getDay().
+  days: number[]
+  // HH:MM, 24-hour.
+  time: string
+  enabled: boolean
+  // Times up to this moment are never run: when the task was made, switched on or changed.
+  armedAt: number
+  // The latest time already run or skipped.
+  lastSlotAt?: number
+  lastRun?: ScheduledTaskRun
+  createdAt: number
+  updatedAt: number
+}
+
+export interface ScheduledTaskRun {
+  at: number
+  // sent: the message went out; failed: it could not; skipped: the time was missed by too long.
+  status: 'sent' | 'failed' | 'skipped'
+  // The time it was due; missing for 立即运行.
+  slotAt?: number
+  // Run late, when the browser came back after missing the time.
+  catchUp?: boolean
+  detail?: string
+  messageId?: string
 }
 
 export type ProjectStatus = 'planning' | 'awaiting-approval' | 'running' | 'reviewing' | 'waiting-user' | 'finishing' | 'done' | 'stopped'
@@ -602,6 +635,8 @@ export interface GroupMessage {
   discussionHandoffFrom?: string
   // On a message the user sent while a discussion ran: the topic. It is shown to the next speakers.
   discussionNoteOf?: string
+  // Sent by this group's scheduled task (ScheduledTask.id), not typed by the user.
+  scheduledTaskId?: string
   // On the user's message that started a 项目 (its goal).
   projectGoal?: boolean
   // On a request OpenTeam sends to a member for a project: a plan, a task, a check or the final

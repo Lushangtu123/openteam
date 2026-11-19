@@ -25,6 +25,8 @@ export interface ShowTeamPageOptions {
   // Bring the tab's window to the front: the user asked from inside the browser. A command typed
   // in a terminal does not pull the browser in front of it.
   focusWindow?: boolean
+  // A scheduled task: a new tab opens behind the user's, and an open one is left where it is.
+  background?: boolean
 }
 
 export function createTeamPageShower(tabs: TeamPageTabsApi, teamPageUrl: string, windows?: TeamPageWindowsApi): (options?: ShowTeamPageOptions) => Promise<void> {
@@ -33,9 +35,10 @@ export function createTeamPageShower(tabs: TeamPageTabsApi, teamPageUrl: string,
     const tab = open.find(candidate => options.fromWindowId !== undefined && candidate.windowId === options.fromWindowId)
       ?? [...open].sort((left, right) => (right.lastAccessed ?? 0) - (left.lastAccessed ?? 0))[0]
     if (tab?.id === undefined) {
-      await tabs.create({ url: teamPageUrl, active: true, ...(options.fromWindowId !== undefined ? { windowId: options.fromWindowId } : {}) })
+      await tabs.create({ url: teamPageUrl, active: !options.background, ...(options.fromWindowId !== undefined ? { windowId: options.fromWindowId } : {}) })
       return
     }
+    if (options.background) return
     await tabs.update(tab.id, { active: true })
     if (options.focusWindow && tab.windowId !== undefined) await windows?.update(tab.windowId, { focused: true })
   }

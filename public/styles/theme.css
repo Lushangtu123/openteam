@@ -1708,6 +1708,164 @@ select.reply-compare-select {
   text-align: center;
 }
 
+/* 定时任务: the group's tasks above, the form to add or change one below; the window scrolls. */
+.modal.scheduled-tasks-dialog {
+  display: grid;
+  gap: 12px;
+  width: min(640px, 100%);
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+}
+
+.scheduled-tasks-dialog .modal-header {
+  margin-bottom: 0;
+}
+
+.scheduled-tasks-dialog .tiny {
+  margin: 4px 0 0;
+}
+
+.scheduled-task-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.scheduled-task-list[hidden],
+.scheduled-task-empty[hidden] {
+  display: none;
+}
+
+.scheduled-task {
+  display: grid;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+
+.scheduled-task-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+}
+
+.scheduled-task-when {
+  font-weight: 600;
+}
+
+.scheduled-task-badge {
+  border-radius: 999px;
+  padding: 1px 8px;
+  background: var(--warning-soft);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.scheduled-task-content {
+  margin: 0;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.scheduled-task.is-off .scheduled-task-content {
+  color: var(--muted);
+}
+
+.scheduled-task-meta {
+  color: var(--muted);
+}
+
+.scheduled-task-meta.scheduled-task-failed {
+  color: var(--danger);
+}
+
+.scheduled-task-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.scheduled-task-action {
+  gap: 5px;
+  min-height: 28px;
+  padding: 3px 10px;
+  font-size: 12px;
+}
+
+.scheduled-task-action svg {
+  width: 15px;
+  height: 15px;
+}
+
+.scheduled-task-action[data-scheduled-action="delete"] {
+  color: var(--danger);
+}
+
+.scheduled-task-empty {
+  margin: 0;
+  padding: 16px 12px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.scheduled-task-form {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.scheduled-task-form-title {
+  margin: 0;
+  font-size: 15px;
+}
+
+.scheduled-task-days {
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.scheduled-task-days legend {
+  margin-bottom: 6px;
+  padding: 0;
+}
+
+.scheduled-task-day-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.scheduled-task-day {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.scheduled-task-day input {
+  width: auto;
+  margin: 0;
+  accent-color: rgb(var(--accent-rgb));
+}
+
+.scheduled-tasks-dialog .scheduled-task-time input {
+  width: 180px;
+  max-width: 100%;
+}
+
+.scheduled-task-hint.scheduled-task-warning {
+  color: var(--danger);
+}
+
 /* Keep the team setup centred with equal content insets. Only the form body scrolls, so
    the title, close button and actions stay inside the rounded window at every height. */
 .team-formation-modal {

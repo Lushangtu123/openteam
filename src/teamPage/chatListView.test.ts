@@ -7,6 +7,7 @@ import { createDefaultStore } from '../group/store'
 import type { MemoryItem, OpenTeamStore } from '../group/types'
 import { createTeamPageState } from './appState'
 import { createChatListView } from './chatListView'
+import { currentScheduledTasksDialog } from './scheduledTasksDialog'
 
 describe('team page chat list view boundary', () => {
   it('wires chat export and deletion through the chat menu', () => {
@@ -84,6 +85,16 @@ describe('chat menu and the memory store', () => {
     expect(second.item('关闭本群记忆')).toBeUndefined()
     second.item('开启本群记忆')?.click()
     expect(second.runCommand).toHaveBeenCalledWith('GROUP_CHAT_UPDATE', { chatId: 'chat-1', patch: { memoryDisabled: false } })
+  })
+
+  it('opens the group\'s scheduled tasks, saying how many it has', () => {
+    const store = makeStore()
+    store.chatsById['chat-1'].scheduledTasks = [{ id: 'sched-1', content: '@所有人 总结', days: [1], time: '08:30', enabled: true, armedAt: 0, createdAt: 0, updatedAt: 0 }]
+    const { item, chatListEl } = openMenu(store)
+    item('定时任务 (1)')?.click()
+    expect(chatListEl.querySelector('.chat-action-menu')).toBeNull()
+    expect(document.querySelector('.scheduled-tasks-modal [role="dialog"]')).not.toBeNull()
+    currentScheduledTasksDialog()?.close()
   })
 
   it('names the switch in English', () => {
