@@ -647,7 +647,11 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     const label = document.createElement('span')
     label.className = 'message-usage message-fallback'
     label.textContent = `${en ? 'Backup' : '备用'} ${modelName}`
-    label.title = en ? `The main model could not answer this time; the backup model ${modelName} did` : `主模型这次没能回答，由备用模型 ${modelName} 回答`
+    // A web member's backup answers when its site cannot take the prompt (memberBackup.ts).
+    const web = roleForMessage(message)?.modelSource !== 'external'
+    label.title = web
+      ? (en ? `Its web page could not take the prompt this time; the backup API model ${modelName} answered` : `网页这次接不了提问，由备用 API 模型 ${modelName} 代答`)
+      : (en ? `The main model could not answer this time; the backup model ${modelName} did` : `主模型这次没能回答，由备用模型 ${modelName} 回答`)
     return label
   }
 

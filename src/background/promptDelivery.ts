@@ -9,6 +9,8 @@ export interface PromptDelivery {
   message: SendPromptMessage
   // Uploaded images to load and send along with the prompt.
   imageAttachmentIds?: string[]
+  // The member has a backup API model (memberBackup.ts): only then is its store looked up for one.
+  hasBackup?: boolean
 }
 
 export type PromptSender = (delivery: PromptDelivery, isTest?: boolean) => Promise<void>

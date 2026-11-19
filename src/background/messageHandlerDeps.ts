@@ -51,6 +51,8 @@ export interface MessageHandlersDependencies {
   roleErrorRetryDelaysMs?: readonly number[]
   requestRoleRecovery?(chatId: string, roleId: string, reason?: string): Promise<boolean>
   waitForRetry?(ms: number): Promise<void>
+  // A web member's backup API model answers its prompt (memberBackup.ts); resolves when it is done.
+  answerForMember?(delivery: ExternalPromptDelivery): Promise<unknown>
 }
 
 // What the message handlers share, made once by createMessageHandlers and handed to each group.

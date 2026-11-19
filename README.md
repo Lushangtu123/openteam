@@ -58,6 +58,7 @@ Use it for learning, research and personal non-commercial work where one answer 
 - **Compare replies**: put every answer to one question side by side, then ask a member to summarise where they agree and differ.
 - **Clickable choices**: when a reply ends with options (A / B / C), answer with one click.
 - **Site check**: one click asks every AI site to reply OK and lists, per site, whether it works, wants a sign-in, is blocked, or got the question but gave no reply (what a site's redesign breaks).
+- **Backup model for web members**: when a web member's page shows a pop-up, is signed out or reports a site error, an API model you chose for it answers instead; the reply is still its own, marked Backup, and the round goes on. A member without a backup is not given summaries or discussion turns meanwhile.
 - **Tools**: search, edit and resend, voice input, pinned groups, notes, a notification when everyone has answered, a live health status for each AI page, and full backup and restore.
 - **Two looks**: a ChatGPT-like and a Grok-like interface, each in light and dark.
 - **Local-first**: chats, people, memory, notes and settings stay in your browser.

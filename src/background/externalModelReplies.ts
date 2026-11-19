@@ -103,7 +103,8 @@ export async function sendExternalModelDelivery(deps: MessageHandlersDependencie
       }
     }
 
-    const finalized = await finishExternalAssistantReply(deps, delivery, replyMessageId, content, usage, answeredByFallback)
+    // A web member's backup is named on its reply, as is an API model's own backup.
+    const finalized = await finishExternalAssistantReply(deps, delivery, replyMessageId, content, usage, answeredByFallback ?? delivery.answeredBy)
     if (finalized.ignored) {
       deps.log.warn('external-model:reply:ignored-stale', { chatId: delivery.chatId, roleId: delivery.roleId, messageId: delivery.messageId, reason: finalized.reason })
       return finalized.store

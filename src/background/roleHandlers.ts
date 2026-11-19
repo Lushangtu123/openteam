@@ -33,6 +33,7 @@ export const ROLE_ROUTE_TYPES = [
   'GROUP_ROLE_DELETE',
   'GROUP_ROLE_RECOVER',
   'GROUP_ROLE_REINITIALIZE',
+  'GROUP_ROLE_BACKUP_SET',
 ] as const
 
 export interface RoleHandlersDependencies {
@@ -302,6 +303,31 @@ export function createRoleHandlers(deps: RoleHandlersDependencies): BackgroundMe
     return { ok: true, store, messageId: result.delivery.message.messageId }
   }
 
+  // A web member's backup API model, which answers when its site cannot take a prompt
+  // (memberBackup.ts). An empty choice removes it.
+  const handleRoleBackupSet = async (message: RuntimeMessage) => {
+    const roleId = requireString(message.roleId, '缺少成员 ID')
+    const backupModelId = typeof message.backupModelId === 'string' ? message.backupModelId.trim() : ''
+    const { store, result } = await mutateStore(store => {
+      const role = store.rolesById[roleId]
+      if (!role) throw new Error(`找不到人员：${roleId}`)
+      if (role.modelSource === 'external') throw new Error('只有网页成员可以设备用模型')
+      if (!backupModelId) {
+        delete role.backupModelId
+      } else {
+        const model = store.settings.externalModelsById[backupModelId]
+        if (!model) throw new Error('找不到这个 API 模型')
+        if (model.format === 'local-agent') throw new Error('备用只能选 API 模型，不能选本机智能体')
+        role.backupModelId = backupModelId
+      }
+      role.updatedAt = deps.now()
+      return role
+    })
+    deps.log.info('role-backup:set', { roleId, backupModelId: result.backupModelId ?? null })
+    await deps.broadcastStoreUpdated(store)
+    return { ok: true, role: result, store }
+  }
+
   return [
     { type: 'ROLE_TEMPLATE_PERSONA_GENERATE', handler: handleRoleTemplatePersonaGenerate },
     { type: 'ROLE_TEMPLATE_CREATE', handler: handleRoleTemplateCreate },
@@ -314,6 +340,7 @@ export function createRoleHandlers(deps: RoleHandlersDependencies): BackgroundMe
     { type: 'GROUP_ROLE_DELETE', handler: handleRoleDelete },
     { type: 'GROUP_ROLE_RECOVER', handler: handleRoleRecover },
     { type: 'GROUP_ROLE_REINITIALIZE', handler: handleRoleReinitialize },
+    { type: 'GROUP_ROLE_BACKUP_SET', handler: handleRoleBackupSet },
   ]
 }
 

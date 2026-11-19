@@ -3075,3 +3075,103 @@ describe('a reply taken while its site still said it was writing', () => {
     expect(usual.stalledWhileGenerating).toBeUndefined()
   })
 })
+
+describe('a web member whose site is blocked', () => {
+  async function roundWithBlockedKimi(kimi: Partial<GroupRole>) {
+    vi.resetModules()
+    const startingStore = createStoreWithTwoApiRoles()
+    startingStore.rolesById['role-3'] = { id: 'role-3', chatId: 'chat-1', name: '研究员', systemPrompt: '核对数据', modelSource: 'site', chatSite: 'kimi', status: 'ready', contextCursor: 0, createdAt: 0, updatedAt: 0, siteHealth: { siteId: 'kimi', status: 'blocked', reason: 'overlay', updatedAt: 1 }, ...kimi }
+    startingStore.chatsById['chat-1'].roleIds = ['role-1', 'role-2', 'role-3']
+    let currentStore = structuredClone(startingStore)
+    vi.doMock('./storeAccess', async importOriginal => {
+      const actual = await importOriginal<typeof import('./storeAccess')>()
+      return {
+        ...actual,
+        mutateStore: vi.fn(async (mutator: (store: OpenTeamStore) => unknown) => {
+          const result = await mutator(currentStore)
+          currentStore = structuredClone(currentStore)
+          return { store: currentStore, result }
+        }),
+      }
+    })
+    const { createMessageHandlers } = await import('./messageHandlers')
+    const complete = vi.fn(async (input: { prompt: string }): Promise<{ content: string }> => ({ content: input.prompt.includes('汇总人') ? '**共识**\n- 都可以' : '**要点**\n- 一个回答' }))
+    const kimiBinding: RuntimeFrameBinding = { chatId: 'chat-1', roleId: 'role-3', tabId: 101, frameId: 7, ready: true, lastSeenAt: 100 }
+    let messageIdSeq = 0
+    const routes = createMessageHandlers({
+      broadcastStoreUpdated: vi.fn(),
+      externalModelClient: { complete },
+      getChatStatusFromRoles: () => 'ready',
+      log: { debug: vi.fn(), info: vi.fn(), warn: vi.fn() },
+      newId: vi.fn((prefix: string) => prefix === 'msg' ? `${prefix}-${++messageIdSeq}` : `${prefix}-${messageIdSeq}`),
+      now: vi.fn(() => 100),
+      runtimeFrames: { bind: vi.fn(), getByAddress: vi.fn(), getByRole: vi.fn((_chatId: string, roleId: string) => roleId === 'role-3' ? kimiBinding : undefined) },
+      sendRoleMessage: vi.fn(),
+      sendError: vi.fn(),
+      sendPrompt: vi.fn(),
+      waitForRetry: vi.fn(async () => {}),
+    })
+    await routes.find(route => route.type === 'GROUP_MESSAGE_SEND')?.handler({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@工程师 @设计师 选哪个方案？' }, {})
+    await vi.waitFor(() => expect(Object.values(currentStore.messagesById).some(message => message.roundSummaryOf)).toBe(true))
+    return Object.values(currentStore.messagesById).find(message => message.roundSummaryOf)!
+  }
+
+  it('is not asked to summarize a round it sat out, though it otherwise would be first', async () => {
+    const request = await roundWithBlockedKimi({})
+    expect(request.targetRoleIds).not.toContain('role-3')
+  })
+
+  it('has its backup API model answer when asked, the reply staying its own and marked as the backup\'s', async () => {
+    vi.resetModules()
+    const startingStore = createStoreWithTwoApiRoles()
+    startingStore.rolesById['role-3'] = { id: 'role-3', chatId: 'chat-1', name: '研究员', systemPrompt: '核对数据', modelSource: 'site', chatSite: 'kimi', status: 'ready', contextCursor: 0, createdAt: 0, updatedAt: 0, backupModelId: 'model-1', siteHealth: { siteId: 'kimi', status: 'blocked', reason: 'overlay', updatedAt: 1 } }
+    startingStore.chatsById['chat-1'].roleIds = ['role-1', 'role-2', 'role-3']
+    let currentStore = structuredClone(startingStore)
+    vi.doMock('./storeAccess', async importOriginal => {
+      const actual = await importOriginal<typeof import('./storeAccess')>()
+      return {
+        ...actual,
+        mutateStore: vi.fn(async (mutator: (store: OpenTeamStore) => unknown) => {
+          const result = await mutator(currentStore)
+          currentStore = structuredClone(currentStore)
+          return { store: currentStore, result }
+        }),
+      }
+    })
+    const { createMessageHandlers } = await import('./messageHandlers')
+    const complete = vi.fn(async (): Promise<{ content: string }> => ({ content: '这些数据样本太小。' }))
+    const sendPrompt = vi.fn(async () => undefined)
+    const onPromptSettled = vi.fn()
+    const kimiBinding: RuntimeFrameBinding = { chatId: 'chat-1', roleId: 'role-3', tabId: 101, frameId: 7, ready: true, lastSeenAt: 100 }
+    let messageIdSeq = 0
+    const routes = createMessageHandlers({
+      broadcastStoreUpdated: vi.fn(),
+      externalModelClient: { complete },
+      getChatStatusFromRoles: () => 'ready',
+      log: { debug: vi.fn(), info: vi.fn(), warn: vi.fn() },
+      newId: vi.fn((prefix: string) => prefix === 'msg' ? `${prefix}-${++messageIdSeq}` : `${prefix}-${messageIdSeq}`),
+      now: vi.fn(() => 100),
+      onPromptSettled,
+      runtimeFrames: { bind: vi.fn(), getByAddress: vi.fn(), getByRole: vi.fn((_chatId: string, roleId: string) => roleId === 'role-3' ? kimiBinding : undefined) },
+      sendRoleMessage: vi.fn(),
+      sendError: vi.fn(),
+      sendPrompt,
+      waitForRetry: vi.fn(async () => {}),
+    })
+    await routes.find(route => route.type === 'GROUP_MESSAGE_SEND')?.handler({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@研究员 这些数据可信吗？' }, {})
+    await vi.waitFor(() => expect(Object.values(currentStore.messagesById).some(message => message.type === 'assistant' && message.roleId === 'role-3' && message.status === 'received')).toBe(true))
+    expect(sendPrompt).not.toHaveBeenCalled()
+    expect(complete).toHaveBeenCalledTimes(1)
+    const reply = Object.values(currentStore.messagesById).find(message => message.type === 'assistant' && message.roleId === 'role-3')!
+    expect(reply).toMatchObject({ content: '这些数据样本太小。', status: 'received', answeredByFallback: '本地模型', roleName: '研究员' })
+    const question = Object.values(currentStore.messagesById).find(message => message.type === 'user' && message.content.includes('这些数据可信吗'))!
+    expect(question.deliveryStatus).toEqual({ 'role-3': 'received' })
+    expect(currentStore.rolesById['role-3'].status).toBe('ready')
+    expect(onPromptSettled).toHaveBeenCalledWith(expect.anything(), 'chat-1', question.id)
+  })
+
+  it('is asked as usual when it has a backup API model to answer for it', async () => {
+    const request = await roundWithBlockedKimi({ backupModelId: 'model-1' })
+    expect(request.targetRoleIds).toEqual(['role-3'])
+  })
+})

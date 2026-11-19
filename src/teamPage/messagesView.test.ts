@@ -180,6 +180,7 @@ describe('team page messages view boundary', () => {
   it("names the backup model on a reply it wrote, and redraws when that changes", () => {
     const { messagesEl, messages, view, deps } = createLongChatView(2)
     deps.getStore().settings.language = 'zh-CN'
+    Object.assign(deps.getStore().rolesById['role-1'], { modelSource: 'external', externalModelId: 'model-1' })
     const label = () => messagesEl.querySelector<HTMLElement>('.message-row.assistant .message-fallback')
     view.renderMessages()
     expect(label()).toBeNull()
@@ -193,6 +194,16 @@ describe('team page messages view boundary', () => {
     messages[1] = { ...messages[1], answeredByFallback: 'lite' }
     view.renderMessages()
     expect(label()?.textContent).toBe('Backup lite')
+  })
+
+  it('says on a web member\'s reply that its backup API model answered because the site could not take the prompt', () => {
+    const { messagesEl, messages, view, deps } = createLongChatView(2)
+    deps.getStore().settings.language = 'zh-CN'
+    messages[1] = { ...messages[1], answeredByFallback: 'DeepSeek API' }
+    view.renderMessages()
+    const label = messagesEl.querySelector<HTMLElement>('.message-row.assistant .message-fallback')
+    expect(label?.textContent).toBe('备用 DeepSeek API')
+    expect(label?.title).toBe('网页这次接不了提问，由备用 API 模型 DeepSeek API 代答')
   })
 
   it('says on a web reply that it was taken while its site still said it was writing', () => {

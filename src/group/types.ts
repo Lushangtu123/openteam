@@ -492,6 +492,9 @@ export interface GroupRole {
   modelSource?: RoleModelSource
   chatSite?: ChatSite
   externalModelId?: string
+  // A web member's backup: the API model that answers for it when its site cannot take a prompt
+  // (src/background/memberBackup.ts).
+  backupModelId?: string
   name: string
   description?: string
   systemPrompt?: string

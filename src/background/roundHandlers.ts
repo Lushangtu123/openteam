@@ -1,5 +1,6 @@
 // What follows a round of answers: its summary and the members' review of each other; a discussion
 // in turns; and a project's steps. The requests OpenTeam sends members itself start here.
+import { canBeAskedNow } from './memberBackup'
 import { type MessageUpload, readMessageUploads } from '../group/messageUploads'
 import { hasRoundSummary, pickSummarizer, readSummarizableRound, roundSummaryRequestText } from '../group/roundSummary'
 import { crossReviewRequestText, wantsCrossReview } from '../group/collaboration'
@@ -39,7 +40,8 @@ export function createRoundHandlers(ctx: MessageHandlerContext) {
       if (options.auto && hasRoundSummary(store, chat, round.question.id)) return undefined
 
       const roles = getChatRoles(store, chat)
-      const isAvailable = (role: GroupRole) => role.status !== 'thinking' && (isExternalModelRole(role)
+      // A web member whose site cannot take a prompt, with no backup to answer for it, is passed over.
+      const isAvailable = (role: GroupRole) => role.status !== 'thinking' && canBeAskedNow(store, role) && (isExternalModelRole(role)
         ? Boolean(getExternalModelForRole(store, role))
         : isRoleDeliverable(role, deps.runtimeFrames.getByRole(chat.id, role.id), timestamp))
       const summarizer = options.roleId ? roles.find(role => role.id === options.roleId) : pickSummarizer(roles, round, isAvailable, store.settings.defaultChatSite)
@@ -232,6 +234,8 @@ export function createRoundHandlers(ctx: MessageHandlerContext) {
 
   function canTakeTurn(store: OpenTeamStore, chat: GroupChat, role: GroupRole, timestamp: number): boolean {
     if (role.status === 'thinking' && !isStaleThinkingRole(role, timestamp)) return false
+    // Its site cannot take a prompt and nothing answers for it: the turn goes to the next member.
+    if (!canBeAskedNow(store, role)) return false
     return isExternalModelRole(role)
       ? Boolean(getExternalModelForRole(store, role))
       : isRoleDeliverable(role, deps.runtimeFrames.getByRole(chat.id, role.id), timestamp)

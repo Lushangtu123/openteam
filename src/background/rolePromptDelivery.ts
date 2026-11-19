@@ -24,6 +24,9 @@ export interface ExternalPromptDelivery {
   model: ExternalModelConfig
   prompt: string
   imageAttachmentIds?: string[]
+  // Answering for a web member whose site could not take the prompt (memberBackup.ts): the model's
+  // name, shown on the reply as 备用.
+  answeredBy?: string
 }
 
 export type PreparedRolePromptDelivery = {
@@ -133,6 +136,8 @@ export function prepareRolePromptDelivery(input: PrepareRolePromptDeliveryInput)
         includesPersona,
       },
       ...images,
+      // Its backup may answer if the site cannot take the prompt (memberBackup.ts).
+      ...(input.role.backupModelId ? { hasBackup: true } : {}),
     },
   }
 }

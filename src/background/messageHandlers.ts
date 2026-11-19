@@ -50,6 +50,8 @@ export function createMessageHandlers(baseDeps: MessageHandlersDependencies): Ba
   // A finished round is also when its summary is asked for.
   const deps: MessageHandlersDependencies = {
     ...baseDeps,
+    // A web member's backup answers through the same path as an API member.
+    answerForMember: delivery => deliverExternal(delivery),
     onPromptSettled: (store, chatId, promptMessageId) => {
       const settled = store.messagesById[promptMessageId]
       if (settled?.projectRequest) projectRunner.onSettled(chatId, promptMessageId)

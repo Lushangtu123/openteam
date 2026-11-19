@@ -208,9 +208,15 @@ describe('team page role panel view boundary', () => {
     view.renderRolePanel()
     roleListEl.querySelector<HTMLButtonElement>('[data-role-more="role-1"]')?.click()
     const items = [...roleListEl.querySelectorAll<HTMLButtonElement>('.role-action-menu [role="menuitem"]')]
-    expect(items.map(item => item.textContent)).toEqual(['编辑名字和头像', '查看提示词', '刷新网页', '查看网页', '移出群聊'])
+    expect(items.map(item => item.textContent)).toEqual(['编辑名字和头像', '查看提示词', '刷新网页', '查看网页', '备用模型：无', '移出群聊'])
+    // The backup model item opens its window.
+    roleListEl.querySelector<HTMLButtonElement>('[data-role-backup="role-1"]')?.click()
+    expect(document.querySelector('.role-backup-modal #role-backup-model')).not.toBeNull()
+    document.querySelector('.role-backup-modal')?.remove()
+    roleListEl.querySelector<HTMLButtonElement>('[data-role-more="role-1"]')?.click()
     const remove = roleListEl.querySelector<HTMLButtonElement>('[data-role-delete="role-1"]')
-    expect(items[items.length - 1]).toBe(remove)
+    const reopened = [...roleListEl.querySelectorAll<HTMLButtonElement>('.role-action-menu [role="menuitem"]')]
+    expect(reopened[reopened.length - 1]).toBe(remove)
     expect(remove?.querySelector('svg')).not.toBeNull()
     expect(remove?.getAttribute('aria-label')).toBe('移出群聊：产品经理')
     remove?.click()

@@ -1,3 +1,4 @@
+import { backupModelLabel, openRoleBackupDialog } from './roleBackupDialog'
 import { CHAT_SITES, chatSiteLabel, isChatSite } from '../group/chatSites'
 import { roleMentionLabel, roleMentionLabelOptionsFromSettings } from '../group/mentionParser'
 import { countMemoryForRole } from '../group/memoryStore'
@@ -143,7 +144,7 @@ export function createRolePanelView(deps: RolePanelViewDependencies): RolePanelV
     menu.addEventListener('click', event => event.stopPropagation())
     const web = role.modelSource !== 'external'
     menu.append(roleProfileButton(role), rolePromptDetailButton(role))
-    if (web) menu.append(roleRefreshButton(role), roleJumpButton(role))
+    if (web) menu.append(roleRefreshButton(role), roleJumpButton(role), roleBackupButton(role))
     menu.append(roleDeleteButton(role))
     menu.addEventListener('keydown', event => {
       const items = [...menu.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')]
@@ -250,6 +251,22 @@ export function createRolePanelView(deps: RolePanelViewDependencies): RolePanelV
     backdrop.append(modal)
     document.body.append(backdrop)
     close.focus()
+  }
+
+  // Web members only: the API model that answers for it when its site cannot take a prompt.
+  function roleBackupButton(role: GroupRole): HTMLButtonElement {
+    const store = deps.getStore()
+    const label = backupModelLabel(store, role, language() === 'en')
+    const button = roleMenuItem('role-backup', 'compare', label, role.name, () => {
+      renderRolePanel()
+      openRoleBackupDialog(role, {
+        getStore: deps.getStore,
+        runCommand: deps.runCommand,
+        onClose: () => [...deps.roleListEl.querySelectorAll<HTMLButtonElement>('[data-role-more]')].find(more => more.dataset.roleMore === role.id)?.focus(),
+      })
+    })
+    button.dataset.roleBackup = role.id
+    return button
   }
 
   // Web members only: reloads the member's AI page.

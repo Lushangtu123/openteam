@@ -48,6 +48,7 @@ describe('background role handlers', () => {
       'GROUP_ROLE_DELETE',
       'GROUP_ROLE_RECOVER',
       'GROUP_ROLE_REINITIALIZE',
+      'GROUP_ROLE_BACKUP_SET',
     ])
     expect(routes.map(route => route.type)).toEqual(ROLE_ROUTE_TYPES)
 
@@ -455,5 +456,42 @@ describe('recovering a member whose reply is under way', () => {
   it('keeps the attempt when a prompt being re-sent asked for it, so the reply to that prompt counts', async () => {
     const role = await recover({ keepReplyAttempt: true })
     expect(role).toMatchObject({ replyAttemptId: 'attempt-1', lastPromptMessageId: 'msg-q' })
+  })
+})
+
+describe('setting a web member\'s backup API model', () => {
+  async function setup(roleFields: Record<string, unknown> = {}) {
+    vi.resetModules()
+    const store = createDefaultStore()
+    store.settings.externalModelsById = {
+      api: { id: 'api', name: 'DeepSeek API', format: 'openai', baseUrl: 'https://api.example.com/v1', apiKey: 'key', modelName: 'm', createdAt: 0, updatedAt: 0 },
+      agent: { id: 'agent', name: 'Claude Code', format: 'local-agent', baseUrl: '', apiKey: '', modelName: '', localAgentId: 'claude-code', createdAt: 0, updatedAt: 0 },
+    }
+    store.chatsById['chat-1'] = { id: 'chat-1', name: '群', mode: 'independent', roleIds: ['role-1'], messageIds: [], nextMessageSeq: 1, status: 'ready', createdAt: 1, updatedAt: 1 }
+    store.rolesById['role-1'] = { id: 'role-1', chatId: 'chat-1', name: '研究员', modelSource: 'site', chatSite: 'kimi', status: 'ready', contextCursor: 0, createdAt: 1, updatedAt: 1, ...roleFields }
+    vi.doMock('./storeAccess', async importOriginal => {
+      const actual = await importOriginal<typeof import('./storeAccess')>()
+      return { ...actual, mutateStore: vi.fn(async (mutator: (store: OpenTeamStore) => unknown) => ({ store, result: await mutator(store) })) }
+    })
+    const { createRoleHandlers } = await import('./roleHandlers')
+    const routes = createRoleHandlers({ broadcastStoreUpdated: vi.fn(), log: { info: vi.fn(), warn: vi.fn() }, newId: vi.fn(), now: vi.fn(() => 100), runtimeFrames: { getByRole: vi.fn(), removeRole: vi.fn() }, sendPrompt: vi.fn() })
+    const set = (backupModelId: unknown) => routes.find(route => route.type === 'GROUP_ROLE_BACKUP_SET')!.handler({ type: 'GROUP_ROLE_BACKUP_SET', roleId: 'role-1', backupModelId }, {})
+    return { store, set }
+  }
+
+  it('sets it to an API model, and clears it with an empty choice', async () => {
+    const { store, set } = await setup()
+    await expect(set('api')).resolves.toMatchObject({ ok: true })
+    expect(store.rolesById['role-1'].backupModelId).toBe('api')
+    await set('')
+    expect('backupModelId' in store.rolesById['role-1']).toBe(false)
+  })
+
+  it('refuses a local agent, a model that is gone, and an API member', async () => {
+    const { set } = await setup()
+    await expect(set('agent')).rejects.toThrow('备用只能选 API 模型')
+    await expect(set('gone')).rejects.toThrow('找不到这个 API 模型')
+    const api = await setup({ modelSource: 'external', externalModelId: 'api' })
+    await expect(api.set('api')).rejects.toThrow('只有网页成员可以设备用模型')
   })
 })
