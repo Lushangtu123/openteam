@@ -3170,6 +3170,48 @@ describe('a web member whose site is blocked', () => {
     expect(onPromptSettled).toHaveBeenCalledWith(expect.anything(), 'chat-1', question.id)
   })
 
+  it('says its backup API model was the one that failed, when the backup cannot answer either', async () => {
+    vi.resetModules()
+    const startingStore = createStoreWithTwoApiRoles()
+    startingStore.rolesById['role-3'] = { id: 'role-3', chatId: 'chat-1', name: '研究员', systemPrompt: '核对数据', modelSource: 'site', chatSite: 'kimi', status: 'ready', contextCursor: 0, createdAt: 0, updatedAt: 0, backupModelId: 'model-1', siteHealth: { siteId: 'kimi', status: 'blocked', reason: 'overlay', updatedAt: 1 } }
+    startingStore.chatsById['chat-1'].roleIds = ['role-1', 'role-2', 'role-3']
+    let currentStore = structuredClone(startingStore)
+    vi.doMock('./storeAccess', async importOriginal => {
+      const actual = await importOriginal<typeof import('./storeAccess')>()
+      return {
+        ...actual,
+        mutateStore: vi.fn(async (mutator: (store: OpenTeamStore) => unknown) => {
+          const result = await mutator(currentStore)
+          currentStore = structuredClone(currentStore)
+          return { store: currentStore, result }
+        }),
+      }
+    })
+    const { createMessageHandlers } = await import('./messageHandlers')
+    const complete = vi.fn(async (): Promise<{ content: string }> => { throw new Error('HTTP 404：Not found the model moonshot-v1-8k or Permission denied') })
+    let messageIdSeq = 0
+    const routes = createMessageHandlers({
+      broadcastStoreUpdated: vi.fn(),
+      externalModelClient: { complete },
+      externalModelRetryDelaysMs: [],
+      getChatStatusFromRoles: () => 'ready',
+      log: { debug: vi.fn(), info: vi.fn(), warn: vi.fn() },
+      newId: vi.fn((prefix: string) => prefix === 'msg' ? `${prefix}-${++messageIdSeq}` : `${prefix}-${messageIdSeq}`),
+      now: vi.fn(() => 100),
+      runtimeFrames: { bind: vi.fn(), getByAddress: vi.fn(), getByRole: vi.fn((_chatId: string, roleId: string) => roleId === 'role-3' ? { chatId: 'chat-1', roleId: 'role-3', tabId: 101, frameId: 7, ready: true, lastSeenAt: 100 } : undefined) },
+      sendRoleMessage: vi.fn(),
+      sendError: vi.fn(),
+      sendPrompt: vi.fn(async () => undefined),
+      waitForRetry: vi.fn(async () => {}),
+    })
+    await routes.find(route => route.type === 'GROUP_MESSAGE_SEND')?.handler({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@研究员 这些数据可信吗？' }, {})
+    await vi.waitFor(() => expect(Object.values(currentStore.messagesById).some(message => message.type === 'assistant' && message.roleId === 'role-3' && message.status === 'error')).toBe(true))
+    const reply = Object.values(currentStore.messagesById).find(message => message.type === 'assistant' && message.roleId === 'role-3')!
+    expect(reply.content).toContain('网页这次接不了提问，备用模型「本地模型」也没能回答：HTTP 404：Not found the model moonshot-v1-8k')
+    expect(reply.answeredByFallback).toBeUndefined()
+    expect(currentStore.rolesById['role-3'].status).toBe('error')
+  })
+
   it('is asked as usual when it has a backup API model to answer for it', async () => {
     const request = await roundWithBlockedKimi({ backupModelId: 'model-1' })
     expect(request.targetRoleIds).toEqual(['role-3'])

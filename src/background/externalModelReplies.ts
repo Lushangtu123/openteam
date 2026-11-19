@@ -123,8 +123,10 @@ export async function sendExternalModelDelivery(deps: MessageHandlersDependencie
       }
       return undefined
     }
-    const reason = error instanceof Error ? error.message : String(error)
-    deps.log.warn('external-model:send:failed', { chatId: delivery.chatId, roleId: delivery.roleId, messageId: delivery.messageId, reason })
+    const message = error instanceof Error ? error.message : String(error)
+    // A web member's backup that fails says so, or the error reads as the web page's own.
+    const reason = delivery.answeredBy ? `网页这次接不了提问，备用模型「${delivery.answeredBy}」也没能回答：${message}` : message
+    deps.log.warn('external-model:send:failed', { chatId: delivery.chatId, roleId: delivery.roleId, messageId: delivery.messageId, reason, backup: delivery.answeredBy })
     // The reply shown while it was written becomes the failure, instead of waiting forever.
     if (replyMessageId) {
       await mutateStore(store => {
