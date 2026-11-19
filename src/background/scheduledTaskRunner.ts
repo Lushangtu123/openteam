@@ -1,6 +1,6 @@
 // Runs the groups' 定时任务 (src/group/scheduledTasks.ts). One alarm wakes the background at the
 // next time any task is due; on waking, and whenever the background starts, every due task is dealt
-// with: run, or marked skipped when it was missed by too long. A run opens OpenTeam in the
+// with: run, or marked skipped when it was missed by too long.
 // When it asks web members, a run shows OpenTeam (opened if need be, made the shown tab of its
 // window, the window not brought in front): a hidden tab barely runs, and its members' replies are
 // not read (seen live: a DeepSeek reply in a never-shown tab went unread for two minutes). It then
@@ -9,6 +9,7 @@
 // for the user.
 import { defaultMentionTargetForMessage, parseGroupMentions, roleMentionLabelOptionsFromSettings } from '../group/mentionParser'
 import { findDueSlot, nextScheduledRunAt } from '../group/scheduledTasks'
+import { activeSiteLimit } from '../group/siteUsage'
 import type { GroupRole, OpenTeamStore, RuntimeFrameBinding, ScheduledTask, ScheduledTaskRun } from '../group/types'
 import type { RuntimeMessage } from './runtimeClient'
 import { mutateStore } from './storeAccess'
@@ -136,7 +137,7 @@ export function createScheduledTaskRunner(deps: ScheduledTaskRunnerDependencies)
   // The asked web members' pages, shown and loaded: OpenTeam shown, then a wait for the pages to
   // load on their own (the open group's do), then the page asked to load the rest.
   async function prepareMembers(store: OpenTeamStore, chatId: string, task: ScheduledTask): Promise<void> {
-    const members = targetWebMembers(store, chatId, task.content)
+    const members = targetWebMembers(store, chatId, task.content, deps.now())
     if (members.length === 0) return
     if (!deps.panelOpen()) {
       await deps.showTeamPage()
@@ -156,8 +157,9 @@ export function createScheduledTaskRunner(deps: ScheduledTaskRunnerDependencies)
   return { sync, checkDue, runNow }
 }
 
-// The web members the message goes to, read as the send will read it.
-function targetWebMembers(store: OpenTeamStore, chatId: string, raw: string): GroupRole[] {
+// The web members whose pages the message goes to, read as the send will read it. A member whose site
+// is limiting is passed over by the send, or answered for by its backup: its page is not needed.
+function targetWebMembers(store: OpenTeamStore, chatId: string, raw: string, now: number): GroupRole[] {
   const chat = store.chatsById[chatId]
   if (!chat) return []
   const roles = chat.roleIds.map(roleId => store.rolesById[roleId]).filter((role): role is GroupRole => Boolean(role))
@@ -165,5 +167,5 @@ function targetWebMembers(store: OpenTeamStore, chatId: string, raw: string): Gr
   if (!parsed.ok) return []
   const manual = parsed.mentionedRoleIds.length > 0 || Boolean(parsed.mentionsAll)
   const targets = chat.requireManualMention && !manual ? [] : parsed.targetRoleIds
-  return roles.filter(role => targets.includes(role.id) && role.modelSource !== 'external')
+  return roles.filter(role => targets.includes(role.id) && role.modelSource !== 'external' && !activeSiteLimit(store, role.chatSite ?? store.settings.defaultChatSite, now))
 }

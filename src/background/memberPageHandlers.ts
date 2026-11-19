@@ -9,7 +9,8 @@ import { mapRuntimeRoleStatus } from '../group/runtimeProtocol'
 import type { GroupMessage, GroupRole, OpenTeamStore } from '../group/types'
 import type { ResumeReply } from '../group/runtimeProtocol'
 import { isExternalModelRole } from './rolePromptDelivery'
-import { backupModelFor } from './memberBackup'
+import { backupModelFor, memberSite, noteMemberSiteLimit } from './memberBackup'
+import { isSiteLimitMessage, noteSiteTried, recordSiteSent, takeSiteRecovery } from '../group/siteUsage'
 import { messageTabId, rememberHost, type RuntimeMessage, senderFrameId, senderTabId } from './runtimeClient'
 import { mutateStore, requireChat, requireRole } from './storeAccess'
 import { markOrchestrationRoleError, maybeAdvanceOrchestrationRun } from './orchestrationRuntime'
@@ -191,6 +192,13 @@ export function createMemberPageHandlers(ctx: MessageHandlerContext) {
       if (userMessage?.deliveryStatus?.[role.id] === 'pending') {
         userMessage.deliveryStatus[role.id] = 'sent'
         updateUserMessageDeliveryStatus(userMessage)
+        // The site took a prompt: counted for 网站额度提醒, and, while it is marked as limiting (the
+        // user sent it again by hand), a reply to it will mean it recovered.
+        const site = memberSite(store, role)
+        if (site) {
+          recordSiteSent(store, site, deps.now())
+          noteSiteTried(store, site, role.id, deps.now())
+        }
       }
       if (userMessage) role.contextCursor = Math.max(role.contextCursor, userMessage.seq)
       // The site has the prompt, and with it the memory items it carried.
@@ -280,6 +288,10 @@ export function createMemberPageHandlers(ctx: MessageHandlerContext) {
         ...(reason ? { reason } : {}),
         ...(detail ? { detail } : {}),
         updatedAt: timestamp,
+      }
+      // A page that cannot be used and says the site is limiting marks the site.
+      if (status === 'error' || status === 'blocked') {
+        if (noteMemberSiteLimit(store, role, detail, timestamp)) deps.log.warn('site-limit:noted', { ...identity, siteId, detail })
       }
       // For a member waiting for a reply, only a page that is generating is a sign of that reply
       // (see isStaleThinkingRole); a page that loaded, or is blocked, is not.
@@ -379,6 +391,9 @@ export function createMemberPageHandlers(ctx: MessageHandlerContext) {
         role.lastReplyAt = timestamp
         role.updatedAt = timestamp
         delete role.liveReply
+        // A reply to a prompt the site took while marked as limiting: it recovered.
+        const site = memberSite(store, role)
+        if (site && takeSiteRecovery(store, site, role.id)) deps.log.info('site-limit:recovered', { ...identity, site })
         if (!promptMessageId || role.lastPromptMessageId === promptMessageId) delete role.lastPromptMessageId
         if (!replyAttemptId || role.replyAttemptId === replyAttemptId) delete role.replyAttemptId
         chat.status = deps.getChatStatusFromRoles(store, chat)
@@ -541,6 +556,15 @@ export function createMemberPageHandlers(ctx: MessageHandlerContext) {
     const promptMessageId = readOptionalString(message.messageId)
     const replyAttemptId = readOptionalString(message.replyAttemptId)
     deps.log.warn('role-error:received', { ...identity, promptMessageId, replyAttemptId, reason, senderUrl: sender.url, tabId: messageTabId(message, sender), frameId: senderFrameId(sender) })
+
+    // The site said it is limiting: it is marked, so its members are not sent prompts for a while.
+    if (isSiteLimitMessage(reason)) {
+      const { store: limitedStore, result: limitNoted } = await mutateStore(store => noteMemberSiteLimit(store, requireRole(store, requireChat(store, identity.chatId).id, identity.roleId), reason, deps.now()))
+      if (limitNoted) {
+        deps.log.warn('site-limit:noted', { ...identity, reason })
+        await deps.broadcastStoreUpdated(limitedStore)
+      }
+    }
 
     // The page could not send a prompt that has a backup to answer it: the same refusal reaches the
     // delivery, which hands the prompt to the backup (siteDeliveries.ts). The member is not failed.

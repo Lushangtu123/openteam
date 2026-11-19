@@ -48,6 +48,7 @@ import type { BackgroundToRoleMessage } from '../group/runtimeProtocol'
 import { createControlActionExecutor } from './controlHandlers'
 import { createSiteCheckHandlers } from './siteCheckHandlers'
 import { createScheduledTaskHandlers } from './scheduledTaskHandlers'
+import { createSiteUsageHandlers } from './siteUsageHandlers'
 import { createScheduledTaskRunner, SCHEDULED_TASK_ALARM } from './scheduledTaskRunner'
 import { keepLogsAcrossRestarts } from './diagnosticsLogs'
 import { recentLogs } from '../shared/logger'
@@ -324,6 +325,7 @@ const routeMessage = createMessageRouter([
   ...createMemoryHandlers({ broadcastStoreUpdated, log, now }),
   // Runs through this router itself, once it is made.
   ...createScheduledTaskHandlers({ broadcastStoreUpdated, newId, now, log, schedulesChanged: () => scheduledTasks.sync(), runNow: (chatId, taskId) => scheduledTasks.runNow(chatId, taskId) }),
+  ...createSiteUsageHandlers({ broadcastStoreUpdated, log }),
   ...createSiteCheckHandlers({ route: message => Promise.resolve(routeMessage(message, {})), broadcastStoreUpdated, runtimeFrames, waitFor: ms => new Promise(resolve => globalThis.setTimeout(resolve, ms)), now }),
   ...createExternalModelHandlers({ broadcastStoreUpdated, externalModelClient, checkLocalAgent, newId, now }),
   { type: 'LOCAL_AGENT_LIST', handler: async () => ({ ok: true, agents: await listLocalAgents() }) },

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createDefaultStore } from '../group/store'
+import { recordSiteLimit } from '../group/siteUsage'
 import type { GroupRole, OpenTeamStore, RuntimeFrameBinding, ScheduledTask } from '../group/types'
 
 // Local times, so the tests hold in any time zone. 2026-11-16 is a Monday.
@@ -109,6 +110,16 @@ describe('a group\'s scheduled task coming due', () => {
     await ctx.runner.checkDue()
     expect(ctx.showTeamPage).not.toHaveBeenCalled()
     expect(ctx.route).toHaveBeenCalledWith(expect.objectContaining({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@分析师 总结' }))
+  })
+
+  it('opens no page for a member whose site is limiting', async () => {
+    const store = storeWith({})
+    recordSiteLimit(store, 'kimi', '额度用完', at(16, 8))
+    const ctx = await setup(store)
+    await ctx.runner.checkDue()
+    expect(ctx.showTeamPage).not.toHaveBeenCalled()
+    expect(ctx.requestRoleRecovery).not.toHaveBeenCalled()
+    expect(ctx.route).toHaveBeenCalledTimes(1)
   })
 
   it('runs a time missed within 12 hours late, once, and says it was late', async () => {

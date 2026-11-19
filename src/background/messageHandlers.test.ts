@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { REPLY_STUCK_AFTER_MS } from '../group/replyTiming'
 import { createDefaultStore } from '../group/store'
+import { SITE_LIMIT_COOLDOWN_MS } from '../group/siteUsage'
 import type { GroupChat, GroupMessage, GroupRole, OpenTeamStore, OrchestrationFlow, RuntimeFrameBinding } from '../group/types'
 
 function createStoreWithReadyRole(): OpenTeamStore {
@@ -3299,5 +3300,119 @@ describe('a web member\'s page reporting that it could not send', () => {
     const { role, question } = await report({ backupModelId: 'model-1' }, 'sent')
     expect(role.status).toBe('error')
     expect(question.deliveryStatus).toEqual({ 'role-3': 'error' })
+  })
+})
+
+describe('a web member whose site is limiting', () => {
+  // Kimi (role-3, 研究员) beside the two API members; `limitedAt` marks Kimi as limiting.
+  async function setupKimi(kimi: Partial<GroupRole> = {}, options: { limitedAt?: number; sendPrompt?: () => Promise<void> } = {}) {
+    vi.resetModules()
+    const startingStore = createStoreWithTwoApiRoles()
+    startingStore.rolesById['role-3'] = { id: 'role-3', chatId: 'chat-1', name: '研究员', systemPrompt: '核对数据', modelSource: 'site', chatSite: 'kimi', status: 'ready', contextCursor: 0, createdAt: 0, updatedAt: 0, ...kimi }
+    startingStore.chatsById['chat-1'].roleIds = ['role-1', 'role-2', 'role-3']
+    if (options.limitedAt !== undefined) {
+      const { recordSiteLimit } = await import('../group/siteUsage')
+      recordSiteLimit(startingStore, 'kimi', '今日对话次数已达上限', options.limitedAt)
+    }
+    let currentStore = structuredClone(startingStore)
+    vi.doMock('./storeAccess', async importOriginal => {
+      const actual = await importOriginal<typeof import('./storeAccess')>()
+      return {
+        ...actual,
+        mutateStore: vi.fn(async (mutator: (store: OpenTeamStore) => unknown) => {
+          const result = await mutator(currentStore)
+          currentStore = structuredClone(currentStore)
+          return { store: currentStore, result }
+        }),
+      }
+    })
+    const { createMessageHandlers } = await import('./messageHandlers')
+    const complete = vi.fn(async (): Promise<{ content: string }> => ({ content: '一个回答' }))
+    const sendPrompt = vi.fn(options.sendPrompt ?? (async () => undefined))
+    const kimiBinding: RuntimeFrameBinding = { chatId: 'chat-1', roleId: 'role-3', tabId: 101, frameId: 7, ready: true, lastSeenAt: 100 }
+    let messageIdSeq = 0
+    const routes = createMessageHandlers({
+      broadcastStoreUpdated: vi.fn(),
+      externalModelClient: { complete },
+      getChatStatusFromRoles: () => 'ready',
+      log: { debug: vi.fn(), info: vi.fn(), warn: vi.fn() },
+      newId: vi.fn((prefix: string) => prefix === 'msg' ? `${prefix}-${++messageIdSeq}` : `${prefix}-${messageIdSeq}`),
+      now: vi.fn(() => 1_000),
+      roleErrorRetryDelaysMs: [5],
+      runtimeFrames: { bind: vi.fn(), getByAddress: vi.fn(), getByRole: vi.fn((_chatId: string, roleId: string) => roleId === 'role-3' ? kimiBinding : undefined) },
+      sendRoleMessage: vi.fn(),
+      sendError: vi.fn(),
+      sendPrompt,
+      waitForRetry: vi.fn(async () => {}),
+    })
+    const route = (type: string, message: Record<string, unknown>, sender: chrome.runtime.MessageSender = {}) => routes.find(item => item.type === type)!.handler({ type, ...message }, sender)
+    const send = (raw: string) => route('GROUP_MESSAGE_SEND', { chatId: 'chat-1', raw })
+    const question = (text: string) => Object.values(currentStore.messagesById).find(message => message.type === 'user' && message.content.includes(text))!
+    const kimiReply = () => Object.values(currentStore.messagesById).find(message => message.type === 'assistant' && message.roleId === 'role-3')
+    return { store: () => currentStore, route, send, question, kimiReply, complete, sendPrompt }
+  }
+
+  it('is not sent the message and says so in the chat, while the others answer', async () => {
+    const ctx = await setupKimi({}, { limitedAt: 500 })
+    await ctx.send('@工程师 @研究员 这些数据可信吗？')
+    await vi.waitFor(() => expect(ctx.complete).toHaveBeenCalledTimes(1))
+    expect(ctx.sendPrompt).not.toHaveBeenCalled()
+    expect(ctx.question('这些数据可信吗').deliveryStatus?.['role-3']).toBe('error')
+    expect(ctx.kimiReply()).toMatchObject({ status: 'error', sourceMessageId: ctx.question('这些数据可信吗').id })
+    expect(ctx.kimiReply()?.content).toMatch(/^Kimi 从 \d\d:\d\d 起在限流，这一轮没有发给它/)
+    expect(ctx.store().rolesById['role-3'].status).toBe('ready')
+  })
+
+  it('refuses a message only it would get, saying why', async () => {
+    const ctx = await setupKimi({}, { limitedAt: 500 })
+    await expect(ctx.send('@研究员 这些数据可信吗？')).rejects.toThrow(/「研究员」：Kimi 从 .* 起在限流/)
+    expect(Object.values(ctx.store().messagesById)).toEqual([])
+  })
+
+  it('has its backup answer instead', async () => {
+    const ctx = await setupKimi({ backupModelId: 'model-1' }, { limitedAt: 500 })
+    await ctx.send('@研究员 这些数据可信吗？')
+    await vi.waitFor(() => expect(ctx.kimiReply()?.status).toBe('received'))
+    expect(ctx.sendPrompt).not.toHaveBeenCalled()
+    expect(ctx.kimiReply()).toMatchObject({ content: '一个回答', answeredByFallback: '本地模型' })
+  })
+
+  it('is sent messages again once the mark runs out', async () => {
+    const ctx = await setupKimi({}, { limitedAt: 1_000 - SITE_LIMIT_COOLDOWN_MS })
+    await ctx.send('@研究员 这些数据可信吗？')
+    expect(ctx.sendPrompt).toHaveBeenCalledTimes(1)
+  })
+
+  it('is marked when its page refuses a prompt saying the site is limiting, and not tried again', async () => {
+    const ctx = await setupKimi({}, { sendPrompt: async () => { throw new Error('Kimi 没有发出这条消息（可能是使用额度用完或排队人数太多），请到 Kimi 页面查看') } })
+    await ctx.send('@研究员 这些数据可信吗？')
+    await vi.waitFor(() => expect(ctx.store().rolesById['role-3'].status).toBe('error'))
+    expect(ctx.sendPrompt).toHaveBeenCalledTimes(1)
+    expect(ctx.store().siteUsageBySite?.kimi).toMatchObject({ limitedAt: 1_000, limitedUntil: 1_000 + SITE_LIMIT_COOLDOWN_MS })
+  })
+
+  it('is marked when its page reports the site limiting, and the reply is not tried again', async () => {
+    const ctx = await setupKimi({ status: 'thinking', lastPromptMessageId: 'msg-q', replyAttemptId: 'attempt-1' })
+    await ctx.route('TEAM_SITE_STATUS_UPDATE', { chatId: 'chat-1', roleId: 'role-3', siteId: 'kimi', status: 'blocked', reason: 'http-error', detail: '429 Too Many Requests' })
+    expect(ctx.store().siteUsageBySite?.kimi?.limitedAt).toBe(1_000)
+
+    const other = await setupKimi({ status: 'thinking', lastPromptMessageId: 'msg-q', replyAttemptId: 'attempt-1' })
+    other.store().chatsById['chat-1'].messageIds = ['msg-q']
+    other.store().messagesById['msg-q'] = { id: 'msg-q', chatId: 'chat-1', seq: 1, type: 'user', content: '问题', targetRoleIds: ['role-3'], createdAt: 0, status: 'sent', deliveryStatus: { 'role-3': 'sent' } }
+    await other.route('TEAM_ROLE_ERROR', { chatId: 'chat-1', roleId: 'role-3', messageId: 'msg-q', replyAttemptId: 'attempt-1', reason: 'You\'ve reached your usage limit' })
+    expect(other.store().siteUsageBySite?.kimi?.limitedAt).toBe(1_000)
+    expect(other.sendPrompt).not.toHaveBeenCalled()
+    expect(other.store().rolesById['role-3'].status).toBe('error')
+  })
+
+  it('counts the prompts the site took, and is used again once one taken while marked gets a reply', async () => {
+    const ctx = await setupKimi({ status: 'thinking', lastPromptMessageId: 'msg-q', replyAttemptId: 'attempt-1' }, { limitedAt: 500 })
+    ctx.store().chatsById['chat-1'].messageIds = ['msg-q']
+    ctx.store().messagesById['msg-q'] = { id: 'msg-q', chatId: 'chat-1', seq: 1, type: 'user', content: '问题', targetRoleIds: ['role-3'], createdAt: 0, status: 'pending', deliveryStatus: { 'role-3': 'pending' } }
+    await ctx.route('TEAM_SEND_ACK', { chatId: 'chat-1', roleId: 'role-3', messageId: 'msg-q' })
+    expect(ctx.store().siteUsageBySite?.kimi).toMatchObject({ sent: 1, triedRoleIds: ['role-3'] })
+    await ctx.route('TEAM_ROLE_REPLY', { chatId: 'chat-1', roleId: 'role-3', messageId: 'msg-q', replyAttemptId: 'attempt-1', content: '恢复了的回答' }, { tab: { id: 101 } as chrome.tabs.Tab, frameId: 7 })
+    expect(ctx.store().siteUsageBySite?.kimi?.limitedAt).toBeUndefined()
+    expect(ctx.store().siteUsageBySite?.kimi?.sent).toBe(1)
   })
 })

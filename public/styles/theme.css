@@ -596,6 +596,11 @@
   margin: 0;
 }
 
+/* 网站额度提醒: a site's count today, near the count it was limited at last time */
+.role-meta-item.role-site-usage-near {
+  color: var(--warning);
+}
+
 .role-health-help .role-health-detail {
   color: var(--muted);
   overflow-wrap: anywhere;

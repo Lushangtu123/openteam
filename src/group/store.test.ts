@@ -71,6 +71,7 @@ describe('group store', () => {
       externalChatMemoriesById: {},
       memoryItemsById: {},
       memoryOrder: [],
+      siteUsageBySite: {},
       settings: {
         defaultMode: 'independent',
         maxContextChars: 6000,

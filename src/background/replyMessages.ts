@@ -133,7 +133,19 @@ export function upsertFailedAssistantAfterPrompt(
   timestamp: number,
   newId: MessageHandlersDependencies['newId'],
 ): AssistantGroupMessage {
-  const content = roleFailureReplyContent(reason)
+  return upsertErrorAssistantAfterPrompt(store, chat, role, promptMessageId, roleFailureReplyContent(reason), timestamp, newId)
+}
+
+// The member's failed reply to the prompt, saying `content`: the one there already, or a new one.
+export function upsertErrorAssistantAfterPrompt(
+  store: OpenTeamStore,
+  chat: GroupChat,
+  role: GroupRole,
+  promptMessageId: string,
+  content: string,
+  timestamp: number,
+  newId: MessageHandlersDependencies['newId'],
+): AssistantGroupMessage {
   const existingReply = findFailedOrPendingAssistantAfterPrompt(store, chat, role, promptMessageId)
   if (existingReply) {
     existingReply.content = content

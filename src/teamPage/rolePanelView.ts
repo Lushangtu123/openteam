@@ -1,5 +1,6 @@
 import { backupModelLabel, openRoleBackupDialog } from './roleBackupDialog'
 import { CHAT_SITES, chatSiteLabel, isChatSite } from '../group/chatSites'
+import { activeSiteLimit, clockTime, siteUsageToday } from '../group/siteUsage'
 import { roleMentionLabel, roleMentionLabelOptionsFromSettings } from '../group/mentionParser'
 import { countMemoryForRole } from '../group/memoryStore'
 import { memoryItemsLeftUnreadBy } from '../group/memoryRetrieval'
@@ -37,6 +38,7 @@ export interface RolePanelViewDependencies {
   openRoleSite?(role: GroupRole): void
   // A card was chosen (the side panel shows that member's AI page in the OpenTeam tab).
   onSelectRole?(role: GroupRole): void
+  now?(): number
 }
 
 export interface RolePanelView {
@@ -44,7 +46,13 @@ export interface RolePanelView {
 }
 
 export function createRolePanelView(deps: RolePanelViewDependencies): RolePanelView {
+  const now = () => deps.now?.() ?? Date.now()
+  // Draws the cards again when the earliest shown site limit runs out.
+  let limitTimer: ReturnType<typeof setTimeout> | undefined
+
   function renderRolePanel(): void {
+    if (limitTimer !== undefined) clearTimeout(limitTimer)
+    limitTimer = undefined
     const roles = deps.getCurrentRoles()
     const store = deps.getStore()
     const selectedRole = deps.state.selectedRoleId ? store.rolesById[deps.state.selectedRoleId] : undefined
@@ -58,7 +66,69 @@ export function createRolePanelView(deps: RolePanelViewDependencies): RolePanelV
       deps.roleListEl.append(deps.emptyCard(ui('暂无成员'), ui('点「添加成员」，从角色库批量加入或临时添加。')))
     } else {
       for (const role of roles) deps.roleListEl.append(roleCard(role))
+      const until = Math.min(...roles.map(role => roleSiteLimit(role)?.limitedUntil ?? Infinity))
+      if (Number.isFinite(until)) limitTimer = setTimeout(renderRolePanel, Math.max(0, until - now()) + 1000)
     }
+  }
+
+  function roleSite(role: GroupRole): ChatSite | undefined {
+    return role.modelSource === 'external' ? undefined : role.chatSite ?? deps.getStore().settings.defaultChatSite
+  }
+
+  function roleSiteLimit(role: GroupRole) {
+    const site = roleSite(role)
+    return site ? activeSiteLimit(deps.getStore(), site, now()) : undefined
+  }
+
+  // 网站额度提醒: the prompts the member's site took today (its members together), flagged near the
+  // count it was limited at last time.
+  function roleSiteUsage(role: GroupRole): HTMLElement | undefined {
+    const site = roleSite(role)
+    if (!site) return undefined
+    const usage = siteUsageToday(deps.getStore(), site, now())
+    if (usage.sent === 0) return undefined
+    const english = language() === 'en'
+    const item = document.createElement('span')
+    item.className = `role-meta-item role-site-usage${usage.nearLimit ? ' role-site-usage-near' : ''}`
+    item.textContent = usage.nearLimit
+      ? english ? `${usage.sent} sent today, near the ${usage.limitCount} it was limited at` : `今天已发 ${usage.sent} 条，接近上次限流时的 ${usage.limitCount} 条`
+      : english ? `${usage.sent} sent today` : `今天已发 ${usage.sent} 条`
+    item.title = english ? `Messages ${siteLabel(site)} took today, all its members together` : `${siteLabel(site)} 今天收下的消息，用它的成员合计`
+    return item
+  }
+
+  // The member's site is limiting: until when it is passed over, and a button for when it recovered.
+  function roleSiteLimitHelp(role: GroupRole): HTMLElement | undefined {
+    const site = roleSite(role)
+    const limit = roleSiteLimit(role)
+    if (!site || !limit) return undefined
+    const english = language() === 'en'
+    const since = clockTime(limit.limitedAt, now(), english)
+    const until = clockTime(limit.limitedUntil, now(), english)
+    const backup = role.backupModelId ? deps.getStore().settings.externalModelsById[role.backupModelId]?.name : undefined
+    const help = document.createElement('div')
+    help.className = 'reference-box role-health-help role-site-limit'
+    const text = document.createElement('p')
+    text.textContent = english
+      ? `${siteLabel(site)} has been rate-limiting since ${since}. Until ${until} ${backup ? `its backup model "${backup}" answers for this member` : 'this member is skipped'}.`
+      : `${siteLabel(site)} 从 ${since} 起在限流。${until} 前${backup ? `由备用模型「${backup}」替这个成员回答` : '发消息时跳过这个成员'}。`
+    help.append(text)
+    if (limit.detail) {
+      const detail = document.createElement('p')
+      detail.className = 'role-health-detail'
+      detail.textContent = limit.detail
+      help.append(detail)
+    }
+    const actions = document.createElement('div')
+    actions.className = 'role-health-actions'
+    const recovered = roleHealthAction('已恢复', () => {
+      deps.runCommand('GROUP_SITE_LIMIT_CLEAR', { site })
+        .catch(error => deps.showError(error instanceof Error ? error.message : String(error)))
+    })
+    recovered.dataset.siteLimitClear = site
+    actions.append(recovered)
+    help.append(actions)
+    return help
   }
 
   function roleCard(role: GroupRole): HTMLElement {
@@ -95,6 +165,8 @@ export function createRolePanelView(deps: RolePanelViewDependencies): RolePanelV
     const meta = document.createElement('div')
     meta.className = 'chat-row tiny role-meta'
     meta.append(roleSiteControl(role), roleContextProgress(role, ui), health ? roleHealthBadge(health) : roleConnectionStatus(role, ui))
+    const usage = roleSiteUsage(role)
+    if (usage) meta.append(usage)
     main.append(row, description, meta)
 
     // One ⋯ button per card; its menu holds the prompt, the web page's actions and, last, removing.
@@ -104,6 +176,8 @@ export function createRolePanelView(deps: RolePanelViewDependencies): RolePanelV
     if (deps.state.roleActionMenuRoleId === role.id) actions.append(roleActionMenu(role))
     card.append(avatar, main, actions)
 
+    const limitHelp = roleSiteLimitHelp(role)
+    if (limitHelp) card.append(limitHelp)
     const healthHelp = health ? roleHealthHelp(role, health) : undefined
     if (healthHelp) {
       // Below the whole card: the middle column is too narrow for advice and buttons.

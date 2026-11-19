@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { createDefaultStore } from '../group/store'
 import type { ExternalModelConfig, GroupRole, OpenTeamStore } from '../group/types'
-import { backupDeliveryFor, backupModelFor, canBeAskedNow, siteBlocksMember } from './memberBackup'
+import { recordSiteLimit, SITE_LIMIT_COOLDOWN_MS } from '../group/siteUsage'
+import { backupDeliveryFor, backupModelFor, canBeAskedNow, memberSiteLimit, memberSiteUnavailable, siteBlocksMember } from './memberBackup'
 import type { PromptDelivery } from './promptDelivery'
 
 function model(id: string, fields: Partial<ExternalModelConfig> = {}): ExternalModelConfig {
@@ -58,9 +59,28 @@ describe('the API model that answers for a web member', () => {
 
   it('lets a blocked member still be asked (its backup answers), and not one without a backup', () => {
     const blocked = { siteHealth: { siteId: 'kimi' as const, status: 'blocked' as const, updatedAt: 1 } }
-    expect(canBeAskedNow(...Object.values(setup({ ...blocked, backupModelId: 'api' })) as [OpenTeamStore, GroupRole])).toBe(true)
-    expect(canBeAskedNow(...Object.values(setup(blocked)) as [OpenTeamStore, GroupRole])).toBe(false)
-    expect(canBeAskedNow(...Object.values(setup()) as [OpenTeamStore, GroupRole])).toBe(true)
+    const asked = ({ store, role }: { store: OpenTeamStore; role: GroupRole }) => canBeAskedNow(store, role, 100)
+    expect(asked(setup({ ...blocked, backupModelId: 'api' }))).toBe(true)
+    expect(asked(setup(blocked))).toBe(false)
+    expect(asked(setup())).toBe(true)
+  })
+
+  it('treats a member whose site is limiting like a blocked one, until the mark runs out', () => {
+    const limited = setup()
+    recordSiteLimit(limited.store, 'kimi', '额度用完', 0)
+    expect(memberSiteLimit(limited.store, limited.role, 100)).toMatchObject({ limitedAt: 0 })
+    expect(memberSiteUnavailable(limited.store, limited.role, 100)).toBe(true)
+    expect(canBeAskedNow(limited.store, limited.role, 100)).toBe(false)
+    expect(canBeAskedNow(limited.store, limited.role, SITE_LIMIT_COOLDOWN_MS)).toBe(true)
+    limited.role.backupModelId = 'api'
+    expect(canBeAskedNow(limited.store, limited.role, 100)).toBe(true)
+    // Another site's limit, or an API member, is not affected.
+    const other = setup({ chatSite: 'chatgpt' })
+    recordSiteLimit(other.store, 'kimi', '额度用完', 0)
+    expect(memberSiteUnavailable(other.store, other.role, 100)).toBe(false)
+    const api = setup({ modelSource: 'external', externalModelId: 'api', chatSite: 'kimi' })
+    recordSiteLimit(api.store, 'kimi', '额度用完', 0)
+    expect(memberSiteLimit(api.store, api.role, 100)).toBeUndefined()
   })
 
   it('gets the member\'s own prompt, attempt and images, and says whose stand-in it is', () => {

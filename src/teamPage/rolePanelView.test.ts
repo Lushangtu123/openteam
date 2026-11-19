@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { createDefaultStore } from '../group/store'
+import { clearSiteLimit, recordSiteLimit, recordSiteSent, SITE_LIMIT_COOLDOWN_MS } from '../group/siteUsage'
 import type { GroupChat, GroupRole, OpenTeamStore } from '../group/types'
 import { createTeamPageState } from './appState'
 import { createRolePanelView, roleHealthAdvice } from './rolePanelView'
@@ -516,3 +517,67 @@ function roleSiteMenuSource(source: string): string {
   const match = source.match(/function roleSiteMenu\(role: GroupRole\): HTMLElement \{(?<body>[\s\S]*?)\n  async function kickRoleFromChat/)
   return match?.groups?.body ?? ''
 }
+
+describe('a member card\'s site use (网站额度提醒)', () => {
+  // 2026-11-16 14:30 local.
+  const now = new Date(2026, 10, 16, 14, 30).getTime()
+
+  function render(fill: (store: OpenTeamStore) => void) {
+    const store = makeStoreWithRole()
+    Object.assign(store.rolesById['role-1'], { status: 'ready', modelSource: 'site', chatSite: 'kimi' })
+    fill(store)
+    const rolePanelEl = document.createElement('aside')
+    const roleSummaryEl = document.createElement('p')
+    const roleListEl = document.createElement('div')
+    rolePanelEl.append(roleSummaryEl, roleListEl)
+    const runCommand = vi.fn(async (_type: string, _payload?: Record<string, unknown>) => undefined)
+    const view = createRolePanelView({
+      state: createTeamPageState(), getStore: () => store, rolePanelEl, roleSummaryEl, roleListEl, iframeHost: { recoverRole: vi.fn() },
+      getCurrentChat: () => store.chatsById['chat-1'], getCurrentRoles: () => [store.rolesById['role-1']], emptyCard: () => document.createElement('div'),
+      insertMention: vi.fn(), refreshCurrentChat: vi.fn(async () => undefined), focusRoleFrame: vi.fn(), runCommand, showError: vi.fn(), now: () => now,
+    })
+    view.renderRolePanel()
+    return { roleListEl, runCommand }
+  }
+
+  it('shows how many messages the site took today, and nothing before the first', () => {
+    expect(render(() => undefined).roleListEl.querySelector('.role-site-usage')).toBeNull()
+    const { roleListEl } = render(store => { for (let index = 0; index < 3; index += 1) recordSiteSent(store, 'kimi', now) })
+    const usage = roleListEl.querySelector('.role-site-usage')!
+    expect(usage.textContent).toBe('今天已发 3 条')
+    expect(usage.classList.contains('role-site-usage-near')).toBe(false)
+  })
+
+  it('warns near the count the site was limited at last time', () => {
+    const yesterday = now - 24 * 60 * 60 * 1000
+    const { roleListEl } = render(store => {
+      for (let index = 0; index < 10; index += 1) recordSiteSent(store, 'kimi', yesterday)
+      recordSiteLimit(store, 'kimi', '额度用完', yesterday)
+      clearSiteLimit(store, 'kimi')
+      for (let index = 0; index < 8; index += 1) recordSiteSent(store, 'kimi', now)
+    })
+    const usage = roleListEl.querySelector('.role-site-usage')!
+    expect(usage.textContent).toBe('今天已发 8 条，接近上次限流时的 10 条')
+    expect(usage.classList.contains('role-site-usage-near')).toBe(true)
+  })
+
+  it('says the site is limiting, until when, and lifts it on 已恢复', async () => {
+    const { roleListEl, runCommand } = render(store => recordSiteLimit(store, 'kimi', '今日对话次数已达上限', new Date(2026, 10, 16, 14, 5).getTime()))
+    const help = roleListEl.querySelector('.role-site-limit')!
+    expect(help.querySelector('p')?.textContent).toBe('Kimi 从 14:05 起在限流。17:05 前发消息时跳过这个成员。')
+    expect(help.querySelector('.role-health-detail')?.textContent).toBe('今日对话次数已达上限')
+    help.querySelector<HTMLButtonElement>('[data-site-limit-clear="kimi"]')!.click()
+    await vi.waitFor(() => expect(runCommand).toHaveBeenCalledWith('GROUP_SITE_LIMIT_CLEAR', { site: 'kimi' }))
+  })
+
+  it('names the backup that answers meanwhile, and shows nothing once the limit ran out', () => {
+    const limitedAt = new Date(2026, 10, 16, 14, 5).getTime()
+    const withBackup = render(store => {
+      store.settings.externalModelsById.api = { id: 'api', name: 'DeepSeek API', format: 'openai', baseUrl: 'https://api.example.com/v1', apiKey: 'key', modelName: 'm', createdAt: 0, updatedAt: 0 }
+      store.rolesById['role-1'].backupModelId = 'api'
+      recordSiteLimit(store, 'kimi', '限流', limitedAt)
+    })
+    expect(withBackup.roleListEl.querySelector('.role-site-limit p')?.textContent).toBe('Kimi 从 14:05 起在限流。17:05 前由备用模型「DeepSeek API」替这个成员回答。')
+    expect(render(store => recordSiteLimit(store, 'kimi', '限流', now - SITE_LIMIT_COOLDOWN_MS)).roleListEl.querySelector('.role-site-limit')).toBeNull()
+  })
+})

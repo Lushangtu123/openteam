@@ -6,7 +6,8 @@ import { DEFAULT_PROMPT_DELIVERY_RETRY_DELAYS_MS, sendPromptDeliveryWithRetry } 
 import { mutateStore, requireChat, requireRole } from './storeAccess'
 import type { MessageHandlersDependencies } from './messageHandlerDeps'
 import { hasAssistantReplyAfterPrompt, staleReplyReason } from './replyMessages'
-import { backupDeliveryFor, backupModelFor, siteBlocksMember } from './memberBackup'
+import { backupDeliveryFor, backupModelFor, memberSiteUnavailable, noteMemberSiteLimit } from './memberBackup'
+import { isSiteLimitMessage } from '../group/siteUsage'
 import { isReceiverGoneError } from '../shared/connectionErrors'
 
 export async function markDeliveryError(deps: MessageHandlersDependencies, chatId: string, roleId: string, messageId: string, reason: string): Promise<OpenTeamStore> {
@@ -24,6 +25,7 @@ export async function markDeliveryError(deps: MessageHandlersDependencies, chatI
       userMessage.deliveryStatus[roleId] = 'error'
       updateUserMessageDeliveryStatus(userMessage)
     }
+    if (noteMemberSiteLimit(store, role, reason, role.updatedAt)) deps.log.warn('site-limit:noted', { chatId, roleId, site: role.chatSite, reason })
     chat.status = deps.getChatStatusFromRoles(store, chat)
     chat.updatedAt = role.updatedAt
   })
@@ -70,8 +72,9 @@ export async function enqueuePromptDelivery(deps: MessageHandlersDependencies, c
   })
 }
 
-// Sends a web member its prompt. When its site is blocked already, or the prompt cannot be sent at
-// all, its backup API model answers instead, if it has one (memberBackup.ts). Resolves to whether the
+// Sends a web member its prompt. When its site is blocked or limiting already, or the prompt cannot
+// be sent at all, its backup API model answers instead, if it has one (memberBackup.ts). A site that
+// says it is limiting is marked (src/group/siteUsage.ts) and not tried again. Resolves to whether the
 // site got the prompt.
 export async function sendPromptDelivery(deps: MessageHandlersDependencies, chatId: string, messageId: string, delivery: PromptDelivery): Promise<boolean> {
   if (await answerWithBackup(deps, chatId, messageId, delivery, 'site-blocked')) return false
@@ -84,10 +87,13 @@ export async function sendPromptDelivery(deps: MessageHandlersDependencies, chat
     // blocked is not tried again for minutes when a backup can answer now. A page that is only gone
     // (the side panel opened or closed, a reload) is brought back and tried again as usual.
     stopRetrying: async (targetChatId, roleId, reason) => {
+      // Trying again in minutes does not help a site that is limiting.
+      if (await noteSiteLimitFromFailure(deps, targetChatId, roleId, reason)) return true
       if (delivery.hasBackup !== true || deps.answerForMember === undefined) return false
-      return !isReceiverGoneError(reason) ? await hasUsableBackup(targetChatId, roleId) : await blockedWithBackup(targetChatId, roleId)
+      return !isReceiverGoneError(reason) ? await hasUsableBackup(targetChatId, roleId) : await blockedWithBackup(targetChatId, roleId, deps.now())
     },
     markDeliveryError: async (targetChatId, roleId, targetMessageId, reason) => {
+      await noteSiteLimitFromFailure(deps, targetChatId, roleId, reason)
       if (await answerWithBackup(deps, targetChatId, targetMessageId, delivery, 'send-failed')) return
       await markDeliveryError(deps, targetChatId, roleId, targetMessageId, reason)
     },
@@ -114,12 +120,24 @@ async function hasUsableBackup(chatId: string, roleId: string): Promise<boolean>
   return result
 }
 
-async function blockedWithBackup(chatId: string, roleId: string): Promise<boolean> {
+async function blockedWithBackup(chatId: string, roleId: string, now: number): Promise<boolean> {
   const { result } = await mutateStore(store => {
     const role = requireRole(store, requireChat(store, chatId).id, roleId)
-    return siteBlocksMember(role) && Boolean(backupModelFor(store, role))
+    return memberSiteUnavailable(store, role, now) && Boolean(backupModelFor(store, role))
   })
   return result
+}
+
+// A prompt the member's site refused saying it is limiting: the site is marked. Resolves to whether
+// the reason says so.
+async function noteSiteLimitFromFailure(deps: MessageHandlersDependencies, chatId: string, roleId: string, reason: string): Promise<boolean> {
+  if (!isSiteLimitMessage(reason)) return false
+  const { store, result: noted } = await mutateStore(store => noteMemberSiteLimit(store, requireRole(store, requireChat(store, chatId).id, roleId), reason, deps.now()))
+  if (noted) {
+    deps.log.warn('site-limit:noted', { chatId, roleId, reason })
+    await deps.broadcastStoreUpdated(store)
+  }
+  return true
 }
 
 // The member's backup answers the prompt its site did not get: when the site is blocked already
@@ -131,7 +149,7 @@ async function answerWithBackup(deps: MessageHandlersDependencies, chatId: strin
   const { result: backup } = await mutateStore(store => {
     const chat = requireChat(store, chatId)
     const role = requireRole(store, chat.id, delivery.roleId)
-    if (why === 'site-blocked' && !siteBlocksMember(role)) return undefined
+    if (why === 'site-blocked' && !memberSiteUnavailable(store, role, deps.now())) return undefined
     if (staleReplyReason(store, chat, role, messageId, delivery.message.replyAttemptId)) return undefined
     return backupDeliveryFor(store, role, delivery)
   })

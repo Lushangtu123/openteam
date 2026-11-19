@@ -1,6 +1,7 @@
 // Trying a member again: on its own after an error that may pass (a few times, spaced out), and when
 // the user asks for a reply again (which prompt to send, and what to do with the failed reply).
 import { updateUserMessageDeliveryStatus } from '../group/deliveryStatus'
+import { isSiteLimitMessage } from '../group/siteUsage'
 import type { GroupChat, GroupMessage, GroupRole, OpenTeamStore } from '../group/types'
 import type { PromptDelivery } from './promptDelivery'
 import { type ExternalPromptDelivery, isExternalModelRole, type PreparedRolePromptDelivery, prepareRolePromptDelivery } from './rolePromptDelivery'
@@ -75,6 +76,8 @@ export async function prepareRoleErrorRetry(
 }
 
 export function isRetryableRoleError(reason: string): boolean {
+  // A site that says it is limiting will say so again (src/group/siteUsage.ts).
+  if (isSiteLimitMessage(reason)) return false
   const normalized = reason.toLowerCase()
   const nonRetryablePatterns = [
     'abort',

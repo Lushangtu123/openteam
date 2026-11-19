@@ -40,8 +40,9 @@ export function createRoundHandlers(ctx: MessageHandlerContext) {
       if (options.auto && hasRoundSummary(store, chat, round.question.id)) return undefined
 
       const roles = getChatRoles(store, chat)
-      // A web member whose site cannot take a prompt, with no backup to answer for it, is passed over.
-      const isAvailable = (role: GroupRole) => role.status !== 'thinking' && canBeAskedNow(store, role) && (isExternalModelRole(role)
+      // A web member whose site cannot take a prompt or is limiting, with no backup to answer for it, is
+      // passed over.
+      const isAvailable = (role: GroupRole) => role.status !== 'thinking' && canBeAskedNow(store, role, timestamp) && (isExternalModelRole(role)
         ? Boolean(getExternalModelForRole(store, role))
         : isRoleDeliverable(role, deps.runtimeFrames.getByRole(chat.id, role.id), timestamp))
       const summarizer = options.roleId ? roles.find(role => role.id === options.roleId) : pickSummarizer(roles, round, isAvailable, store.settings.defaultChatSite)
@@ -235,7 +236,7 @@ export function createRoundHandlers(ctx: MessageHandlerContext) {
   function canTakeTurn(store: OpenTeamStore, chat: GroupChat, role: GroupRole, timestamp: number): boolean {
     if (role.status === 'thinking' && !isStaleThinkingRole(role, timestamp)) return false
     // Its site cannot take a prompt and nothing answers for it: the turn goes to the next member.
-    if (!canBeAskedNow(store, role)) return false
+    if (!canBeAskedNow(store, role, timestamp)) return false
     return isExternalModelRole(role)
       ? Boolean(getExternalModelForRole(store, role))
       : isRoleDeliverable(role, deps.runtimeFrames.getByRole(chat.id, role.id), timestamp)

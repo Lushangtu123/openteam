@@ -6,7 +6,11 @@ import { updateUserMessageDeliveryStatus } from '../group/deliveryStatus'
 import { isDiscussionRunning, startsDiscussion } from '../group/discussion'
 import { readScheduledRunRequest, recordScheduledRunSent } from '../group/scheduledTasks'
 import { defaultMentionTargetForMessage, parseGroupMentions, roleMentionLabelOptionsFromSettings } from '../group/mentionParser'
+import { siteLimitSkipReason } from '../group/siteUsage'
 import type { GroupMessage, GroupRole } from '../group/types'
+import { normalizeLanguage } from '../shared/i18n'
+import { backupModelFor, memberSite, memberSiteLimit } from './memberBackup'
+import { upsertErrorAssistantAfterPrompt } from './replyMessages'
 import type { PromptDelivery } from './promptDelivery'
 import { type ExternalPromptDelivery, getExternalModelForRole, isExternalModelRole, prepareRolePromptDelivery } from './rolePromptDelivery'
 import type { RuntimeMessage } from './runtimeClient'
@@ -91,8 +95,18 @@ export function createMessageSendHandler(ctx: MessageHandlerContext, roundHandle
         if (isExternalModelRole(role)) return !getExternalModelForRole(store, role)
         return !isRoleDeliverable(role, deps.runtimeFrames.getByRole(chat.id, role.id), timestamp)
       })
-      const deliverableTargetRoles = targetRoles.filter(role => !unavailable.includes(role))
+      // A web member whose site is limiting is passed over this time, unless its backup answers for it
+      // (src/group/siteUsage.ts, siteDeliveries.ts).
+      const limited = targetRoles.filter(role => !unavailable.includes(role) && !backupModelFor(store, role) && memberSiteLimit(store, role, timestamp))
+      const deliverableTargetRoles = targetRoles.filter(role => !unavailable.includes(role) && !limited.includes(role))
+      const english = normalizeLanguage(store.settings.language) === 'en'
+      const limitReason = (role: GroupRole) => siteLimitSkipReason(memberSite(store, role)!, memberSiteLimit(store, role, timestamp)!, timestamp, english)
 
+      if (limited.length > 0) deps.log.warn('message-send:site-limited-targets', { chatId: chat.id, skippedTargets: limited.map(role => ({ id: role.id, name: role.name, site: memberSite(store, role) })) })
+      if (limited.length > 0 && deliverableTargetRoles.length === 0) {
+        const unavailableNote = unavailable.length > 0 ? `以下成员不可用，请等待或恢复：${unavailable.map(role => role.name).join('、')}。` : ''
+        throw new Error(`${unavailableNote}${limited.map(role => `「${role.name}」：${limitReason(role)}`).join('\n')}`)
+      }
       if (unavailable.length > 0 && deliverableTargetRoles.length === 0) {
         deps.log.warn('message-send:unavailable-targets', {
           chatId: chat.id,
@@ -139,7 +153,7 @@ export function createMessageSendHandler(ctx: MessageHandlerContext, roundHandle
         ...(message.refreshPersona === true ? { refreshPersona: true } : {}),
         createdAt: timestamp,
         status: finalTargetRoleIds.length > 0 ? 'pending' : 'received',
-        deliveryStatus: Object.fromEntries(finalTargetRoleIds.map(roleId => [roleId, unavailable.some(role => role.id === roleId) ? 'error' : 'pending'])),
+        deliveryStatus: Object.fromEntries(finalTargetRoleIds.map(roleId => [roleId, unavailable.some(role => role.id === roleId) || limited.some(role => role.id === roleId) ? 'error' : 'pending'])),
       }
       updateUserMessageDeliveryStatus(userMessage)
 
@@ -151,6 +165,8 @@ export function createMessageSendHandler(ctx: MessageHandlerContext, roundHandle
       store.messagesById[userMessage.id] = userMessage
       chat.messageIds.push(userMessage.id)
       chat.nextMessageSeq += 1
+      // Said in the chat, under the message, for each member passed over.
+      for (const role of limited) upsertErrorAssistantAfterPrompt(store, chat, role, userMessage.id, limitReason(role), timestamp, deps.newId)
       deps.log.info('message-send:stored', { chatId: chat.id, messageId: userMessage.id, targetCount: parsed.targetRoleIds.length })
       chat.updatedAt = timestamp
       if (finalTargetRoleIds.length === 0) {

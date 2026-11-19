@@ -3,6 +3,7 @@ import type { MessageHighlightColor } from './highlightColors'
 
 export type RoomMode = 'independent' | 'collaborative'
 import type { ChatSite } from './chatSites'
+import type { SiteUsageRecord } from './siteUsage'
 export type { ChatSite }
 export type OpenTeamLanguage = 'en' | 'zh-CN'
 export type RoleModelSource = 'site' | 'external'
@@ -47,6 +48,8 @@ export interface OpenTeamStore {
   memoryItemsById?: Record<string, MemoryItem>
   // Item ids, newest first.
   memoryOrder?: string[]
+  // How much each AI site was used today, and whether it is limiting (src/group/siteUsage.ts).
+  siteUsageBySite?: SiteUsageRecord
   settings: OpenTeamSettings
   viewState?: OpenTeamViewState
 }
