@@ -442,6 +442,7 @@ const UI_TRANSLATIONS: Record<string, string> = {
   '移除附件': 'Remove attachment',
   '刚才的网页': 'The page you were on',
   '在标签页中打开': 'Open in a tab',
+  '成员正在 OpenTeam 标签页里写回复，写完后由侧边栏接手': 'Members are finishing their replies in the OpenTeam tab; the side panel takes over then',
   '工具': 'Tools',
   '附上': 'Attach',
   '不附上': 'Don’t attach',

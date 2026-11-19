@@ -1,6 +1,8 @@
 // Replies that were on their way when their member could no longer give them. A web member's
-// reply is read by its page inside an OpenTeam tab: once no OpenTeam tab is open, or the browser
-// has started again, that page is gone, and a page opened later does not go on reading the reply.
+// reply is read by its page inside an OpenTeam tab or the side panel: once no OpenTeam page is open,
+// or the browser has started again, that page is gone. (A page loaded again while one is open goes
+// on reading the reply from the site, and ends it here only when the site does not have it: see
+// resumeReply in memberPageHandlers.ts.)
 // An API member's reply comes through the background: when the background starts again, the
 // request it was reading is gone. Left alone, such a member would show as replying until it counted
 // as stuck, and its question would never be answered.

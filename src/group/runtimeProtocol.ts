@@ -100,13 +100,25 @@ export type RoleToBackgroundMessage =
       stalledWhileGenerating?: boolean
     }
   | { type: 'TEAM_SITE_STATUS_UPDATE'; chatId?: string; roleId?: string; siteId: string; status: SiteStatus; reason?: RoleSiteHealthReason; detail?: string }
+  // The reply this page was asked to go on reading (FrameRoleReadyResponse.resumeReply) is not on the site.
+  | { type: 'TEAM_ROLE_RESUME_FAILED'; chatId: string; roleId: string; messageId: string; replyAttemptId?: string; reason: string }
 
 export interface FrameRoleReadyResponse {
   ok: boolean
   role?: Pick<GroupRole, 'id' | 'name' | 'chatId'>
   store?: OpenTeamStore
   replyHistory?: string[]
+  // The member's reply was under way when its earlier page went (the side panel opened or closed,
+  // the OpenTeam page was refreshed): this page reads it from the site, going on from what had been
+  // read, and reports it as usual, or says it could not (TEAM_ROLE_RESUME_FAILED).
+  resumeReply?: ResumeReply
   error?: string
+}
+
+export interface ResumeReply {
+  messageId: string
+  replyAttemptId?: string
+  readSoFar: string
 }
 
 export function mapRuntimeRoleStatus(value: unknown): RoleStatus | undefined {

@@ -45,6 +45,7 @@ describe('team page dom refs', () => {
       <input id="backup-file" type="file" />
       <input id="backup-include-keys" type="checkbox" />
       <div id="web-page-offer"></div>
+      <p id="panel-handover-note"></p>
       <button id="open-in-tab"></button>
       <div id="attachment-tray"></div>
       <button id="attach-file"></button>

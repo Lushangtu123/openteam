@@ -1319,6 +1319,13 @@
   width: auto;
 }
 
+/* In the side panel, while the OpenTeam tab finishes its members' replies before handing over. */
+:root[data-theme] .panel-handover-note:not([hidden]) {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
 /* 附上网页: the page the OpenTeam icon was clicked on, offered over the message box. */
 :root[data-theme] .web-page-offer:not([hidden]) {
   display: flex;

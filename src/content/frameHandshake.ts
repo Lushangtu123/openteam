@@ -1,4 +1,4 @@
-import type { FrameRoleReadyResponse, RoleToBackgroundMessage } from '../group/runtimeProtocol'
+import type { FrameRoleReadyResponse, ResumeReply, RoleToBackgroundMessage } from '../group/runtimeProtocol'
 import type { ContentLogger } from './runtimeClient'
 import type { RoleSession } from './roleSession'
 import type { ChatSiteAdapter } from './sites/types'
@@ -19,6 +19,8 @@ export function registerFrameRoleHandshake(options: {
   sendRuntimeMessage<T>(message: RoleToBackgroundMessage): Promise<T>
   // OpenTeam in the side panel asks its pages to link over a port (memberLink.ts); resolves once linked.
   linkOverPort(): Promise<void>
+  // The background asks this page to go on reading the reply its member's earlier page was reading.
+  resumeReply?(resume: ResumeReply): void
 }): FrameRoleHandshake {
   let lastAssignment: { chatId: string; roleId: string; hostTabId?: number } | undefined
 
@@ -63,6 +65,7 @@ export function registerFrameRoleHandshake(options: {
           roleName: response.role.name,
           roomId: response.role.chatId || chatId,
         })
+        if (response.resumeReply) options.resumeReply?.(response.resumeReply)
       })
       .catch(error => options.log.warn('frame-role:ready-error', { roleId, error: error instanceof Error ? error.message : String(error) }))
   }

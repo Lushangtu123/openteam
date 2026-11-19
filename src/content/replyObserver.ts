@@ -1,5 +1,5 @@
 import { REPLY_SIGNAL_INTERVAL_MS } from '../group/replyTiming'
-import type { RoleToBackgroundMessage } from '../group/runtimeProtocol'
+import type { ResumeReply, RoleToBackgroundMessage } from '../group/runtimeProtocol'
 import type { ReplyImageSource } from '../group/types'
 import { createReplyTimeout } from './replyTimeout'
 import { createReplyTracker } from './replyTracker'
@@ -10,7 +10,7 @@ import type { ContentLogger } from './runtimeClient'
 import type { RoleSession } from './roleSession'
 import type { ChatSiteAdapter } from './sites/types'
 
-type ReplySource = 'observer' | 'timeout-compensation' | 'polling-compensation'
+type ReplySource = 'observer' | 'timeout-compensation' | 'polling-compensation' | 'resumed'
 
 const RESPONSE_DEBOUNCE_MS = 2500
 const RESPONSE_FINAL_SETTLE_MS = 1500
@@ -27,6 +27,12 @@ const SHORT_REPLY_STABLE_SETTLE_MS = 5000
 // as it stands, marked so, and the site is stopped so its next prompt can go in. A model still
 // thinking has no text yet and is left to it.
 export const STALLED_GENERATING_MS = 3 * 60_000
+// A page loaded again while its member's reply was under way (resumeReply): how long the page has to
+// show that reply, and the longest it waits for the site to finish it.
+export const RESUME_FIND_MS = 60_000
+export const RESUME_LIMIT_MS = 15 * 60_000
+// Meanwhile it says this often that the site is still writing, well within REPLY_SIGNAL_INTERVAL_MS.
+const RESUME_HEARTBEAT_MS = 60_000
 // How often the reply written so far is sent to the chat while the site is still writing. The
 // team page smooths the text between updates.
 export const REPLY_PROGRESS_INTERVAL_MS = 500
@@ -39,6 +45,11 @@ export interface ReplyObserverController {
   startReplyReporting(): void
   seedStoredRoleReplies(replies: string[] | undefined): void
   resetForAssignedRole(): void
+  // Goes on reading a reply its member's earlier page was reading (FrameRoleReadyResponse
+  // .resumeReply), and reports it as usual, or TEAM_ROLE_RESUME_FAILED when the site does not have it.
+  resumeReply(resume: ResumeReply): Promise<'reported' | 'lost' | 'cancelled' | 'already'>
+  // The reply was stopped, or a new prompt came: resuming ends without a word.
+  cancelResume(): void
 }
 
 export function createReplyObserver(options: {
@@ -416,6 +427,104 @@ export function createReplyObserver(options: {
       .catch(error => log.warn('reply:report-failed', { error: error instanceof Error ? error.message : String(error) }))
   }
 
+  let resuming: { cancelled: boolean } | undefined
+
+  function cancelResume(): void {
+    if (resuming) resuming.cancelled = true
+    resuming = undefined
+  }
+
+  // The reply on the page that goes on from what had been read: the latest one that holds that text,
+  // or else the latest one, leaving out replies from before (the role's reply history).
+  function findResumedReply(readSoFar: string): { element: Element; text: string; content: { text: string; contentFormat?: 'markdown' } } | undefined {
+    const conversationId = getConversationId()
+    const candidates = keepDeepestResponseContainers(siteAdapter.getResponseContainers())
+      .map(element => readReplySnapshot(element))
+      .filter(snapshot => hasReplySnapshot(snapshot) && !replyTracker.isKnown(conversationId, snapshot.text))
+      .map(snapshot => ({ element: snapshot.element, text: snapshot.text, content: readReplyContent(snapshot.element, snapshot.text) }))
+      .filter(candidate => !replyTracker.isKnown(conversationId, candidate.content.text))
+    const soFar = compactText(readSoFar)
+    const holding = soFar ? [...candidates].reverse().find(candidate => compactText(candidate.content.text).includes(soFar) || compactText(candidate.text).includes(soFar)) : undefined
+    return holding ?? candidates[candidates.length - 1]
+  }
+
+  async function resumeReply(resume: ResumeReply): Promise<'reported' | 'lost' | 'cancelled' | 'already'> {
+    const { messageId, replyAttemptId, readSoFar } = resume
+    if (roleSession.getActivePrompt()?.messageId === messageId) return 'already'
+    cancelResume()
+    const state = { cancelled: false }
+    resuming = state
+    const startedAt = Date.now()
+    let lastHeartbeatAt = startedAt
+    let stableKey = ''
+    let stableSince = startedAt
+    let sawGenerating = false
+    let lastProgress = ''
+    const identity = statusIdentityPayload()
+    const fail = (reason: string): 'lost' => {
+      if (resuming === state) resuming = undefined
+      log.warn('reply-resume:lost', { messageId, reason, readSoFarLength: readSoFar.length })
+      options
+        .sendRuntimeMessage({ type: 'TEAM_ROLE_RESUME_FAILED', chatId: identity.chatId ?? '', roleId: identity.roleId ?? '', messageId, ...(replyAttemptId ? { replyAttemptId } : {}), reason })
+        .catch(error => log.warn('reply-resume:report-failed', { messageId, error: error instanceof Error ? error.message : String(error) }))
+      return 'lost'
+    }
+    log.info('reply-resume:start', { messageId, readSoFarLength: readSoFar.length })
+
+    for (;;) {
+      await new Promise(resolve => window.setTimeout(resolve, REPLY_POLL_INTERVAL_MS))
+      if (state.cancelled) return 'cancelled'
+      const timestamp = Date.now()
+      const generating = siteAdapter.isGenerating()
+      if (generating) sawGenerating = true
+      if (timestamp - lastHeartbeatAt >= RESUME_HEARTBEAT_MS) {
+        lastHeartbeatAt = timestamp
+        options
+          .sendRuntimeMessage({ type: 'TEAM_ROLE_STATUS', status: 'generating', ...identity })
+          .catch(error => log.debug('reply-resume:heartbeat-failed', { messageId, error: error instanceof Error ? error.message : String(error) }))
+      }
+
+      const candidate = findResumedReply(readSoFar)
+      if (!candidate) {
+        if (timestamp - startedAt >= RESUME_FIND_MS) return fail('页面上没有找到这条回复')
+        continue
+      }
+      const key = readReplySnapshot(candidate.element, candidate.text).key
+      if (key !== stableKey) {
+        stableKey = key
+        stableSince = timestamp
+        if (candidate.content.text && candidate.content.text !== lastProgress && identity.chatId && identity.roleId) {
+          lastProgress = candidate.content.text
+          options
+            .sendRuntimeMessage({ type: 'TEAM_ROLE_REPLY_PROGRESS', chatId: identity.chatId, roleId: identity.roleId, messageId, replyAttemptId, content: candidate.content.text, ...(candidate.content.contentFormat ? { contentFormat: candidate.content.contentFormat } : {}) })
+            .catch(error => log.debug('reply-resume:progress-failed', { messageId, error: error instanceof Error ? error.message : String(error) }))
+        }
+        continue
+      }
+      const stableDuration = timestamp - stableSince
+      const stalled = generating && stableDuration >= STALLED_GENERATING_MS
+      if (generating && !stalled) {
+        if (timestamp - startedAt >= RESUME_LIMIT_MS) return fail('站点写了太久，没有等到这条回复写完')
+        continue
+      }
+      if (stableDuration < RESPONSE_FINAL_SETTLE_MS) continue
+
+      // The site wrote nothing after the earlier page went: it may have stopped mid-reply then, so
+      // what it shows is not taken for the whole reply.
+      if (!sawGenerating && compactText(candidate.content.text).length <= compactText(readSoFar).length) return fail('网站上的回复没有比已经读到的更多，可能在页面关闭时就停下了')
+
+      const reply = await resolveReportableReplyText(siteAdapter, candidate.element, candidate.text, log)
+      if (state.cancelled) return 'cancelled'
+      if (replyTracker.isKnown(getConversationId(), reply.text)) return fail('页面上只有之前的回复')
+      resuming = undefined
+      roleSession.startPrompt(messageId, replyAttemptId)
+      replyTracker.consumeIfNewForMessage(getConversationId(), reportableReplyKey(reply), messageId)
+      log.warn('reply-resume:reported', { messageId, textLength: reply.text.length, stalled })
+      reportAcceptedReply(messageId, reply, 'resumed', stalled)
+      return 'reported'
+    }
+  }
+
   function statusIdentityPayload(): { chatId?: string; roleId?: string } {
     const assignedRole = roleSession.getAssignedRole()
     const chatId = roleSession.getAssignedChatId(assignedRole)
@@ -632,6 +741,8 @@ export function createReplyObserver(options: {
     startReplyReporting,
     seedStoredRoleReplies,
     resetForAssignedRole,
+    resumeReply,
+    cancelResume,
   }
 }
 
@@ -640,6 +751,10 @@ interface ReplySnapshot {
   text: string
   images: ReplyImageSource[]
   key: string
+}
+
+function compactText(text: string): string {
+  return text.replace(/\s+/g, '')
 }
 
 function hasReplySnapshot(snapshot: ReplySnapshot): boolean {

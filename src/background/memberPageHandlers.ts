@@ -6,7 +6,9 @@ import { confirmMemorySent, forgetMemorySent } from '../group/memoryPrompt'
 import { extractMemoryProposals, takeMemoryProposals } from '../group/memoryProposals'
 import { type InterruptedReply, type InterruptedReplyScope, settleInterruptedReplies } from './interruptedReplies'
 import { mapRuntimeRoleStatus } from '../group/runtimeProtocol'
-import type { GroupMessage, OpenTeamStore } from '../group/types'
+import type { GroupMessage, GroupRole, OpenTeamStore } from '../group/types'
+import type { ResumeReply } from '../group/runtimeProtocol'
+import { isExternalModelRole } from './rolePromptDelivery'
 import { messageTabId, rememberHost, type RuntimeMessage, senderFrameId, senderTabId } from './runtimeClient'
 import { mutateStore, requireChat, requireRole } from './storeAccess'
 import { markOrchestrationRoleError, maybeAdvanceOrchestrationRun } from './orchestrationRuntime'
@@ -44,19 +46,25 @@ export function createMemberPageHandlers(ctx: MessageHandlerContext) {
       conversationUrl: message.conversationUrl,
     })
 
-    // A member whose page was loaded again (the OpenTeam page refreshed, or its frame reloaded) while
-    // it read a reply: the new page does not go on reading it, so the reply is ended now, as when its
-    // page is closed, instead of the member showing as replying until it counts as stuck. The same
-    // page reporting again (the OpenTeam page asks until it hears back) leaves it as it is.
+    // A member whose page was loaded again while it read a reply: the side panel was opened or
+    // closed, the OpenTeam page was refreshed, or its frame reloaded. The site most often goes on
+    // writing the reply, so the new page is asked to read it there, going on from what had been read
+    // (resumeReply). A prompt that had not reached the site has no reply there: that reply is ended
+    // now, as when its page is closed, instead of the member showing as replying until it counts as
+    // stuck. The same page reporting again (the OpenTeam page asks until it hears back) leaves it as
+    // it is. A member with no page on record had its page closed (the side panel's go with it).
     const previous = deps.runtimeFrames.getByRole(chatId, roleId)
     const documentId = sender.documentId
     const pageLoadedAgain = Boolean(previous?.documentId && documentId && previous.documentId !== documentId)
+    const pageClosedBefore = !previous && Boolean(documentId)
 
     // Validate the chat and role before trusting this frame as their host.
     const { store, result } = await mutateStore(store => {
       const chat = requireChat(store, chatId)
       const role = requireRole(store, chat.id, roleId)
-      const settled = pageLoadedAgain && role.status === 'thinking'
+      const resumeReply = (pageLoadedAgain || pageClosedBefore) && role.status === 'thinking' ? replyToResume(store, role) : undefined
+      if (resumeReply) role.updatedAt = timestamp
+      const settled = pageLoadedAgain && role.status === 'thinking' && !resumeReply
         ? settleInterruptedReplies(store, { siteMembers: true, apiMembers: false, onlyRole: { chatId, roleId }, timestamp, newId: deps.newId, getChatStatusFromRoles: deps.getChatStatusFromRoles })
         : []
       if (role.status !== 'thinking') {
@@ -66,16 +74,56 @@ export function createMemberPageHandlers(ctx: MessageHandlerContext) {
       updateConversation(role, readOptionalString(message.conversationUrl), readOptionalString(message.conversationId))
       chat.status = deps.getChatStatusFromRoles(store, chat)
       chat.updatedAt = timestamp
-      return { role, replyHistory: getRoleReplyHistory(store, chat, role.id), settled }
+      return { role, replyHistory: getRoleReplyHistory(store, chat, role.id), settled, resumeReply }
     })
     rememberHost(sender, tabId)
     deps.runtimeFrames.bind({ chatId, roleId, tabId, frameId, ready: true, lastSeenAt: timestamp, ...(documentId ? { documentId } : {}) })
     if (result.settled.length > 0) deps.log.warn('frame-ready:reply-interrupted', { chatId, roleId, settled: result.settled })
+    if (result.resumeReply) deps.log.warn('frame-ready:resume-reply', { chatId, roleId, messageId: result.resumeReply.messageId, readSoFarLength: result.resumeReply.readSoFar.length })
 
     deps.log.info('frame-ready:store-updated', { chatId, roleId, roleName: result.role.name, status: result.role.status, replyHistoryCount: result.replyHistory.length, binding: deps.runtimeFrames.getByRole(chatId, roleId) })
     await deps.broadcastStoreUpdated(store)
     await afterRepliesInterrupted(store, result.settled)
-    return { ok: true, role: result.role, replyHistory: result.replyHistory, store }
+    return { ok: true, role: result.role, replyHistory: result.replyHistory, ...(result.resumeReply ? { resumeReply: result.resumeReply } : {}), store }
+  }
+
+  // The reply a member page loaded again goes on reading, when its prompt reached the site: the site
+  // confirmed it, or the reply had begun to arrive.
+  function replyToResume(store: OpenTeamStore, role: GroupRole): ResumeReply | undefined {
+    if (isExternalModelRole(role)) return undefined
+    const promptMessageId = role.lastPromptMessageId
+    const prompt = promptMessageId ? store.messagesById[promptMessageId] : undefined
+    if (!promptMessageId || prompt?.type !== 'user' || prompt.chatId !== role.chatId) return undefined
+    const live = role.liveReply?.promptMessageId === promptMessageId ? role.liveReply.content : ''
+    const delivered = prompt.deliveryStatus?.[role.id]
+    if (delivered !== 'sent' && delivered !== 'received' && !live) return undefined
+    return { messageId: promptMessageId, ...(role.replyAttemptId ? { replyAttemptId: role.replyAttemptId } : {}), readSoFar: live }
+  }
+
+  // The page asked to go on reading a reply did not find it on the site: the reply is ended, keeping
+  // what had arrived, as when no page was there to read it.
+  const handleRoleResumeFailed = async (message: RuntimeMessage, sender: chrome.runtime.MessageSender) => {
+    const identity = readIdentity(deps, message, sender)
+    const promptMessageId = requireString(message.messageId, '缺少消息 ID')
+    const replyAttemptId = readOptionalString(message.replyAttemptId)
+    const reason = readOptionalString(message.reason) ?? ''
+    const { store, result: settled } = await mutateStore(store => {
+      const role = requireRole(store, requireChat(store, identity.chatId).id, identity.roleId)
+      const current = role.status === 'thinking' && role.lastPromptMessageId === promptMessageId && (!replyAttemptId || !role.replyAttemptId || role.replyAttemptId === replyAttemptId)
+      if (!current) return []
+      const timestamp = deps.now()
+      const settled = settleInterruptedReplies(store, { siteMembers: true, apiMembers: false, onlyRole: { chatId: identity.chatId, roleId: identity.roleId }, timestamp, newId: deps.newId, getChatStatusFromRoles: deps.getChatStatusFromRoles })
+      // Its page is there, and can take the next prompt.
+      role.status = 'ready'
+      const chat = requireChat(store, identity.chatId)
+      chat.status = deps.getChatStatusFromRoles(store, chat)
+      return settled
+    })
+    deps.log.warn('role-resume:failed', { ...identity, promptMessageId, reason, settled })
+    if (settled.length === 0) return { ok: true, settled }
+    await deps.broadcastStoreUpdated(store)
+    await afterRepliesInterrupted(store, settled)
+    return { ok: true, settled }
   }
 
   // What waited for the ended replies (a round, a discussion, a project, a workflow) goes on.
@@ -535,7 +583,7 @@ export function createMemberPageHandlers(ctx: MessageHandlerContext) {
     return { ok: true, store }
   }
 
-  return { handleFrameRoleReady, handleConversationUpdated, handleSendAck, handleRoleStatus, handleSiteStatusUpdate, handleRoleReply, handleRoleReplyProgress, handleRoleReplyResync, handleRepliesInterrupted, handleRoleReplyEnd, handleRoleError }
+  return { handleFrameRoleReady, handleConversationUpdated, handleSendAck, handleRoleStatus, handleSiteStatusUpdate, handleRoleReply, handleRoleReplyProgress, handleRoleReplyResync, handleRepliesInterrupted, handleRoleReplyEnd, handleRoleResumeFailed, handleRoleError }
 }
 
 export type MemberPageHandlers = ReturnType<typeof createMemberPageHandlers>

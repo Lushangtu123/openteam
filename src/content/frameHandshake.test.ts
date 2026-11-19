@@ -16,6 +16,8 @@ function setup() {
     finishLink = () => resolve()
   }))
   const assignRole = vi.fn()
+  const resumeReply = vi.fn()
+  let readyAnswer: Record<string, unknown> = {}
   const handshake = registerFrameRoleHandshake({
     siteAdapter: { getConversationSnapshot: () => ({ conversationId: 'conv', conversationUrl: 'https://chat.deepseek.com/a/chat/s/conv' }), getConversationId: () => 'conv' } as unknown as ChatSiteAdapter,
     roleSession: { assignRole } as unknown as RoleSession,
@@ -25,12 +27,13 @@ function setup() {
     sendRuntimeMessage: async <T,>(message: unknown) => {
       order.push('ready')
       sent.push(message)
-      return { ok: true, role: { id: 'r', name: '甲', chatId: 'c' }, replyHistory: [] } as T
+      return { ok: true, role: { id: 'r', name: '甲', chatId: 'c' }, replyHistory: [], ...readyAnswer } as T
     },
     linkOverPort,
+    resumeReply,
   })
   const assign = (data: Record<string, unknown>) => window.dispatchEvent(new MessageEvent('message', { data: { type: 'OPENTEAM_ASSIGN_FRAME_ROLE', chatId: 'c', roleId: 'r', ...data }, origin: EXTENSION, source: window.parent }))
-  return { handshake, sent, order, linkOverPort, assignRole, assign, finishLink: () => finishLink() }
+  return { handshake, sent, order, linkOverPort, assignRole, resumeReply, assign, finishLink: () => finishLink(), answerReadyWith: (answer: Record<string, unknown>) => { readyAnswer = answer } }
 }
 
 describe('a member page told which member it is', () => {
@@ -58,6 +61,21 @@ describe('a member page told which member it is', () => {
     handshake.announceAgain()
     await vi.waitFor(() => expect(sent).toHaveLength(2))
     expect(sent[1]).toMatchObject({ type: 'TEAM_FRAME_ROLE_READY', roleId: 'r' })
+  })
+
+  it('goes on reading its member\'s reply when the background says it was under way, once it knows its member', async () => {
+    const { assign, assignRole, resumeReply, answerReadyWith } = setup()
+    answerReadyWith({ resumeReply: { messageId: 'm', replyAttemptId: 'a', readSoFar: '写到一半' } })
+    assign({ hostTabId: 7 })
+    await vi.waitFor(() => expect(resumeReply).toHaveBeenCalledWith({ messageId: 'm', replyAttemptId: 'a', readSoFar: '写到一半' }))
+    expect(assignRole.mock.invocationCallOrder[0]).toBeLessThan(resumeReply.mock.invocationCallOrder[0])
+  })
+
+  it('does not resume anything when no reply was under way', async () => {
+    const { assign, assignRole, resumeReply } = setup()
+    assign({ hostTabId: 7 })
+    await vi.waitFor(() => expect(assignRole).toHaveBeenCalled())
+    expect(resumeReply).not.toHaveBeenCalled()
   })
 
   it('ignores an assignment from anywhere but the OpenTeam page around it', () => {

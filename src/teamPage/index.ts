@@ -60,6 +60,7 @@ import { getSafeSupportedChatIframeSrcForRole } from '../group/conversationUrl'
 import { normalizeLanguage, translateUi } from '../shared/i18n'
 import { createSidePanel, isSidePanel } from './sidePanel'
 import { movePanelTools } from './panelTools'
+import { createPanelHandover } from './panelHandover'
 import { PANEL_PORT_NAME } from '../group/runtimeProtocol'
 import type { RolePageHealth } from './roleHealth'
 
@@ -142,6 +143,12 @@ const primaryCoordinator = createTeamPagePrimaryCoordinator({
   navigator,
   window,
   onPrimaryChange: handlePrimaryModeChange,
+  log,
+})
+// When the side panel opens, this tab keeps the member pages while a member replies.
+const panelHandover = createPanelHandover({
+  replying: () => primaryCoordinator.isPrimary() && membersReplying(),
+  yieldToPanel: yielding => primaryCoordinator.yieldToPanel(yielding),
   log,
 })
 
@@ -635,6 +642,19 @@ function applyStore(nextStore: OpenTeamStore): void {
   syncIframeHost()
   render()
   notifyRoleReadyWaiters()
+  panelHandover.storeChanged()
+}
+
+// A web member is writing a reply.
+function membersReplying(): boolean {
+  return Object.values(store.rolesById).some(role => role.modelSource !== 'external' && role.status === 'thinking')
+}
+
+// In the side panel, before the OpenTeam tab has handed over the member pages (panelHandover.ts).
+function renderPanelHandoverNote(): void {
+  const note = teamDomRefs.panelHandoverNoteEl
+  note.hidden = !(inSidePanel && !primaryCoordinator.isPrimary() && membersReplying())
+  note.textContent = translateUi('成员正在 OpenTeam 标签页里写回复，写完后由侧边栏接手', normalizeLanguage(store.settings.language))
 }
 
 function getCurrentChat(): GroupChat | undefined {
@@ -704,6 +724,7 @@ function render(): void {
   updateNotice.render()
   backupReminderView.render()
   webPageOfferView.render()
+  renderPanelHandoverNote()
   replyComparisonView.refresh()
   teamFormationView.refresh()
   renderTemplates()
@@ -784,7 +805,7 @@ function handlePush(message: StorePushMessage, sender: chrome.runtime.MessageSen
   {
     if (!message || typeof message.type !== 'string') return false
     if (message.type === 'TEAM_PANEL_PRESENCE') {
-      if (!inSidePanel) primaryCoordinator.yieldToPanel(message.open)
+      if (!inSidePanel) panelHandover.panelChanged(message.open)
       return false
     }
     if (message.type === 'TEAM_ROLE_FOCUS') {
@@ -1010,7 +1031,7 @@ async function boot(): Promise<void> {
   // An OpenTeam tab opened while a side panel holds the member pages leaves them to it.
   if (!inSidePanel) {
     const presence = await sendRuntimeMessage<unknown>('TEAM_PANEL_PRESENCE_GET').catch(() => undefined) as { open?: boolean } | undefined
-    if (presence?.open) primaryCoordinator.yieldToPanel(true)
+    if (presence?.open) panelHandover.panelChanged(true)
   }
   window.addEventListener('pagehide', () => primaryCoordinator.dispose(), { once: true })
   registerRuntimePush()

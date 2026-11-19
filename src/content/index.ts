@@ -254,6 +254,8 @@ function handleResyncReplyMessage(message: Extract<BackgroundToRoleMessage, { ty
 function handleStopGenerationMessage(message: Extract<BackgroundToRoleMessage, { type: 'TEAM_STOP_GENERATION' }>, sendResponse: (response?: unknown) => void): void {
   // A prompt still waiting for the site is not sent once its reply is stopped.
   if (promptWaitingForSite && (!message.messageId || message.messageId === promptWaitingForSite.messageId)) promptWaitingForSite.stopped = true
+  // Nor is a reply this page was going on reading (after its member's earlier page went) read on.
+  replyObserver?.cancelResume()
   const activePrompt = roleSession.getActivePrompt()
   log.info('message:stop-generation', {
     chatId: message.chatId,
@@ -290,6 +292,8 @@ function handleStopGenerationMessage(message: Extract<BackgroundToRoleMessage, {
 }
 
 function handleSendPromptMessage(message: Extract<BackgroundToRoleMessage, { type: 'TEAM_SEND_PROMPT' }>, sendResponse: (response?: unknown) => void): void {
+  // A new prompt for the member: the reply this page was going on reading is over.
+  replyObserver?.cancelResume()
   const promptChatId = message.chatId || roleSession.getAssignedChatId()
   const promptRoleId = message.roleId || roleSession.getAssignedRole()?.roleId || ''
   const isRetry = message.isRetry ?? false
@@ -430,6 +434,9 @@ function startOpenTeam(): void {
         seedStoredRoleReplies: replies => replyObserver?.seedStoredRoleReplies(replies),
         sendRuntimeMessage: message => sendBackgroundMessage(message),
         linkOverPort: () => memberLink.start(),
+        resumeReply: resume => {
+          void replyObserver?.resumeReply(resume)
+        },
       })
       startStatusHeartbeat()
     }

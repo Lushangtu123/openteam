@@ -143,6 +143,8 @@ async function bootContentEntrypoint(options: { embedded: boolean; directEmbedde
     startReplyReporting: vi.fn(),
     seedStoredRoleReplies: vi.fn(),
     resetForAssignedRole: vi.fn(),
+    resumeReply: vi.fn(async () => 'reported' as const),
+    cancelResume: vi.fn(),
   }
   vi.doMock('./typingTurn', () => ({
     requestTypingTurn: () => ({ granted: Promise.resolve(), done: vi.fn() }),

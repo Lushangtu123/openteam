@@ -17,6 +17,9 @@ type BackgroundHarness = {
   getStore: () => Promise<OpenTeamStore>
   invoke: (message: RuntimeMessage, sender?: MessageSender) => Promise<unknown>
   invokeRaw: (message: RuntimeMessage, sender: MessageSender) => Promise<unknown>
+  // Chrome says the tab closed (or a side panel member page's port did), while an OpenTeam tab
+  // stays open.
+  closeTab: (tabId: number) => Promise<void>
 }
 
 async function setupBackground(initialStore?: OpenTeamStore): Promise<BackgroundHarness> {
@@ -28,6 +31,7 @@ async function setupBackground(initialStore?: OpenTeamStore): Promise<Background
   const listeners: Array<(message: RuntimeMessage, sender: MessageSender, sendResponse: (response: unknown) => void) => boolean> = []
   const tabsSendMessage = vi.fn().mockResolvedValue({ ok: true })
   const runtimeSendMessage = vi.fn().mockResolvedValue({ ok: true })
+  const tabRemovedListeners: Array<(tabId: number) => void> = []
 
   vi.stubGlobal('chrome', {
     runtime: {
@@ -60,7 +64,8 @@ async function setupBackground(initialStore?: OpenTeamStore): Promise<Background
     tabs: {
       sendMessage: tabsSendMessage,
       create: vi.fn().mockResolvedValue({}),
-      onRemoved: { addListener: vi.fn() },
+      onRemoved: { addListener: vi.fn(listener => tabRemovedListeners.push(listener)) },
+      query: vi.fn().mockResolvedValue([{ id: 900, url: 'chrome-extension://test/team.html' }]),
     },
     action: {
       onClicked: { addListener: vi.fn() },
@@ -84,6 +89,10 @@ async function setupBackground(initialStore?: OpenTeamStore): Promise<Background
       new Promise(resolve => {
         listeners[0](message, sender, resolve)
       }),
+    closeTab: async tabId => {
+      for (const listener of tabRemovedListeners) listener(tabId)
+      for (let i = 0; i < 10; i++) await new Promise(resolve => setTimeout(resolve, 0))
+    },
   }
 }
 
@@ -1958,7 +1967,7 @@ describe('memory a member proposes', () => {
 })
 
 describe('a member page loaded again while its member replies', () => {
-  it('ends that reply, keeping what arrived, when a new page reports in; the same page reporting again changes nothing', async () => {
+  async function replyUnderWay() {
     const store = makeStore()
     store.settings.language = 'zh-CN'
     store.currentChatId = 'chat-1'
@@ -1967,20 +1976,51 @@ describe('a member page loaded again while its member replies', () => {
     store.rolesById['role-1'] = makeRole('chat-1', 'role-1', '工程师', {})
     const harness = await setupBackground(store)
     const frame = (documentId: string) => ({ tab: { id: 101 } as chrome.tabs.Tab, frameId: 7, url: 'https://gemini.google.com/', documentId })
-    const ready = (documentId: string) => harness.invoke({ type: 'TEAM_FRAME_ROLE_READY', chatId: 'chat-1', roleId: 'role-1', hostTabId: 900 }, frame(documentId))
+    const ready = (documentId: string) => harness.invoke({ type: 'TEAM_FRAME_ROLE_READY', chatId: 'chat-1', roleId: 'role-1', hostTabId: 900 }, frame(documentId)) as Promise<{ ok: boolean; resumeReply?: { messageId: string; replyAttemptId?: string; readSoFar: string } }>
 
     await ready('doc-1')
     const sent = await harness.invoke({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@all 写一段说明' }) as { ok: boolean; message: { id: string } }
-    await harness.invoke({ type: 'TEAM_SEND_ACK', chatId: 'chat-1', roleId: 'role-1', messageId: sent.message.id }, frame('doc-1'))
-    await harness.invoke({ type: 'TEAM_ROLE_REPLY_PROGRESS', chatId: 'chat-1', roleId: 'role-1', messageId: sent.message.id, content: '写到一半' }, frame('doc-1'))
-    expect((await harness.getStore()).rolesById['role-1'].status).toBe('thinking')
+    return { harness, frame, ready, promptId: sent.message.id }
+  }
+
+  it('asks the new page to go on reading the reply, which then arrives as usual; the same page reporting again changes nothing', async () => {
+    const { harness, frame, ready, promptId } = await replyUnderWay()
+    await harness.invoke({ type: 'TEAM_SEND_ACK', chatId: 'chat-1', roleId: 'role-1', messageId: promptId }, frame('doc-1'))
+    await harness.invoke({ type: 'TEAM_ROLE_REPLY_PROGRESS', chatId: 'chat-1', roleId: 'role-1', messageId: promptId, content: '写到一半' }, frame('doc-1'))
+    const attemptId = (await harness.getStore()).rolesById['role-1'].replyAttemptId
 
     // The OpenTeam page asks again until it hears back: the same page, still reading.
-    await ready('doc-1')
+    expect((await ready('doc-1')).resumeReply).toBeUndefined()
     expect((await harness.getStore()).rolesById['role-1'].status).toBe('thinking')
 
-    // The OpenTeam page was refreshed: a new page for the member, which is not reading the reply.
-    await ready('doc-2')
+    // The member page was loaded again (the side panel was opened or closed, the OpenTeam page was
+    // refreshed): the site may well be writing the reply still, so the new page reads it from there.
+    const answer = await ready('doc-2')
+    expect(answer.resumeReply).toEqual({ messageId: promptId, replyAttemptId: attemptId, readSoFar: '写到一半' })
+    const waiting = await harness.getStore()
+    expect(waiting.rolesById['role-1']).toMatchObject({ status: 'thinking', lastPromptMessageId: promptId })
+    expect(waiting.chatsById['chat-1'].messageIds.map(id => waiting.messagesById[id]).filter(message => message.type === 'assistant')).toEqual([])
+
+    await harness.invoke({ type: 'TEAM_ROLE_REPLY', chatId: 'chat-1', roleId: 'role-1', messageId: promptId, replyAttemptId: attemptId, content: '写到一半，后面也写完了。' }, frame('doc-2'))
+    const after = await harness.getStore()
+    expect(after.rolesById['role-1'].status).toBe('ready')
+    const reply = after.chatsById['chat-1'].messageIds.map(id => after.messagesById[id]).find(message => message.type === 'assistant')!
+    expect(reply).toMatchObject({ status: 'received', content: '写到一半，后面也写完了。' })
+    expect(after.messagesById[promptId].deliveryStatus?.['role-1']).toBe('received')
+  })
+
+  it('ends the reply, keeping what arrived, when the new page cannot find it on the site', async () => {
+    const { harness, frame, ready, promptId } = await replyUnderWay()
+    await harness.invoke({ type: 'TEAM_SEND_ACK', chatId: 'chat-1', roleId: 'role-1', messageId: promptId }, frame('doc-1'))
+    await harness.invoke({ type: 'TEAM_ROLE_REPLY_PROGRESS', chatId: 'chat-1', roleId: 'role-1', messageId: promptId, content: '写到一半' }, frame('doc-1'))
+    const answer = await ready('doc-2')
+    expect(answer.resumeReply?.messageId).toBe(promptId)
+
+    // An outdated report (another prompt) leaves it alone.
+    await harness.invoke({ type: 'TEAM_ROLE_RESUME_FAILED', chatId: 'chat-1', roleId: 'role-1', messageId: 'msg-other', reason: '页面上没有找到这条回复' }, frame('doc-2'))
+    expect((await harness.getStore()).rolesById['role-1'].status).toBe('thinking')
+
+    await harness.invoke({ type: 'TEAM_ROLE_RESUME_FAILED', chatId: 'chat-1', roleId: 'role-1', messageId: promptId, replyAttemptId: answer.resumeReply?.replyAttemptId, reason: '页面上没有找到这条回复' }, frame('doc-2'))
     const after = await harness.getStore()
     expect(after.rolesById['role-1']).toMatchObject({ status: 'ready' })
     expect(after.rolesById['role-1'].lastPromptMessageId).toBeUndefined()
@@ -1988,7 +2028,25 @@ describe('a member page loaded again while its member replies', () => {
     expect(reply.status).toBe('received')
     expect(reply.content).toContain('写到一半')
     expect(reply.content).toContain('成员页面就关闭或重新加载了')
-    expect(after.messagesById[sent.message.id].deliveryStatus?.['role-1']).toBe('error')
+    expect(after.messagesById[promptId].deliveryStatus?.['role-1']).toBe('error')
+  })
+
+  it('ends the reply at once when its prompt had not reached the site: there is nothing to read there', async () => {
+    const { harness, ready, promptId } = await replyUnderWay()
+    const answer = await ready('doc-2')
+    expect(answer.resumeReply).toBeUndefined()
+    const after = await harness.getStore()
+    expect(after.rolesById['role-1'].status).toBe('ready')
+    expect(after.messagesById[promptId].deliveryStatus?.['role-1']).toBe('error')
+  })
+
+  it('asks a page to resume when the member had no page on record (its earlier page closed with the side panel)', async () => {
+    const { harness, frame, ready, promptId } = await replyUnderWay()
+    await harness.invoke({ type: 'TEAM_SEND_ACK', chatId: 'chat-1', roleId: 'role-1', messageId: promptId }, frame('doc-1'))
+    await harness.closeTab(101)
+    const answer = await ready('doc-2')
+    expect(answer.resumeReply).toMatchObject({ messageId: promptId, readSoFar: '' })
+    expect((await harness.getStore()).rolesById['role-1'].status).toBe('thinking')
   })
 
   it('leaves the reply alone when the page id is missing (an older Chrome): it cannot tell a new page from the same one', async () => {

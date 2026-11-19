@@ -204,7 +204,7 @@ Attached images are stored in the browser (IndexedDB) and uploaded only when you
 - Embedding sites needs response-header changes through `declarativeNetRequest`, a heavier permission than a normal extension.
 - A site can refuse to run inside other pages. OpenTeam shows this on the member's status and does not work around it; such a model can still join as an API member.
 - Signed-out sessions have limits: signed-out Gemini does not send images, and signed-out Grok asks you to sign in before drawing.
-- Opening or closing the side panel reloads members' AI pages, so a reply being written is cut off, as when a page is refreshed.
+- When the side panel opens while members are writing replies, the OpenTeam tab finishes those replies before handing over, waiting 3 minutes at most. Closing the side panel or refreshing the OpenTeam page reloads members' AI pages, and the new page goes on reading the reply from the site; if the site stopped writing when the page closed, only what had been read is kept, and **Resync full reply** reads it again.
 - Chrome lets no extension read `chrome://` pages, other extensions' pages or the Chrome Web Store, so those pages cannot be attached.
 - Voice input needs a network connection.
 - Famous-person advisor templates are prompts inspired by public ideas, not real people.

@@ -423,6 +423,7 @@ describe('background message handlers', () => {
       'TEAM_ROLE_REPLY',
       'TEAM_ROLE_REPLY_PROGRESS',
       'TEAM_ROLE_REPLY_RESYNC',
+      'TEAM_ROLE_RESUME_FAILED',
       'TEAM_ROLE_ERROR',
       'GROUP_REPLIES_INTERRUPTED',
       'GROUP_ROLE_REPLY_END',

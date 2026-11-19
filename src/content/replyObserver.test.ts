@@ -2,7 +2,7 @@
 
 import { describe, expect, it, vi } from 'vitest'
 import type { RoleToBackgroundMessage } from '../group/runtimeProtocol'
-import { createReplyObserver, STALLED_GENERATING_MS } from './replyObserver'
+import { createReplyObserver, RESUME_FIND_MS, STALLED_GENERATING_MS } from './replyObserver'
 import type { RoleSession } from './roleSession'
 import { createChatGptAdapter } from './sites/chatgpt'
 import { createDeepSeekAdapter } from './sites/deepseek'
@@ -1046,6 +1046,121 @@ describe('createReplyObserver', () => {
       content: finalText,
     }))
 
+    vi.useRealTimers()
+  })
+})
+
+describe('a member page loaded again goes on reading the reply under way', () => {
+  function setup(options: { html: string; generating?: () => boolean; history?: string[] }) {
+    vi.useFakeTimers()
+    document.body.innerHTML = options.html
+    const sentMessages: RoleToBackgroundMessage[] = []
+    const roleSession = createFakeRoleSession()
+    const adapter = createFakeAdapter({ isGenerating: options.generating ?? (() => false) })
+    const observer = createReplyObserver({
+      siteAdapter: adapter,
+      roleSession,
+      log: createFakeLog(),
+      sendRuntimeMessage: async message => {
+        sentMessages.push(message)
+        return { ok: true } as never
+      },
+      reportRoleError: vi.fn(),
+    })
+    observer.seedStoredRoleReplies(options.history)
+    const sent = (type: RoleToBackgroundMessage['type']) => sentMessages.filter(message => message.type === type)
+    return { observer, roleSession, adapter, sentMessages, sent }
+  }
+
+  it('waits while the site still writes it, then reports the whole reply for that prompt', async () => {
+    let generating = true
+    const { observer, sent } = setup({ html: '<message-content id="old">上一个回答。</message-content><message-content id="new">写到一半</message-content>', generating: () => generating, history: ['上一个回答。'] })
+    const outcome = observer.resumeReply({ messageId: 'msg-1', replyAttemptId: 'attempt-1', readSoFar: '写到一半' })
+
+    await vi.advanceTimersByTimeAsync(10_000)
+    document.getElementById('new')!.textContent = '写到一半，后面也写完了。'
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(sent('TEAM_ROLE_REPLY')).toEqual([])
+    // What has arrived shows in the chat meanwhile.
+    expect(sent('TEAM_ROLE_REPLY_PROGRESS')).toContainEqual(expect.objectContaining({ messageId: 'msg-1', replyAttemptId: 'attempt-1', content: '写到一半，后面也写完了。' }))
+
+    generating = false
+    await vi.advanceTimersByTimeAsync(10_000)
+    await expect(outcome).resolves.toBe('reported')
+    expect(sent('TEAM_ROLE_REPLY')).toEqual([expect.objectContaining({ messageId: 'msg-1', replyAttemptId: 'attempt-1', content: '写到一半，后面也写完了。' })])
+    expect(sent('TEAM_ROLE_RESUME_FAILED')).toEqual([])
+    vi.useRealTimers()
+  })
+
+  it('reports a reply the site finished meanwhile', async () => {
+    const { observer, sent } = setup({ html: '<message-content id="new">写到一半，后面也写完了。</message-content>' })
+    const outcome = observer.resumeReply({ messageId: 'msg-1', replyAttemptId: 'attempt-1', readSoFar: '写到一半' })
+    await vi.advanceTimersByTimeAsync(10_000)
+    await expect(outcome).resolves.toBe('reported')
+    expect(sent('TEAM_ROLE_REPLY')).toEqual([expect.objectContaining({ messageId: 'msg-1', content: '写到一半，后面也写完了。' })])
+    vi.useRealTimers()
+  })
+
+  it('reports a reply that had not begun to arrive, once the page shows it', async () => {
+    const { observer, sent } = setup({ html: '<message-content id="old">上一个回答。</message-content>', history: ['上一个回答。'] })
+    const outcome = observer.resumeReply({ messageId: 'msg-1', readSoFar: '' })
+    await vi.advanceTimersByTimeAsync(8_000)
+    document.body.insertAdjacentHTML('beforeend', '<message-content id="new">新的回答。</message-content>')
+    await vi.advanceTimersByTimeAsync(10_000)
+    await expect(outcome).resolves.toBe('reported')
+    expect(sent('TEAM_ROLE_REPLY')).toEqual([expect.objectContaining({ messageId: 'msg-1', content: '新的回答。' })])
+    vi.useRealTimers()
+  })
+
+  it('says it could not when the site shows no more than had been read: it stopped when the page closed', async () => {
+    const { observer, sent } = setup({ html: '<message-content id="new">写到一半</message-content>' })
+    const outcome = observer.resumeReply({ messageId: 'msg-1', replyAttemptId: 'attempt-1', readSoFar: '写到一半' })
+    await vi.advanceTimersByTimeAsync(10_000)
+    await expect(outcome).resolves.toBe('lost')
+    expect(sent('TEAM_ROLE_REPLY')).toEqual([])
+    expect(sent('TEAM_ROLE_RESUME_FAILED')).toEqual([expect.objectContaining({ chatId: 'chat-1', roleId: 'role-1', messageId: 'msg-1', replyAttemptId: 'attempt-1' })])
+    vi.useRealTimers()
+  })
+
+  it('says it could not when the page shows only earlier replies', async () => {
+    const { observer, sent } = setup({ html: '<message-content id="old">上一个回答。</message-content>', history: ['上一个回答。'] })
+    const outcome = observer.resumeReply({ messageId: 'msg-1', readSoFar: '' })
+    await vi.advanceTimersByTimeAsync(RESUME_FIND_MS + 5_000)
+    await expect(outcome).resolves.toBe('lost')
+    expect(sent('TEAM_ROLE_REPLY')).toEqual([])
+    expect(sent('TEAM_ROLE_RESUME_FAILED')).toHaveLength(1)
+    vi.useRealTimers()
+  })
+
+  it('takes a reply the site keeps saying it writes, with no new text for 3 minutes, and stops the site', async () => {
+    const { observer, adapter, sent } = setup({ html: '<message-content id="new">写到一半，其实已经写完了。</message-content>', generating: () => true })
+    const outcome = observer.resumeReply({ messageId: 'msg-1', readSoFar: '写到一半' })
+    await vi.advanceTimersByTimeAsync(STALLED_GENERATING_MS + 10_000)
+    await expect(outcome).resolves.toBe('reported')
+    expect(sent('TEAM_ROLE_REPLY')).toEqual([expect.objectContaining({ content: '写到一半，其实已经写完了。', stalledWhileGenerating: true })])
+    expect(adapter.stopGenerating).toHaveBeenCalled()
+    // Meanwhile it said now and then that the site was still writing, so it did not count as stuck.
+    expect(sent('TEAM_ROLE_STATUS').filter(message => 'status' in message && message.status === 'generating').length).toBeGreaterThanOrEqual(2)
+    vi.useRealTimers()
+  })
+
+  it('does nothing when this page is reading that reply already (the background restarted)', async () => {
+    const { observer, roleSession, sentMessages } = setup({ html: '<message-content id="new">写到一半</message-content>' })
+    roleSession.startPrompt('msg-1', 'attempt-1')
+    await expect(observer.resumeReply({ messageId: 'msg-1', replyAttemptId: 'attempt-1', readSoFar: '写到一半' })).resolves.toBe('already')
+    expect(sentMessages).toEqual([])
+    vi.useRealTimers()
+  })
+
+  it('stops when the reply is stopped or a new prompt comes', async () => {
+    const { observer, sent } = setup({ html: '<message-content id="new">写到一半</message-content>', generating: () => true })
+    const outcome = observer.resumeReply({ messageId: 'msg-1', readSoFar: '写到一半' })
+    await vi.advanceTimersByTimeAsync(5_000)
+    observer.cancelResume()
+    await vi.advanceTimersByTimeAsync(STALLED_GENERATING_MS + 10_000)
+    await expect(outcome).resolves.toBe('cancelled')
+    expect(sent('TEAM_ROLE_REPLY')).toEqual([])
+    expect(sent('TEAM_ROLE_RESUME_FAILED')).toEqual([])
     vi.useRealTimers()
   })
 })
