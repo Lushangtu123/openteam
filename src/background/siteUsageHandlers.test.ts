@@ -20,11 +20,11 @@ async function setup() {
 describe('saying a limiting site has recovered', () => {
   it('lifts the mark, keeping the day\'s count, and tells the pages', async () => {
     const { store, run, broadcastStoreUpdated } = await setup()
-    recordSiteSent(store, 'kimi', 100)
+    for (let index = 0; index < 6; index += 1) recordSiteSent(store, 'kimi', 100)
     recordSiteLimit(store, 'kimi', '额度用完', 200)
     await run({ site: 'kimi' })
     expect(activeSiteLimit(store, 'kimi', 300)).toBeUndefined()
-    expect(store.siteUsageBySite?.kimi).toMatchObject({ sent: 1, limitCount: 1 })
+    expect(store.siteUsageBySite?.kimi).toMatchObject({ sent: 6, limitCount: 6 })
     expect(broadcastStoreUpdated).toHaveBeenCalledWith(store)
   })
 

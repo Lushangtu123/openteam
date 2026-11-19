@@ -9,6 +9,9 @@ import type { OpenTeamStore } from './types'
 
 export const SITE_LIMIT_COOLDOWN_MS = 3 * 60 * 60 * 1000
 const NEAR_LIMIT_SHARE = 0.8
+// A site limiting after fewer prompts than this that day was used elsewhere too, or limits by
+// something else than a count: its count is not kept.
+const MIN_LEARNED_LIMIT = 5
 const LIMIT_DETAIL_MAX = 160
 
 export interface SiteUsage {
@@ -21,7 +24,8 @@ export interface SiteUsage {
   limitDetail?: string
   // Until when its members are not sent prompts.
   limitedUntil?: number
-  // How many prompts it had taken that day when it last said so (kept across days).
+  // How many prompts it had taken that day when it last said so, if at least MIN_LEARNED_LIMIT (kept
+  // across days).
   limitCount?: number
   // Members whose prompt the site took while it was marked: a reply from one means it recovered.
   triedRoleIds?: string[]
@@ -72,7 +76,7 @@ export function recordSiteLimit(store: OpenTeamStore, site: ChatSite, detail: st
   const trimmed = detail.trim().slice(0, LIMIT_DETAIL_MAX)
   if (trimmed) usage.limitDetail = trimmed
   else delete usage.limitDetail
-  if (usage.sent > 0) usage.limitCount = usage.sent
+  if (usage.sent >= MIN_LEARNED_LIMIT) usage.limitCount = usage.sent
   delete usage.triedRoleIds
   return true
 }

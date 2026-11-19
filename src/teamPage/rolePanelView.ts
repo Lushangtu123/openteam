@@ -80,8 +80,8 @@ export function createRolePanelView(deps: RolePanelViewDependencies): RolePanelV
     return site ? activeSiteLimit(deps.getStore(), site, now()) : undefined
   }
 
-  // 网站额度提醒: the prompts the member's site took today (its members together), flagged near the
-  // count it was limited at last time.
+  // 网站额度提醒: the prompts the member's site took today (its members together), with the count it
+  // was limited at last time, flagged once today's count nears it.
   function roleSiteUsage(role: GroupRole): HTMLElement | undefined {
     const site = roleSite(role)
     if (!site) return undefined
@@ -90,8 +90,8 @@ export function createRolePanelView(deps: RolePanelViewDependencies): RolePanelV
     const english = language() === 'en'
     const item = document.createElement('span')
     item.className = `role-meta-item role-site-usage${usage.nearLimit ? ' role-site-usage-near' : ''}`
-    item.textContent = usage.nearLimit
-      ? english ? `${usage.sent} sent today, near the ${usage.limitCount} it was limited at` : `今天已发 ${usage.sent} 条，接近上次限流时的 ${usage.limitCount} 条`
+    item.textContent = usage.limitCount
+      ? english ? `${usage.sent} sent today; last limited at ${usage.limitCount}` : `今天已发 ${usage.sent} 条，上次限流时是 ${usage.limitCount} 条`
       : english ? `${usage.sent} sent today` : `今天已发 ${usage.sent} 条`
     item.title = english ? `Messages ${siteLabel(site)} took today, all its members together` : `${siteLabel(site)} 今天收下的消息，用它的成员合计`
     return item

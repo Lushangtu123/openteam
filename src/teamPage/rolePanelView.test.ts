@@ -548,7 +548,7 @@ describe('a member card\'s site use (网站额度提醒)', () => {
     expect(usage.classList.contains('role-site-usage-near')).toBe(false)
   })
 
-  it('warns near the count the site was limited at last time', () => {
+  it('warns near the count the site was limited at last time, giving it', () => {
     const yesterday = now - 24 * 60 * 60 * 1000
     const { roleListEl } = render(store => {
       for (let index = 0; index < 10; index += 1) recordSiteSent(store, 'kimi', yesterday)
@@ -557,8 +557,21 @@ describe('a member card\'s site use (网站额度提醒)', () => {
       for (let index = 0; index < 8; index += 1) recordSiteSent(store, 'kimi', now)
     })
     const usage = roleListEl.querySelector('.role-site-usage')!
-    expect(usage.textContent).toBe('今天已发 8 条，接近上次限流时的 10 条')
+    expect(usage.textContent).toBe('今天已发 8 条，上次限流时是 10 条')
     expect(usage.classList.contains('role-site-usage-near')).toBe(true)
+  })
+
+  it('gives the count it was limited at without a warning while today\'s is still low', () => {
+    const yesterday = now - 24 * 60 * 60 * 1000
+    const { roleListEl } = render(store => {
+      for (let index = 0; index < 10; index += 1) recordSiteSent(store, 'kimi', yesterday)
+      recordSiteLimit(store, 'kimi', '额度用完', yesterday)
+      clearSiteLimit(store, 'kimi')
+      recordSiteSent(store, 'kimi', now)
+    })
+    const usage = roleListEl.querySelector('.role-site-usage')!
+    expect(usage.textContent).toBe('今天已发 1 条，上次限流时是 10 条')
+    expect(usage.classList.contains('role-site-usage-near')).toBe(false)
   })
 
   it('says the site is limiting, until when, and lifts it on 已恢复', async () => {

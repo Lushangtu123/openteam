@@ -56,10 +56,19 @@ describe('a site that says it is limiting', () => {
     expect(activeSiteLimit(store, 'kimi', at(16, 20))?.limitedAt).toBe(at(16, 18))
   })
 
-  it('keeps the count it had reached, unless it had taken none today', () => {
+  it('keeps the count it had reached only when that was at least 5, keeping an earlier one otherwise', () => {
     const store = createDefaultStore()
+    for (let index = 0; index < 4; index += 1) recordSiteSent(store, 'kimi', at(16, 9))
     recordSiteLimit(store, 'kimi', '限流', at(16, 9))
     expect(siteUsageToday(store, 'kimi', at(16, 9)).limitCount).toBeUndefined()
+    clearSiteLimit(store, 'kimi')
+    recordSiteSent(store, 'kimi', at(16, 10))
+    recordSiteLimit(store, 'kimi', '限流', at(16, 10))
+    expect(siteUsageToday(store, 'kimi', at(16, 10)).limitCount).toBe(5)
+    clearSiteLimit(store, 'kimi')
+    recordSiteSent(store, 'kimi', at(17, 9))
+    recordSiteLimit(store, 'kimi', '限流', at(17, 9))
+    expect(siteUsageToday(store, 'kimi', at(17, 9)).limitCount).toBe(5)
   })
 
   it('is used again once the user says it recovered', () => {
