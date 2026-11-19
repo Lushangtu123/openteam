@@ -104,8 +104,9 @@ export function createMessageSendHandler(ctx: MessageHandlerContext, roundHandle
         chat.updatedAt = timestamp
         return { message: note, deliveries: [], externalDeliveries: [] }
       }
-      // A vote is answered by every member at once, whatever the group's way of answering.
-      if (!teamInvitation && !poll && startsDiscussion(chat, finalTargetRoleIds)) {
+      // A vote, and a question asked with sources (then fact-checked), are answered by every member at
+      // once, whatever the group's way of answering.
+      if (!teamInvitation && !poll && message.wantsSources !== true && startsDiscussion(chat, finalTargetRoleIds)) {
         return startDiscussion(store, chat, parsed, finalTargetRoleIds, uploads, message.refreshPersona === true, timestamp)
       }
 

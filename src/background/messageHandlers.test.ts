@@ -3510,11 +3510,11 @@ describe('a vote (投票)', () => {
 
 describe('a message asked with sources (要来源)', () => {
   // 工程师 and 设计师 answer with sources; 校对 (also an API member) sat out and checks the facts.
-  async function setupSources() {
+  async function setupSources(chatFields: Partial<GroupChat> = {}) {
     vi.resetModules()
     const startingStore = createStoreWithTwoApiRoles()
     startingStore.rolesById['role-3'] = { ...structuredClone(startingStore.rolesById['role-1']), id: 'role-3', name: '校对', systemPrompt: '核对事实' }
-    Object.assign(startingStore.chatsById['chat-1'], { mode: 'collaborative', crossReview: true, roleIds: ['role-1', 'role-2', 'role-3'] })
+    Object.assign(startingStore.chatsById['chat-1'], { mode: 'collaborative', crossReview: true, roleIds: ['role-1', 'role-2', 'role-3'], ...chatFields })
     let currentStore = structuredClone(startingStore)
     vi.doMock('./storeAccess', async importOriginal => {
       const actual = await importOriginal<typeof import('./storeAccess')>()
@@ -3586,6 +3586,16 @@ describe('a message asked with sources (要来源)', () => {
     ctx.checkLinks.mockClear()
     await ctx.route('GROUP_LINKS_CHECK', { messageId: answer.id })
     expect(ctx.checkLinks).toHaveBeenCalledWith(['https://made-up.example/ev'])
+  })
+
+  it('is answered by everyone at once in a group that takes turns, then fact-checked (seen live)', async () => {
+    const ctx = await setupSources({ discussionMode: true })
+    await ctx.route('GROUP_MESSAGE_SEND', { raw: '@工程师 @设计师 2024 年电动车卖了多少？', wantsSources: true })
+    await vi.waitFor(() => expect(ctx.messages().some(message => message.factCheckOf)).toBe(true))
+    const question = ctx.messages()[0]
+    expect(question).toMatchObject({ wantsSources: true })
+    expect(question.discussionTopic).toBeUndefined()
+    expect(ctx.messages().some(message => message.discussionTurnOf)).toBe(false)
   })
 
   it('is not asked for sources on a vote, nor on a message to nobody', async () => {
