@@ -1,4 +1,4 @@
-import { checkUploadFile, MAX_UPLOADS_PER_MESSAGE, UPLOAD_ACCEPT, type MessageUpload, type UploadKind } from '../group/messageUploads'
+import { checkUploadFile, MAX_TEXT_UPLOAD_BYTES, MAX_UPLOADS_PER_MESSAGE, UPLOAD_ACCEPT, type MessageUpload, type UploadKind } from '../group/messageUploads'
 import { readDocumentText, type DocumentTextLabels } from './documentText'
 import { createIcon } from './icons'
 
@@ -13,8 +13,8 @@ export interface ComposerAttachmentsDependencies {
   showError(message: string): void
   onChange(): void
   // Shows a pending text file before it is sent (filePreviewDialog.ts): a PDF or Office file as the
-  // text read from it, which is what is sent.
-  previewFile?(file: { fileName: string; text: string; mimeType?: string }): void
+  // text read from it, which is what is sent. `save` keeps an edit of it (resolving to why it cannot).
+  previewFile?(file: { fileName: string; text: string; mimeType?: string }, save: (text: string) => string | undefined): void
   // Reads a PDF or Office file's text; tests pass their own.
   readDocument?(file: File, labels: DocumentTextLabels): Promise<string>
 }
@@ -27,6 +27,8 @@ export interface PendingAttachment {
   // A PDF or Office file: its text, read as soon as the file is added.
   text?: Promise<string>
   textLength?: number
+  // Changed in the preview before sending.
+  edited?: boolean
 }
 
 export interface ComposerAttachments {
@@ -171,11 +173,11 @@ export function createComposerAttachments(deps: ComposerAttachmentsDependencies)
     name.textContent = item.file.name
     const size = document.createElement('span')
     size.className = 'attachment-chip-size'
-    size.textContent = item.kind !== 'document'
+    size.textContent = (item.kind !== 'document'
       ? formatBytes(item.file.size)
       : item.textLength === undefined
         ? deps.ui('读取中…')
-        : `${formatBytes(item.file.size)} · ${deps.ui(`${item.textLength} 字`)}`
+        : `${formatBytes(item.file.size)} · ${deps.ui(`${item.textLength} 字`)}`) + (item.edited ? ` · ${deps.ui('已编辑')}` : '')
     meta.append(name, size)
     const removeButton = document.createElement('button')
     removeButton.type = 'button'
@@ -191,10 +193,25 @@ export function createComposerAttachments(deps: ComposerAttachmentsDependencies)
   async function preview(item: PendingAttachment): Promise<void> {
     try {
       const text = item.kind === 'document' ? await (item.text ?? Promise.reject(new Error('not read'))) : await readText(item.file)
-      deps.previewFile?.({ fileName: item.file.name, text, mimeType: item.kind === 'document' ? 'text/plain' : item.file.type })
+      deps.previewFile?.({ fileName: item.file.name, text, mimeType: item.kind === 'document' ? 'text/plain' : item.file.type }, edited => saveEdit(item, edited))
     } catch (error) {
       deps.showError(error instanceof Error && error.message !== 'not read' ? error.message : deps.ui(`读不了这个文件：${item.file.name}`))
     }
+  }
+
+  // An edit made in the preview: the file, or a PDF or Office file's text, is what is sent from now on.
+  function saveEdit(item: PendingAttachment, text: string): string | undefined {
+    if (!items.includes(item)) return deps.ui('这个附件已经移除了')
+    if (new TextEncoder().encode(text).length > MAX_TEXT_UPLOAD_BYTES) return deps.ui(`文本文件太大：${item.file.name}（最大 1 MB）`)
+    if (item.kind === 'document') {
+      item.text = Promise.resolve(text)
+      item.textLength = text.length
+    } else {
+      item.file = new File([text], item.file.name, { type: item.file.type || 'text/plain' })
+    }
+    item.edited = true
+    changed()
+    return undefined
   }
 
   async function readUploads(): Promise<MessageUpload[]> {

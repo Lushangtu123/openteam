@@ -116,9 +116,31 @@ describe('composer attachments', () => {
     const openers = [...trayEl.querySelectorAll<HTMLButtonElement>('.attachment-chip-open')]
     expect(openers.map(button => button.getAttribute('aria-label'))).toEqual(['查看 notes.md', '查看 report.pdf'])
     openers[0].click()
-    await vi.waitFor(() => expect(previewFile).toHaveBeenCalledWith({ fileName: 'notes.md', text: '# 目标', mimeType: 'text/markdown' }))
+    await vi.waitFor(() => expect(previewFile).toHaveBeenCalledWith({ fileName: 'notes.md', text: '# 目标', mimeType: 'text/markdown' }, expect.any(Function)))
     openers[1].click()
-    await vi.waitFor(() => expect(previewFile).toHaveBeenCalledWith({ fileName: 'report.pdf', text: '季度目标', mimeType: 'text/plain' }))
+    await vi.waitFor(() => expect(previewFile).toHaveBeenCalledWith({ fileName: 'report.pdf', text: '季度目标', mimeType: 'text/plain' }, expect.any(Function)))
+  })
+
+  it('sends what was edited in the preview, says it was edited, and refuses a file too big', async () => {
+    const previewFile = vi.fn()
+    const { attachments, trayEl, choose } = setup(async () => '季度目标', previewFile)
+    choose([new File(['# 目标'], 'notes.md', { type: 'text/markdown' }), new File(['%PDF'], 'report.pdf', { type: 'application/pdf' })])
+    await vi.waitFor(() => expect(attachments.list()[1].textLength).toBe(4))
+    const openers = () => [...trayEl.querySelectorAll<HTMLButtonElement>('.attachment-chip-open')]
+    openers()[0].click()
+    await vi.waitFor(() => expect(previewFile).toHaveBeenCalledTimes(1))
+    const saveNotes = previewFile.mock.calls[0][1] as (text: string) => string | undefined
+    expect(saveNotes('# 新目标')).toBeUndefined()
+    expect(saveNotes('x'.repeat(1024 * 1024 + 1))).toBe('文本文件太大：notes.md（最大 1 MB）')
+    openers()[1].click()
+    await vi.waitFor(() => expect(previewFile).toHaveBeenCalledTimes(2))
+    const saveReport = previewFile.mock.calls[1][1] as (text: string) => string | undefined
+    expect(saveReport('只要第一季度')).toBeUndefined()
+    expect([...trayEl.querySelectorAll('.attachment-chip-size')].map(node => node.textContent)).toEqual(['11 B · 已编辑', '4 B · 6 字 · 已编辑'])
+    expect(await attachments.readUploads()).toEqual([
+      { kind: 'text', fileName: 'notes.md', mimeType: 'text/markdown', size: 11, text: '# 新目标' },
+      { kind: 'text', fileName: 'report.pdf', mimeType: 'application/pdf', size: 4, text: '只要第一季度' },
+    ])
   })
 
   it('reads a PDF or Office file as soon as it is added and sends its text', async () => {

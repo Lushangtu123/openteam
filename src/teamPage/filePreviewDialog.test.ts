@@ -44,3 +44,54 @@ describe('previewing an attached text file', () => {
     expect(onClose).toHaveBeenCalled()
   })
 })
+
+describe('editing an attached file before it is sent', () => {
+  it('is offered only when the file can still change', () => {
+    openFilePreview({ fileName: 'a.md', text: '# A' }, { english: false })
+    expect([...document.querySelectorAll('.file-preview-actions button')].map(node => node.textContent)).toEqual(['下载', '关闭'])
+    document.body.innerHTML = ''
+    openFilePreview({ fileName: 'a.md', text: '# A' }, { english: false, onSave: () => undefined })
+    expect([...document.querySelectorAll('.file-preview-actions button')].map(node => node.textContent)).toEqual(['下载', '编辑', '关闭'])
+  })
+
+  it('edits the text, keeps it on 保存 and shows the new version', async () => {
+    const onSave = vi.fn(() => undefined)
+    openFilePreview({ fileName: '网页对比.md', text: PAGES }, { english: false, onSave })
+    const action = (label: string) => [...document.querySelectorAll<HTMLButtonElement>('.file-preview-actions button')].find(node => node.textContent === label)!
+    action('编辑').click()
+    const editor = document.querySelector<HTMLTextAreaElement>('.file-preview-editor')!
+    expect(editor.hidden).toBe(false)
+    expect(editor.value).toBe(PAGES)
+    expect(document.activeElement).toBe(editor)
+    expect([...document.querySelectorAll('.file-preview-actions button')].map(node => node.textContent)).toEqual(['取消编辑', '保存'])
+    editor.value = '# 只留产品 A\n\n价格 99 元'
+    editor.dispatchEvent(new Event('input'))
+    expect(document.querySelector('.file-preview-size')?.textContent).toContain('17 字')
+    action('保存').click()
+    await vi.waitFor(() => expect(onSave).toHaveBeenCalledWith('# 只留产品 A\n\n价格 99 元'))
+    expect(editor.hidden).toBe(true)
+    expect(document.querySelector('.file-preview-body h1')?.textContent).toBe('只留产品 A')
+  })
+
+  it('keeps the file as it was on 取消编辑 or Esc, and refuses an empty file or what the owner refuses', async () => {
+    const onSave = vi.fn((text: string) => text.length > 20 ? '文本文件太大' : undefined)
+    openFilePreview({ fileName: 'a.md', text: '# A' }, { english: false, onSave })
+    const action = (label: string) => [...document.querySelectorAll<HTMLButtonElement>('.file-preview-actions button')].find(node => node.textContent === label)!
+    const editor = document.querySelector<HTMLTextAreaElement>('.file-preview-editor')!
+    action('编辑').click()
+    editor.value = '# B'
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    expect(editor.hidden).toBe(true)
+    expect(document.querySelector('.file-preview-body h1')?.textContent).toBe('A')
+    expect(document.querySelector('.file-preview-modal')).not.toBeNull()
+
+    action('编辑').click()
+    editor.value = '   '
+    action('保存').click()
+    expect(document.querySelector('.team-form-error')?.textContent).toContain('内容不能为空')
+    editor.value = 'x'.repeat(30)
+    action('保存').click()
+    await vi.waitFor(() => expect(document.querySelector('.team-form-error')?.textContent).toBe('文本文件太大'))
+    expect(editor.hidden).toBe(false)
+  })
+})

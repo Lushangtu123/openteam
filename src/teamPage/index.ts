@@ -344,7 +344,7 @@ const composerAttachments = createComposerAttachments({
   ui: source => translateUi(source, normalizeLanguage(store.settings.language)),
   showError,
   onChange: () => renderComposerState(),
-  previewFile: file => openFilePreview(file, { english: normalizeLanguage(store.settings.language) === 'en', onClose: () => messageInputEl.focus() }),
+  previewFile: (file, save) => openFilePreview(file, { english: normalizeLanguage(store.settings.language) === 'en', onClose: () => messageInputEl.focus(), onSave: save }),
 })
 const composerView = createComposerView({
   onSourcesUsed: () => renderSourcesToggle(),

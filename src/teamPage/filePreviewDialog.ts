@@ -1,6 +1,7 @@
 // A text file attached to a message, shown in OpenTeam: before it is sent (from the attachment tray)
 // and after (from the message). Markdown is laid out as it reads; other text is shown as it is. The
-// window has the file's size and a button to download it.
+// window has the file's size and a button to download it. Before sending, the file can be edited
+// (onSave): what is saved is what the members get.
 import { createIcon } from './icons'
 import { renderMarkdownInto } from './markdownRender'
 import { formatBytes } from './composerAttachments'
@@ -15,7 +16,15 @@ export function isMarkdownFile(file: Pick<PreviewFile, 'fileName' | 'mimeType'>)
   return /\.(md|markdown)$/i.test(file.fileName) || /markdown/i.test(file.mimeType ?? '')
 }
 
-export function openFilePreview(file: PreviewFile, options: { english: boolean; onClose?(): void }): { close(): void } {
+export interface FilePreviewOptions {
+  english: boolean
+  onClose?(): void
+  // Keeps an edit; resolves to why it cannot be kept, if it cannot. Without it the file is read-only.
+  onSave?(text: string): string | undefined | Promise<string | undefined>
+}
+
+export function openFilePreview(source: PreviewFile, options: FilePreviewOptions): { close(): void } {
+  let file = source
   document.querySelector('.file-preview-modal')?.remove()
   const t = (zh: string, en: string): string => options.english ? en : zh
   const backdrop = element('div', 'modal-backdrop file-preview-modal')
@@ -31,9 +40,8 @@ export function openFilePreview(file: PreviewFile, options: { english: boolean; 
   const heading = element('div')
   const title = element('h2', 'file-preview-title', file.fileName)
   title.id = 'file-preview-title'
-  const bytes = new TextEncoder().encode(file.text).length
-  const characters = [...file.text].length
-  heading.append(title, element('p', 'tiny file-preview-size', t(`${formatBytes(bytes)} · ${characters} 字`, `${formatBytes(bytes)} · ${characters} characters`)))
+  const size = element('p', 'tiny file-preview-size')
+  heading.append(title, size)
   const closeButton = element('button', 'icon-btn modal-close')
   closeButton.type = 'button'
   closeButton.setAttribute('aria-label', t('关闭', 'Close'))
@@ -44,33 +52,100 @@ export function openFilePreview(file: PreviewFile, options: { english: boolean; 
   const body = element('div', 'file-preview-body')
   body.tabIndex = 0
   body.setAttribute('aria-label', t('文件内容', 'File content'))
-  if (isMarkdownFile(file)) {
-    body.classList.add('file-preview-markdown')
-    renderMarkdownInto(body, file.text)
-  } else {
-    body.append(element('pre', 'file-preview-text', file.text))
-  }
+  const editor = element('textarea', 'file-preview-editor')
+  editor.setAttribute('aria-label', t('编辑文件内容', 'Edit the file'))
+  editor.spellcheck = false
+  editor.addEventListener('input', () => {
+    error.textContent = ''
+    renderSize(editor.value)
+  })
+  const error = element('p', 'team-form-error')
+  error.setAttribute('role', 'alert')
 
   const actions = element('div', 'team-setup-actions file-preview-actions')
-  const download = element('button', 'btn')
-  download.type = 'button'
-  download.append(createIcon('download'), element('span', '', t('下载', 'Download')))
-  download.addEventListener('click', () => downloadFile(file))
-  const done = element('button', 'btn btn-primary', t('关闭', 'Close'))
-  done.type = 'button'
-  done.addEventListener('click', () => close())
-  actions.append(download, done)
+  const download = button(t('下载', 'Download'), 'download', () => downloadFile(file))
+  const edit = button(t('编辑', 'Edit'), 'edit', () => startEditing())
+  const done = button(t('关闭', 'Close'), undefined, () => close(), 'btn btn-primary')
+  const cancelEdit = button(t('取消编辑', 'Cancel editing'), undefined, () => stopEditing())
+  const save = button(t('保存', 'Save'), undefined, () => void saveEdit(), 'btn btn-primary')
 
-  dialog.append(header, body, actions)
+  dialog.append(header, body, editor, error, actions)
   backdrop.append(dialog)
   document.body.append(backdrop)
   document.addEventListener('keydown', handleEscape)
+  showFile()
   body.focus()
 
+  function renderSize(text: string): void {
+    const bytes = new TextEncoder().encode(text).length
+    const characters = [...text].length
+    size.textContent = t(`${formatBytes(bytes)} · ${characters} 字`, `${formatBytes(bytes)} · ${characters} characters`)
+  }
+
+  function showFile(): void {
+    renderSize(file.text)
+    body.replaceChildren()
+    body.classList.toggle('file-preview-markdown', isMarkdownFile(file))
+    if (isMarkdownFile(file)) renderMarkdownInto(body, file.text)
+    else body.append(element('pre', 'file-preview-text', file.text))
+    body.hidden = false
+    editor.hidden = true
+    error.textContent = ''
+    actions.replaceChildren(download, ...(options.onSave ? [edit] : []), done)
+  }
+
+  function startEditing(): void {
+    editor.value = file.text
+    body.hidden = true
+    editor.hidden = false
+    actions.replaceChildren(cancelEdit, save)
+    editor.focus()
+    editor.setSelectionRange(0, 0)
+    editor.scrollTop = 0
+  }
+
+  function stopEditing(): void {
+    showFile()
+    edit.focus()
+  }
+
+  async function saveEdit(): Promise<void> {
+    const text = editor.value
+    if (!text.trim()) {
+      error.textContent = t('内容不能为空；不想要这个文件的话，在输入框上方把它移除。', 'The file cannot be empty; to drop it, remove it above the message box.')
+      editor.focus()
+      return
+    }
+    save.disabled = true
+    try {
+      const refused = await options.onSave?.(text)
+      if (refused) {
+        error.textContent = refused
+        return
+      }
+      file = { ...file, text }
+      showFile()
+      edit.focus()
+    } finally {
+      save.disabled = false
+    }
+  }
+
+  // Esc leaves editing first (keeping the file as it was), then closes.
   function handleEscape(event: KeyboardEvent): void {
     if (event.key !== 'Escape') return
     event.preventDefault()
-    close()
+    if (!editor.hidden) stopEditing()
+    else close()
+  }
+
+  function button(label: string, icon: 'download' | 'edit' | undefined, run: () => void, className = 'btn'): HTMLButtonElement {
+    const node = element('button', className)
+    node.type = 'button'
+    if (icon) node.append(createIcon(icon))
+    node.append(element('span', '', label))
+    node.addEventListener('click', run)
+    return node
   }
 
   function close(): void {
