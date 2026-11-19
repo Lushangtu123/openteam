@@ -21,7 +21,7 @@ function storeWith(task: Partial<ScheduledTask>, roles: GroupRole[] = [role('kim
   return store
 }
 
-async function setup(store: OpenTeamStore, options: { pageOpen?: boolean; framesLoad?: boolean; sendError?: string } = {}) {
+async function setup(store: OpenTeamStore, options: { pageOpen?: boolean; panelOpen?: boolean; framesLoad?: boolean; sendError?: string } = {}) {
   vi.resetModules()
   vi.doMock('./storeAccess', async importOriginal => {
     const actual = await importOriginal<typeof import('./storeAccess')>()
@@ -40,15 +40,16 @@ async function setup(store: OpenTeamStore, options: { pageOpen?: boolean; frames
     recordScheduledRunSent(store, 'chat-1', readScheduledRunRequest(message.scheduledRun)!, id, clock)
     return { ok: true, message: { id } }
   })
-  const openTeamPageInBackground = vi.fn(async () => { pageOpen = true })
+  const showTeamPage = vi.fn(async () => { pageOpen = true })
   const requestRoleRecovery = vi.fn(async (_chatId: string, roleId: string) => { bound.add(roleId); return true })
   const alarms = { create: vi.fn(), clear: vi.fn() }
   const runner = createScheduledTaskRunner({
     loadStore: async () => store,
     route,
     broadcastStoreUpdated: vi.fn(),
-    teamPageOpen: () => pageOpen,
-    openTeamPageInBackground,
+    teamPageOpen: () => pageOpen || Boolean(options.panelOpen),
+    panelOpen: () => Boolean(options.panelOpen),
+    showTeamPage,
     requestRoleRecovery,
     runtimeFrames: { getByRole: (_chatId: string, roleId: string): RuntimeFrameBinding | undefined => bound.has(roleId) ? { chatId: 'chat-1', roleId, tabId: 1, frameId: 2, ready: true, lastSeenAt: 0 } : undefined },
     alarms,
@@ -56,17 +57,17 @@ async function setup(store: OpenTeamStore, options: { pageOpen?: boolean; frames
     now: () => clock,
     log: { info: vi.fn(), warn: vi.fn() },
   })
-  return { runner, route, openTeamPageInBackground, requestRoleRecovery, alarms, SCHEDULED_TASK_ALARM, setClock: (value: number) => { clock = value } }
+  return { runner, route, showTeamPage, requestRoleRecovery, alarms, SCHEDULED_TASK_ALARM, setClock: (value: number) => { clock = value } }
 }
 
 const task = (store: OpenTeamStore) => store.chatsById['chat-1'].scheduledTasks![0]
 
 describe('a group\'s scheduled task coming due', () => {
-  it('opens OpenTeam in the background, has the member\'s page loaded, sends the message and marks it as the task\'s', async () => {
+  it('shows OpenTeam, has the member\'s page loaded, sends the message and marks it as the task\'s', async () => {
     const store = storeWith({})
     const ctx = await setup(store)
     await ctx.runner.checkDue()
-    expect(ctx.openTeamPageInBackground).toHaveBeenCalledTimes(1)
+    expect(ctx.showTeamPage).toHaveBeenCalledTimes(1)
     // The member's page did not load on its own, so the page is asked to load it.
     expect(ctx.requestRoleRecovery).toHaveBeenCalledWith('chat-1', 'kimi', 'scheduled-task')
     expect(ctx.route).toHaveBeenCalledWith({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '总结今天的新闻', scheduledRun: { taskId: 'sched-1', slotAt: at(16, 8, 30) } })
@@ -77,12 +78,20 @@ describe('a group\'s scheduled task coming due', () => {
     expect(ctx.alarms.create).toHaveBeenCalledWith(ctx.SCHEDULED_TASK_ALARM, { when: at(23, 8, 30) })
   })
 
-  it('does not ask the page to reload members whose pages load on their own, nor open a second OpenTeam', async () => {
+  it('shows an open OpenTeam too, a hidden tab not reading replies, and does not reload pages that load on their own', async () => {
     const store = storeWith({})
     const ctx = await setup(store, { pageOpen: true, framesLoad: true })
     await ctx.runner.checkDue()
-    expect(ctx.openTeamPageInBackground).not.toHaveBeenCalled()
+    expect(ctx.showTeamPage).toHaveBeenCalledTimes(1)
     expect(ctx.requestRoleRecovery).not.toHaveBeenCalled()
+    expect(ctx.route).toHaveBeenCalledTimes(1)
+  })
+
+  it('leaves OpenTeam in the side panel, which is shown while open', async () => {
+    const store = storeWith({})
+    const ctx = await setup(store, { panelOpen: true, framesLoad: true })
+    await ctx.runner.checkDue()
+    expect(ctx.showTeamPage).not.toHaveBeenCalled()
     expect(ctx.route).toHaveBeenCalledTimes(1)
   })
 
@@ -98,7 +107,7 @@ describe('a group\'s scheduled task coming due', () => {
     const store = storeWith({ content: '@分析师 总结' }, [role('api-member', { name: '分析师', modelSource: 'external', externalModelId: 'api' }), role('kimi', { name: '研究员', modelSource: 'site', chatSite: 'kimi' })])
     const ctx = await setup(store)
     await ctx.runner.checkDue()
-    expect(ctx.openTeamPageInBackground).not.toHaveBeenCalled()
+    expect(ctx.showTeamPage).not.toHaveBeenCalled()
     expect(ctx.route).toHaveBeenCalledWith(expect.objectContaining({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@分析师 总结' }))
   })
 
@@ -117,7 +126,7 @@ describe('a group\'s scheduled task coming due', () => {
     ctx.setClock(at(16, 21))
     await ctx.runner.checkDue()
     expect(ctx.route).not.toHaveBeenCalled()
-    expect(ctx.openTeamPageInBackground).not.toHaveBeenCalled()
+    expect(ctx.showTeamPage).not.toHaveBeenCalled()
     expect(task(store)).toMatchObject({ lastSlotAt: at(16, 8, 30), lastRun: { status: 'skipped', slotAt: at(16, 8, 30) } })
     expect(task(store).lastRun?.detail).toContain('12 小时')
   })

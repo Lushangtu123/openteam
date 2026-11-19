@@ -1,9 +1,12 @@
 // Runs the groups' 定时任务 (src/group/scheduledTasks.ts). One alarm wakes the background at the
 // next time any task is due; on waking, and whenever the background starts, every due task is dealt
 // with: run, or marked skipped when it was missed by too long. A run opens OpenTeam in the
-// background when it is not open (web members answer only from that page), waits for the asked
-// members' pages, asks the page to load those still missing, then sends the message as the user
-// would. Members whose pages never load are skipped by the send, as they are for the user.
+// When it asks web members, a run shows OpenTeam (opened if need be, made the shown tab of its
+// window, the window not brought in front): a hidden tab barely runs, and its members' replies are
+// not read (seen live: a DeepSeek reply in a never-shown tab went unread for two minutes). It then
+// waits for the asked members' pages, asks the page to load those still missing, and sends the
+// message as the user would. Members whose pages never load are skipped by the send, as they are
+// for the user.
 import { defaultMentionTargetForMessage, parseGroupMentions, roleMentionLabelOptionsFromSettings } from '../group/mentionParser'
 import { findDueSlot, nextScheduledRunAt } from '../group/scheduledTasks'
 import type { GroupRole, OpenTeamStore, RuntimeFrameBinding, ScheduledTask, ScheduledTaskRun } from '../group/types'
@@ -23,10 +26,12 @@ export interface ScheduledTaskRunnerDependencies {
   // The background's own message router.
   route(message: RuntimeMessage): Promise<unknown>
   broadcastStoreUpdated(store: OpenTeamStore): Promise<void> | void
-  // An OpenTeam page (tab) is open and has introduced itself.
+  // An OpenTeam page (tab or side panel) is open and has introduced itself.
   teamPageOpen(): boolean
-  // Opens an OpenTeam tab without bringing it forward; nothing when one is open.
-  openTeamPageInBackground(): Promise<void>
+  // OpenTeam is in the side panel, which is shown while it is open.
+  panelOpen(): boolean
+  // Opens OpenTeam, or makes its tab the shown one in its window, without bringing the window in front.
+  showTeamPage(): Promise<void>
   requestRoleRecovery(chatId: string, roleId: string, reason: string): Promise<boolean>
   runtimeFrames: { getByRole(chatId: string, roleId: string): RuntimeFrameBinding | undefined }
   alarms: {
@@ -128,17 +133,16 @@ export function createScheduledTaskRunner(deps: ScheduledTaskRunnerDependencies)
     }
   }
 
-  // The asked web members' pages, loaded: OpenTeam opened if need be, then a wait for the pages to
+  // The asked web members' pages, shown and loaded: OpenTeam shown, then a wait for the pages to
   // load on their own (the open group's do), then the page asked to load the rest.
   async function prepareMembers(store: OpenTeamStore, chatId: string, task: ScheduledTask): Promise<void> {
     const members = targetWebMembers(store, chatId, task.content)
     if (members.length === 0) return
-    const ready = () => members.filter(role => deps.runtimeFrames.getByRole(chatId, role.id)?.ready)
-    if (ready().length === members.length) return
-    if (!deps.teamPageOpen()) {
-      await deps.openTeamPageInBackground()
+    if (!deps.panelOpen()) {
+      await deps.showTeamPage()
       await waitUntil(() => deps.teamPageOpen(), SCHEDULED_PAGE_WAIT_MS)
     }
+    const ready = () => members.filter(role => deps.runtimeFrames.getByRole(chatId, role.id)?.ready)
     await waitUntil(() => ready().length === members.length, SCHEDULED_MEMBER_WAIT_MS)
     const missing = members.filter(role => !deps.runtimeFrames.getByRole(chatId, role.id)?.ready)
     await Promise.all(missing.map(role => deps.requestRoleRecovery(chatId, role.id, 'scheduled-task').catch(() => false)))

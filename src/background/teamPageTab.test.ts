@@ -70,16 +70,4 @@ describe('showing the OpenTeam page from the toolbar icon', () => {
     expect(tabs.create).toHaveBeenCalledWith({ url: TEAM_URL, active: true, windowId: 4 })
     expect(windows.update).not.toHaveBeenCalled()
   })
-
-  it('opens a tab behind the user\'s for a scheduled task, and leaves an open one where it is', async () => {
-    const closed = setup([])
-    await closed.show({ background: true })
-    expect(closed.tabs.create).toHaveBeenCalledWith({ url: TEAM_URL, active: false })
-
-    const open = setup([{ id: 7, windowId: 1 }])
-    await open.show({ background: true })
-    expect(open.tabs.create).not.toHaveBeenCalled()
-    expect(open.tabs.update).not.toHaveBeenCalled()
-    expect(open.windows.update).not.toHaveBeenCalled()
-  })
 })

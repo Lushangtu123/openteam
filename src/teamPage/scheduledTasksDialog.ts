@@ -57,8 +57,8 @@ export function openScheduledTasksDialog(chatId: string, deps: ScheduledTasksDia
   const title = element('h2')
   title.id = 'scheduled-tasks-title'
   heading.append(title, element('p', 'tiny', t(
-    '到点时，这条消息会像你亲手发的一样发到群里，@ 谁就由谁回答。OpenTeam 没打开时会在后台打开；浏览器关着时错过的那次，12 小时内重新打开会补发一次。',
-    'At its time the message is sent to the group as if you typed it; whoever it @mentions answers. OpenTeam opens in the background if it is not open; a time missed while the browser was closed is sent once if the browser comes back within 12 hours.',
+    '到点时，这条消息会像你亲手发的一样发到群里，@ 谁就由谁回答。要问网页成员时，OpenTeam 会打开并切到它所在窗口的前面（不会把 Chrome 提到其他程序前面），网页成员要在显示着的页面里才能回答。浏览器关着时错过的那次，12 小时内重新打开会补发一次。',
+    'At its time the message is sent to the group as if you typed it; whoever it @mentions answers. When it asks web members, OpenTeam opens and becomes the shown tab of its window (Chrome is not brought in front of other apps): web members answer only from a page that is shown. A time missed while the browser was closed is sent once if the browser comes back within 12 hours.',
   )))
   const closeButton = element('button', 'icon-btn modal-close')
   closeButton.type = 'button'

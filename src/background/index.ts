@@ -280,11 +280,12 @@ const scheduledTasks = createScheduledTaskRunner({
   route: message => Promise.resolve(routeMessage(message, {})),
   broadcastStoreUpdated,
   teamPageOpen: () => listHostTabIds().length > 0 || panelOpen(),
-  async openTeamPageInBackground() {
+  panelOpen,
+  async showTeamPage() {
     // After the background restarts it no longer knows the OpenTeam tab that is open.
     const open = await chrome.tabs.query({ url: `${chrome.runtime.getURL('team.html')}*` })
     for (const tab of open) if (tab.id !== undefined) rememberHost({} as chrome.runtime.MessageSender, tab.id)
-    if (open.length === 0) await showTeamPage({ background: true })
+    await showTeamPage()
   },
   requestRoleRecovery,
   runtimeFrames,

@@ -1,6 +1,6 @@
-// Shows the OpenTeam page: for the toolbar icon, a reply notification and commands from the local
-// daemon (openteamcli chat activate, run create-and-post). An OpenTeam tab that is already open is
-// brought forward; a new one is opened only when there is none. Two OpenTeam tabs on the same
+// Shows the OpenTeam page: for the toolbar icon, a reply notification, commands from the local
+// daemon (openteamcli chat activate, run create-and-post) and a scheduled task that asks web
+// members. An OpenTeam tab that is already open is brought forward; a new one is opened only when there is none. Two OpenTeam tabs on the same
 // group would each load every member's page, and the copies take the member away from each other.
 
 interface TeamPageTab {
@@ -25,8 +25,6 @@ export interface ShowTeamPageOptions {
   // Bring the tab's window to the front: the user asked from inside the browser. A command typed
   // in a terminal does not pull the browser in front of it.
   focusWindow?: boolean
-  // A scheduled task: a new tab opens behind the user's, and an open one is left where it is.
-  background?: boolean
 }
 
 export function createTeamPageShower(tabs: TeamPageTabsApi, teamPageUrl: string, windows?: TeamPageWindowsApi): (options?: ShowTeamPageOptions) => Promise<void> {
@@ -35,10 +33,9 @@ export function createTeamPageShower(tabs: TeamPageTabsApi, teamPageUrl: string,
     const tab = open.find(candidate => options.fromWindowId !== undefined && candidate.windowId === options.fromWindowId)
       ?? [...open].sort((left, right) => (right.lastAccessed ?? 0) - (left.lastAccessed ?? 0))[0]
     if (tab?.id === undefined) {
-      await tabs.create({ url: teamPageUrl, active: !options.background, ...(options.fromWindowId !== undefined ? { windowId: options.fromWindowId } : {}) })
+      await tabs.create({ url: teamPageUrl, active: true, ...(options.fromWindowId !== undefined ? { windowId: options.fromWindowId } : {}) })
       return
     }
-    if (options.background) return
     await tabs.update(tab.id, { active: true })
     if (options.focusWindow && tab.windowId !== undefined) await windows?.update(tab.windowId, { focused: true })
   }
