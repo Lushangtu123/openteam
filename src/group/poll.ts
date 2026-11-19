@@ -91,8 +91,11 @@ export function readVote(content: string, optionCount: number): { choice?: numbe
       choice = letterIndex(lone[1])
     }
   }
-  const reasonMatch = content.match(REASON)
-  const reasonText = reasonMatch ? reasonMatch[1] : lines.filter((_, index) => index !== voteLine).join('\n')
+  // The reason after 理由： (after the vote line, when there is one), to the end of its paragraph
+  // or list item; without one, the rest of the reply.
+  const afterVote = voteLine >= 0 ? lines.slice(voteLine).join('\n') : content
+  const reasonMatch = afterVote.match(REASON) ?? content.match(REASON)
+  const reasonText = reasonMatch ? reasonMatch[1].split(REASON_END)[0] : lines.filter((_, index) => index !== voteLine).join('\n')
   const reason = reasonText.replace(/\*\*/g, '').replace(/\s+/g, ' ').trim().slice(0, REASON_MAX)
   return { ...(choice !== undefined && choice < optionCount ? { choice } : {}), reason }
 }
@@ -100,6 +103,8 @@ export function readVote(content: string, optionCount: number): { choice?: numbe
 const VOTE_LINE = /(?:投票|\bvote)\s*(?:\*\*)?\s*[:：]\s*(?:\*\*)?\s*(?:选项\s*|option\s*)?([A-F])(?![A-Za-z])/i
 const LONE_LETTER = /^\s*(?:\*\*)?\s*([A-F])\s*(?:\*\*)?\s*(?:[.、:：)）]|$)/
 const REASON = /(?:理由|reason)\s*(?:\*\*)?\s*[:：]\s*(?:\*\*)?\s*([\s\S]*)/i
+// A blank line, or a new list item or heading.
+const REASON_END = /\n\s*\n|\n\s*(?:[-*+]\s|\d+[.)]\s|#|\*\*)/
 
 function letterIndex(letter: string): number {
   return LETTERS.indexOf(letter.toUpperCase())

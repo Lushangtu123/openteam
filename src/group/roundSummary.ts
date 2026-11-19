@@ -29,6 +29,8 @@ export function keyPointsInstruction(languageInput: OpenTeamLanguage | undefined
 export function wantsKeyPoints(settings: Pick<OpenTeamSettings, 'replyKeyPoints'>, chat: GroupChat | undefined, message: GroupMessage): boolean {
   if (settings.replyKeyPoints === false) return false
   if (message.type !== 'user' || message.orchestrationKind || message.roundSummaryOf || message.crossReviewOf) return false
+  // A vote is answered in its own short form (src/group/poll.ts).
+  if (message.poll) return false
   if (chat?.teamFormation?.invitationIds.includes(message.id)) return false
   return (message.targetRoleIds?.length ?? 0) >= 2
 }

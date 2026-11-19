@@ -32,6 +32,12 @@ describe('a member\'s vote, read from its reply', () => {
     expect(readVote('投票: 选项 B（方案二）\n因为它更稳。', 2)).toEqual({ choice: 1, reason: '因为它更稳。' })
   })
 
+  it('keeps the reason to its own paragraph or list item, as models write it (seen live)', () => {
+    expect(readVote('投票：B\n理由：React 生态成熟，适合跨 AI 协作。\n\n**要点**\n- 群内倾向成熟方案。\n\n详细内容：大家好！', 3)).toEqual({ choice: 1, reason: 'React 生态成熟，适合跨 AI 协作。' })
+    expect(readVote('**要点**\n\n- 投票：B\n- 理由：React 生态成熟，测试工具丰富\n- 适合集成测试\n\n投票：B\n理由：更利于异常处理测试。', 3)).toEqual({ choice: 1, reason: 'React 生态成熟，测试工具丰富' })
+    expect(readVote('**要点**\n\n- 推荐 React。\n\n投票：B\n理由：组件库丰富，\n也更容易找到人。', 3)).toEqual({ choice: 1, reason: '组件库丰富， 也更容易找到人。' })
+  })
+
   it('is a lone letter on the first line, when the member wrote no 投票', () => {
     expect(readVote('B\n它更稳。', 2)).toEqual({ choice: 1, reason: '它更稳。' })
     expect(readVote('B. 方案二\n它更稳。', 2)).toEqual({ choice: 1, reason: '它更稳。' })

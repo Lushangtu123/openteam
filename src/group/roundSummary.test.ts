@@ -42,6 +42,7 @@ describe('key points', () => {
     expect(wantsKeyPoints(store.settings, chat, single)).toBe(false)
     expect(wantsKeyPoints(store.settings, chat, { ...round, orchestrationKind: 'task' })).toBe(false)
     expect(wantsKeyPoints(store.settings, chat, { ...round, roundSummaryOf: 'q0' })).toBe(false)
+    expect(wantsKeyPoints(store.settings, chat, { ...round, poll: { question: '选哪个？', options: ['a', 'b'], round: 1 } })).toBe(false)
     chat.teamFormation = { invitationIds: ['q1'] } as unknown as GroupChat['teamFormation']
     expect(wantsKeyPoints(store.settings, chat, round)).toBe(false)
     expect(wantsKeyPoints({ replyKeyPoints: false }, undefined, round)).toBe(false)
