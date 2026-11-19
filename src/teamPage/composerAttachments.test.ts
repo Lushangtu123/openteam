@@ -9,7 +9,7 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-function setup(readDocument?: (file: File, labels: DocumentTextLabels) => Promise<string>) {
+function setup(readDocument?: (file: File, labels: DocumentTextLabels) => Promise<string>, previewFile?: (file: { fileName: string; text: string; mimeType?: string }) => void) {
   vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: vi.fn(() => 'blob:preview'), revokeObjectURL: vi.fn() }))
   const trayEl = document.createElement('div')
   const attachButtonEl = document.createElement('button')
@@ -21,7 +21,7 @@ function setup(readDocument?: (file: File, labels: DocumentTextLabels) => Promis
   document.body.append(dropTargetEl)
   const showError = vi.fn()
   const onChange = vi.fn()
-  const attachments = createComposerAttachments({ trayEl, attachButtonEl, fileInputEl, pasteTargetEl, dropTargetEl, ui: source => source, showError, onChange, readDocument })
+  const attachments = createComposerAttachments({ trayEl, attachButtonEl, fileInputEl, pasteTargetEl, dropTargetEl, ui: source => source, showError, onChange, readDocument, previewFile })
   attachments.register()
   const choose = (files: File[]) => {
     Object.defineProperty(fileInputEl, 'files', { configurable: true, get: () => files })
@@ -107,6 +107,18 @@ describe('composer attachments', () => {
     attachments.take()
     choose([new File([new Uint8Array([0, 159, 146, 150, 0, 255])], 'data.txt', { type: 'text/plain' })])
     await expect(attachments.readUploads()).rejects.toThrow('无法读取文本文件：data.txt（不是 UTF-8 文本）')
+  })
+
+  it('opens a text file, or what a PDF\'s text reads as, before it is sent; not an image', async () => {
+    const previewFile = vi.fn()
+    const { trayEl, choose } = setup(async () => '季度目标', previewFile)
+    choose([new File(['png'], 'chart.png', { type: 'image/png' }), new File(['# 目标'], 'notes.md', { type: 'text/markdown' }), new File(['%PDF'], 'report.pdf', { type: 'application/pdf' })])
+    const openers = [...trayEl.querySelectorAll<HTMLButtonElement>('.attachment-chip-open')]
+    expect(openers.map(button => button.getAttribute('aria-label'))).toEqual(['查看 notes.md', '查看 report.pdf'])
+    openers[0].click()
+    await vi.waitFor(() => expect(previewFile).toHaveBeenCalledWith({ fileName: 'notes.md', text: '# 目标', mimeType: 'text/markdown' }))
+    openers[1].click()
+    await vi.waitFor(() => expect(previewFile).toHaveBeenCalledWith({ fileName: 'report.pdf', text: '季度目标', mimeType: 'text/plain' }))
   })
 
   it('reads a PDF or Office file as soon as it is added and sends its text', async () => {

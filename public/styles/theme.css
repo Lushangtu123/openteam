@@ -773,6 +773,21 @@
   min-width: 0;
 }
 
+/* A pending text file opens its preview. */
+button.attachment-chip-meta {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+button.attachment-chip-meta:hover .attachment-chip-name {
+  text-decoration: underline;
+}
+
 .attachment-chip-name,
 .message-file-name {
   overflow: hidden;
@@ -2110,6 +2125,58 @@ select.reply-compare-select {
 .composer-pages[hidden],
 :root[data-theme] .composer-pages[hidden] {
   display: none;
+}
+
+/* A text file attached to a message, shown before or after it is sent. */
+.modal.file-preview-dialog {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  width: min(820px, 100%);
+  height: min(80vh, 900px);
+}
+
+.file-preview-dialog .modal-header {
+  margin-bottom: 0;
+}
+
+.file-preview-title {
+  overflow-wrap: anywhere;
+}
+
+.file-preview-size {
+  margin: 4px 0 0;
+  color: var(--muted);
+}
+
+.file-preview-body {
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px 16px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.file-preview-body:focus-visible {
+  outline: 2px solid rgb(var(--accent-rgb));
+  outline-offset: 2px;
+}
+
+.file-preview-text {
+  margin: 0;
+  font-size: 13px;
+  white-space: pre-wrap;
+}
+
+.file-preview-actions .btn {
+  gap: 6px;
+}
+
+.file-preview-actions svg {
+  width: 16px;
+  height: 16px;
 }
 
 /* 附上网页: the open tabs to tick. */

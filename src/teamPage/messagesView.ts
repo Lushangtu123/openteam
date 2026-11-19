@@ -20,6 +20,7 @@ import { tallyPoll, type PollTally } from '../group/poll'
 import { pollCardSignature, renderPollCard } from './pollCard'
 import { readFactCheck } from '../group/sources'
 import { renderFactCheckCard, renderSourcesBlock } from './sourcesView'
+import { openFilePreview } from './filePreviewDialog'
 import { hostAccessPattern } from '../shared/hostAccess'
 import { foldToKeyPoints } from './keyPointsFold'
 import type { ImageAttachmentBlobRecord } from '../shared/imageAttachmentRepository'
@@ -130,6 +131,7 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     showError: deps.showError,
     resync: message => handleResyncMessage(message),
     iconButton: (label, icon, onClick) => createMessageIconButton(label, icon, onClick),
+    previewFile: file => openFilePreview(file, { english: normalizeLanguage(deps.getStore().settings.language) === 'en' }),
   })
   let timeDividers = new Map<string, HTMLElement>()
   // Vote cards by vote message id, with the signature they were drawn for.

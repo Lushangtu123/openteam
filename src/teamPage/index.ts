@@ -14,6 +14,7 @@ import { createChatListView } from './chatListView'
 import { currentScheduledTasksDialog } from './scheduledTasksDialog'
 import { openPollDialog } from './pollDialog'
 import { openWebPagesDialog } from './webPagesDialog'
+import { openFilePreview } from './filePreviewDialog'
 import { createComposerAttachments } from './composerAttachments'
 import { createComposerView } from './composerView'
 import { createTeamPageDomRefs } from './domRefs'
@@ -343,6 +344,7 @@ const composerAttachments = createComposerAttachments({
   ui: source => translateUi(source, normalizeLanguage(store.settings.language)),
   showError,
   onChange: () => renderComposerState(),
+  previewFile: file => openFilePreview(file, { english: normalizeLanguage(store.settings.language) === 'en', onClose: () => messageInputEl.focus() }),
 })
 const composerView = createComposerView({
   onSourcesUsed: () => renderSourcesToggle(),

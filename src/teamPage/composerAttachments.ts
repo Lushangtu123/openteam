@@ -12,6 +12,9 @@ export interface ComposerAttachmentsDependencies {
   ui(source: string): string
   showError(message: string): void
   onChange(): void
+  // Shows a pending text file before it is sent (filePreviewDialog.ts): a PDF or Office file as the
+  // text read from it, which is what is sent.
+  previewFile?(file: { fileName: string; text: string; mimeType?: string }): void
   // Reads a PDF or Office file's text; tests pass their own.
   readDocument?(file: File, labels: DocumentTextLabels): Promise<string>
 }
@@ -155,8 +158,14 @@ export function createComposerAttachments(deps: ComposerAttachmentsDependencies)
       icon.textContent = fileExtension(item.file.name)
       element.append(icon)
     }
-    const meta = document.createElement('span')
+    const meta = document.createElement(item.kind !== 'image' && deps.previewFile ? 'button' : 'span')
     meta.className = 'attachment-chip-meta'
+    if (meta instanceof HTMLButtonElement) {
+      meta.type = 'button'
+      meta.classList.add('attachment-chip-open')
+      meta.setAttribute('aria-label', deps.ui(`查看 ${item.file.name}`))
+      meta.addEventListener('click', () => void preview(item))
+    }
     const name = document.createElement('span')
     name.className = 'attachment-chip-name'
     name.textContent = item.file.name
@@ -176,6 +185,16 @@ export function createComposerAttachments(deps: ComposerAttachmentsDependencies)
     removeButton.addEventListener('click', () => remove(item.key))
     element.append(meta, removeButton)
     return element
+  }
+
+  // What would be sent: a text file's text, or the text read from a PDF or Office file.
+  async function preview(item: PendingAttachment): Promise<void> {
+    try {
+      const text = item.kind === 'document' ? await (item.text ?? Promise.reject(new Error('not read'))) : await readText(item.file)
+      deps.previewFile?.({ fileName: item.file.name, text, mimeType: item.kind === 'document' ? 'text/plain' : item.file.type })
+    } catch (error) {
+      deps.showError(error instanceof Error && error.message !== 'not read' ? error.message : deps.ui(`读不了这个文件：${item.file.name}`))
+    }
   }
 
   async function readUploads(): Promise<MessageUpload[]> {

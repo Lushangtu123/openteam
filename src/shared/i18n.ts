@@ -441,6 +441,7 @@ const UI_TRANSLATIONS: Record<string, string> = {
   '添加图片或文件': 'Add image or file',
   '发起投票': 'Start a vote',
   '附上网页': 'Attach web pages',
+  '文件内容': 'File content',
   '要来源': 'Sources',
   '开启后，这条消息要求成员给每个事实标出来源；答完后 OpenTeam 检查链接，并请一位成员核对': 'When on, this message asks members to give a source for each fact; afterwards OpenTeam checks the links and asks one member to check the facts',
   '事实核查': 'Fact check',
@@ -1248,6 +1249,8 @@ function translateUiPattern(source: string): string | undefined {
   if (textTooLarge) return `Text file too large: ${textTooLarge[1]} (1 MB at most)`
   const unreadableText = source.match(/^无法读取文本文件：(.+)（不是 UTF-8 文本）$/)
   if (unreadableText) return `Cannot read text file: ${unreadableText[1]} (not UTF-8 text)`
+  const view = source.match(/^查看 (.+)$/)
+  if (view) return `View ${view[1]}`
   const download = source.match(/^下载 (.+)$/)
   if (download) return `Download ${download[1]}`
   const backupExported = source.match(/^已导出备份：(\d+) 个群聊、(\d+) 条消息$/)

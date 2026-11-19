@@ -1,5 +1,5 @@
 // What a message carries besides its text: images (drawn from the browser's image store, with a
-// download button) and text files (chips that download the file). Image object URLs are kept while
+// download button) and text files (chips that open the file in a preview, or download it). Image object URLs are kept while
 // a message on screen shows them, and released once none does.
 import type { GroupMessage, MessageFileAttachment, MessageImageAttachment } from '../group/types'
 import type { ImageAttachmentBlobRecord } from '../shared/imageAttachmentRepository'
@@ -11,6 +11,8 @@ export interface MessageAttachmentsViewDependencies {
   // Reads the reply again from its page, for an image that could not be read.
   resync(message: GroupMessage): void
   iconButton(label: string, icon: 'download', onClick: () => void): HTMLButtonElement
+  // Shows a text file in OpenTeam (filePreviewDialog.ts); without it the file is downloaded.
+  previewFile?(file: { fileName: string; text: string; mimeType?: string }): void
 }
 
 export interface MessageAttachmentsView {
@@ -47,7 +49,7 @@ export function createMessageAttachmentsView(deps: MessageAttachmentsViewDepende
       const chip = document.createElement('button')
       chip.type = 'button'
       chip.className = 'message-file-chip'
-      chip.title = `下载 ${file.fileName}`
+      chip.title = deps.previewFile ? `查看 ${file.fileName}` : `下载 ${file.fileName}`
       const icon = document.createElement('span')
       icon.className = 'message-file-icon'
       icon.textContent = file.fileName.match(/\.([a-z0-9]{1,5})$/i)?.[1]?.toUpperCase() ?? 'TXT'
@@ -60,6 +62,10 @@ export function createMessageAttachmentsView(deps: MessageAttachmentsViewDepende
       chip.append(icon, name, size)
       chip.addEventListener('click', event => {
         event.stopPropagation()
+        if (deps.previewFile) {
+          deps.previewFile({ fileName: file.fileName, text: file.text, mimeType: file.mimeType })
+          return
+        }
         const url = URL.createObjectURL(new Blob([file.text], { type: file.mimeType || 'text/plain' }))
         const link = document.createElement('a')
         link.href = url

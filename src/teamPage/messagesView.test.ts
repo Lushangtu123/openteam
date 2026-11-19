@@ -280,7 +280,7 @@ describe('team page messages view boundary', () => {
     expect(messagesEl.querySelector('.no-chat-card')).toBeTruthy()
   })
 
-  it('shows attached text files as chips that download the file', () => {
+  it('shows attached text files as chips that open the file, which can be downloaded from there', () => {
     const { messagesEl, messages, view } = createLongChatView(1)
     messages[0] = { ...messages[0], attachments: [{ id: 'f1', type: 'file', status: 'ready', fileName: 'notes.md', mimeType: 'text/markdown', size: 2048, text: '# 目标' }] }
     vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: vi.fn(() => 'blob:notes'), revokeObjectURL: vi.fn() }))
@@ -289,9 +289,16 @@ describe('team page messages view boundary', () => {
     view.renderMessages()
     const chip = messagesEl.querySelector<HTMLButtonElement>('.message-file-chip')
     expect(chip?.textContent).toBe('MDnotes.md2.0 KB')
+    expect(chip?.title).toBe('查看 notes.md')
     chip?.click()
 
+    const preview = document.querySelector('.file-preview-modal')
+    expect(preview?.querySelector('#file-preview-title')?.textContent).toBe('notes.md')
+    expect(preview?.querySelector('.file-preview-body h1')?.textContent).toBe('目标')
+    expect(click).not.toHaveBeenCalled()
+    preview?.querySelector<HTMLButtonElement>('.file-preview-actions .btn')?.click()
     expect(click).toHaveBeenCalled()
+    preview?.remove()
   })
 
   it('offers to compare replies once two people have answered a question', () => {
