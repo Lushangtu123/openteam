@@ -28,7 +28,8 @@ const SHORT_REPLY_STABLE_SETTLE_MS = 5000
 // thinking has no text yet and is left to it.
 export const STALLED_GENERATING_MS = 3 * 60_000
 // A page loaded again while its member's reply was under way (resumeReply): how long the page has to
-// show that reply, and the longest it waits for the site to finish it.
+// show that reply once the site no longer says it is writing (a model thinking first shows nothing
+// for a while), and the longest it waits for the site to finish it.
 export const RESUME_FIND_MS = 60_000
 export const RESUME_LIMIT_MS = 15 * 60_000
 // Meanwhile it says this often that the site is still writing, well within REPLY_SIGNAL_INTERVAL_MS.
@@ -459,6 +460,8 @@ export function createReplyObserver(options: {
     let stableKey = ''
     let stableSince = startedAt
     let sawGenerating = false
+    // Since when the site has not said it is writing: the reply should be on the page by a minute later.
+    let quietSince = startedAt
     let lastProgress = ''
     const identity = statusIdentityPayload()
     const fail = (reason: string): 'lost' => {
@@ -476,7 +479,10 @@ export function createReplyObserver(options: {
       if (state.cancelled) return 'cancelled'
       const timestamp = Date.now()
       const generating = siteAdapter.isGenerating()
-      if (generating) sawGenerating = true
+      if (generating) {
+        sawGenerating = true
+        quietSince = timestamp
+      }
       if (timestamp - lastHeartbeatAt >= RESUME_HEARTBEAT_MS) {
         lastHeartbeatAt = timestamp
         options
@@ -486,7 +492,8 @@ export function createReplyObserver(options: {
 
       const candidate = findResumedReply(readSoFar)
       if (!candidate) {
-        if (timestamp - startedAt >= RESUME_FIND_MS) return fail('页面上没有找到这条回复')
+        if (timestamp - quietSince >= RESUME_FIND_MS) return fail('页面上没有找到这条回复')
+        if (timestamp - startedAt >= RESUME_LIMIT_MS) return fail('站点写了太久，没有等到这条回复写完')
         continue
       }
       const key = readReplySnapshot(candidate.element, candidate.text).key

@@ -1122,6 +1122,33 @@ describe('a member page loaded again goes on reading the reply under way', () =>
     vi.useRealTimers()
   })
 
+  it('keeps waiting past a minute while the site says it is writing but shows no reply yet (a model thinking first)', async () => {
+    let generating = true
+    const { observer, sent } = setup({ html: '<message-content id="old">上一个回答。</message-content>', generating: () => generating, history: ['上一个回答。'] })
+    const outcome = observer.resumeReply({ messageId: 'msg-1', readSoFar: '' })
+    await vi.advanceTimersByTimeAsync(RESUME_FIND_MS + 30_000)
+    expect(sent('TEAM_ROLE_RESUME_FAILED')).toEqual([])
+    document.body.insertAdjacentHTML('beforeend', '<message-content id="new">想了很久之后写完的回答。</message-content>')
+    generating = false
+    await vi.advanceTimersByTimeAsync(10_000)
+    await expect(outcome).resolves.toBe('reported')
+    expect(sent('TEAM_ROLE_REPLY')).toEqual([expect.objectContaining({ content: '想了很久之后写完的回答。' })])
+    vi.useRealTimers()
+  })
+
+  it('gives up a minute after the site stopped saying it was writing, when no reply came', async () => {
+    let generating = true
+    const { observer, sent } = setup({ html: '<message-content id="old">上一个回答。</message-content>', generating: () => generating, history: ['上一个回答。'] })
+    const outcome = observer.resumeReply({ messageId: 'msg-1', readSoFar: '' })
+    await vi.advanceTimersByTimeAsync(RESUME_FIND_MS + 30_000)
+    generating = false
+    await vi.advanceTimersByTimeAsync(RESUME_FIND_MS - 10_000)
+    expect(sent('TEAM_ROLE_RESUME_FAILED')).toEqual([])
+    await vi.advanceTimersByTimeAsync(15_000)
+    await expect(outcome).resolves.toBe('lost')
+    vi.useRealTimers()
+  })
+
   it('says it could not when the page shows only earlier replies', async () => {
     const { observer, sent } = setup({ html: '<message-content id="old">上一个回答。</message-content>', history: ['上一个回答。'] })
     const outcome = observer.resumeReply({ messageId: 'msg-1', readSoFar: '' })
