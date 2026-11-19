@@ -66,6 +66,8 @@ Use it for learning, research and personal non-commercial work where one answer 
 
 ![Comparing three replies side by side](docs/assets/screenshots/compare-replies.png)
 
+![The side panel: the page being read on the left; on the right, three members review it in a group chat, with the page attached to the question](docs/assets/screenshots/side-panel.png)
+
 ## How It Works
 
 ```mermaid

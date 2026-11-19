@@ -66,6 +66,8 @@ OpenTeam 是一个 Manifest V3 Chrome 扩展。大多数成员不需要 API Key�
 
 ![并排对比三位成员的回复](docs/assets/screenshots/compare-replies.png)
 
+![侧边栏：左边是正在看的网页，右边的群聊里三位成员在评这篇文章，提问附上了这个网页](docs/assets/screenshots/side-panel.png)
+
 ## 工作原理
 
 ```mermaid
