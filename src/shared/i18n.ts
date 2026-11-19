@@ -440,6 +440,7 @@ const UI_TRANSLATIONS: Record<string, string> = {
   '系统': 'System',
   '添加图片或文件': 'Add image or file',
   '发起投票': 'Start a vote',
+  '附上网页': 'Attach web pages',
   '要来源': 'Sources',
   '开启后，这条消息要求成员给每个事实标出来源；答完后 OpenTeam 检查链接，并请一位成员核对': 'When on, this message asks members to give a source for each fact; afterwards OpenTeam checks the links and asks one member to check the facts',
   '事实核查': 'Fact check',

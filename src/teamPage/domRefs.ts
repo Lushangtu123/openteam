@@ -55,6 +55,7 @@ export interface TeamPageDomRefs {
   openInTabEl: HTMLButtonElement
   attachFileEl: HTMLButtonElement
   startPollEl: HTMLButtonElement
+  attachPagesEl: HTMLButtonElement
   sourcesToggleEl: HTMLButtonElement
   attachFileInputEl: HTMLInputElement
   voiceInputEl: HTMLButtonElement
@@ -247,6 +248,7 @@ export function createTeamPageDomRefs(): TeamPageDomRefs {
     openInTabEl: requireElement<HTMLButtonElement>('#open-in-tab'),
     attachFileEl: requireElement<HTMLButtonElement>('#attach-file'),
     startPollEl: requireElement<HTMLButtonElement>('#start-poll'),
+    attachPagesEl: requireElement<HTMLButtonElement>('#attach-pages'),
     sourcesToggleEl: requireElement<HTMLButtonElement>('#sources-toggle'),
     attachFileInputEl: requireElement<HTMLInputElement>('#attach-file-input'),
     voiceInputEl: requireElement<HTMLButtonElement>('#voice-input'),

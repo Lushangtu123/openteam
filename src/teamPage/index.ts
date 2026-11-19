@@ -13,6 +13,7 @@ import { registerHeaderMenus } from './headerMenus'
 import { createChatListView } from './chatListView'
 import { currentScheduledTasksDialog } from './scheduledTasksDialog'
 import { openPollDialog } from './pollDialog'
+import { openWebPagesDialog } from './webPagesDialog'
 import { createComposerAttachments } from './composerAttachments'
 import { createComposerView } from './composerView'
 import { createTeamPageDomRefs } from './domRefs'
@@ -728,7 +729,28 @@ teamDomRefs.startPollEl.addEventListener('click', () => {
   if (chat) openPollDialog(chat.id, { getStore: () => store, runCommand, showError, onClose: () => teamDomRefs.startPollEl.focus() })
 })
 
+// 附上网页 from the tabs open in this window (webPagesDialog.ts).
+teamDomRefs.attachPagesEl.addEventListener('click', () => {
+  void openWebPagesDialog({
+    english: normalizeLanguage(store.settings.language) === 'en',
+    listTabs: async () => (await chrome.tabs.query({ currentWindow: true })).flatMap(tab => tab.id !== undefined && tab.url ? [{ id: tab.id, url: tab.url, title: tab.title ?? '' }] : []),
+    requestAccess: patterns => chrome.permissions.request({ origins: patterns }),
+    async readPages(tabs) {
+      const response = await sendRuntimeMessage('WEB_PAGES_READ', { tabs }) as { ok?: boolean; error?: string; upload?: { fileName: string; mimeType: string; text: string }; failed?: Array<{ title: string; reason: string }> }
+      if (response.ok === false || !response.upload) throw new Error(response.error || '没有读到网页')
+      return { upload: response.upload, failed: response.failed }
+    },
+    addFile: file => {
+      composerAttachments.addFiles([file])
+      messageInputEl.focus()
+    },
+    showError,
+    onClose: () => { if (!teamDomRefs.attachPagesEl.hidden && document.activeElement === document.body) teamDomRefs.attachPagesEl.focus() },
+  })
+})
+
 function renderPollButton(): void {
+  teamDomRefs.attachPagesEl.hidden = !getCurrentChat()
   teamDomRefs.startPollEl.hidden = !getCurrentChat() || getCurrentRoles().length < 2
   renderSourcesToggle()
 }

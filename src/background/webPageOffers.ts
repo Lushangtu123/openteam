@@ -2,7 +2,7 @@
 // keeps which page that was; Chrome lets OpenTeam read that one tab until it moves on (activeTab).
 // Nothing is read until the user clicks 附上 on the OpenTeam page. The offer lives in session
 // storage, where the OpenTeam page watches it.
-import { isReadablePageUrl, WEB_PAGE_OFFER_KEY, WEB_PAGE_OFFER_TTL_MS, webPageUpload, type CapturedWebPage, type WebPageOffer } from '../group/webPage'
+import { isReadablePageUrl, MAX_WEB_PAGES, WEB_PAGE_OFFER_KEY, WEB_PAGE_OFFER_TTL_MS, webPagesUpload, webPageUpload, type CapturedWebPage, type WebPageOffer } from '../group/webPage'
 import type { OpenTeamLanguage } from '../group/types'
 import type { RuntimeMessage } from './runtimeClient'
 
@@ -70,6 +70,30 @@ export function createWebPageOffers(deps: WebPageOfferDependencies) {
     return { ok: true, upload: webPageUpload({ ...page, title: page.title || offered.title, selection }, await deps.language()) }
   }
 
+  // 附上网页 from the open tabs the user ticked (the page asked for access to their sites first): each
+  // is read if it still shows the page that was ticked, and all go as one file (webPagesUpload).
+  const readTabs: Handler = async message => {
+    const wanted = Array.isArray(message.tabs) ? message.tabs.filter((item): item is { tabId: number; url: string } => typeof item?.tabId === 'number' && typeof item?.url === 'string') : []
+    if (wanted.length === 0) throw new Error('先勾选要附上的网页')
+    if (wanted.length > MAX_WEB_PAGES) throw new Error(`一次最多附上 ${MAX_WEB_PAGES} 个网页`)
+    const pages: CapturedWebPage[] = []
+    const failed: Array<{ title: string; reason: string }> = []
+    for (const item of wanted) {
+      const tab = await deps.getTab(item.tabId).catch(() => undefined)
+      const title = tab?.title?.trim() || item.url
+      if (!tab) { failed.push({ title, reason: '已经关掉了' }); continue }
+      if (tab.url !== item.url) { failed.push({ title, reason: '已经换了网页' }); continue }
+      try {
+        const page = await deps.readTab(item.tabId)
+        pages.push({ ...page, title: page.title || title })
+      } catch (error) {
+        failed.push({ title, reason: `读不了：${error instanceof Error ? error.message : String(error)}` })
+      }
+    }
+    if (pages.length === 0) throw new Error(`没有读到网页：${failed.map(item => `「${item.title}」${item.reason}`).join('；')}`)
+    return { ok: true, upload: webPagesUpload(pages, await deps.language()), failed }
+  }
+
   const dismiss: Handler = async () => {
     await deps.storage.remove(WEB_PAGE_OFFER_KEY)
     return { ok: true }
@@ -80,6 +104,7 @@ export function createWebPageOffers(deps: WebPageOfferDependencies) {
     handlers: [
       { type: 'WEB_PAGE_READ' as const, handler: read },
       { type: 'WEB_PAGE_DISMISS' as const, handler: dismiss },
+      { type: 'WEB_PAGES_READ' as const, handler: readTabs },
     ],
   }
 }

@@ -123,3 +123,47 @@ describe('reading a page from inside it', () => {
     getSelection()!.removeAllRanges()
   })
 })
+
+describe('reading several open tabs at once', () => {
+  function setupTabs(tabs: Record<number, { url: string; title: string; fails?: boolean } | undefined>) {
+    const readTab = vi.fn(async (tabId: number) => {
+      if (tabs[tabId]?.fails) throw new Error('Cannot access contents of the page')
+      return { title: tabs[tabId]!.title, url: tabs[tabId]!.url, text: `${tabs[tabId]!.title} 的正文` }
+    })
+    const offers = createWebPageOffers({
+      extensionOrigin: EXTENSION,
+      storage: { get: async () => ({}), set: async () => undefined, remove: async () => undefined },
+      getTab: async tabId => tabs[tabId] ? { id: tabId, ...tabs[tabId] } : undefined,
+      readTab,
+      language: async () => 'zh-CN',
+      now: () => NOW,
+    })
+    const read = offers.handlers.find(handler => handler.type === 'WEB_PAGES_READ')!.handler
+    return { read: (wanted: unknown) => read({ type: 'WEB_PAGES_READ', tabs: wanted }, {}), readTab }
+  }
+
+  it('reads each ticked tab into one file, and says which could not be read', async () => {
+    const { read } = setupTabs({
+      1: { url: 'https://a.com/x', title: '产品 A' },
+      2: { url: 'https://b.com/y', title: '产品 B' },
+      3: { url: 'https://c.com/z', title: '产品 C', fails: true },
+      4: { url: 'https://d.com/moved', title: '产品 D' },
+    })
+    const result = await read([{ tabId: 1, url: 'https://a.com/x' }, { tabId: 2, url: 'https://b.com/y' }, { tabId: 3, url: 'https://c.com/z' }, { tabId: 4, url: 'https://d.com/w' }, { tabId: 9, url: 'https://gone.com/' }]) as { upload: { fileName: string; text: string }; failed: Array<{ title: string; reason: string }> }
+    expect(result.upload.fileName).toBe('网页对比-2个网页.md')
+    expect(result.upload.text).toContain('## 1. 产品 A')
+    expect(result.upload.text).toContain('## 2. 产品 B')
+    expect(result.failed).toEqual([
+      { title: '产品 C', reason: '读不了：Cannot access contents of the page' },
+      { title: '产品 D', reason: '已经换了网页' },
+      { title: 'https://gone.com/', reason: '已经关掉了' },
+    ])
+  })
+
+  it('is refused with none ticked, more than five, or none readable', async () => {
+    const { read } = setupTabs({ 1: { url: 'https://a.com/x', title: 'A', fails: true } })
+    await expect(read([])).rejects.toThrow('先勾选要附上的网页')
+    await expect(read(Array.from({ length: 6 }, (_, index) => ({ tabId: index, url: 'https://a.com/' })))).rejects.toThrow('一次最多附上 5 个网页')
+    await expect(read([{ tabId: 1, url: 'https://a.com/x' }])).rejects.toThrow('没有读到网页：「A」读不了')
+  })
+})

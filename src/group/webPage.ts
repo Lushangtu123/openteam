@@ -65,6 +65,36 @@ export function webPageUpload(page: CapturedWebPage, language: OpenTeamLanguage)
   }
 }
 
+// 附上网页 from several open tabs: at most this many, in one file whose page texts share this length.
+export const MAX_WEB_PAGES = 5
+export const WEB_PAGES_TEXT_MAX_CHARS = 60000
+
+// Several pages as one Markdown file, a section each (title, address, selected text, text). One page
+// is the usual single-page file.
+export function webPagesUpload(pages: CapturedWebPage[], language: OpenTeamLanguage): { fileName: string; mimeType: string; text: string } {
+  if (pages.length === 1) return webPageUpload(pages[0], language)
+  const en = language === 'en'
+  const share = Math.min(WEB_PAGE_TEXT_MAX_CHARS, Math.floor(WEB_PAGES_TEXT_MAX_CHARS / Math.max(1, pages.length)))
+  const sections = pages.map((page, index) => {
+    const title = page.title.replace(/\s+/g, ' ').trim() || hostOf(page.url)
+    const text = tidy(page.text)
+    const cut = [...text].length > share
+    const body = cut ? [...text].slice(0, share).join('') : text
+    const selection = tidy(page.selection ?? '')
+    return [
+      `## ${index + 1}. ${title}`,
+      en ? `Address: ${page.url}` : `网址：${page.url}`,
+      ...(selection ? [`${en ? 'Selected text:' : '选中的文字：'}\n${selection}`] : []),
+      body + (cut ? (en ? `\n\n(The page is long; only its first ${share} characters are attached.)` : `\n\n（网页较长，只附上了前 ${share} 字）`) : ''),
+    ].join('\n\n')
+  })
+  return {
+    fileName: en ? `web-pages-${pages.length}.md` : `网页对比-${pages.length}个网页.md`,
+    mimeType: 'text/markdown',
+    text: `${[en ? `# Compared web pages (${pages.length})` : `# 网页对比（${pages.length} 个网页）`, ...sections].join('\n\n')}\n`,
+  }
+}
+
 // Blank lines kept to one, and spaces at the ends of lines and of the whole text dropped.
 function tidy(text: string): string {
   return text.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim()

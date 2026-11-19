@@ -2106,7 +2106,82 @@ select.reply-compare-select {
 :root[data-theme] .composer-sources[hidden],
 :root[data-theme] .composer-poll[hidden],
 .composer-sources[hidden],
-.composer-poll[hidden] {
+.composer-poll[hidden],
+.composer-pages[hidden],
+:root[data-theme] .composer-pages[hidden] {
+  display: none;
+}
+
+/* 附上网页: the open tabs to tick. */
+.modal.web-pages-dialog {
+  display: grid;
+  gap: 12px;
+  width: min(560px, 100%);
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+}
+
+.web-pages-dialog .modal-header {
+  margin-bottom: 0;
+}
+
+.web-pages-dialog .tiny {
+  margin: 4px 0 0;
+}
+
+.web-pages-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.web-page-choice label {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+.web-page-choice input {
+  width: auto;
+  margin: 3px 0 0;
+  accent-color: rgb(var(--accent-rgb));
+}
+
+.web-page-choice input:disabled + .web-page-choice-text {
+  color: var(--muted);
+}
+
+.web-page-choice-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.web-page-choice-title {
+  overflow-wrap: anywhere;
+}
+
+.web-page-choice-host,
+.web-page-choice-note,
+.web-pages-count {
+  margin: 0;
+  color: var(--muted);
+}
+
+.web-pages-empty {
+  margin: 0;
+  padding: 16px 12px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.web-pages-empty[hidden] {
   display: none;
 }
 
