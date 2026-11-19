@@ -11,6 +11,11 @@ export interface PromptDelivery {
   imageAttachmentIds?: string[]
   // The member has a backup API model (memberBackup.ts): only then is its store looked up for one.
   hasBackup?: boolean
+  // What the backup is sent instead of `message.content`. The site's conversation already holds the
+  // persona, the earlier group messages and the member's own answers, so the site is sent only what
+  // is new; the backup has none of that, so it gets a whole prompt, as an API member does. Unset for
+  // OpenTeam's own requests (a summary, a discussion turn, a project step), which carry everything.
+  backupPrompt?: string
 }
 
 export type PromptSender = (delivery: PromptDelivery, isTest?: boolean) => Promise<void>

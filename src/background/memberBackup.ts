@@ -66,7 +66,7 @@ export function backupDeliveryFor(store: OpenTeamStore, role: GroupRole, deliver
     messageId: message.messageId,
     replyAttemptId: message.replyAttemptId ?? '',
     model,
-    prompt: message.content,
+    prompt: delivery.backupPrompt ?? message.content,
     ...(delivery.imageAttachmentIds?.length ? { imageAttachmentIds: delivery.imageAttachmentIds } : {}),
     answeredBy: model.name,
   }

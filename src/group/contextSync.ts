@@ -21,7 +21,9 @@ export function getUnsyncedMessagesForRole(
   return chat.messageIds
     .map(messageId => messageById.get(messageId))
     .filter((message): message is GroupMessage => Boolean(message))
-    .filter(message => message.seq > role.contextCursor && message.id !== userMessage.id && message.roleId !== role.id)
+    // The member's own answers are in its site conversation already, except those its backup model
+    // wrote while the site could not take prompts (memberBackup.ts): the site is told about those.
+    .filter(message => message.seq > role.contextCursor && message.id !== userMessage.id && (message.roleId !== role.id || Boolean(message.answeredByFallback)))
     .filter(message => isMessageVisibleToRole(message, role.id))
     // Round summaries are for the user; they repeat what members already said. Discussion turn
     // requests are OpenTeam's own instructions.
@@ -38,7 +40,7 @@ export function buildUnsyncedContext(
   languageInput?: OpenTeamLanguage,
 ): UnsyncedContextResult {
   const unsyncedMessages = getUnsyncedMessagesForRole(chat, role, messages, userMessage)
-  const formatted = unsyncedMessages.map(message => formatContextMessage(message, languageInput)).join('\n\n')
+  const formatted = unsyncedMessages.map(message => formatContextMessage(message, languageInput, role.id)).join('\n\n')
   const truncated = truncateLatest(formatted, maxContextChars)
 
   return {
@@ -61,13 +63,20 @@ export function getContextCursorAfterAck(chat: GroupChat, messages?: GroupMessag
   return messages ? getLatestMessageSeq(chat, messages) : chat.nextMessageSeq - 1
 }
 
-export function formatContextMessage(message: GroupMessage, languageInput?: OpenTeamLanguage): string {
+// `selfRoleId`: the member the context is for. Its own answers there are the ones its backup model
+// wrote for it, and are said to be.
+export function formatContextMessage(message: GroupMessage, languageInput?: OpenTeamLanguage, selfRoleId?: string): string {
   const language = normalizeLanguage(languageInput)
-  const speaker = message.type === 'assistant'
-    ? message.roleName ?? (language === 'en' ? 'Person' : '人员')
-    : message.type === 'user'
-      ? (language === 'en' ? 'User' : '用户')
-      : (language === 'en' ? 'System' : '系统')
+  const backupNote = language === 'en'
+    ? `You (answered for you by the backup model "${message.answeredByFallback ?? ''}" while your page could not take messages)`
+    : `你（网页接不了消息时，由备用模型「${message.answeredByFallback ?? ''}」代你回答）`
+  const speaker = selfRoleId && message.roleId === selfRoleId
+    ? backupNote
+    : message.type === 'assistant'
+      ? message.roleName ?? (language === 'en' ? 'Person' : '人员')
+      : message.type === 'user'
+        ? (language === 'en' ? 'User' : '用户')
+        : (language === 'en' ? 'System' : '系统')
   return `${speaker}${language === 'en' ? ': ' : '：'}${message.content}${describeAttachments(message.attachments, language)}`
 }
 

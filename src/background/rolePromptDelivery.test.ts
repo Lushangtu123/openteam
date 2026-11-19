@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { createDefaultStore } from '../group/store'
 import type { ExternalModelFormat, GroupChat, GroupMessage, GroupRole } from '../group/types'
 import { prepareRolePromptDelivery } from './rolePromptDelivery'
+import { backupDeliveryFor } from './memberBackup'
 
 describe('team execution handbook delivery', () => {
   it.each(['site', 'openai', 'local-agent'] as const)('sends the selected handbook intact to a %s member', source => {
@@ -140,3 +141,42 @@ describe('memory items in prompts', () => {
   })
 })
 
+
+describe('the prompt a web member\'s backup gets', () => {
+  // 研究员 on Kimi has answered before: its site conversation holds its persona and that answer.
+  function setup(fields: Partial<GroupMessage> = {}) {
+    const store = createDefaultStore()
+    store.settings.language = 'zh-CN'
+    store.settings.externalModelsById.api = { id: 'api', name: 'DeepSeek API', format: 'openai', baseUrl: 'https://api.example.com/v1', apiKey: 'key', modelName: 'deepseek-chat', createdAt: 1, updatedAt: 1 }
+    const role: GroupRole = { id: 'r', chatId: 'c', name: '研究员', systemPrompt: '你是严谨的数据研究员，只用可靠来源。', chatSite: 'kimi', backupModelId: 'api', status: 'ready', contextCursor: 2, createdAt: 1, updatedAt: 1 }
+    const messages: GroupMessage[] = [
+      { id: 'm1', chatId: 'c', seq: 1, type: 'user', content: '这份调查的样本有多大？', targetRoleIds: ['r'], deliveryStatus: { r: 'received' }, createdAt: 1, status: 'received' },
+      { id: 'm2', chatId: 'c', seq: 2, type: 'assistant', roleId: 'r', roleName: '研究员', content: '样本只有 120 人，偏小。', createdAt: 2, status: 'received' },
+      { id: 'm3', chatId: 'c', seq: 3, type: 'user', content: '那结论还能用吗？', targetRoleIds: ['r'], createdAt: 3, status: 'pending', ...fields },
+    ]
+    const chat: GroupChat = { id: 'c', name: '调研', mode: 'collaborative', roleIds: ['r'], messageIds: messages.map(message => message.id), nextMessageSeq: 4, status: 'ready', createdAt: 1, updatedAt: 1 }
+    Object.assign(store, { chatsById: { c: chat }, rolesById: { r: role }, messagesById: Object.fromEntries(messages.map(message => [message.id, message])) })
+    const prepared = prepareRolePromptDelivery({ store, chat, role, userMessage: messages[2], roles: [role], messages, timestamp: 4, newId: () => 'attempt', runtimeFrames: { getByRole: () => ({ chatId: 'c', roleId: 'r', tabId: 1, frameId: 2, ready: true, lastSeenAt: 1 }) } })
+    return { store, role, delivery: prepared.delivery! }
+  }
+
+  it('is whole, as an API member\'s: persona, earlier messages and its own answers, while the site gets only what is new', () => {
+    const { delivery } = setup()
+    expect(delivery.message.content).not.toContain('你是严谨的数据研究员')
+    expect(delivery.message.content).not.toContain('样本只有 120 人')
+    expect(delivery.backupPrompt).toContain('你是严谨的数据研究员，只用可靠来源。')
+    expect(delivery.backupPrompt).toContain('这份调查的样本有多大？')
+    expect(delivery.backupPrompt).toContain('样本只有 120 人，偏小。')
+    expect(delivery.backupPrompt).toContain('那结论还能用吗？')
+  })
+
+  it('is what the backup is sent', () => {
+    const { store, role, delivery } = setup()
+    expect(backupDeliveryFor(store, role, delivery)?.prompt).toBe(delivery.backupPrompt)
+  })
+
+  it('is not made for OpenTeam\'s own requests, which carry everything', () => {
+    const { delivery } = setup({ discussionTurnOf: 'm1', discussionTurn: 1 } as Partial<GroupMessage>)
+    expect(delivery.backupPrompt).toBeUndefined()
+  })
+})

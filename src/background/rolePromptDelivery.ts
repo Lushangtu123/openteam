@@ -138,8 +138,19 @@ export function prepareRolePromptDelivery(input: PrepareRolePromptDeliveryInput)
       ...images,
       // Its backup may answer if the site cannot take the prompt (memberBackup.ts).
       ...(input.role.backupModelId ? { hasBackup: true } : {}),
+      ...(input.role.backupModelId && !summary ? { backupPrompt: withAdditions(buildBackupPrompt(input, input.role.backupModelId, responseInstruction, extraInstruction)) } : {}),
     },
   }
+}
+
+// The whole prompt for a web member's backup API model: built as an API member's is (persona, the
+// group's messages with the member's own earlier answers, the conversation summary), in the backup
+// model's budget.
+function buildBackupPrompt(input: PrepareRolePromptDeliveryInput, backupModelId: string, responseInstruction: string | undefined, extraInstruction: string | undefined): string {
+  const asBackup: GroupRole = { ...input.role, modelSource: 'external', externalModelId: backupModelId }
+  const maxContextChars = contextCharBudgetForRole(input.store, asBackup)
+  // The summary it may compress older messages into is not kept: the member's own is the site's.
+  return buildExternalModelPrompt(input.store, input.chat, input.role, input.userMessage, input.roles, { responseInstruction, extraInstruction, maxContextChars }).content
 }
 
 export function isExternalModelRole(role: GroupRole): boolean {
