@@ -97,6 +97,7 @@ describe('what a link check says', () => {
     expect(linkCheckLabel({ status: 'reachable', checkedAt: 1 }, false)).toBe('网站能连上，没细查页面')
     expect(linkCheckLabel({ status: 'no-response', checkedAt: 1 }, false)).toBe('没有响应：网站可能不存在，也可能拦了自动访问')
     expect(linkCheckLabel({ status: 'unreachable', checkedAt: 1 }, false)).toBe('细查也连不上，网站可能不存在')
+    expect(linkCheckLabel({ status: 'slow', checkedAt: 1 }, false)).toBe('网站太慢，15 秒内没有回应')
     expect(linkCheckLabel({ status: 'unchecked', checkedAt: 1 }, false)).toBe('没有检查（不是 https 链接）')
     expect(linkCheckLabel(undefined, false)).toBe('检查中')
     expect(linkCheckLabel({ status: 'missing', httpStatus: 404, checkedAt: 1 }, true)).toBe('Page not found (404)')

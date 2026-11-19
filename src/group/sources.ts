@@ -150,6 +150,7 @@ export function linkCheckLabel(check: LinkCheck | undefined, english: boolean): 
     case 'error': return english ? `Site error${code}` : `网站报错${code}`
     case 'reachable': return english ? 'Site responds; page not checked' : '网站能连上，没细查页面'
     case 'no-response': return english ? 'No response: the site may not exist, or may block automatic visits' : '没有响应：网站可能不存在，也可能拦了自动访问'
+    case 'slow': return english ? 'The site did not answer within 15 seconds' : '网站太慢，15 秒内没有回应'
     case 'unreachable': return english ? 'Cannot connect, even with access; the site may not exist' : '细查也连不上，网站可能不存在'
     case 'unchecked': return english ? 'Not checked (not an https link)' : '没有检查（不是 https 链接）'
   }

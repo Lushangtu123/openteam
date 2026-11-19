@@ -4,7 +4,8 @@
 // from the page's 细查链接, it does. Cookies are never sent.
 import type { LinkCheck } from '../group/types'
 
-export const LINK_CHECK_TIMEOUT_MS = 8_000
+// Some real sites take many seconds (seen live: 9 s for autohome.com.cn).
+export const LINK_CHECK_TIMEOUT_MS = 15_000
 const TITLE_BYTES = 150_000
 const CONCURRENCY = 4
 
@@ -40,7 +41,7 @@ export async function checkLink(url: string, deps: LinkCheckDependencies): Promi
         await deps.fetch(url, { mode: 'no-cors', credentials: 'omit', redirect: 'follow', signal: controller.signal })
         return { status: 'reachable', checkedAt: checkedAt() }
       } catch {
-        return { status: 'no-response', checkedAt: checkedAt() }
+        return { status: controller.signal.aborted ? 'slow' : 'no-response', checkedAt: checkedAt() }
       }
     }
     const response = await deps.fetch(url, { credentials: 'omit', redirect: 'follow', signal: controller.signal })
@@ -54,7 +55,8 @@ export async function checkLink(url: string, deps: LinkCheckDependencies): Promi
     if ([401, 403, 429, 451].includes(httpStatus)) return { status: 'refused', httpStatus, checkedAt: checkedAt() }
     return { status: 'error', httpStatus, checkedAt: checkedAt() }
   } catch {
-    return { status: 'unreachable', checkedAt: checkedAt() }
+    // Too slow is not missing.
+    return { status: controller.signal.aborted ? 'slow' : 'unreachable', checkedAt: checkedAt() }
   } finally {
     clearTimeout(timer)
   }

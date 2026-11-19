@@ -589,9 +589,10 @@ export interface RoleSiteHealth {
 // How a source link in a reply was found to be (src/background/linkCheck.ts): it opens, the page is
 // missing, the site refuses automatic visits, the site errors, the site responds (page not checked,
 // as no access to it was granted), no response without access (the site may not exist, or may block
-// such requests), it cannot be reached even with access, or it was not checked (not https).
+// such requests), too slow to answer in time, it cannot be reached even with access, or it was not
+// checked (not https).
 export interface LinkCheck {
-  status: 'ok' | 'missing' | 'refused' | 'error' | 'reachable' | 'no-response' | 'unreachable' | 'unchecked'
+  status: 'ok' | 'missing' | 'refused' | 'error' | 'reachable' | 'no-response' | 'slow' | 'unreachable' | 'unchecked'
   httpStatus?: number
   title?: string
   checkedAt: number

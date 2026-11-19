@@ -27,7 +27,10 @@ describe('checking a source link', () => {
 
   it('gives up on a site that does not answer in time', async () => {
     const hanging = deps({ respond: (_url, init) => new Promise((_resolve, reject) => init.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')))) })
-    expect(await checkLink('https://slow.example/x', hanging)).toEqual({ status: 'no-response', checkedAt: 42 })
+    expect(await checkLink('https://slow.example/x', hanging)).toEqual({ status: 'slow', checkedAt: 42 })
+    // Also with access: a slow site is not a missing one (seen live: autohome.com.cn took 9 s).
+    const hangingWithAccess = deps({ access: true, respond: (_url, init) => new Promise((_resolve, reject) => init.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')))) })
+    expect(await checkLink('https://slow.example/x', hangingWithAccess)).toEqual({ status: 'slow', checkedAt: 42 })
   })
 
   it('does not check links that are not https', async () => {
