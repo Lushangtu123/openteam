@@ -586,6 +586,15 @@ export interface RoleSiteHealth {
   updatedAt: number
 }
 
+// A vote (src/group/poll.ts): the question and its options, on the message that asks for it.
+export interface MessagePoll {
+  question: string
+  options: string[]
+  round: 1 | 2
+  // A second round: the first round's message.
+  of?: string
+}
+
 export interface GroupMessage {
   id: string
   chatId: string
@@ -640,6 +649,8 @@ export interface GroupMessage {
   discussionNoteOf?: string
   // Sent by this group's scheduled task (ScheduledTask.id), not typed by the user.
   scheduledTaskId?: string
+  // On the user's message that asks members to vote.
+  poll?: MessagePoll
   // On the user's message that started a 项目 (its goal).
   projectGoal?: boolean
   // On a request OpenTeam sends to a member for a project: a plan, a task, a check or the final

@@ -49,6 +49,8 @@ export function wantsCrossReview(chat: GroupChat, message: GroupMessage | undefi
   if (!message || message.type !== 'user' || chat.mode !== 'collaborative' || !chat.crossReview || chat.discussionMode) return false
   if (message.crossReviewOf || message.roundSummaryOf || message.discussionTurnOf || message.discussionTopic || message.discussionNoteOf) return false
   if (message.projectRequest || message.projectGoal || message.projectNoteOf || message.orchestrationKind) return false
+  // A vote is summed up straight away; its second round is the members' chance to reconsider.
+  if (message.poll) return false
   if (chat.teamFormation?.invitationIds.includes(message.id)) return false
   return (message.targetRoleIds?.length ?? 0) >= 2
 }

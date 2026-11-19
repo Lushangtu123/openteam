@@ -54,6 +54,7 @@ export interface TeamPageDomRefs {
   panelHandoverNoteEl: HTMLElement
   openInTabEl: HTMLButtonElement
   attachFileEl: HTMLButtonElement
+  startPollEl: HTMLButtonElement
   attachFileInputEl: HTMLInputElement
   voiceInputEl: HTMLButtonElement
   composerModesEl: HTMLElement
@@ -244,6 +245,7 @@ export function createTeamPageDomRefs(): TeamPageDomRefs {
     panelHandoverNoteEl: requireElement<HTMLElement>('#panel-handover-note'),
     openInTabEl: requireElement<HTMLButtonElement>('#open-in-tab'),
     attachFileEl: requireElement<HTMLButtonElement>('#attach-file'),
+    startPollEl: requireElement<HTMLButtonElement>('#start-poll'),
     attachFileInputEl: requireElement<HTMLInputElement>('#attach-file-input'),
     voiceInputEl: requireElement<HTMLButtonElement>('#voice-input'),
     composerModesEl: requireElement<HTMLElement>('#composer-modes'),

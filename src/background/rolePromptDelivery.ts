@@ -11,6 +11,8 @@ import { buildProjectPrompt } from '../group/project'
 import { memoryItemsForPrompt, noteMemoryPending, withMemoryBlock } from '../group/memoryPrompt'
 import { wantsMemoryProposals, withMemoryProposalInstruction } from '../group/memoryProposals'
 import { withTeamHandbook } from '../group/teamHandbooks'
+import { pollInstruction } from '../group/poll'
+import { normalizeLanguage } from '../shared/i18n'
 import type { ExternalModelConfig, GroupChat, GroupMessage, GroupRole, MessageReference, OpenTeamStore } from '../group/types'
 import type { PromptDelivery } from './promptDelivery'
 import type { RuntimeFrameRegistry } from './runtimeFrames'
@@ -63,7 +65,7 @@ export function prepareRolePromptDelivery(input: PrepareRolePromptDeliveryInput)
       ? buildProjectPromptFor(input, includesPersona)
       : undefined)
   const replyAttemptId = input.newId('attempt')
-  const responseInstruction = responseInstructionForMessage(input.userMessage, input.store.settings.language)
+  const responseInstruction = responseInstructionForMessage(input.store, input.chat, input.userMessage)
   const extraInstruction = wantsKeyPoints(input.store.settings, input.chat, input.userMessage) ? keyPointsInstruction(input.store.settings.language) : undefined
   const maxContextChars = contextCharBudgetForRole(input.store, input.role)
   const imageAttachmentIds = uploadedImageIds(discussionImagesSource(input) ?? input.userMessage)
@@ -253,8 +255,9 @@ function isRoleHistoryMessage(message: GroupMessage, roleId: string): boolean {
   return deliveryStatus === 'sent' || deliveryStatus === 'received'
 }
 
-function responseInstructionForMessage(message: GroupMessage, language: OpenTeamStore['settings']['language']): string | undefined {
-  return message.orchestrationKind === 'review'
-    ? buildOrchestrationReviewResponseInstruction(language)
-    : undefined
+function responseInstructionForMessage(store: OpenTeamStore, chat: GroupChat, message: GroupMessage): string | undefined {
+  const language = store.settings.language
+  if (message.orchestrationKind === 'review') return buildOrchestrationReviewResponseInstruction(language)
+  // A vote: how to answer it, and in a second round, the first round's votes (src/group/poll.ts).
+  return pollInstruction(store, chat, message, normalizeLanguage(language) === 'en')
 }

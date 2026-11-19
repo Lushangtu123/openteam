@@ -439,6 +439,7 @@ const UI_TRANSLATIONS: Record<string, string> = {
   'AI 成员': 'AI person',
   '系统': 'System',
   '添加图片或文件': 'Add image or file',
+  '发起投票': 'Start a vote',
   '附件只在发送时上传给对应的 AI 网站或模型。': 'Attachments are uploaded to the AI site or model only when you send them.',
   '读取中…': 'Reading…',
   '附件只在发送时上传给对应的 AI 网站或模型。PDF 和 Office 文件发送的是读出的文字。': 'Attachments are uploaded to the AI site or model only when you send them. PDF and Office files are sent as the text read from them.',

@@ -4,6 +4,7 @@ import { PROMPT_I18N, normalizeLanguage } from '../shared/i18n'
 import { describeAttachments } from './messageUploads'
 import { discussionTranscript } from './discussion'
 import { modelKey } from './replyComparison'
+import { pollLetter, pollTallyText, readVote, type PollVote, type PollVoter } from './poll'
 import type { ChatSite, GroupChat, GroupMessage, GroupRole, OpenTeamLanguage, OpenTeamSettings, OpenTeamStore } from './types'
 
 // Key points
@@ -177,6 +178,8 @@ export function buildRoundSummaryPrompt(input: {
   // When everyone took part, the summarizer is one of them: it is asked to stay even-handed.
   const tookPart = input.round.replies.some(reply => reply.role.id === input.summarizer.id)
   const questionText = `${asked.content}${describeAttachments(asked.attachments, language)}`.trim()
+  // A vote: the count goes with the replies, and the disagreements are the reasons behind each option.
+  const votes = question.poll ? pollTallyFromReplies(question, replies, en) : undefined
 
   return [
     en ? `You are "${input.summarizer.name}". This time, act as the summarizer of this round of the group discussion.` : `你是「${input.summarizer.name}」，这次请你担任本轮讨论的汇总人。`,
@@ -186,6 +189,7 @@ export function buildRoundSummaryPrompt(input: {
       : input.round.reviewOf
         ? `${en ? "Each member's review of the others' answers, with its revised plan:" : '各成员看过彼此的回答后的意见，以及修正后的方案：'}\n\n${quoted.join('\n\n')}`
         : `${en ? "The members' replies:" : '各成员的回复：'}\n\n${quoted.join('\n\n')}`,
+    ...(votes ? [`${en ? 'This was a vote. The count:' : '这是一次投票，计票结果：'}\n${votes}`] : []),
     en
       ? [
           'Summarize these replies so the user can see at a glance where things stand (under 200 words), in this format:',
@@ -198,6 +202,7 @@ export function buildRoundSummaryPrompt(input: {
           '**Suggested next step**',
           '- one or two concrete suggestions',
           `Summarize only what the replies say; add no new views, and name the member behind each view. ${PROMPT_I18N.en.responseLanguageInstruction}`,
+          ...(votes ? ['Start Agreed with the result of the vote (which option won, or that it was a tie); under Disagreements, say what reasons separate the options.'] : []),
           ...(tookPart ? ['You took part in this round too: do not lean toward your own view; give each side the same room and tone.'] : []),
           'Write only the summary: @-mention nobody, and add no hand-off or request for someone to go on.',
         ].join('\n')
@@ -212,6 +217,7 @@ export function buildRoundSummaryPrompt(input: {
           '**建议下一步**',
           '- 一到两条具体建议',
           `只根据以上回复汇总，不要加入新的观点；提到观点时写明是哪位成员的。${PROMPT_I18N['zh-CN'].responseLanguageInstruction}`,
+          ...(votes ? ['「共识」第一条写投票结果（哪个选项胜出，或者平票）；「分歧」里写清楚支持不同选项的理由差在哪里。'] : []),
           ...(tookPart ? ['你也参加了这一轮：汇总时不要偏向你自己的观点，各方观点用同样的篇幅和语气写。'] : []),
           '只写汇总本身：不要 @ 任何成员，也不要加交接或请别人接着说的话。',
         ].join('\n'),
@@ -266,4 +272,17 @@ export function trimRoundReply(content: string, maxChars: number, en: boolean): 
   const text = content.trim()
   if (text.length <= maxChars) return text
   return `${text.slice(0, maxChars).trimEnd()}\n${en ? '[…the rest of this reply is omitted]' : '［……其余部分已省略］'}`
+}
+
+// The count of a vote, from the round's replies.
+function pollTallyFromReplies(question: GroupMessage, replies: RoundReply[], en: boolean): string {
+  const poll = question.poll!
+  const options = poll.options.map((text, index) => ({ letter: pollLetter(index), text, votes: [] as PollVote[] }))
+  const invalid: PollVoter[] = []
+  for (const { role, message } of replies) {
+    const vote = readVote(message.content, poll.options.length)
+    if (vote.choice === undefined) invalid.push({ roleId: role.id, name: role.name })
+    else options[vote.choice].votes.push({ roleId: role.id, name: role.name, choice: vote.choice, reason: vote.reason })
+  }
+  return pollTallyText({ message: question, poll, options, invalid, missing: [], waiting: [], done: true, voted: 0, leaders: [] }, en)
 }

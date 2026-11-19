@@ -12,6 +12,7 @@ import { createComposerModesView } from './composerModesView'
 import { registerHeaderMenus } from './headerMenus'
 import { createChatListView } from './chatListView'
 import { currentScheduledTasksDialog } from './scheduledTasksDialog'
+import { openPollDialog } from './pollDialog'
 import { createComposerAttachments } from './composerAttachments'
 import { createComposerView } from './composerView'
 import { createTeamPageDomRefs } from './domRefs'
@@ -719,8 +720,19 @@ function startSiteCheck(): void {
   runCommand('GROUP_SITE_CHECK_START').catch(error => showError(error instanceof Error ? error.message : String(error)))
 }
 
+// 投票: a vote needs at least two members to vote.
+teamDomRefs.startPollEl.addEventListener('click', () => {
+  const chat = getCurrentChat()
+  if (chat) openPollDialog(chat.id, { getStore: () => store, runCommand, showError, onClose: () => teamDomRefs.startPollEl.focus() })
+})
+
+function renderPollButton(): void {
+  teamDomRefs.startPollEl.hidden = !getCurrentChat() || getCurrentRoles().length < 2
+}
+
 function render(): void {
   renderSelectedChat()
+  renderPollButton()
   // In the language chosen now.
   updateNotice.render()
   backupReminderView.render()

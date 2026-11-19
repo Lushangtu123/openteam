@@ -3416,3 +3416,93 @@ describe('a web member whose site is limiting', () => {
     expect(ctx.store().siteUsageBySite?.kimi?.sent).toBe(1)
   })
 })
+
+describe('a vote (投票)', () => {
+  // 工程师 and 设计师, both API members, vote; `answers` gives each one's reply by its name.
+  async function setupVote(answers: Record<string, string>, chatFields: Partial<GroupChat> = {}, settings: Partial<OpenTeamStore['settings']> = {}) {
+    vi.resetModules()
+    const startingStore = createStoreWithTwoApiRoles()
+    Object.assign(startingStore.chatsById['chat-1'], { mode: 'collaborative', ...chatFields })
+    Object.assign(startingStore.settings, settings)
+    let currentStore = structuredClone(startingStore)
+    vi.doMock('./storeAccess', async importOriginal => {
+      const actual = await importOriginal<typeof import('./storeAccess')>()
+      return {
+        ...actual,
+        mutateStore: vi.fn(async (mutator: (store: OpenTeamStore) => unknown) => {
+          const result = await mutator(currentStore)
+          currentStore = structuredClone(currentStore)
+          return { store: currentStore, result }
+        }),
+      }
+    })
+    const { createMessageHandlers } = await import('./messageHandlers')
+    const prompts: string[] = []
+    const complete = vi.fn(async (input: { prompt: string }): Promise<{ content: string }> => {
+      prompts.push(input.prompt)
+      if (input.prompt.includes('汇总人')) return { content: '**共识**\n- B 胜出' }
+      const name = input.prompt.match(/你的身份是「(.+?)」/)?.[1] ?? ''
+      return { content: answers[name] ?? '没想好' }
+    })
+    let messageIdSeq = 0
+    const routes = createMessageHandlers({
+      broadcastStoreUpdated: vi.fn(),
+      externalModelClient: { complete },
+      getChatStatusFromRoles: () => 'ready',
+      log: { debug: vi.fn(), info: vi.fn(), warn: vi.fn() },
+      newId: vi.fn((prefix: string) => prefix === 'msg' ? `${prefix}-${++messageIdSeq}` : `${prefix}-${messageIdSeq}`),
+      now: vi.fn(() => 100),
+      runtimeFrames: { bind: vi.fn(), getByAddress: vi.fn(), getByRole: vi.fn() },
+      sendRoleMessage: vi.fn(),
+      sendError: vi.fn(),
+      sendPrompt: vi.fn(),
+      waitForRetry: vi.fn(async () => {}),
+    })
+    const send = (fields: Record<string, unknown>) => routes.find(route => route.type === 'GROUP_MESSAGE_SEND')!.handler({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', ...fields }, {})
+    const messages = () => currentStore.chatsById['chat-1'].messageIds.map(id => currentStore.messagesById[id])
+    return { store: () => currentStore, send, messages, prompts, complete }
+  }
+  const poll = { question: '选哪个方案？', options: ['方案一', '方案二'] }
+
+  it('asks each member to vote in the format, shows the question and options, and has the vote summed up with its count', async () => {
+    const ctx = await setupVote({ 工程师: '投票：B\n理由：更稳', 设计师: '投票：B\n理由：更好看' }, { crossReview: true }, { roundSummary: false })
+    await ctx.send({ raw: '@工程师 @设计师 选哪个方案？', poll })
+    await vi.waitFor(() => expect(ctx.messages().some(message => message.roundSummaryOf)).toBe(true))
+    await vi.waitFor(() => expect(ctx.prompts.some(prompt => prompt.includes('汇总人'))).toBe(true))
+    const vote = ctx.messages()[0]
+    expect(vote).toMatchObject({ content: '投票：选哪个方案？\nA. 方案一\nB. 方案二', poll: { question: '选哪个方案？', options: ['方案一', '方案二'], round: 1 }, targetRoleIds: ['role-1', 'role-2'] })
+    expect(ctx.prompts[0]).toContain('回答的第一行写「投票：」加一个字母')
+    // No review round, even in a 互相审 group; the summary even with summaries off, with the count.
+    expect(ctx.messages().some(message => message.crossReviewOf)).toBe(false)
+    const summaryPrompt = ctx.prompts.find(prompt => prompt.includes('汇总人'))!
+    expect(summaryPrompt).toContain('这是一次投票，计票结果：\nA. 方案一：0 票\nB. 方案二：2 票（工程师、设计师）')
+    expect(summaryPrompt).toContain('「共识」第一条写投票结果')
+  })
+
+  it('asks a second round with everyone\'s first-round votes, and only one', async () => {
+    const ctx = await setupVote({ 工程师: '投票：A\n理由：便宜', 设计师: '投票：B\n理由：好看' })
+    await ctx.send({ raw: '@工程师 @设计师 选哪个方案？', poll })
+    await vi.waitFor(() => expect(ctx.messages().filter(message => message.type === 'assistant' && !message.roundSummaryOf).length).toBeGreaterThanOrEqual(2))
+    const first = ctx.messages()[0]
+    await ctx.send({ raw: '@工程师 @设计师 再投一轮', poll: { ...poll, of: first.id } })
+    await vi.waitFor(() => expect(ctx.prompts.filter(prompt => prompt.includes('第一轮的投票')).length).toBe(2))
+    const second = ctx.messages().find(message => message.poll?.round === 2)!
+    expect(second).toMatchObject({ content: '再投一轮：选哪个方案？\nA. 方案一\nB. 方案二', poll: { round: 2, of: first.id } })
+    expect(ctx.prompts.find(prompt => prompt.includes('第一轮的投票'))).toContain('第一轮的投票：\n- 工程师：A（便宜）\n- 设计师：B（好看）')
+    await expect(ctx.send({ raw: '@工程师 @设计师 再投一轮', poll: { ...poll, of: first.id } })).rejects.toThrow('这次投票已经投过第二轮了')
+  })
+
+  it('is refused without members to vote, or with a bad setup', async () => {
+    const ctx = await setupVote({}, { requireManualMention: true })
+    await expect(ctx.send({ raw: '选哪个方案？', poll })).rejects.toThrow('选几位成员来投票')
+    await expect(ctx.send({ raw: '@工程师 选哪个方案？', poll: { question: '选哪个？', options: ['一'] } })).rejects.toThrow('至少要两个选项')
+    expect(ctx.messages()).toEqual([])
+  })
+
+  it('goes to every member at once in a group that takes turns', async () => {
+    const ctx = await setupVote({ 工程师: '投票：A', 设计师: '投票：A' }, { discussionMode: true } as Partial<GroupChat>)
+    await ctx.send({ raw: '@工程师 @设计师 选哪个方案？', poll })
+    await vi.waitFor(() => expect(ctx.complete).toHaveBeenCalledTimes(2))
+    expect(ctx.store().chatsById['chat-1'].discussion).toBeUndefined()
+  })
+})

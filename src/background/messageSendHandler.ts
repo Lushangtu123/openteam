@@ -7,7 +7,8 @@ import { isDiscussionRunning, startsDiscussion } from '../group/discussion'
 import { readScheduledRunRequest, recordScheduledRunSent } from '../group/scheduledTasks'
 import { defaultMentionTargetForMessage, parseGroupMentions, roleMentionLabelOptionsFromSettings } from '../group/mentionParser'
 import { siteLimitSkipReason } from '../group/siteUsage'
-import type { GroupMessage, GroupRole } from '../group/types'
+import { pollMessageText, readPollInput } from '../group/poll'
+import type { GroupMessage, GroupRole, MessagePoll } from '../group/types'
 import { normalizeLanguage } from '../shared/i18n'
 import { backupModelFor, memberSite, memberSiteLimit } from './memberBackup'
 import { upsertErrorAssistantAfterPrompt } from './replyMessages'
@@ -35,6 +36,8 @@ export function createMessageSendHandler(ctx: MessageHandlerContext, roundHandle
     const uploadCheck = readMessageUploads(copied.length > 0 ? [...(Array.isArray(message.uploads) ? message.uploads : []), ...copied] : message.uploads)
     if (!uploadCheck.ok) throw new Error(uploadCheck.error)
     const uploads = uploadCheck.uploads.map(upload => ({ id: deps.newId('attachment'), upload }))
+    // A vote (投票): the question and options the user set up (src/group/poll.ts).
+    const pollInput = message.poll === undefined ? undefined : readPollInput(message.poll)
     deps.log.info('message-send:start', { chatId, rawLength: raw.length, uploads: uploads.length })
 
     const { store: storedStore, result } = await mutateStore(store => {
@@ -69,6 +72,21 @@ export function createMessageSendHandler(ctx: MessageHandlerContext, roundHandle
       }
       deps.log.debug('message-send:parsed-targets', { chatId: chat.id, targetRoleIds: finalTargetRoleIds })
 
+      let poll: MessagePoll | undefined
+      if (pollInput) {
+        if (isProjectActive(chat.project)) throw new Error('项目进行中，不能发起投票')
+        if (isDiscussionRunning(chat)) throw new Error('讨论进行中，不能发起投票')
+        if (finalTargetRoleIds.length === 0) throw new Error('选几位成员来投票')
+        let round: MessagePoll['round'] = 1
+        if (pollInput.of) {
+          const first = store.messagesById[pollInput.of]
+          if (!first?.poll || first.chatId !== chat.id || first.poll.round !== 1) throw new Error('找不到第一轮投票')
+          if (chat.messageIds.some(id => store.messagesById[id]?.poll?.of === first.id)) throw new Error('这次投票已经投过第二轮了')
+          round = 2
+        }
+        poll = { question: pollInput.question, options: pollInput.options, round, ...(pollInput.of ? { of: pollInput.of } : {}) }
+      }
+
       // While a project runs, what the user sends is a note for its coordinator; an answer to the
       // coordinator's question lets the project go on.
       if (isProjectActive(chat.project)) {
@@ -86,7 +104,8 @@ export function createMessageSendHandler(ctx: MessageHandlerContext, roundHandle
         chat.updatedAt = timestamp
         return { message: note, deliveries: [], externalDeliveries: [] }
       }
-      if (!teamInvitation && startsDiscussion(chat, finalTargetRoleIds)) {
+      // A vote is answered by every member at once, whatever the group's way of answering.
+      if (!teamInvitation && !poll && startsDiscussion(chat, finalTargetRoleIds)) {
         return startDiscussion(store, chat, parsed, finalTargetRoleIds, uploads, message.refreshPersona === true, timestamp)
       }
 
@@ -144,7 +163,8 @@ export function createMessageSendHandler(ctx: MessageHandlerContext, roundHandle
         chatId: chat.id,
         seq: chat.nextMessageSeq,
         type: 'user',
-        content: parsed.content,
+        content: poll ? pollMessageText(poll, normalizeLanguage(store.settings.language) === 'en') : parsed.content,
+        ...(poll ? { poll } : {}),
         targetRoleIds: finalTargetRoleIds,
         mentionedRoleIds: parsed.mentionedRoleIds,
         mentionsAll: parsed.mentionsAll,

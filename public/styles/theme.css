@@ -1871,6 +1871,237 @@ select.reply-compare-select {
   color: var(--danger);
 }
 
+/* 投票: the window that sets up a vote, and the card with its count in the chat. */
+.modal.poll-dialog {
+  display: grid;
+  gap: 12px;
+  width: min(560px, 100%);
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+}
+
+.poll-dialog .modal-header {
+  margin-bottom: 0;
+}
+
+.poll-dialog .tiny {
+  margin: 4px 0 0;
+}
+
+.poll-options,
+.poll-members {
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.poll-options legend,
+.poll-members legend {
+  margin-bottom: 6px;
+  padding: 0;
+}
+
+.poll-option-list {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 6px;
+  padding: 0;
+  list-style: none;
+}
+
+.poll-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.poll-option-letter {
+  flex: 0 0 auto;
+  width: 18px;
+  color: var(--muted);
+  font-weight: 600;
+  text-align: center;
+}
+
+.poll-option-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.poll-remove-option[hidden],
+.poll-add-option[hidden] {
+  display: none;
+}
+
+.poll-add-option {
+  gap: 5px;
+}
+
+.poll-add-option svg {
+  width: 15px;
+  height: 15px;
+}
+
+.poll-member-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.poll-member {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.poll-member input {
+  width: auto;
+  margin: 0;
+  accent-color: rgb(var(--accent-rgb));
+}
+
+.poll-card {
+  display: grid;
+  gap: 8px;
+  width: min(560px, calc(100% - 48px));
+  margin: 4px 0 12px 48px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 14px;
+  background: var(--surface-raised);
+  color: var(--text);
+  font-size: 13px;
+}
+
+.poll-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+}
+
+.poll-card-head svg {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+}
+
+.poll-card-round {
+  border-radius: 999px;
+  padding: 1px 8px;
+  background: rgba(var(--accent-rgb), 0.12);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.poll-card-progress {
+  margin-left: auto;
+  color: var(--muted);
+}
+
+.poll-card-question {
+  margin: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.poll-card-options {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.poll-card-option-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.poll-card-letter {
+  font-weight: 700;
+}
+
+.poll-card-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.poll-card-count {
+  flex: 0 0 auto;
+  color: var(--muted);
+}
+
+.poll-card-bar {
+  height: 6px;
+  margin-top: 4px;
+  border-radius: 999px;
+  background: rgba(var(--neutral-rgb), 0.16);
+  overflow: hidden;
+}
+
+.poll-card-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: rgba(var(--neutral-rgb), 0.55);
+}
+
+.poll-card-leading .poll-card-bar span {
+  background: rgb(var(--accent-rgb));
+}
+
+.poll-card-leading .poll-card-count {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.poll-card-voters {
+  margin: 2px 0 0;
+  color: var(--muted);
+}
+
+.poll-card-result {
+  margin: 0;
+  font-weight: 600;
+}
+
+.poll-card-reasons summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+
+.poll-card-reasons ul {
+  display: grid;
+  gap: 4px;
+  margin: 6px 0 0;
+  padding-left: 18px;
+  line-height: 1.5;
+}
+
+.poll-card-note {
+  margin: 0;
+  color: var(--muted);
+}
+
+.poll-card-revote {
+  justify-self: start;
+  gap: 5px;
+}
+
+.poll-card-revote svg {
+  width: 15px;
+  height: 15px;
+}
+
 /* Keep the team setup centred with equal content insets. Only the form body scrolls, so
    the title, close button and actions stay inside the rounded window at every height. */
 .team-formation-modal {

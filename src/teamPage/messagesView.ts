@@ -16,6 +16,8 @@ import { paintRoleAvatar, roleAvatarSignature } from './viewHelpers'
 import { renderMarkdownInto } from './markdownRender'
 import { countRepliesByQuestion } from '../group/replyComparison'
 import { hasRoundSummary, isOpenTeamRequest } from '../group/roundSummary'
+import { tallyPoll, type PollTally } from '../group/poll'
+import { pollCardSignature, renderPollCard } from './pollCard'
 import { foldToKeyPoints } from './keyPointsFold'
 import type { ImageAttachmentBlobRecord } from '../shared/imageAttachmentRepository'
 import type { TeamPageState } from './appState'
@@ -125,6 +127,8 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     iconButton: (label, icon, onClick) => createMessageIconButton(label, icon, onClick),
   })
   let timeDividers = new Map<string, HTMLElement>()
+  // Vote cards by vote message id, with the signature they were drawn for.
+  let pollCards = new Map<string, { signature: string; node: HTMLElement }>()
   // People who answered each question in the chat on screen, counted once per render.
   let replyCounts = new Map<string, number>()
   // Choices are offered only on replies newer than the user's latest message.
@@ -190,6 +194,16 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
       }
     }
 
+    // A vote's card goes after the round's last vote (or the vote itself, before any).
+    const pollCardsAfter = new Map<string, PollTally>()
+    for (const message of messages) {
+      const tally = message.poll ? tallyPoll(deps.getStore(), chat, message) : undefined
+      if (!tally) continue
+      const lastReply = messages.reduce<GroupMessage | undefined>((last, item) => item.type === 'assistant' && item.sourceMessageId === message.id && (!last || item.seq > last.seq) ? item : last, undefined)
+      pollCardsAfter.set((lastReply ?? message).id, tally)
+    }
+    const nextPollCards = new Map<string, { signature: string; node: HTMLElement }>()
+
     const nextTimeDividers = new Map<string, HTMLElement>()
     for (const item of buildChatRenderItems(messages, deps.getCurrentRoles())) {
       if (item.type === 'time') {
@@ -205,8 +219,18 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
         continue
       }
       nodes.push(renderMessageNode(item.message, item.showName, item.showAvatar))
+      const tally = pollCardsAfter.get(item.message.id)
+      if (tally) {
+        const english = normalizeLanguage(deps.getStore().settings.language) === 'en'
+        const signature = pollCardSignature(tally, english)
+        const cached = pollCards.get(tally.message.id)
+        const node = cached?.signature === signature ? cached.node : renderPollCard(tally, { english, revote: revotePoll })
+        nextPollCards.set(tally.message.id, { signature, node })
+        nodes.push(node)
+      }
     }
     timeDividers = nextTimeDividers
+    pollCards = nextPollCards
 
     const streamingRoleIds = new Set(messages
       .filter(message => message.type === 'assistant' && message.status === 'pending' && message.roleId)
@@ -235,6 +259,23 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
       deps.messagesEl.scrollTop = previousScrollTop
     } else {
       deps.messagesEl.scrollTop = deps.messagesEl.scrollHeight
+    }
+  }
+
+  // The same members vote again, with everyone's first-round reasons (src/group/poll.ts).
+  async function revotePoll(tally: PollTally): Promise<void> {
+    const store = deps.getStore()
+    const english = normalizeLanguage(store.settings.language) === 'en'
+    const mentions = (tally.message.targetRoleIds ?? [])
+      .map(roleId => store.rolesById[roleId])
+      .filter((role): role is GroupRole => Boolean(role))
+      .map(role => `@${roleMentionLabel(role, roleMentionLabelOptionsFromSettings(store.settings))}`)
+      .join(' ')
+    try {
+      await deps.runCommand('GROUP_MESSAGE_SEND', { chatId: tally.message.chatId, raw: `${mentions} ${english ? 'Vote again' : '再投一轮'}`, poll: { question: tally.poll.question, options: tally.poll.options, of: tally.message.id } })
+    } catch (error) {
+      deps.showError(error instanceof Error ? error.message : String(error))
+      throw error
     }
   }
 

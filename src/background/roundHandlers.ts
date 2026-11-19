@@ -31,7 +31,8 @@ export function createRoundHandlers(ctx: MessageHandlerContext) {
     const { store, result } = await mutateStore(store => {
       const chat = requireChat(store, chatId)
       const question = store.messagesById[questionId]
-      if (options.auto && (store.settings.roundSummary === false || (question?.targetRoleIds?.length ?? 0) < 2)) return undefined
+      // A vote is always summed up; other rounds when the user has summaries on.
+      if (options.auto && ((store.settings.roundSummary === false && !question?.poll) || (question?.targetRoleIds?.length ?? 0) < 2)) return undefined
       const round = readSummarizableRound(store, chat, question)
       if (!round) {
         if (options.auto) return undefined
@@ -166,7 +167,7 @@ export function createRoundHandlers(ctx: MessageHandlerContext) {
   function scheduleRoundSummary(store: OpenTeamStore, chatId: string, questionId: string): void {
     const chat = store.chatsById[chatId]
     const question = store.messagesById[questionId]
-    if (!chat || store.settings.roundSummary === false || (question?.targetRoleIds?.length ?? 0) < 2) return
+    if (!chat || (store.settings.roundSummary === false && !question?.poll) || (question?.targetRoleIds?.length ?? 0) < 2) return
     if (!readSummarizableRound(store, chat, question) || hasRoundSummary(store, chat, questionId)) return
     void (async () => {
       await waitForRetryDelay(deps, ROUND_SUMMARY_DELAY_MS)
