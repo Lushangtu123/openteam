@@ -65,7 +65,9 @@ describe('extension security configuration', () => {
 
     expect(manifest.optional_host_permissions).toEqual(['https://*/*'])
     // The only plain-http address the pages may connect to is this computer.
-    expect(manifest.content_security_policy.extension_pages).toMatch(/connect-src 'self' https:\/\/\* http:\/\/127\.0\.0\.1:\* ws:\/\/127\.0\.0\.1:\*;/)
+    // data: reaches no network: Chrome checks a member's picture avatar (a data: URL) against
+    // connect-src while the page first draws it, and reports an error without it.
+    expect(manifest.content_security_policy.extension_pages).toMatch(/connect-src 'self' data: https:\/\/\* http:\/\/127\.0\.0\.1:\* ws:\/\/127\.0\.0\.1:\*;/)
   })
 
   it('does not declare page-world bridge scripts in release manifest', () => {
