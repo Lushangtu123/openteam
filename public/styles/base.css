@@ -653,7 +653,6 @@ select:focus {
 .chat-list {
   display: flex;
   min-height: 0;
-  max-height: calc(var(--chat-list-row-height) * 10 + 28px);
   flex-direction: column;
   gap: 5px;
   overflow-x: hidden;
