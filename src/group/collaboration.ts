@@ -51,6 +51,8 @@ export function wantsCrossReview(chat: GroupChat, message: GroupMessage | undefi
   if (message.projectRequest || message.projectGoal || message.projectNoteOf || message.orchestrationKind) return false
   // A vote is summed up straight away; its second round is the members' chance to reconsider.
   if (message.poll) return false
+  // A round asked with sources is fact-checked instead (src/group/sources.ts).
+  if (message.wantsSources || message.factCheckOf) return false
   if (chat.teamFormation?.invitationIds.includes(message.id)) return false
   return (message.targetRoleIds?.length ?? 0) >= 2
 }

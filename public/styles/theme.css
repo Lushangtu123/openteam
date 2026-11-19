@@ -2102,6 +2102,182 @@ select.reply-compare-select {
   height: 15px;
 }
 
+/* 投票 and 要来源 next to the message box: hidden without a group (their display would show them). */
+:root[data-theme] .composer-sources[hidden],
+:root[data-theme] .composer-poll[hidden],
+.composer-sources[hidden],
+.composer-poll[hidden] {
+  display: none;
+}
+
+/* 要来源: an answer's sources under it, and the fact-checker's verdicts. */
+.reply-sources {
+  display: grid;
+  gap: 6px;
+  max-width: 100%;
+  margin-top: 6px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 12px;
+}
+
+.reply-sources-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+}
+
+.reply-sources-warning {
+  color: var(--danger);
+}
+
+.reply-sources-muted {
+  margin: 0;
+  color: var(--muted);
+}
+
+.reply-sources-list {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.reply-source {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  min-width: 0;
+}
+
+.reply-source-n {
+  color: var(--muted);
+}
+
+.reply-source-link {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.reply-source-status {
+  color: var(--muted);
+}
+
+.reply-source-good .reply-source-status {
+  color: var(--success);
+}
+
+.reply-source-bad .reply-source-status {
+  color: var(--danger);
+}
+
+.reply-sources-check {
+  justify-self: start;
+  gap: 5px;
+}
+
+.reply-sources-check svg {
+  width: 15px;
+  height: 15px;
+}
+
+.reply-sources-unsourced summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+
+.reply-sources-unsourced ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  line-height: 1.5;
+}
+
+.fact-check-card {
+  display: grid;
+  gap: 8px;
+}
+
+.fact-check-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.fact-verdict {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.fact-verdict-verified {
+  background: color-mix(in srgb, var(--success) 16%, transparent);
+  color: var(--text);
+}
+
+.fact-verdict-doubtful {
+  background: var(--warning-soft);
+  color: var(--text);
+}
+
+.fact-verdict-wrong {
+  background: var(--danger-soft);
+  color: var(--text);
+}
+
+.fact-verdict-unverifiable {
+  background: rgba(var(--neutral-rgb), 0.16);
+  color: var(--text);
+}
+
+.fact-check-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fact-check-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+}
+
+.fact-check-who {
+  font-weight: 600;
+}
+
+.fact-check-claim {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.fact-check-basis {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.fact-check-conclusion {
+  margin: 0;
+  font-weight: 600;
+}
+
+.fact-check-original summary {
+  margin-top: 8px;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 /* Keep the team setup centred with equal content insets. Only the form body scrolls, so
    the title, close button and actions stay inside the rounded window at every height. */
 .team-formation-modal {

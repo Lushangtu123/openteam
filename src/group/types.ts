@@ -586,6 +586,16 @@ export interface RoleSiteHealth {
   updatedAt: number
 }
 
+// How a source link in a reply was found to be (src/background/linkCheck.ts): it opens, the page is
+// missing, the site refuses automatic visits, the site errors, the site responds (page not checked,
+// as no access to it was granted), it cannot be reached, or it was not checked (not https).
+export interface LinkCheck {
+  status: 'ok' | 'missing' | 'refused' | 'error' | 'reachable' | 'unreachable' | 'unchecked'
+  httpStatus?: number
+  title?: string
+  checkedAt: number
+}
+
 // A vote (src/group/poll.ts): the question and its options, on the message that asks for it.
 export interface MessagePoll {
   question: string
@@ -651,6 +661,13 @@ export interface GroupMessage {
   scheduledTaskId?: string
   // On the user's message that asks members to vote.
   poll?: MessagePoll
+  // On the user's message that asks members to give sources (src/group/sources.ts).
+  wantsSources?: boolean
+  // On a reply to such a message: what OpenTeam found opening each of its source links.
+  linkChecks?: Record<string, LinkCheck>
+  // On a request OpenTeam sends to one member to check the facts of a round asked with sources:
+  // the message that started the round.
+  factCheckOf?: string
   // On the user's message that started a 项目 (its goal).
   projectGoal?: boolean
   // On a request OpenTeam sends to a member for a project: a plan, a task, a check or the final

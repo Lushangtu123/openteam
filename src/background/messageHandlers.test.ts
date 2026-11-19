@@ -408,6 +408,7 @@ describe('background message handlers', () => {
       'GROUP_MESSAGE_RESYNC_REPLY',
       'GROUP_MESSAGE_SEND',
       'GROUP_ROUND_SUMMARY_REQUEST',
+      'GROUP_LINKS_CHECK',
       'GROUP_DISCUSSION_STOP',
       'GROUP_DISCUSSION_CONTINUE',
       'GROUP_PROJECT_START',
@@ -3504,5 +3505,92 @@ describe('a vote (投票)', () => {
     await ctx.send({ raw: '@工程师 @设计师 选哪个方案？', poll })
     await vi.waitFor(() => expect(ctx.complete).toHaveBeenCalledTimes(2))
     expect(ctx.store().chatsById['chat-1'].discussion).toBeUndefined()
+  })
+})
+
+describe('a message asked with sources (要来源)', () => {
+  // 工程师 and 设计师 answer with sources; 校对 (also an API member) sat out and checks the facts.
+  async function setupSources() {
+    vi.resetModules()
+    const startingStore = createStoreWithTwoApiRoles()
+    startingStore.rolesById['role-3'] = { ...structuredClone(startingStore.rolesById['role-1']), id: 'role-3', name: '校对', systemPrompt: '核对事实' }
+    Object.assign(startingStore.chatsById['chat-1'], { mode: 'collaborative', crossReview: true, roleIds: ['role-1', 'role-2', 'role-3'] })
+    let currentStore = structuredClone(startingStore)
+    vi.doMock('./storeAccess', async importOriginal => {
+      const actual = await importOriginal<typeof import('./storeAccess')>()
+      return {
+        ...actual,
+        mutateStore: vi.fn(async (mutator: (store: OpenTeamStore) => unknown) => {
+          const result = await mutator(currentStore)
+          currentStore = structuredClone(currentStore)
+          return { store: currentStore, result }
+        }),
+      }
+    })
+    const { createMessageHandlers } = await import('./messageHandlers')
+    const prompts: string[] = []
+    const complete = vi.fn(async (input: { prompt: string }): Promise<{ content: string }> => {
+      prompts.push(input.prompt)
+      if (input.prompt.includes('事实核查员')) return { content: '- 【已核实】工程师：1700 万辆 —— IEA 报告\n结论：大体可信。' }
+      const name = input.prompt.match(/你的身份是「(.+?)」/)?.[1]
+      return { content: name === '工程师' ? '约 1700 万辆 [1]。\n\n来源：\n[1] https://www.iea.org/report' : '大约 1500 万辆 [1]。\n\n来源：\n[1] https://made-up.example/ev' }
+    })
+    const checkLinks = vi.fn(async (urls: string[]) => Object.fromEntries(urls.map(url => [url, url.includes('iea') ? { status: 'ok' as const, httpStatus: 200, title: 'Global EV Outlook', checkedAt: 1 } : { status: 'unreachable' as const, checkedAt: 1 }])))
+    let messageIdSeq = 0
+    const routes = createMessageHandlers({
+      broadcastStoreUpdated: vi.fn(),
+      checkLinks,
+      externalModelClient: { complete },
+      getChatStatusFromRoles: () => 'ready',
+      log: { debug: vi.fn(), info: vi.fn(), warn: vi.fn() },
+      newId: vi.fn((prefix: string) => prefix === 'msg' ? `${prefix}-${++messageIdSeq}` : `${prefix}-${messageIdSeq}`),
+      now: vi.fn(() => 100),
+      runtimeFrames: { bind: vi.fn(), getByAddress: vi.fn(), getByRole: vi.fn() },
+      sendRoleMessage: vi.fn(),
+      sendError: vi.fn(),
+      sendPrompt: vi.fn(),
+      waitForRetry: vi.fn(async () => {}),
+    })
+    const route = (type: string, fields: Record<string, unknown>) => routes.find(item => item.type === type)!.handler({ type, chatId: 'chat-1', ...fields }, {})
+    const messages = () => currentStore.chatsById['chat-1'].messageIds.map(id => currentStore.messagesById[id])
+    return { route, messages, prompts, checkLinks }
+  }
+
+  it('asks members for numbered sources, checks their links, then has one member who sat out check the facts', async () => {
+    const ctx = await setupSources()
+    await ctx.route('GROUP_MESSAGE_SEND', { raw: '@工程师 @设计师 2024 年电动车卖了多少？', wantsSources: true })
+    await vi.waitFor(() => expect(ctx.messages().some(message => message.factCheckOf)).toBe(true))
+    await vi.waitFor(() => expect(ctx.prompts.some(prompt => prompt.includes('事实核查员'))).toBe(true))
+    const question = ctx.messages()[0]
+    expect(question.wantsSources).toBe(true)
+    expect(ctx.prompts[0]).toContain('[无来源]')
+    expect(ctx.checkLinks).toHaveBeenCalledWith(['https://www.iea.org/report', 'https://made-up.example/ev'])
+    const answers = ctx.messages().filter(message => message.type === 'assistant' && message.sourceMessageId === question.id)
+    expect(answers.map(answer => Object.values(answer.linkChecks ?? {})[0]?.status)).toEqual(['ok', 'unreachable'])
+    const request = ctx.messages().find(message => message.factCheckOf)!
+    expect(request).toMatchObject({ factCheckOf: question.id, targetRoleIds: ['role-3'] })
+    const checkPrompt = ctx.prompts.find(prompt => prompt.includes('事实核查员'))!
+    expect(checkPrompt).toContain('你是「校对」')
+    expect(checkPrompt).toContain('- 【工程师】https://www.iea.org/report：能打开，标题「Global EV Outlook」')
+    expect(checkPrompt).toContain('- 【设计师】https://made-up.example/ev：连不上，网站可能不存在')
+    // No summary or review round on top.
+    await vi.waitFor(() => expect(ctx.messages().some(message => message.type === 'assistant' && message.content.includes('结论'))).toBe(true))
+    expect(ctx.messages().some(message => message.roundSummaryOf || message.crossReviewOf)).toBe(false)
+  })
+
+  it('checks one answer\'s links again when asked (access to their sites was just granted)', async () => {
+    const ctx = await setupSources()
+    await ctx.route('GROUP_MESSAGE_SEND', { raw: '@工程师 @设计师 2024 年电动车卖了多少？', wantsSources: true })
+    await vi.waitFor(() => expect(ctx.messages().some(message => message.factCheckOf)).toBe(true))
+    const answer = ctx.messages().find(message => message.type === 'assistant' && message.roleName === '设计师')!
+    ctx.checkLinks.mockClear()
+    await ctx.route('GROUP_LINKS_CHECK', { messageId: answer.id })
+    expect(ctx.checkLinks).toHaveBeenCalledWith(['https://made-up.example/ev'])
+  })
+
+  it('is not asked for sources on a vote, nor on a message to nobody', async () => {
+    const ctx = await setupSources()
+    await ctx.route('GROUP_MESSAGE_SEND', { raw: '只是记一下', wantsSources: true })
+    expect(ctx.messages()[0].wantsSources).toBeUndefined()
   })
 })

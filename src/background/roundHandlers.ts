@@ -4,6 +4,7 @@ import { canBeAskedNow } from './memberBackup'
 import { type MessageUpload, readMessageUploads } from '../group/messageUploads'
 import { hasRoundSummary, pickSummarizer, readSummarizableRound, roundSummaryRequestText } from '../group/roundSummary'
 import { crossReviewRequestText, wantsCrossReview } from '../group/collaboration'
+import { factCheckRequestText, hasFactCheck, readCheckableRound, readReplySources } from '../group/sources'
 import { createProjectRunner } from './projectRunner'
 import { chooseNextSpeaker, DISCUSSION_MAX_FAILED_TURNS, discussionMaxTurns, discussionTranscript, discussionTurnRequestText, turnCountsOf } from '../group/discussion'
 import type { DiscussionRun, GroupChat, GroupMessage, GroupRole, OpenTeamStore } from '../group/types'
@@ -94,6 +95,11 @@ export function createRoundHandlers(ctx: MessageHandlerContext) {
   function scheduleAfterRound(store: OpenTeamStore, chatId: string, questionId: string): void {
     const chat = store.chatsById[chatId]
     const question = store.messagesById[questionId]
+    // Asked with sources: its links are checked, then one member checks the facts (no summary).
+    if (question?.wantsSources) {
+      if (chat && readCheckableRound(store, chat, question) && !hasFactCheck(store, chat, questionId)) scheduleSourcesCheck(chatId, questionId)
+      return
+    }
     if (!chat || !wantsCrossReview(chat, question) || !readSummarizableRound(store, chat, question) || hasCrossReview(store, chat, questionId)) {
       scheduleRoundSummary(store, chatId, questionId)
       return
@@ -162,6 +168,104 @@ export function createRoundHandlers(ctx: MessageHandlerContext) {
     await sendPromptDeliveries(deps, chatId, result.request.id, result.prepared.flatMap(item => item.delivery ? [item.delivery] : []))
     await deliverExternalTogether(result.prepared.flatMap(item => item.externalDelivery ? [item.externalDelivery] : []))
     return true
+  }
+
+  // 要来源 (src/group/sources.ts): the round's source links are opened, then one member is asked to
+  // check the facts, given the answers, the link checks and the claims without a source.
+  const sourcesChecks = new Set<string>()
+  function scheduleSourcesCheck(chatId: string, questionId: string): void {
+    if (sourcesChecks.has(questionId)) return
+    sourcesChecks.add(questionId)
+    void (async () => {
+      await checkReplyLinks(chatId, questionId)
+      await waitForRetryDelay(deps, ROUND_SUMMARY_DELAY_MS)
+      await requestFactCheck(chatId, questionId)
+    })()
+      .catch(error => deps.log.warn('fact-check:failed', { chatId, questionId, error: error instanceof Error ? error.message : String(error) }))
+      .finally(() => sourcesChecks.delete(questionId))
+  }
+
+  // Opens the links of the round's answers (or of one answer) that have not been checked, or all of
+  // them again when `again` (access to their sites was just granted).
+  async function checkReplyLinks(chatId: string, questionId: string, options: { replyId?: string; again?: boolean } = {}): Promise<OpenTeamStore | undefined> {
+    if (!deps.checkLinks) return undefined
+    const { result: wanted } = await mutateStore(store => {
+      const chat = store.chatsById[chatId]
+      const round = chat ? readCheckableRound(store, chat, store.messagesById[questionId]) : undefined
+      return (round?.replies ?? [])
+        .filter(reply => !options.replyId || reply.message.id === options.replyId)
+        .map(reply => ({ id: reply.message.id, urls: readReplySources(reply.message.content).links.map(link => link.url).filter(url => options.again || !reply.message.linkChecks?.[url]) }))
+        .filter(item => item.urls.length > 0)
+    })
+    if (wanted.length === 0) return undefined
+    const results = await deps.checkLinks(wanted.flatMap(item => item.urls))
+    const { store } = await mutateStore(store => {
+      for (const item of wanted) {
+        const reply = store.messagesById[item.id]
+        if (!reply) continue
+        reply.linkChecks = { ...reply.linkChecks, ...Object.fromEntries(item.urls.flatMap(url => results[url] ? [[url, results[url]]] : [])) }
+      }
+    })
+    deps.log.info('fact-check:links-checked', { chatId, questionId, links: Object.keys(results).length })
+    await deps.broadcastStoreUpdated(store)
+    return store
+  }
+
+  async function requestFactCheck(chatId: string, questionId: string) {
+    const timestamp = deps.now()
+    const { store, result } = await mutateStore(store => {
+      const chat = store.chatsById[chatId]
+      const question = store.messagesById[questionId]
+      const round = chat ? readCheckableRound(store, chat, question) : undefined
+      if (!chat || !round || hasFactCheck(store, chat, questionId)) return undefined
+      const roles = getChatRoles(store, chat)
+      const isAvailable = (role: GroupRole) => role.status !== 'thinking' && canBeAskedNow(store, role, timestamp) && (isExternalModelRole(role)
+        ? Boolean(getExternalModelForRole(store, role))
+        : isRoleDeliverable(role, deps.runtimeFrames.getByRole(chat.id, role.id), timestamp))
+      // Someone who sat the round out, on another model if there is one, as for a summary.
+      const checker = pickSummarizer(roles, round, isAvailable, store.settings.defaultChatSite)
+      if (!checker) return undefined
+      const request: GroupMessage = {
+        id: deps.newId('msg'),
+        chatId: chat.id,
+        seq: chat.nextMessageSeq,
+        type: 'user',
+        content: factCheckRequestText(store.settings.language),
+        targetRoleIds: [checker.id],
+        mentionedRoleIds: [checker.id],
+        factCheckOf: round.question.id,
+        createdAt: timestamp,
+        status: 'pending',
+        deliveryStatus: { [checker.id]: 'pending' },
+      }
+      store.messagesById[request.id] = request
+      chat.messageIds.push(request.id)
+      chat.nextMessageSeq += 1
+      chat.updatedAt = timestamp
+      chat.status = 'running'
+      const prepared = prepareRolePromptDelivery({ store, chat, role: checker, userMessage: request, roles, messages: getChatMessages(store, chat), timestamp, newId: deps.newId, runtimeFrames: deps.runtimeFrames })
+      recoverDeliverableRoleStatus(checker, timestamp, deps.log)
+      checker.status = 'thinking'
+      checker.lastPromptMessageId = request.id
+      checker.replyAttemptId = prepared.replyAttemptId
+      checker.updatedAt = timestamp
+      return { request, prepared }
+    })
+    if (!result) return
+    deps.log.info('fact-check:requested', { chatId, questionId, messageId: result.request.id, roleId: result.request.targetRoleIds?.[0] })
+    await deps.broadcastStoreUpdated(store)
+    if (result.prepared.delivery) await sendPromptDeliveries(deps, chatId, result.request.id, [result.prepared.delivery])
+    if (result.prepared.externalDelivery) await deliverExternal(result.prepared.externalDelivery)
+  }
+
+  // 细查链接: the page was just granted access to these sites; the answer's links are checked again.
+  const handleLinksCheck = async (message: RuntimeMessage) => {
+    const chatId = requireString(message.chatId, '缺少群聊 ID')
+    const replyId = requireString(message.messageId, '缺少消息 ID')
+    const { result: questionId } = await mutateStore(store => store.messagesById[replyId]?.sourceMessageId)
+    if (!questionId) throw new Error('找不到这条回答')
+    const store = await checkReplyLinks(chatId, questionId, { replyId, again: true })
+    return { ok: true, ...(store ? { store } : {}) }
   }
 
   function scheduleRoundSummary(store: OpenTeamStore, chatId: string, questionId: string): void {
@@ -431,7 +535,7 @@ export function createRoundHandlers(ctx: MessageHandlerContext) {
     return requestRoundSummary(chatId, questionId, { roleId: readOptionalString(message.roleId) })
   }
 
-  return { scheduleAfterRound, startDiscussion, scheduleDiscussionAdvance, handleDiscussionStop, handleDiscussionContinue, projectRunner, handleProjectStart, projectRoute, handleRoundSummaryRequest }
+  return { scheduleAfterRound, startDiscussion, scheduleDiscussionAdvance, handleDiscussionStop, handleDiscussionContinue, projectRunner, handleProjectStart, projectRoute, handleRoundSummaryRequest, handleLinksCheck }
 }
 
 export type RoundHandlers = ReturnType<typeof createRoundHandlers>

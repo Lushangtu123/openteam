@@ -28,7 +28,7 @@ export function keyPointsInstruction(languageInput: OpenTeamLanguage | undefined
 // easy to scan. Orchestration steps, team invitations and summary requests keep their own formats.
 export function wantsKeyPoints(settings: Pick<OpenTeamSettings, 'replyKeyPoints'>, chat: GroupChat | undefined, message: GroupMessage): boolean {
   if (settings.replyKeyPoints === false) return false
-  if (message.type !== 'user' || message.orchestrationKind || message.roundSummaryOf || message.crossReviewOf) return false
+  if (message.type !== 'user' || message.orchestrationKind || message.roundSummaryOf || message.crossReviewOf || message.factCheckOf) return false
   // A vote is answered in its own short form (src/group/poll.ts).
   if (message.poll) return false
   if (chat?.teamFormation?.invitationIds.includes(message.id)) return false
@@ -64,7 +64,7 @@ export function isRoundSummaryRequest(message: GroupMessage | undefined): boolea
 // What OpenTeam itself asks members (a summary, a discussion turn, a project step, a review round);
 // members do not get these as context, and the user did not write them.
 export function isOpenTeamRequest(message: GroupMessage | undefined): boolean {
-  return message?.type === 'user' && Boolean(message.roundSummaryOf || message.discussionTurnOf || message.projectRequest || message.crossReviewOf)
+  return message?.type === 'user' && Boolean(message.roundSummaryOf || message.discussionTurnOf || message.projectRequest || message.crossReviewOf || message.factCheckOf)
 }
 
 // A reply that failed holds OpenTeam's note about the failure ("回复失败：…"), not anything the member
@@ -83,7 +83,7 @@ export function isRoundSummaryMessage(message: GroupMessage, messageById: (id: s
 export function readSummarizableRound(store: OpenTeamStore, chat: GroupChat, question: GroupMessage | undefined): SummarizableRound | undefined {
   if (!question || question.chatId !== chat.id || question.type !== 'user') return undefined
   if (question.discussionTopic) return readSummarizableDiscussion(store, chat, question)
-  if (question.roundSummaryOf || question.orchestrationKind || chat.teamFormation?.invitationIds.includes(question.id)) return undefined
+  if (question.roundSummaryOf || question.factCheckOf || question.orchestrationKind || chat.teamFormation?.invitationIds.includes(question.id)) return undefined
   const statuses = Object.values(question.deliveryStatus ?? {})
   if (statuses.some(status => status !== 'received' && status !== 'error')) return undefined
 

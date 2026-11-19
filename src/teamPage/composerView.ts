@@ -11,6 +11,8 @@ import { paintRoleAvatar } from './viewHelpers'
 
 export interface ComposerViewDependencies {
   state: TeamPageState
+  // 要来源 was switched off by a send (or back on when the send failed): its switch is drawn again.
+  onSourcesUsed?(): void
   composerFormEl: HTMLFormElement
   targetPreviewEl: HTMLElement
   busyPreviewEl: HTMLElement
@@ -292,10 +294,20 @@ export function createComposerView(deps: ComposerViewDependencies): ComposerView
     // Read before the composer clears, so a file that cannot be read keeps the draft as it is.
     const uploads = await deps.attachments?.readUploads() ?? []
     const attached = deps.attachments?.take() ?? []
+    // 要来源 goes with this message only.
+    const wantsSources = deps.state.wantSources === true
+    if (wantsSources) {
+      deps.state.wantSources = false
+      deps.onSourcesUsed?.()
+    }
     clearComposerAfterSend(raw, reference)
     try {
-      await runCommandWithReconnect(deps, { chat, roles: targetResult.roles, type: 'GROUP_MESSAGE_SEND', payload: { chatId: chat.id, raw, reference, ...(uploads.length > 0 ? { uploads } : {}) } })
+      await runCommandWithReconnect(deps, { chat, roles: targetResult.roles, type: 'GROUP_MESSAGE_SEND', payload: { chatId: chat.id, raw, reference, ...(uploads.length > 0 ? { uploads } : {}), ...(wantsSources ? { wantsSources: true } : {}) } })
     } catch (error) {
+      if (wantsSources) {
+        deps.state.wantSources = true
+        deps.onSourcesUsed?.()
+      }
       restoreComposerDraft(raw, reference)
       deps.attachments?.restore(attached)
       throw error

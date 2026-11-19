@@ -165,6 +165,8 @@ export function createMessageSendHandler(ctx: MessageHandlerContext, roundHandle
         type: 'user',
         content: poll ? pollMessageText(poll, normalizeLanguage(store.settings.language) === 'en') : parsed.content,
         ...(poll ? { poll } : {}),
+        // 要来源, for this message only (src/group/sources.ts); a vote has its own form.
+        ...(message.wantsSources === true && !poll && finalTargetRoleIds.length > 0 ? { wantsSources: true } : {}),
         targetRoleIds: finalTargetRoleIds,
         mentionedRoleIds: parsed.mentionedRoleIds,
         mentionsAll: parsed.mentionsAll,

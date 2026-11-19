@@ -18,6 +18,9 @@ import { countRepliesByQuestion } from '../group/replyComparison'
 import { hasRoundSummary, isOpenTeamRequest } from '../group/roundSummary'
 import { tallyPoll, type PollTally } from '../group/poll'
 import { pollCardSignature, renderPollCard } from './pollCard'
+import { readFactCheck } from '../group/sources'
+import { renderFactCheckCard, renderSourcesBlock } from './sourcesView'
+import { hostAccessPattern } from '../shared/hostAccess'
 import { foldToKeyPoints } from './keyPointsFold'
 import type { ImageAttachmentBlobRecord } from '../shared/imageAttachmentRepository'
 import type { TeamPageState } from './appState'
@@ -32,6 +35,8 @@ const AUTO_SCROLL_BOTTOM_THRESHOLD_PX = 48
 
 export interface MessagesViewDependencies {
   state: TeamPageState
+  // Asks the browser for access to these sites (match patterns); resolves to whether it was given.
+  requestSiteAccess?(patterns: string[]): Promise<boolean>
   getStore(): OpenTeamStore
   messagesEl: HTMLElement
   getCurrentChat(): GroupChat | undefined
@@ -331,6 +336,17 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
       return article
     }
 
+    if (message.type === 'user' && message.factCheckOf) {
+      article.className = 'message-row message system fact-check-request'
+      const pill = document.createElement('div')
+      pill.className = 'message-system-pill'
+      const checker = message.targetRoleIds?.[0] ? deps.getStore().rolesById[message.targetRoleIds[0]] : undefined
+      pill.textContent = checker ? `已请「${checker.name}」核查这一轮回答里的事实` : '正在核查这一轮回答里的事实'
+      article.append(pill)
+      cacheMessageNode(message.id, signature, article, streamingSignature)
+      return article
+    }
+
     if (message.type === 'system') {
       const pill = document.createElement('div')
       pill.className = 'message-system-pill'
@@ -354,17 +370,19 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     stack.className = 'message-stack'
 
     const isSummary = isRoundSummaryReply(message)
+    const isFactCheck = isFactCheckReply(message)
     const projectRequest = message.type === 'assistant' && message.sourceMessageId ? deps.getStore().messagesById[message.sourceMessageId]?.projectRequest : undefined
     const isFinal = projectRequest?.kind === 'final'
     if (isSummary || isFinal) article.classList.add('round-summary')
     if (isFinal) article.classList.add('project-final')
-    if (message.type === 'assistant' && (showName || isSummary || isFinal)) {
+    if (isFactCheck) article.classList.add('round-summary', 'fact-check')
+    if (message.type === 'assistant' && (showName || isSummary || isFinal || isFactCheck)) {
       const name = document.createElement('div')
       name.className = 'message-name'
-      if (isSummary || isFinal) {
+      if (isSummary || isFinal || isFactCheck) {
         const label = document.createElement('span')
         label.className = 'round-summary-label'
-        label.textContent = isFinal ? '最终交付' : '本轮汇总'
+        label.textContent = isFinal ? '最终交付' : isFactCheck ? '事实核查' : '本轮汇总'
         name.append(label)
       }
       const title = document.createElement('span')
@@ -420,6 +438,17 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
       // Shown as the claimed position.
     } else if (message.type === 'assistant' && message.status === 'pending') {
       reveal.show(streamingRevealKey(message), body, message.content)
+    } else if (isFactCheck && message.status === 'received' && readFactCheck(message.content)) {
+      // The checker's verdicts as a card; its own words a click away.
+      body.append(renderFactCheckCard(readFactCheck(message.content)!, normalizeLanguage(deps.getStore().settings.language) === 'en'))
+      const original = document.createElement('details')
+      original.className = 'fact-check-original'
+      const summary = document.createElement('summary')
+      summary.textContent = '查看原文'
+      const text = document.createElement('div')
+      renderMarkdownMessageBody(text, message.content)
+      original.append(summary, text)
+      body.append(original)
     } else if (shouldRenderMarkdownMessage(message)) {
       renderMarkdownMessageBody(body, message.content)
     } else {
@@ -491,6 +520,8 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
       if (summarize) actions.append(summarize)
       stack.append(actions)
     }
+    const sources = sourcesBlock(message)
+    if (sources) stack.append(sources)
     const choices = replyChoicesBlock(message)
     if (choices) stack.append(choices)
     const proposals = memoryProposalsBlock(message)
@@ -505,6 +536,28 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
   function projectTaskLabel(message: GroupMessage, taskId: string | undefined): string {
     const task = deps.getStore().chatsById[message.chatId]?.project?.tasks.find(candidate => candidate.id === taskId)
     return task ? `任务 ${task.id} · ${task.title}` : `任务 ${taskId ?? ''}`
+  }
+
+  function isFactCheckReply(message: GroupMessage): boolean {
+    return message.type === 'assistant' && Boolean(message.sourceMessageId && deps.getStore().messagesById[message.sourceMessageId]?.factCheckOf)
+  }
+
+  // 要来源: an answer to a message asked with sources shows its sources and their checks.
+  function sourcesBlock(message: GroupMessage): HTMLElement | undefined {
+    if (message.type !== 'assistant' || message.status !== 'received' || !message.sourceMessageId) return undefined
+    if (!deps.getStore().messagesById[message.sourceMessageId]?.wantsSources) return undefined
+    return renderSourcesBlock(message, { english: normalizeLanguage(deps.getStore().settings.language) === 'en', ...(deps.requestSiteAccess ? { checkClosely } : {}) })
+  }
+
+  // 细查链接: the browser asks for these sites once; then their links are checked again, closely.
+  async function checkClosely(reply: GroupMessage, urls: string[]): Promise<void> {
+    const patterns = [...new Set(urls.filter(url => url.startsWith('https://')).map(hostAccessPattern).filter((pattern): pattern is string => Boolean(pattern)))]
+    try {
+      if (patterns.length === 0 || !await deps.requestSiteAccess!(patterns)) return
+      await deps.runCommand('GROUP_LINKS_CHECK', { chatId: reply.chatId, messageId: reply.id })
+    } catch (error) {
+      deps.showError(error instanceof Error ? error.message : String(error))
+    }
   }
 
   function isRoundSummaryReply(message: GroupMessage): boolean {
@@ -1000,6 +1053,9 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
       compareCount: message.type === 'user' ? replyCounts.get(message.id) ?? 0 : undefined,
       summarized: message.type === 'user' ? summarizedQuestionIds.has(message.id) : undefined,
       roundSummary: isRoundSummaryReply(message),
+      factCheck: isFactCheckReply(message),
+      linkChecks: message.linkChecks,
+      sourcesAsked: message.type === 'assistant' && message.sourceMessageId ? deps.getStore().messagesById[message.sourceMessageId]?.wantsSources : undefined,
       summaryTarget: message.roundSummaryOf ? deps.getStore().rolesById[message.targetRoleIds?.[0] ?? '']?.name : undefined,
       targetRoleIds: message.targetRoleIds,
       mentionedRoleIds: message.mentionedRoleIds,

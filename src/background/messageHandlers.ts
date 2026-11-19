@@ -22,6 +22,7 @@ export const MESSAGE_ROUTE_TYPES = [
   'GROUP_MESSAGE_RESYNC_REPLY',
   'GROUP_MESSAGE_SEND',
   'GROUP_ROUND_SUMMARY_REQUEST',
+  'GROUP_LINKS_CHECK',
   'GROUP_DISCUSSION_STOP',
   'GROUP_DISCUSSION_CONTINUE',
   'GROUP_PROJECT_START',
@@ -96,7 +97,7 @@ export function createMessageHandlers(baseDeps: MessageHandlersDependencies): Ba
 
   const ctx: MessageHandlerContext = { baseDeps, deps, externalModelClient, externalModelRuns, roleErrorRetryCounts, deliverExternal, deliverExternalTogether }
   const roundHandlers = createRoundHandlers(ctx)
-  const { scheduleAfterRound, scheduleDiscussionAdvance, handleDiscussionStop, handleDiscussionContinue, projectRunner, handleProjectStart, projectRoute, handleRoundSummaryRequest } = roundHandlers
+  const { scheduleAfterRound, scheduleDiscussionAdvance, handleDiscussionStop, handleDiscussionContinue, projectRunner, handleProjectStart, projectRoute, handleRoundSummaryRequest, handleLinksCheck } = roundHandlers
   const { handleMessageSend } = createMessageSendHandler(ctx, roundHandlers)
   const { handleRoleRetryReply, handleRoleStopReply, handleNoteSave, handleMessageHighlightCreate, handleMessageResyncReply } = createMessageActionHandlers(ctx)
   const { handleFrameRoleReady, handleConversationUpdated, handleSendAck, handleRoleStatus, handleSiteStatusUpdate, handleRoleReply, handleRoleReplyProgress, handleRoleReplyResync, handleRepliesInterrupted, handleRoleReplyEnd, handleRoleResumeFailed, handleRoleError } = createMemberPageHandlers(ctx)
@@ -109,6 +110,7 @@ export function createMessageHandlers(baseDeps: MessageHandlersDependencies): Ba
     { type: 'GROUP_MESSAGE_RESYNC_REPLY', handler: handleMessageResyncReply },
     { type: 'GROUP_MESSAGE_SEND', handler: handleMessageSend },
     { type: 'GROUP_ROUND_SUMMARY_REQUEST', handler: handleRoundSummaryRequest },
+    { type: 'GROUP_LINKS_CHECK', handler: handleLinksCheck },
     { type: 'GROUP_DISCUSSION_STOP', handler: handleDiscussionStop },
     { type: 'GROUP_DISCUSSION_CONTINUE', handler: handleDiscussionContinue },
     { type: 'GROUP_PROJECT_START', handler: handleProjectStart },

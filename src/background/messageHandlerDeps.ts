@@ -1,7 +1,7 @@
 // What the message handlers are given, and the shapes they share with the modules they use.
 import type { LoadedUpload, UploadedImage } from './imageAttachments'
 import type { BackgroundToRoleMessage } from '../group/runtimeProtocol'
-import type { GroupChat, GroupMessage, MessageImageAttachment, OpenTeamStore, ReplyImageSource } from '../group/types'
+import type { GroupChat, GroupMessage, LinkCheck, MessageImageAttachment, OpenTeamStore, ReplyImageSource } from '../group/types'
 import type { ExternalModelClient } from './externalModelClient'
 import type { PromptSender } from './promptDelivery'
 import type { ExternalPromptDelivery, PreparedRolePromptDelivery } from './rolePromptDelivery'
@@ -51,6 +51,8 @@ export interface MessageHandlersDependencies {
   roleErrorRetryDelaysMs?: readonly number[]
   requestRoleRecovery?(chatId: string, roleId: string, reason?: string): Promise<boolean>
   waitForRetry?(ms: number): Promise<void>
+  // Opens source links to see whether they hold up (linkCheck.ts); without it, links stay unchecked.
+  checkLinks?(urls: string[]): Promise<Record<string, LinkCheck>>
   // A web member's backup API model answers its prompt (memberBackup.ts); resolves when it is done.
   answerForMember?(delivery: ExternalPromptDelivery): Promise<unknown>
 }

@@ -344,6 +344,7 @@ const composerAttachments = createComposerAttachments({
   onChange: () => renderComposerState(),
 })
 const composerView = createComposerView({
+  onSourcesUsed: () => renderSourcesToggle(),
   state: appState,
   composerFormEl,
   targetPreviewEl,
@@ -537,6 +538,7 @@ const closePeopleModals = peopleLibraryView.closePeopleModals
 const registerPeopleLibraryEvents = peopleLibraryView.registerPeopleLibraryEvents
 const messagesView = createMessagesView({
   state: appState,
+  requestSiteAccess: patterns => chrome.permissions.request({ origins: patterns }),
   getStore: () => store,
   messagesEl,
   getCurrentChat,
@@ -728,6 +730,18 @@ teamDomRefs.startPollEl.addEventListener('click', () => {
 
 function renderPollButton(): void {
   teamDomRefs.startPollEl.hidden = !getCurrentChat() || getCurrentRoles().length < 2
+  renderSourcesToggle()
+}
+
+// 要来源: for the next message only.
+teamDomRefs.sourcesToggleEl.addEventListener('click', () => {
+  appState.wantSources = !appState.wantSources
+  renderSourcesToggle()
+})
+
+function renderSourcesToggle(): void {
+  teamDomRefs.sourcesToggleEl.hidden = !getCurrentChat() || getCurrentRoles().length === 0
+  teamDomRefs.sourcesToggleEl.setAttribute('aria-checked', String(appState.wantSources === true))
 }
 
 function render(): void {

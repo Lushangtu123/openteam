@@ -49,6 +49,7 @@ import { createControlActionExecutor } from './controlHandlers'
 import { createSiteCheckHandlers } from './siteCheckHandlers'
 import { createScheduledTaskHandlers } from './scheduledTaskHandlers'
 import { createSiteUsageHandlers } from './siteUsageHandlers'
+import { checkLinks } from './linkCheck'
 import { createScheduledTaskRunner, SCHEDULED_TASK_ALARM } from './scheduledTaskRunner'
 import { keepLogsAcrossRestarts } from './diagnosticsLogs'
 import { recentLogs } from '../shared/logger'
@@ -343,7 +344,7 @@ const routeMessage = createMessageRouter([
   },
   ...createRoleHandlers({ broadcastStoreUpdated, externalModelClient, log, newId, now, runtimeFrames, sendPrompt }),
   ...createOrchestrationHandlers({ broadcastStoreUpdated, broadcastAutoGenerateStream, externalModelClient, getChatStatusFromRoles, log, newId, now, promptDeliveryLimiter, requestRoleRecovery, runtimeFrames, sendPrompt }),
-  ...createMessageHandlers({ broadcastStoreUpdated, externalModelClient, getChatStatusFromRoles, imageAttachments, log, newId, now, onPromptSettled: notifyWhenAnswered, promptDeliveryLimiter, requestRoleRecovery, runtimeFrames, sendError, sendPrompt, sendRoleMessage }),
+  ...createMessageHandlers({ broadcastStoreUpdated, checkLinks: urls => checkLinks(urls, { fetch: (url, init) => fetch(url, init), hasAccess: pattern => chrome.permissions.contains({ origins: [pattern] }), now }), externalModelClient, getChatStatusFromRoles, imageAttachments, log, newId, now, onPromptSettled: notifyWhenAnswered, promptDeliveryLimiter, requestRoleRecovery, runtimeFrames, sendError, sendPrompt, sendRoleMessage }),
 ])
 
 // Replies their members can no longer give, ended at these moments (see interruptedReplies.ts).

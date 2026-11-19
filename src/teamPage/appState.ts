@@ -24,6 +24,8 @@ export interface TeamPageState {
   hostTabId?: number
   mentionIndex: number
   peopleDrawerOpen: boolean
+  // 要来源 is on for the next message (src/group/sources.ts); off again once it is sent.
+  wantSources?: boolean
   chatMenuChatId?: string
   // The groups ticked while choosing several in the chat list; undefined when not choosing.
   chatSelection?: string[]

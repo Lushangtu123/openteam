@@ -12,6 +12,7 @@ import { memoryItemsForPrompt, noteMemoryPending, withMemoryBlock } from '../gro
 import { wantsMemoryProposals, withMemoryProposalInstruction } from '../group/memoryProposals'
 import { withTeamHandbook } from '../group/teamHandbooks'
 import { pollInstruction } from '../group/poll'
+import { buildFactCheckPrompt, readCheckableRound, sourcesInstruction } from '../group/sources'
 import { normalizeLanguage } from '../shared/i18n'
 import type { ExternalModelConfig, GroupChat, GroupMessage, GroupRole, MessageReference, OpenTeamStore } from '../group/types'
 import type { PromptDelivery } from './promptDelivery'
@@ -55,7 +56,7 @@ export interface PrepareRolePromptDeliveryInput {
 
 export function prepareRolePromptDelivery(input: PrepareRolePromptDeliveryInput): PreparedRolePromptDelivery {
   const roleHistoryCount = countLocalRoleHistory(input.messages, input.role, input.userMessage.id)
-  const summaryPrompt = roundSummaryPromptFor(input) ?? crossReviewPromptFor(input)
+  const summaryPrompt = roundSummaryPromptFor(input) ?? crossReviewPromptFor(input) ?? factCheckPromptFor(input)
   const projectKind = input.userMessage.projectRequest?.kind
   const includesPersona = !summaryPrompt && (!projectKind || projectKind === 'task') && (shouldIncludePersonaForPrompt(input.role, roleHistoryCount, input.userMessage) || isFirstProjectTask(input))
   // OpenTeam's own requests (a summary, a discussion turn, a project step) carry their whole prompt.
@@ -66,7 +67,11 @@ export function prepareRolePromptDelivery(input: PrepareRolePromptDeliveryInput)
       : undefined)
   const replyAttemptId = input.newId('attempt')
   const responseInstruction = responseInstructionForMessage(input.store, input.chat, input.userMessage)
-  const extraInstruction = wantsKeyPoints(input.store.settings, input.chat, input.userMessage) ? keyPointsInstruction(input.store.settings.language) : undefined
+  const extraInstruction = joinInstructions(
+    wantsKeyPoints(input.store.settings, input.chat, input.userMessage) ? keyPointsInstruction(input.store.settings.language) : undefined,
+    // 要来源: number each fact's source and list the links (src/group/sources.ts).
+    input.userMessage.wantsSources ? sourcesInstruction(normalizeLanguage(input.store.settings.language) === 'en') : undefined,
+  )
   const maxContextChars = contextCharBudgetForRole(input.store, input.role)
   const imageAttachmentIds = uploadedImageIds(discussionImagesSource(input) ?? input.userMessage)
   const images = imageAttachmentIds.length > 0 ? { imageAttachmentIds } : {}
@@ -229,6 +234,19 @@ function roundSummaryPromptFor(input: PrepareRolePromptDeliveryInput): string | 
   const round = readSummarizableRound(input.store, input.chat, input.store.messagesById[input.userMessage.roundSummaryOf])
   if (!round) throw new Error('这一轮的回复已经不在了，无法汇总')
   return buildRoundSummaryPrompt({ round, summarizer: input.role, language: input.store.settings.language, maxReplyChars: contextCharBudgetForRole(input.store, input.role) })
+}
+
+// A fact check's request carries the answers, their link checks and unsourced claims itself.
+function factCheckPromptFor(input: PrepareRolePromptDeliveryInput): string | undefined {
+  if (!input.userMessage.factCheckOf) return undefined
+  const round = readCheckableRound(input.store, input.chat, input.store.messagesById[input.userMessage.factCheckOf])
+  if (!round) throw new Error('这一轮的回答已经不在了，无法核查')
+  return buildFactCheckPrompt({ round, checker: input.role, language: input.store.settings.language, maxReplyChars: contextCharBudgetForRole(input.store, input.role) })
+}
+
+function joinInstructions(...parts: Array<string | undefined>): string | undefined {
+  const present = parts.filter((part): part is string => Boolean(part))
+  return present.length > 0 ? present.join('\n\n') : undefined
 }
 
 // A review round's request carries the question and everyone's answers itself (互相审).

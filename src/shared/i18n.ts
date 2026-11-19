@@ -440,6 +440,11 @@ const UI_TRANSLATIONS: Record<string, string> = {
   '系统': 'System',
   '添加图片或文件': 'Add image or file',
   '发起投票': 'Start a vote',
+  '要来源': 'Sources',
+  '开启后，这条消息要求成员给每个事实标出来源；答完后 OpenTeam 检查链接，并请一位成员核对': 'When on, this message asks members to give a source for each fact; afterwards OpenTeam checks the links and asks one member to check the facts',
+  '事实核查': 'Fact check',
+  '查看原文': 'Show the reply',
+  '正在核查这一轮回答里的事实': 'Checking the facts in this round',
   '附件只在发送时上传给对应的 AI 网站或模型。': 'Attachments are uploaded to the AI site or model only when you send them.',
   '读取中…': 'Reading…',
   '附件只在发送时上传给对应的 AI 网站或模型。PDF 和 Office 文件发送的是读出的文字。': 'Attachments are uploaded to the AI site or model only when you send them. PDF and Office files are sent as the text read from them.',
@@ -1212,6 +1217,8 @@ function translateUiPattern(source: string): string | undefined {
   if (reviewAsked) return `Asked ${[...reviewAsked[1].matchAll(/「([^」]+)」/g)].map(match => match[1]).join(', ')} to review each other's answers`
   const summaryAsked = source.match(/^已请「(.+)」汇总本轮回复$/)
   if (summaryAsked) return `Asked ${summaryAsked[1]} to summarize this round`
+  const factCheckAsked = source.match(/^已请「(.+)」核查这一轮回答里的事实$/)
+  if (factCheckAsked) return `Asked ${factCheckAsked[1]} to check the facts in this round`
   const discussionRunning = source.match(/^轮流讨论中 · 第 (\d+)\/(\d+) 轮$/)
   if (discussionRunning) return `Discussion running · turn ${discussionRunning[1]}/${discussionRunning[2]}`
   const discussionSpeaker = source.match(/^「(.+)」正在发言。你现在发的消息会作为补充，给下一位发言的成员看。$/)
