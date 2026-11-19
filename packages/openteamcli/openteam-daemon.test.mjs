@@ -218,6 +218,54 @@ describe('openteam local daemon', () => {
     extension.close()
   })
 
+  it('runs an agent on another machine in its own folder there, the same subfolder as here', async () => {
+    const { realpathSync } = await import('node:fs')
+    const { resolve } = await import('node:path')
+    const workspace = realpathSync(mkdtempSync(join(tmpdir(), 'ot-daemon-remote-')))
+    tempDirs.push(workspace)
+    mkdirSync(join(workspace, 'demo'))
+    const daemon = await createControlDaemon({
+      port: 0,
+      token: 'test-token',
+      logToConsole: false,
+      acpAgents: [{ id: 'vm', name: 'DeepSeek（VM）', type: 'stdio', command: process.execPath, args: [resolve(import.meta.dirname, 'test-fixtures/mock-acp-agent.mjs')], cwdAllowlist: [workspace], remoteCwd: '/home/purge/workspace/' }],
+    })
+    daemons.push(daemon)
+    const extension = new WebSocket(`ws://127.0.0.1:${daemon.port}/ext?profileId=test-profile`, { headers: { Origin: EXTENSION_ORIGIN } })
+    const responses = new Map()
+    const events = []
+    extension.addEventListener('message', event => {
+      const message = JSON.parse(String(event.data))
+      if (message.type === 'response') responses.set(message.response.id, message.response)
+      if (message.type === 'agent-event') events.push(message.event)
+    })
+    await waitFor(() => daemon.status().extensionConnected)
+    const ask = async (id, action, payload) => {
+      extension.send(JSON.stringify({ type: 'request', request: { id, action, payload } }))
+      await waitFor(() => responses.has(id))
+      return responses.get(id)
+    }
+    expect((await ask('list', 'agent.list', {})).data.agents[0]).toMatchObject({ id: 'vm', remoteCwd: '/home/purge/workspace' })
+    await ask('run', 'agent.run', { agentId: 'vm', prompt: 'WHERE', cwd: join(workspace, 'demo') })
+    await waitFor(() => events.some(event => event.kind === 'done'))
+    expect(events.find(event => event.kind === 'done').output).toBe('工作目录：/home/purge/workspace/demo；可读：false；可写：false')
+    extension.close()
+  })
+
+  it('reads a remote folder only as an absolute path without .. steps, and maps subfolders onto it', async () => {
+    const { normalizeAcpAgents, agentFolder } = await import('./openteam-daemon.mjs')
+    const agents = normalizeAcpAgents([
+      { id: 'a', type: 'stdio', command: 'ssh', cwdAllowlist: ['/Users/me/vm'], remoteCwd: '/home/purge/ws//' },
+      { id: 'b', type: 'stdio', command: 'ssh', cwdAllowlist: ['/Users/me/vm'], remoteCwd: 'home/purge' },
+      { id: 'c', type: 'stdio', command: 'ssh', cwdAllowlist: ['/Users/me/vm'], remoteCwd: '/home/../etc' },
+      { id: 'd', type: 'stdio', command: 'claude', cwdAllowlist: ['/Users/me/code'] },
+    ])
+    expect(agents.map(agent => agent.remoteCwd)).toEqual(['/home/purge/ws', undefined, undefined, undefined])
+    expect(agentFolder(agents[0], '/Users/me/vm')).toEqual({ agentCwd: '/home/purge/ws' })
+    expect(agentFolder(agents[0], '/Users/me/vm/demo/src')).toEqual({ agentCwd: '/home/purge/ws/demo/src' })
+    expect(agentFolder(agents[3], '/Users/me/code')).toEqual({})
+  })
+
   it('starts Claude Code entries without a mode in the mode that asks', async () => {
     const { normalizeAcpAgents } = await import('./openteam-daemon.mjs')
     const [old, auto, other] = normalizeAcpAgents([

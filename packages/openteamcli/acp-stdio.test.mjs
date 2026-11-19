@@ -97,6 +97,18 @@ describe('ACP over stdio', () => {
     await expect(runStdioAcpAgent(leavesMidPrompt, { prompt: '很长的群聊上下文。'.repeat(40_000), cwd: workspace(), timeoutMs: 10_000 })).rejects.toThrow(/本地智能体/)
   })
 
+  it('opens a remote agent\'s session in its own folder, and does not offer to read or write files for it', async () => {
+    const cwd = workspace()
+    const local = await runStdioAcpAgent(agent, { prompt: 'WHERE', cwd, timeoutMs: 10_000 })
+    expect(local.output).toBe(`工作目录：${cwd}；可读：true；可写：true`)
+    const remote = await runStdioAcpAgent(agent, { prompt: 'WHERE', cwd, agentCwd: '/home/purge/workspace/demo', timeoutMs: 10_000 })
+    expect(remote.output).toBe('工作目录：/home/purge/workspace/demo；可读：false；可写：false')
+    // An agent that asks anyway is refused, and nothing is written here.
+    const asked = await runStdioAcpAgent(agent, { prompt: '写', cwd, agentCwd: cwd, timeoutMs: 10_000, requestPermission: async () => 'allow' })
+    expect(asked.output).toContain('写入失败：OpenTeam 不替远程智能体读写文件')
+    expect(existsSync(join(cwd, 'hello.txt'))).toBe(false)
+  })
+
   it('explains an agent that cannot start', async () => {
     await expect(runStdioAcpAgent({ command: '/nonexistent/agent' }, { prompt: 'x', cwd: workspace(), timeoutMs: 5_000 })).rejects.toThrow('无法启动本地智能体')
   })

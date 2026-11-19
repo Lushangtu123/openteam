@@ -1251,6 +1251,8 @@ function translateUiPattern(source: string): string | undefined {
   if (textTooLarge) return `Text file too large: ${textTooLarge[1]} (1 MB at most)`
   const unreadableText = source.match(/^无法读取文本文件：(.+)（不是 UTF-8 文本）$/)
   if (unreadableText) return `Cannot read text file: ${unreadableText[1]} (not UTF-8 text)`
+  const remoteAgent = source.match(/^这个智能体在远程机器上运行，实际在那里的 (.+) 里工作（上面的工作目录下的子目录，对应它下面同名的子目录）。$/)
+  if (remoteAgent) return `This agent runs on another machine and works in ${remoteAgent[1]} there (a subfolder of the folder above maps to the same subfolder under it).`
   const view = source.match(/^查看 (.+)$/)
   if (view) return `View ${view[1]}`
   const download = source.match(/^下载 (.+)$/)

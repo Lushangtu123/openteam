@@ -2,7 +2,7 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { dirname, resolve } from 'node:path'
+import { dirname, posix, resolve } from 'node:path'
 import { createServer } from 'node:http'
 import { fileURLToPath } from 'node:url'
 import { runStdioAcpAgent } from './acp-stdio.mjs'
@@ -231,7 +231,7 @@ export async function createControlDaemon(options = {}) {
       const timeoutMs = readPositiveNumber(input.timeoutMs) ?? command.timeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS
       // From the command line nobody can answer a permission request, so the agent's requests are declined.
       const result = agent.type === 'stdio'
-        ? await runStdioAcpAgent(agent, { prompt, cwd, timeoutMs, signal: controller.signal })
+        ? await runStdioAcpAgent(agent, { prompt, cwd, ...agentFolder(agent, cwd), timeoutMs, signal: controller.signal })
         : await runWebSocketAgent(agent, { prompt, cwd, timeoutMs, signal: controller.signal })
       run.status = 'completed'
       run.result = result
@@ -443,10 +443,11 @@ export async function createControlDaemon(options = {}) {
     const emit = event => {
       if (run.connection.open) sendFrame(run.connection.socket, JSON.stringify({ type: 'agent-event', runId: run.id, event }))
     }
-    log('agent:run-start', { runId: run.id, agentId: agent.id, cwd })
+    log('agent:run-start', { runId: run.id, agentId: agent.id, cwd, ...agentFolder(agent, cwd) })
     runStdioAcpAgent(agent, {
       prompt,
       cwd,
+      ...agentFolder(agent, cwd),
       timeoutMs: readPositiveNumber(payload.timeoutMs) ?? DEFAULT_AGENT_RUN_TIMEOUT_MS,
       signal: controller.signal,
       onEvent: emit,
@@ -552,6 +553,8 @@ export function normalizeAcpAgents(raw) {
           : undefined,
         enabled: item.enabled !== false,
         cwdAllowlist: Array.isArray(item.cwdAllowlist) ? item.cwdAllowlist.map(readString).filter(Boolean).map(normalizeFsPath) : [],
+        // An agent on another machine (started over SSH): the folder it works in there.
+        ...(readRemoteFolder(item.remoteCwd) ? { remoteCwd: readRemoteFolder(item.remoteCwd) } : {}),
         runMethod: readString(item.runMethod) ?? 'session/prompt',
       }
     })
@@ -586,7 +589,24 @@ function publicAgent(agent) {
     type: agent.type,
     enabled: agent.enabled,
     cwdAllowlist: agent.cwdAllowlist,
+    ...(agent.remoteCwd ? { remoteCwd: agent.remoteCwd } : {}),
   }
+}
+
+// An absolute folder on the remote machine, without .. steps; anything else is ignored.
+export function readRemoteFolder(value) {
+  const text = readString(value)
+  if (!text || !text.startsWith('/') || text.split('/').includes('..')) return undefined
+  return posix.normalize(text).replace(/(.)\/+$/, '$1')
+}
+
+// The folder a remote agent works in for a run in `cwd` here: its remote folder, with the same
+// subfolder as `cwd` has under the allowed folder it is in. Nothing for an agent on this machine.
+export function agentFolder(agent, cwd) {
+  if (!agent.remoteCwd) return {}
+  const root = agent.cwdAllowlist.filter(folder => cwd === folder || cwd.startsWith(`${folder}/`)).sort((left, right) => right.length - left.length)[0]
+  const rest = root ? cwd.slice(root.length).replace(/^\/+/, '') : ''
+  return { agentCwd: rest ? posix.join(agent.remoteCwd, rest) : agent.remoteCwd }
 }
 
 function publicRun(run) {

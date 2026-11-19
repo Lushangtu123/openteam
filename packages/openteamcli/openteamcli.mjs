@@ -4,7 +4,7 @@ import { accessSync, constants, existsSync, mkdirSync, readFileSync, realpathSyn
 import { homedir } from 'node:os'
 import { delimiter, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { DEFAULT_AGENT_CONFIG_PATH, DEFAULT_PORT, DEFAULT_TOKEN_PATH, readOrCreateToken } from './openteam-daemon.mjs'
+import { DEFAULT_AGENT_CONFIG_PATH, DEFAULT_PORT, DEFAULT_TOKEN_PATH, readOrCreateToken, readRemoteFolder } from './openteam-daemon.mjs'
 import { chooseNodePath, createLaunchAgent, daemonEnvironment, describeLaunchAgent, nodeFileSystem, runLaunchctl } from './launch-agent.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -514,6 +514,11 @@ export function agentFromOptions(options) {
   // `claude` makes it use the same program, settings and login as the terminal.
   const installedClaude = options.preset === 'claude-code' ? findOnPath('claude') : undefined
   const env = { ...(installedClaude ? { CLAUDE_CODE_EXECUTABLE: installedClaude } : {}), ...envFromOption(options.env) }
+  // An agent on another machine, started over SSH: the folder it works in there. The folders above
+  // stay the ones on this Mac that OpenTeam checks and starts the command in.
+  const remoteOption = options['remote-cwd']
+  const remoteCwd = remoteOption === undefined ? undefined : readRemoteFolder(typeof remoteOption === 'string' ? remoteOption : '')
+  if (remoteOption !== undefined && !remoteCwd) throw new Error('--remote-cwd 要写远程机器上的绝对路径，例如 /home/purge/workspace（不能有 ..）')
   return {
     id,
     name: typeof options.name === 'string' ? options.name.trim() : preset?.name ?? id,
@@ -524,6 +529,7 @@ export function agentFromOptions(options) {
     ...((typeof options.mode === 'string' ? options.mode.trim() : preset?.mode) ? { mode: typeof options.mode === 'string' ? options.mode.trim() : preset.mode } : {}),
     enabled: true,
     cwdAllowlist,
+    ...(remoteCwd ? { remoteCwd } : {}),
   }
 }
 
@@ -583,7 +589,7 @@ export function help() {
       'openteamcli memory add --scope global|chat|role [--chat <chatId>] [--role name:<name>|role:<id>] [--kind fact|decision|preference|note] --content <text> [--tags a,b] [--pinned]',
       'openteamcli agent list|run --agent <id> --content <prompt> --cwd <path>',
       'openteamcli agent add --preset claude-code|codex|gemini --cwd <folder>[,<folder>] [--id <id>] [--name <name>] [--env KEY=VALUE,...] [--mode <session mode>]',
-      'openteamcli agent add --id <id> --name <name> --command "<command and arguments>" --cwd <folder>[,<folder>]',
+      'openteamcli agent add --id <id> --name <name> --command "<command and arguments>" --cwd <folder>[,<folder>] [--remote-cwd <folder on the remote machine>]',
       'openteamcli agent remove <id>',
     ],
   }

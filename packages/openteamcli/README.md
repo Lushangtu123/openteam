@@ -85,6 +85,21 @@ OPENTEAM_EXTENSION_ORIGINS=chrome-extension://<your-extension-id> openteamcli da
 
 The daemon runs in the background with no output. What happens to it is kept in `~/.openteam/daemon.log` (readable only by you; the previous file is kept as `daemon.log.1` once it reaches 1 MB): when it started and ended and why (a signal, a crash, `daemon stop`), the extension connecting and leaving, and local agent runs. Prompts and the token are never written there. A run that ended without writing its end (killed outright, or the computer lost power) is noted at the next start. `openteamcli daemon status` shows the file's path.
 
+## Remote agents (over SSH)
+
+An agent can also run on another machine, such as DeepSeek Harness (dsh) in a VM. If it speaks ACP over standard input and output, the daemon can start it with `ssh`, which carries both directions. In OpenTeam it works like Claude Code: it asks you before each run, its permission requests show as cards, and its reply comes back to the group.
+
+```bash
+openteamcli agent add --id deepseek-vm --name "DeepSeek (VM)" \
+  --command "ssh -T -o BatchMode=yes harness-vm bin/dsh-acp" \
+  --cwd ~/OpenTeam/vm --remote-cwd /home/purge/workspace
+```
+
+- `--command`: what runs on the Mac. `-T` asks for no terminal, and `BatchMode=yes` makes SSH fail rather than hang when it would ask for a password (log in with a key). The command is split at spaces, with no quoting; for environment variables (the node path, `DSH_HOME`, a proxy), put a small script in the VM (say `~/bin/dsh-acp`, setting them and running `dsh --profile acp`) and call that.
+- `--cwd`: a folder on the Mac that OpenTeam checks and starts `ssh` in. The working folder you pick for the member in OpenTeam must be inside it.
+- `--remote-cwd`: the folder the agent really works in on the remote machine (an absolute path). A subfolder of `--cwd` maps to the same subfolder there: `~/OpenTeam/vm/demo` is `/home/purge/workspace/demo`.
+- A remote agent reads and writes files with its own tools; OpenTeam does not do it for it, as those paths are not on this Mac.
+
 ## Start at Login (macOS)
 
 The daemon does not start by itself after the Mac restarts, so local agent members and CLI control stop working until someone runs `openteamcli daemon start`. On macOS, install it as a LaunchAgent instead:

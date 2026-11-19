@@ -45,6 +45,7 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
   const localAgentEl = form.querySelector<HTMLSelectElement>('#external-model-local-agent')
   const workspaceEl = form.querySelector<HTMLInputElement>('#external-model-workspace')
   const workspacesEl = form.querySelector<HTMLDataListElement>('#external-model-workspaces')
+  const remoteWorkspaceEl = form.querySelector<HTMLElement>('#external-model-remote-workspace')
   const localStatusEl = form.querySelector<HTMLElement>('#local-agent-status')
   const localHint = localStatusEl?.textContent ?? ''
   const addButtonEl = form.ownerDocument.querySelector<HTMLButtonElement>('#add-external-model')
@@ -118,6 +119,14 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
       return option
     }))
     if (workspaceEl && !workspaceEl.value && agent?.cwdAllowlist[0]) workspaceEl.value = agent.cwdAllowlist[0]
+    // An agent on another machine works in its own folder there; the folder above is only where its
+    // command starts on this Mac.
+    if (remoteWorkspaceEl) {
+      remoteWorkspaceEl.hidden = !agent?.remoteCwd
+      remoteWorkspaceEl.textContent = agent?.remoteCwd
+        ? ui(`这个智能体在远程机器上运行，实际在那里的 ${agent.remoteCwd} 里工作（上面的工作目录下的子目录，对应它下面同名的子目录）。`)
+        : ''
+    }
     if (agent && !deps.externalModelNameEl.value.trim()) deps.externalModelNameEl.value = agent.name
   }
 

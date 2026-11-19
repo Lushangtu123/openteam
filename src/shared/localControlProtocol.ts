@@ -88,6 +88,8 @@ export interface LocalAgentInfo {
   type: string
   enabled: boolean
   cwdAllowlist: string[]
+  // An agent on another machine (started over SSH): the folder it works in there.
+  remoteCwd?: string
 }
 
 export type ExtensionControlMessage =

@@ -97,7 +97,7 @@ describe('openteamcli command builder', () => {
         'openteamcli memory add --scope global|chat|role [--chat <chatId>] [--role name:<name>|role:<id>] [--kind fact|decision|preference|note] --content <text> [--tags a,b] [--pinned]',
         'openteamcli agent list|run --agent <id> --content <prompt> --cwd <path>',
         'openteamcli agent add --preset claude-code|codex|gemini --cwd <folder>[,<folder>] [--id <id>] [--name <name>] [--env KEY=VALUE,...] [--mode <session mode>]',
-        'openteamcli agent add --id <id> --name <name> --command "<command and arguments>" --cwd <folder>[,<folder>]',
+        'openteamcli agent add --id <id> --name <name> --command "<command and arguments>" --cwd <folder>[,<folder>] [--remote-cwd <folder on the remote machine>]',
         'openteamcli agent remove <id>',
       ],
     })
@@ -148,6 +148,11 @@ describe('openteamcli command builder', () => {
       process.env.PATH = savedPath
       const custom = agentFromOptions({ id: 'mine', name: '我的智能体', command: 'node agent.mjs --acp', cwd: `${folder},${folder}` })
       expect(custom).toMatchObject({ id: 'mine', command: 'node', args: ['agent.mjs', '--acp'], cwdAllowlist: [folder, folder] })
+      // An agent in a VM, started over SSH: the folder it works in there.
+      expect(agentFromOptions({ id: 'deepseek-vm', name: 'DeepSeek（VM）', command: 'ssh -T -o BatchMode=yes harness-vm bin/dsh-acp', cwd: folder, 'remote-cwd': '/home/purge/workspace/' }))
+        .toMatchObject({ command: 'ssh', args: ['-T', '-o', 'BatchMode=yes', 'harness-vm', 'bin/dsh-acp'], cwdAllowlist: [folder], remoteCwd: '/home/purge/workspace' })
+      expect(() => agentFromOptions({ id: 'x', command: 'ssh vm', cwd: folder, 'remote-cwd': 'workspace' })).toThrow('--remote-cwd 要写远程机器上的绝对路径')
+      expect(agentFromOptions({ id: 'x', command: 'ssh vm', cwd: folder }).remoteCwd).toBeUndefined()
       expect(() => agentFromOptions({ preset: 'nope', cwd: folder })).toThrow('没有这个预设')
       expect(() => agentFromOptions({ preset: 'codex', cwd: join(folder, 'missing') })).toThrow('文件夹不存在')
       expect(buildCliRequest(['agent', 'remove', 'mine'])).toEqual({ kind: 'agent-remove', id: 'mine' })

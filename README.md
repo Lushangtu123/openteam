@@ -172,7 +172,7 @@ npx skills add . --skill openteam-control
 
 From anywhere else, `npx skills add Lushangtu123/openteam --skill openteam-control` installs it from GitHub.
 
-The daemon does not start by itself after a restart. On macOS, `npm run openteamcli -- daemon install` adds it as a LaunchAgent that starts at login; `daemon uninstall` removes it. See [OpenTeam CLI](packages/openteamcli/README.md) for all commands.
+The daemon does not start by itself after a restart. On macOS, `npm run openteamcli -- daemon install` adds it as a LaunchAgent that starts at login; `daemon uninstall` removes it. An agent can also run on another machine (DeepSeek Harness in a VM, say, started over SSH): see Remote agents there. See [OpenTeam CLI](packages/openteamcli/README.md) for all commands.
 
 ## Development
 

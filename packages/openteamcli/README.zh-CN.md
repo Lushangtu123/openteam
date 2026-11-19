@@ -85,6 +85,21 @@ OPENTEAM_EXTENSION_ORIGINS=chrome-extension://<你的扩展ID> openteamcli daemo
 
 守护进程在后台运行，没有输出。它的经过记在 `~/.openteam/daemon.log`（只有你能读；满 1 MB 后旧文件保留为 `daemon.log.1`）：何时启动、何时结束以及原因（收到信号、崩溃、`daemon stop`），扩展的连接和断开，本地智能体的运行。提示词和令牌不会写进去。如果上一次运行没有写下结束记录（被强制结束或电脑断电），下次启动时会补记一条。`openteamcli daemon status` 会显示这个文件的位置。
 
+## 远程智能体（通过 SSH）
+
+智能体也可以在另一台机器上运行，比如虚拟机里的 DeepSeek Harness（dsh）。只要它支持通过标准输入输出说 ACP，守护进程就可以用 `ssh` 启动它，SSH 会把输入输出双向转发。在 OpenTeam 里它和 Claude Code 一样：执行前先问你，它的权限请求以卡片出现，回复回到群里。
+
+```bash
+openteamcli agent add --id deepseek-vm --name "DeepSeek（VM）" \
+  --command "ssh -T -o BatchMode=yes harness-vm bin/dsh-acp" \
+  --cwd ~/OpenTeam/vm --remote-cwd /home/purge/workspace
+```
+
+- `--command`：在 Mac 上执行的命令。`-T` 不分配终端，`BatchMode=yes` 让 SSH 在需要密码时直接失败而不是卡住（请用密钥登录）。命令按空格拆开，不支持引号；需要环境变量（node 路径、`DSH_HOME`、代理）时，在虚拟机里写一个小脚本（例如 `~/bin/dsh-acp`，内容是设好环境后执行 `dsh --profile acp`），在这里调用它。
+- `--cwd`：Mac 上的一个文件夹，OpenTeam 用它做检查，并在这里启动 `ssh`。在 OpenTeam 里给这个成员选的工作目录必须在它下面。
+- `--remote-cwd`：智能体在远程机器上实际工作的文件夹（绝对路径）。选了 `--cwd` 下的子文件夹时，远程也用同名的子文件夹，例如 `~/OpenTeam/vm/demo` 对应 `/home/purge/workspace/demo`。
+- 远程智能体用它自己的工具读写文件；OpenTeam 不替它读写，因为那些路径不在这台 Mac 上。
+
 ## 登录时自动启动（macOS）
 
 Mac 重启后守护进程不会自己启动，本机智能体成员和 CLI 控制都要等有人运行 `openteamcli daemon start` 才能用。在 macOS 上可以把它装成 LaunchAgent：

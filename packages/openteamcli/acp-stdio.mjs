@@ -44,15 +44,20 @@ export function loginHint(authMethods) {
  * @param {{
  *   prompt: string,
  *   cwd: string,
+ *   agentCwd?: string,
  *   timeoutMs: number,
  *   signal?: AbortSignal,
  *   onEvent?: (event: Record<string, unknown>) => void,
  *   requestPermission?: (request: { toolCall: Record<string, unknown>, options: Array<{ optionId: string, name: string, kind: string }> }) => Promise<string | undefined>,
  * }} input
  */
+// `input.agentCwd`: an agent on another machine (started over SSH, say) works in this folder there.
+// The command still starts in `cwd` on this machine, the session is opened in `agentCwd`, and
+// OpenTeam does not offer to read or write files for it: its paths are not this machine's.
 export async function runStdioAcpAgent(agent, input) {
   if (!agent.command) throw new AcpError('缺少启动本地智能体的命令。')
   const workspace = await realpath(input.cwd)
+  const remote = typeof input.agentCwd === 'string' && input.agentCwd.length > 0
   const child = spawn(agent.command, agent.args ?? [], {
     cwd: workspace,
     env: { ...process.env, ...(agent.env ?? {}) },
@@ -195,6 +200,7 @@ export async function runStdioAcpAgent(agent, input) {
           return
         }
         case 'fs/read_text_file': {
+          if (remote) throw new AcpError('OpenTeam 不替远程智能体读写文件，请用它自己的工具。')
           const path = await pathInside(workspace, message.params?.path)
           const bytes = await readFile(path)
           if (bytes.length > MAX_READ_BYTES) throw new AcpError('文件太大，无法读取。')
@@ -210,6 +216,7 @@ export async function runStdioAcpAgent(agent, input) {
           return
         }
         case 'fs/write_text_file': {
+          if (remote) throw new AcpError('OpenTeam 不替远程智能体读写文件，请用它自己的工具。')
           const path = await pathInside(workspace, message.params?.path)
           if (typeof message.params?.content !== 'string') throw new AcpError('缺少要写入的内容。')
           await mkdir(dirname(path), { recursive: true })
@@ -245,11 +252,11 @@ export async function runStdioAcpAgent(agent, input) {
   try {
     const initialized = await request('initialize', {
       protocolVersion: ACP_PROTOCOL_VERSION,
-      clientCapabilities: { fs: { readTextFile: true, writeTextFile: true }, terminal: false },
+      clientCapabilities: { fs: { readTextFile: !remote, writeTextFile: !remote }, terminal: false },
       clientInfo: { name: 'OpenTeam', version: '0.1.0' },
     })
     authMethods = Array.isArray(initialized?.authMethods) ? initialized.authMethods : []
-    const session = await request('session/new', { cwd: workspace, mcpServers: [] })
+    const session = await request('session/new', { cwd: remote ? input.agentCwd : workspace, mcpServers: [] })
     sessionId = typeof session?.sessionId === 'string' ? session.sessionId : undefined
     if (!sessionId) throw new AcpError('本地智能体没有开始会话。')
     if (agent.mode && session?.modes?.currentModeId !== agent.mode) {

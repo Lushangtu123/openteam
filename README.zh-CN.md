@@ -172,7 +172,7 @@ npx skills add . --skill openteam-control
 
 不在仓库文件夹里时，`npx skills add Lushangtu123/openteam --skill openteam-control` 会从 GitHub 安装。
 
-电脑重启后守护进程不会自动启动。在 macOS 上，`npm run openteamcli -- daemon install` 会把它添加为登录时启动的 LaunchAgent；`daemon uninstall` 可移除。全部命令见 [OpenTeam CLI](packages/openteamcli/README.zh-CN.md)。
+电脑重启后守护进程不会自动启动。在 macOS 上，`npm run openteamcli -- daemon install` 会把它添加为登录时启动的 LaunchAgent；`daemon uninstall` 可移除。智能体也可以在另一台机器上运行（例如虚拟机里的 DeepSeek Harness，通过 SSH 启动），见其中的「远程智能体」。全部命令见 [OpenTeam CLI](packages/openteamcli/README.zh-CN.md)。
 
 ## 开发
 

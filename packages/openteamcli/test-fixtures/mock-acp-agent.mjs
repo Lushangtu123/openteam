@@ -12,6 +12,7 @@ let cwd = process.cwd()
 let cancelled = false
 let mode = 'auto'
 let releaseSlow
+let fsCapabilities
 
 function send(message) {
   process.stdout.write(`${JSON.stringify({ jsonrpc: '2.0', ...message })}\n`)
@@ -35,6 +36,12 @@ async function prompt(id, params) {
   const sessionId = params.sessionId
   const text = params.prompt?.map(part => part.text ?? '').join('') ?? ''
   cancelled = false
+  // WHERE: says the folder it was given and whether OpenTeam offered to read and write files for it.
+  if (text.includes('WHERE')) {
+    say(sessionId, `工作目录：${cwd}；可读：${fsCapabilities?.readTextFile}；可写：${fsCapabilities?.writeTextFile}`)
+    send({ id, result: { stopReason: 'end_turn' } })
+    return
+  }
   say(sessionId, `好的，我来写文件（${mode}）。\n`)
   if (text.includes('SLOW')) {
     await new Promise(resolve => { releaseSlow = resolve })
@@ -76,6 +83,7 @@ function handle(message) {
   }
   switch (message.method) {
     case 'initialize':
+      fsCapabilities = message.params?.clientCapabilities?.fs
       send({ id: message.id, result: { protocolVersion: 1, agentCapabilities: { loadSession: false }, authMethods: process.env.MOCK_ACP_AUTH ? [{ id: 'claude-login', name: 'Log in with Claude Code', description: 'Run `claude /login` in the terminal' }] : [] } })
       return
     case 'session/new':
