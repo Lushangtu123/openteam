@@ -35,6 +35,40 @@ describe('the sources in a reply', () => {
     expect(readReplySources('我觉得都可以。')).toEqual({ links: [], unsourced: [] })
   })
 
+  it('reads sources as ChatGPT writes them: the title above the link, a site name linked first, tracking added (seen live)', () => {
+    const twoLines = readReplySources([
+      '全球超过 1,700 万辆。[1]',
+      '',
+      '来源：',
+      '',
+      '[1] IEA — Global EV Outlook 2025: Trends in electric car markets',
+      '[https://www.iea.org/reports/global-ev-outlook-2025/trends-in-electric-car-markets-2](https://www.iea.org/reports/global-ev-outlook-2025/trends-in-electric-car-markets-2?utm_source=chatgpt.com)',
+      '',
+      '[2] Yahoo Finance — Global EV sales surge 25% in 2024',
+      '[https://finance.yahoo.com/news/a.html](https://finance.yahoo.com/news/a.html?utm_source=chatgpt.com)',
+    ].join('\n'))
+    expect(twoLines.links).toEqual([
+      { n: 1, url: 'https://www.iea.org/reports/global-ev-outlook-2025/trends-in-electric-car-markets-2', title: 'IEA — Global EV Outlook 2025: Trends in electric car markets' },
+      { n: 2, url: 'https://finance.yahoo.com/news/a.html', title: 'Yahoo Finance — Global EV sales surge 25% in 2024' },
+    ])
+    expect(readReplySources('- 2024年全球电动车销量超过1,700万辆。[1]\n- 中国占比约64%–65%。[1][2]\n- 欧洲增长 14%。').unsourced).toEqual(['欧洲增长 14%。'])
+    expect(readReplySources('IEA 给出约 1700 万辆 [-1](https://www.iea.org/x)。').links).toEqual([{ url: 'https://www.iea.org/x' }])
+    const siteFirst = readReplySources('销量 1,710 万。[3]\n\n来源：\n[3] [EV.com](https://ev.com/) “2024 Saw 17.1 Million EVs Sold” [https://ev.com/news/2024-saw](https://ev.com/news/2024-saw)')
+    expect(siteFirst.links).toEqual([{ n: 3, url: 'https://ev.com/news/2024-saw', title: 'EV.com “2024 Saw 17.1 Million EVs Sold”' }])
+  })
+
+  it('counts a paragraph citing at its end as sourced, does not cut a sentence inside a link, and leaves tables out (seen live)', () => {
+    const reply = [
+      'IEA 明确全球销量超过 1,700 万辆。Rho Motion 给出 1,710 万辆。[-1](https://www.iea.org/x?a=1&b=2#1)[-8](https://www.rti.org.tw/news?uid=3&pid=119280)',
+      '',
+      '统计指标 | 2024年数据',
+      '全球销量 | 超过1,700万辆',
+      '',
+      '欧洲 2024 年增长 14%。',
+    ].join('\n')
+    expect(readReplySources(reply).unsourced).toEqual(['欧洲 2024 年增长 14%。'])
+  })
+
   it('keeps at most 10 links, without repeats', () => {
     const many = Array.from({ length: 14 }, (_, index) => `[${index + 1}] https://example.com/${index % 12}`).join('\n')
     const links = readReplySources(`事实 [1]。\n\n来源：\n${many}`).links
@@ -61,7 +95,8 @@ describe('what a link check says', () => {
     expect(linkCheckLabel({ status: 'refused', httpStatus: 403, checkedAt: 1 }, false)).toBe('网站拒绝自动访问（403）')
     expect(linkCheckLabel({ status: 'error', httpStatus: 500, checkedAt: 1 }, false)).toBe('网站报错（500）')
     expect(linkCheckLabel({ status: 'reachable', checkedAt: 1 }, false)).toBe('网站能连上，没细查页面')
-    expect(linkCheckLabel({ status: 'unreachable', checkedAt: 1 }, false)).toBe('连不上，网站可能不存在')
+    expect(linkCheckLabel({ status: 'no-response', checkedAt: 1 }, false)).toBe('没有响应：网站可能不存在，也可能拦了自动访问')
+    expect(linkCheckLabel({ status: 'unreachable', checkedAt: 1 }, false)).toBe('细查也连不上，网站可能不存在')
     expect(linkCheckLabel({ status: 'unchecked', checkedAt: 1 }, false)).toBe('没有检查（不是 https 链接）')
     expect(linkCheckLabel(undefined, false)).toBe('检查中')
     expect(linkCheckLabel({ status: 'missing', httpStatus: 404, checkedAt: 1 }, true)).toBe('Page not found (404)')
@@ -104,7 +139,7 @@ describe('a round asked with sources', () => {
     expect(prompt).toContain('2024 年电动车卖了多少？')
     expect(prompt).toContain('【研究员】\n约 1700 万辆 [1]。')
     expect(prompt).toContain('- 【研究员】https://www.iea.org/report：能打开，标题「Global EV Outlook」')
-    expect(prompt).toContain('- 【分析师】https://made-up.example/ev：连不上，网站可能不存在')
+    expect(prompt).toContain('- 【分析师】https://made-up.example/ev：细查也连不上，网站可能不存在')
     expect(prompt).toContain('- 【分析师】大约 1500 万辆，增长 25%。')
     expect(prompt).toContain('- 【已核实】成员名：说法 —— 依据')
     expect(prompt).toContain('结论：')

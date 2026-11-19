@@ -12,7 +12,9 @@ describe('checking a source link', () => {
     expect(await checkLink('https://www.iea.org/report', d)).toEqual({ status: 'reachable', checkedAt: 42 })
     expect(d.hasAccess).toHaveBeenCalledWith('https://www.iea.org/*')
     expect(d.fetch).toHaveBeenCalledWith('https://www.iea.org/report', expect.objectContaining({ mode: 'no-cors', credentials: 'omit' }))
-    expect(await checkLink('https://made-up.example/x', deps({ respond: async () => { throw new TypeError('Failed to fetch') } }))).toEqual({ status: 'unreachable', checkedAt: 42 })
+    // Not proof the site is missing: a bot check's answer is blocked the same way (seen live with iea.org).
+    expect(await checkLink('https://www.iea.org/x', deps({ respond: async () => { throw new TypeError('Failed to fetch') } }))).toEqual({ status: 'no-response', checkedAt: 42 })
+    expect(await checkLink('https://made-up.example/x', deps({ access: true, respond: async () => { throw new TypeError('Failed to fetch') } }))).toEqual({ status: 'unreachable', checkedAt: 42 })
   })
 
   it('with access, reads the status and the page title', async () => {
@@ -25,7 +27,7 @@ describe('checking a source link', () => {
 
   it('gives up on a site that does not answer in time', async () => {
     const hanging = deps({ respond: (_url, init) => new Promise((_resolve, reject) => init.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')))) })
-    expect(await checkLink('https://slow.example/x', hanging)).toEqual({ status: 'unreachable', checkedAt: 42 })
+    expect(await checkLink('https://slow.example/x', hanging)).toEqual({ status: 'no-response', checkedAt: 42 })
   })
 
   it('does not check links that are not https', async () => {

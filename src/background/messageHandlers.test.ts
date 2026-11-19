@@ -3572,7 +3572,7 @@ describe('a message asked with sources (要来源)', () => {
     const checkPrompt = ctx.prompts.find(prompt => prompt.includes('事实核查员'))!
     expect(checkPrompt).toContain('你是「校对」')
     expect(checkPrompt).toContain('- 【工程师】https://www.iea.org/report：能打开，标题「Global EV Outlook」')
-    expect(checkPrompt).toContain('- 【设计师】https://made-up.example/ev：连不上，网站可能不存在')
+    expect(checkPrompt).toContain('- 【设计师】https://made-up.example/ev：细查也连不上，网站可能不存在')
     // No summary or review round on top.
     await vi.waitFor(() => expect(ctx.messages().some(message => message.type === 'assistant' && message.content.includes('结论'))).toBe(true))
     expect(ctx.messages().some(message => message.roundSummaryOf || message.crossReviewOf)).toBe(false)

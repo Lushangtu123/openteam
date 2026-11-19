@@ -49,8 +49,8 @@ export function renderSourcesBlock(reply: GroupMessage, options: SourcesBlockOpt
     block.append(list)
   }
 
-  // Links checked only for whether their site responds: looked at closely once their sites are allowed.
-  const coarse = sources.links.filter(link => reply.linkChecks?.[link.url]?.status === 'reachable').map(link => link.url)
+  // Links checked without access to their sites (responded or not): looked at closely once allowed.
+  const coarse = sources.links.filter(link => ['reachable', 'no-response'].includes(reply.linkChecks?.[link.url]?.status ?? '')).map(link => link.url)
   if (coarse.length > 0 && options.checkClosely) {
     const checkClosely = options.checkClosely
     const button = element('button', 'btn btn-ghost btn-small reply-sources-check')

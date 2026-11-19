@@ -1,7 +1,7 @@
 // Opens a reply's source links (要来源, src/group/sources.ts) to see whether they hold up. Without
-// access to a site, a request still tells whether the site responds at all (a made-up domain does
-// not), but not the page's status or title; with access, granted site by site from the page's
-// 细查链接, it does. Cookies are never sent.
+// access to a site, a request tells whether the site responds (a made-up domain does not, nor does a
+// site behind a bot check), but not the page's status or title; with access, granted site by site
+// from the page's 细查链接, it does. Cookies are never sent.
 import type { LinkCheck } from '../group/types'
 
 export const LINK_CHECK_TIMEOUT_MS = 8_000
@@ -34,8 +34,14 @@ export async function checkLink(url: string, deps: LinkCheckDependencies): Promi
   const timer = setTimeout(() => controller.abort(), deps.timeoutMs ?? LINK_CHECK_TIMEOUT_MS)
   try {
     if (!fine) {
-      await deps.fetch(url, { mode: 'no-cors', credentials: 'omit', redirect: 'follow', signal: controller.signal })
-      return { status: 'reachable', checkedAt: checkedAt() }
+      // A failure here is not proof the site is missing: a site behind a bot check answers with a
+      // header that blocks the response (seen live with iea.org), which fails the same way.
+      try {
+        await deps.fetch(url, { mode: 'no-cors', credentials: 'omit', redirect: 'follow', signal: controller.signal })
+        return { status: 'reachable', checkedAt: checkedAt() }
+      } catch {
+        return { status: 'no-response', checkedAt: checkedAt() }
+      }
     }
     const response = await deps.fetch(url, { credentials: 'omit', redirect: 'follow', signal: controller.signal })
     const httpStatus = response.status

@@ -8,7 +8,7 @@ import { renderFactCheckCard, renderSourcesBlock } from './sourcesView'
 function reply(linkChecks: GroupMessage['linkChecks'] = {}): GroupMessage {
   return {
     id: 'a1', chatId: 'c', seq: 2, type: 'assistant', roleId: 'r1', roleName: '研究员', sourceMessageId: 'q', createdAt: 2, status: 'received',
-    content: '约 1700 万辆 [1]，增长 25% [2]。电池降价 90%。\n\n来源：\n[1] IEA 报告 https://www.iea.org/report\n[2] https://made-up.example/ev\n[3] https://slow.example/page',
+    content: '约 1700 万辆 [1]，增长 25% [2]。\n电池降价 90%。\n\n来源：\n[1] IEA 报告 https://www.iea.org/report\n[2] https://made-up.example/ev\n[3] https://slow.example/page',
     linkChecks,
   }
 }
@@ -22,7 +22,7 @@ describe('the sources under an answer', () => {
     const items = [...block.querySelectorAll('.reply-source')]
     expect(items.map(item => [item.querySelector('.reply-source-n')?.textContent, item.querySelector('a')?.textContent, item.querySelector('.reply-source-status')?.textContent])).toEqual([
       ['[1]', 'Global EV Outlook', '能打开'],
-      ['[2]', 'made-up.example', '连不上，网站可能不存在'],
+      ['[2]', 'made-up.example', '细查也连不上，网站可能不存在'],
       ['[3]', 'slow.example', '检查中'],
     ])
     expect(items.map(item => item.className)).toEqual(['reply-source reply-source-good', 'reply-source reply-source-bad', 'reply-source reply-source-unknown'])
@@ -32,12 +32,12 @@ describe('the sources under an answer', () => {
     expect([...block.querySelectorAll('.reply-sources-unsourced li')].map(item => item.textContent)).toEqual(['电池降价 90%。'])
   })
 
-  it('offers to check closely the links only known to respond, with their sites', async () => {
+  it('offers to check closely the links checked without access: those that responded and those that did not', async () => {
     const checkClosely = vi.fn(async () => undefined)
     const block = renderSourcesBlock(reply({
       'https://www.iea.org/report': { status: 'reachable', checkedAt: 1 },
       'https://made-up.example/ev': { status: 'unreachable', checkedAt: 1 },
-      'https://slow.example/page': { status: 'reachable', checkedAt: 1 },
+      'https://slow.example/page': { status: 'no-response', checkedAt: 1 },
     }), { english: false, checkClosely })
     const button = block.querySelector<HTMLButtonElement>('.reply-sources-check')!
     expect(button.textContent).toBe('细查链接')

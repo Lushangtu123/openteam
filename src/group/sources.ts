@@ -57,36 +57,76 @@ export function readReplySources(content: string): ReplySources {
     if (links.length >= MAX_LINKS_PER_REPLY || links.some(item => item.url === url)) return
     links.push({ ...(link.n !== undefined ? { n: link.n } : {}), url, ...(link.title ? { title: link.title } : {}) })
   }
+  // A source line: its number, its link (the last one: a site's name may be linked before it) and its
+  // title (the rest of its text). A number and title with the link on the next line are joined.
+  let pending: { n: number; title: string } | undefined
   for (const line of section) {
     const number = line.match(NUMBERED)
-    const markdown = [...line.matchAll(MARKDOWN_LINK)]
-    if (markdown.length > 0) {
-      for (const match of markdown) add({ ...(number ? { n: Number(number[1]) } : {}), url: match[2], title: match[1].trim() })
+    const rest = number ? line.slice(number[0].length) : line
+    const urls = [...[...rest.matchAll(MARKDOWN_LINK)].map(match => match[2]), ...rest.replace(MARKDOWN_LINK, '').match(BARE_URL) ?? []]
+    if (urls.length === 0) {
+      pending = number && rest.trim() ? { n: Number(number[1]), title: cleanTitle(rest) } : pending
       continue
     }
-    for (const match of line.matchAll(BARE_URL)) {
-      const title = number ? cleanTitle(line.slice(number[0].length, match.index)) : ''
-      add({ ...(number ? { n: Number(number[1]) } : {}), url: match[0], ...(title ? { title } : {}) })
-    }
+    const text = cleanTitle(rest.replace(MARKDOWN_LINK, (_, label: string) => isUrl(label) ? '' : label).replace(BARE_URL, ''))
+    const n = number ? Number(number[1]) : pending?.n
+    const title = number ? text : pending?.title ?? ''
+    const last = [...rest.matchAll(MARKDOWN_LINK)].map(match => ({ index: match.index ?? 0, url: match[2] }))
+      .concat([...rest.matchAll(BARE_URL)].filter(match => !isInsideMarkdown(rest, match.index ?? 0)).map(match => ({ index: match.index ?? 0, url: match[0] })))
+      .sort((left, right) => left.index - right.index)
+      .pop()!
+    add({ ...(n !== undefined ? { n } : {}), url: last.url, ...(title ? { title } : {}) })
+    pending = undefined
   }
   const bodyText = body.join('\n')
-  for (const match of bodyText.matchAll(MARKDOWN_LINK)) add({ url: match[2], title: match[1].trim() })
+  // A link's label is its title unless it is a citation chip ([-1], [2]) or the link itself.
+  for (const match of bodyText.matchAll(MARKDOWN_LINK)) add({ url: match[2], ...(isTitle(match[1]) ? { title: match[1].trim() } : {}) })
   for (const match of bodyText.replace(MARKDOWN_LINK, '').matchAll(BARE_URL)) add({ url: match[0] })
 
+  // Claims without a source: those marked so, and, in a paragraph that cites nothing, those with
+  // numbers or dates. A citation may cover its whole paragraph (some members cite at its end). Table
+  // rows are left out (a header such as 「2024年数据」 is no claim) unless marked.
   const unsourced: string[] = []
   for (const line of body) {
-    const text = line.replace(/\*\*|__/g, '').replace(/^\s*(?:[-*+]|\d+[.)、])\s+/, '').trim()
+    if (unsourced.length >= MAX_UNSOURCED) break
+    const lineCited = CITED.test(line)
+    const table = line.includes('|')
+    const text = line.replace(MARKDOWN_LINK, '').replace(BARE_URL, '').replace(/\*\*|__/g, '').replace(/^\s*(?:[-*+]|\d+[.)、])\s+/, '').trim()
     if (!text || /^#/.test(text) || /[:：]$/.test(text)) continue
-    for (const sentence of text.split(/(?<=[。！？!?])|(?<=\.)\s+/).map(item => item.trim())) {
+    // A citation written after the full stop (「……万辆。[1]」) belongs to the sentence before it.
+    for (const sentence of text.split(/(?<=[。！？!?])(?!\s*\[)|(?<=\.)\s+(?!\[)/).map(item => item.trim())) {
       if (sentence.length < 6 || unsourced.length >= MAX_UNSOURCED) continue
-      if (MARKED_UNSOURCED.test(sentence) || (!CITED.test(sentence) && /\d/.test(sentence))) unsourced.push(sentence.slice(0, CLAIM_MAX))
+      const marked = MARKED_UNSOURCED.test(sentence)
+      if (marked || (!table && !lineCited && /\d/.test(sentence))) unsourced.push(sentence.slice(0, CLAIM_MAX))
     }
   }
   return { links, unsourced }
 }
 
+// Without trailing punctuation or tracking parameters (utm_*), so the same page is one source.
 function cleanUrl(url: string): string {
-  return url.replace(/[.,;:!?]+$/, '')
+  const trimmed = url.replace(/[.,;:!?]+$/, '')
+  try {
+    const parsed = new URL(trimmed)
+    for (const key of [...parsed.searchParams.keys()]) if (/^utm_/i.test(key)) parsed.searchParams.delete(key)
+    return parsed.href.replace(/\?$/, '')
+  } catch {
+    return trimmed
+  }
+}
+
+function isTitle(label: string): boolean {
+  const text = label.trim()
+  return text.length >= 2 && /\p{L}/u.test(text) && !isUrl(text)
+}
+
+function isUrl(text: string): boolean {
+  return /^https?:\/\//i.test(text.trim())
+}
+
+// Whether a bare link found at `index` is part of a markdown link: its label or its target.
+function isInsideMarkdown(line: string, index: number): boolean {
+  return [...line.matchAll(MARKDOWN_LINK)].some(match => index >= (match.index ?? 0) && index < (match.index ?? 0) + match[0].length)
 }
 
 function cleanTitle(text: string): string {
@@ -109,7 +149,8 @@ export function linkCheckLabel(check: LinkCheck | undefined, english: boolean): 
     case 'refused': return english ? `Site refuses automatic visits${code}` : `网站拒绝自动访问${code}`
     case 'error': return english ? `Site error${code}` : `网站报错${code}`
     case 'reachable': return english ? 'Site responds; page not checked' : '网站能连上，没细查页面'
-    case 'unreachable': return english ? 'Cannot connect; the site may not exist' : '连不上，网站可能不存在'
+    case 'no-response': return english ? 'No response: the site may not exist, or may block automatic visits' : '没有响应：网站可能不存在，也可能拦了自动访问'
+    case 'unreachable': return english ? 'Cannot connect, even with access; the site may not exist' : '细查也连不上，网站可能不存在'
     case 'unchecked': return english ? 'Not checked (not an https link)' : '没有检查（不是 https 链接）'
   }
 }
