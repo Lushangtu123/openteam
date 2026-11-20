@@ -46,6 +46,9 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
   const workspaceEl = form.querySelector<HTMLInputElement>('#external-model-workspace')
   const workspacesEl = form.querySelector<HTMLDataListElement>('#external-model-workspaces')
   const remoteWorkspaceEl = form.querySelector<HTMLElement>('#external-model-remote-workspace')
+  const priceInputEl = form.querySelector<HTMLInputElement>('#external-model-price-input')
+  const priceOutputEl = form.querySelector<HTMLInputElement>('#external-model-price-output')
+  const priceCurrencyEl = form.querySelector<HTMLSelectElement>('#external-model-price-currency')
   const localStatusEl = form.querySelector<HTMLElement>('#local-agent-status')
   const localHint = localStatusEl?.textContent ?? ''
   const addButtonEl = form.ownerDocument.querySelector<HTMLButtonElement>('#add-external-model')
@@ -360,6 +363,8 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
           apiKey: deps.externalModelApiKeyEl.value.trim(),
           modelName: deps.externalModelModelNameEl.value.trim(),
           fallbackModelName: fallbackNameEl?.value.trim() ?? '',
+          // 用量's estimate; both empty removes the price.
+          pricing: { input: priceInputEl?.value.trim() ?? '', output: priceOutputEl?.value.trim() ?? '', currency: priceCurrencyEl?.value ?? 'CNY' },
         }
     if (format !== 'local-agent') await allowAccess(deps.externalModelBaseUrlEl.value)
     await deps.runCommand(modelId ? 'EXTERNAL_MODEL_UPDATE' : 'EXTERNAL_MODEL_CREATE', modelId ? { modelId, ...payload } : payload)
@@ -406,6 +411,9 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
     deps.externalModelApiKeyEl.value = model.apiKey
     deps.externalModelModelNameEl.value = model.modelName
     if (fallbackNameEl) fallbackNameEl.value = model.fallbackModelName ?? ''
+    if (priceInputEl) priceInputEl.value = model.pricing ? String(model.pricing.input) : ''
+    if (priceOutputEl) priceOutputEl.value = model.pricing ? String(model.pricing.output) : ''
+    if (priceCurrencyEl) priceCurrencyEl.value = model.pricing?.currency ?? 'CNY'
     if (workspaceEl) workspaceEl.value = model.workspace ?? ''
     presetFilledName = ''
     clearModelNames()
@@ -422,6 +430,9 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
     deps.externalModelApiKeyEl.value = ''
     deps.externalModelModelNameEl.value = ''
     if (fallbackNameEl) fallbackNameEl.value = ''
+    if (priceInputEl) priceInputEl.value = ''
+    if (priceOutputEl) priceOutputEl.value = ''
+    if (priceCurrencyEl) priceCurrencyEl.value = 'CNY'
     if (workspaceEl) workspaceEl.value = ''
     presetFilledName = ''
     clearModelNames()

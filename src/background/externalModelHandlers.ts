@@ -1,4 +1,5 @@
-import type { ExternalModelConfig, ExternalModelFormat, OpenTeamStore } from '../group/types'
+import type { ExternalModelConfig, ExternalModelFormat, OpenTeamStore, ModelPricing } from '../group/types'
+import { readModelPricing } from '../group/pricing'
 import { loadStore } from '../group/store'
 import type { ExternalModelClient } from './externalModelClient'
 import type { BackgroundMessageRoute } from './messageRouter'
@@ -101,9 +102,16 @@ function readExternalModelInput(message: RuntimeMessage, id: string, createdAt: 
     apiKey: requireString(message.apiKey, '模型 Key 不能为空'),
     modelName: requireString(message.modelName, '模型名称不能为空'),
     ...optionalFallback(message.fallbackModelName),
+    ...optionalPricing(message.pricing),
     createdAt,
     updatedAt,
   }
+}
+
+// Left out when no price is given, so that clearing both removes it.
+function optionalPricing(value: unknown): { pricing?: ModelPricing } {
+  const pricing = readModelPricing(value)
+  return pricing ? { pricing } : {}
 }
 
 // Left out when empty, so that clearing the field removes the backup.

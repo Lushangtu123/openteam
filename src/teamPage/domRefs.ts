@@ -87,6 +87,7 @@ export interface TeamPageDomRefs {
   allNoteUndoEl: HTMLButtonElement
   allNoteRedoEl: HTMLButtonElement
   openPeopleLibraryEl: HTMLButtonElement
+  openUsageEl: HTMLButtonElement
   openExternalModelsEl: HTMLButtonElement
   openMemoryPanelEl: HTMLButtonElement
   openOrchestrationEl: HTMLButtonElement
@@ -280,6 +281,7 @@ export function createTeamPageDomRefs(): TeamPageDomRefs {
     allNoteUndoEl: requireElement<HTMLButtonElement>('#all-note-undo'),
     allNoteRedoEl: requireElement<HTMLButtonElement>('#all-note-redo'),
     openPeopleLibraryEl: requireElement<HTMLButtonElement>('#open-people-library'),
+    openUsageEl: requireElement<HTMLButtonElement>('#open-usage'),
     openExternalModelsEl: requireElement<HTMLButtonElement>('#open-external-models'),
     openMemoryPanelEl: requireElement<HTMLButtonElement>('#open-memory-panel'),
     openOrchestrationEl: requireElement<HTMLButtonElement>('#open-orchestration'),

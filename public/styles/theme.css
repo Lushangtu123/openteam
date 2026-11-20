@@ -2127,6 +2127,178 @@ select.reply-compare-select {
   display: none;
 }
 
+/* 用量: totals, answers per day, and tables by member, group and site. */
+.modal.usage-dialog {
+  display: grid;
+  gap: 12px;
+  width: min(880px, 100%);
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+}
+
+.usage-dialog .modal-header {
+  margin-bottom: 0;
+}
+
+.usage-dialog .tiny {
+  margin: 4px 0 0;
+}
+
+.usage-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.usage-ranges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.usage-range[aria-pressed="true"],
+:root[data-theme] .usage-range[aria-pressed="true"] {
+  border-color: transparent;
+  background: var(--text);
+  color: var(--surface);
+}
+
+.usage-scope {
+  width: auto;
+  min-width: 160px;
+  max-width: 100%;
+}
+
+.usage-content {
+  display: grid;
+  gap: 16px;
+}
+
+.usage-empty {
+  margin: 0;
+  padding: 28px 12px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.usage-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+}
+
+.usage-tile {
+  display: grid;
+  gap: 2px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.usage-tile-label,
+.usage-tile-note {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.usage-tile-value {
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+}
+
+.usage-section-title {
+  margin: 0 0 6px;
+  font-weight: 600;
+  text-align: left;
+}
+
+.usage-chart {
+  margin: 0;
+}
+
+.usage-bars {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-around;
+  gap: 4px;
+  height: 140px;
+  overflow-x: auto;
+}
+
+.usage-bar {
+  display: flex;
+  flex: 1 0 18px;
+  max-width: 48px;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: stretch;
+  min-width: 18px;
+}
+
+.usage-bar-fill {
+  display: block;
+  min-height: 2px;
+  border-radius: 4px 4px 0 0;
+  background: rgba(var(--accent-rgb), 0.7);
+}
+
+.usage-bar-count,
+.usage-bar-day {
+  color: var(--muted);
+  font-size: 11px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.usage-bar-day {
+  margin-top: 4px;
+}
+
+.usage-table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.usage-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.usage-table th,
+.usage-table td {
+  border-bottom: 1px solid var(--line);
+  padding: 6px 8px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.usage-table th {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.usage-table td:nth-child(n + 4) {
+  font-variant-numeric: tabular-nums;
+}
+
+.model-pricing-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.model-pricing-row input {
+  width: 110px;
+}
+
+.model-pricing-row select {
+  width: auto;
+}
+
 /* A text file attached to a message, shown before or after it is sent. */
 .modal.file-preview-dialog {
   display: grid;

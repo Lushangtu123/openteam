@@ -124,6 +124,13 @@ export interface TeamTemplate {
   createdAt: number
 }
 
+export interface ModelPricing {
+  // Per million input and output tokens.
+  input: number
+  output: number
+  currency: 'CNY' | 'USD'
+}
+
 export interface ExternalModelConfig {
   id: string
   name: string
@@ -134,6 +141,8 @@ export interface ExternalModelConfig {
   // An API model's backup, at the same address with the same key: it answers a group reply when the
   // main model is busy, rate-limited, out of quota or too slow.
   fallbackModelName?: string
+  // What the user entered the model costs, per million tokens, for the 用量 window's estimate.
+  pricing?: ModelPricing
   // For a local agent: its ID in the daemon's agent list, and the folder it works in.
   localAgentId?: string
   workspace?: string
@@ -636,6 +645,9 @@ export interface GroupMessage {
   memoryProposalsHandled?: string[]
   // Tokens an API member's reply used, as its model reported them.
   usage?: MessageTokenUsage
+  // The API model (its settings' id) that wrote the reply, for the 用量 window. Replies from before
+  // it was kept count under the member's model.
+  modelId?: string
   // The backup model that wrote an API member's reply, when its main model could not.
   answeredByFallback?: string
   // On a web member's reply its site kept saying it was still writing, with no new text for

@@ -40,6 +40,12 @@
               <path d="M5.7 19.2c.65-3.3 2.82-5.15 6.3-5.15s5.65 1.85 6.3 5.15" />
             </svg>
           </button>
+          <button id="open-usage" class="rail-btn" type="button" aria-label="用量" data-tooltip="用量">
+            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
+              <path d="M4.5 19.5h15" />
+              <path d="M5.5 15.5l4-4.5 3.5 3 5.5-6.5" />
+            </svg>
+          </button>
         </div>
         <div class="rail-bottom">
           <button id="open-in-tab" class="rail-btn" type="button" aria-label="在标签页中打开" data-tooltip="在标签页中打开" hidden>
@@ -742,6 +748,19 @@
             <input id="external-model-fallback-name" type="text" autocomplete="off" />
             <select id="external-model-fallback-choices" class="external-model-choices" aria-label="从列表选择备用模型" hidden></select>
             <p class="tiny">同一地址、同一 Key 下的另一个模型。主模型繁忙、限流、额度用完或太慢时，由它回答群聊消息，回复上会注明。</p>
+          </div>
+          <div class="field api-model-field model-pricing-field">
+            <span class="field-label" id="external-model-price-label">单价（可选，用于估算费用）</span>
+            <div class="model-pricing-row" role="group" aria-labelledby="external-model-price-label">
+              <input id="external-model-price-input" type="number" min="0" step="any" inputmode="decimal" placeholder="输入" aria-label="每百万输入 token 的价格" />
+              <input id="external-model-price-output" type="number" min="0" step="any" inputmode="decimal" placeholder="输出" aria-label="每百万输出 token 的价格" />
+              <select id="external-model-price-currency" aria-label="币种">
+                <option value="CNY">元</option>
+                <option value="USD">美元</option>
+              </select>
+              <span class="tiny">/ 百万 token</span>
+            </div>
+            <p class="tiny">按服务商价格表填写，「用量」窗口据此估算费用；不填就只统计 token。</p>
           </div>
           <div class="template-actions">
             <button id="reset-external-model-form" class="btn" type="button">取消</button>

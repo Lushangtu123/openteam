@@ -15,6 +15,7 @@ import { currentScheduledTasksDialog } from './scheduledTasksDialog'
 import { openPollDialog } from './pollDialog'
 import { openWebPagesDialog } from './webPagesDialog'
 import { openFilePreview } from './filePreviewDialog'
+import { currentUsageDialog, openUsageDialog } from './usageDialog'
 import { createComposerAttachments } from './composerAttachments'
 import { createComposerView } from './composerView'
 import { createTeamPageDomRefs } from './domRefs'
@@ -731,6 +732,11 @@ teamDomRefs.startPollEl.addEventListener('click', () => {
   if (chat) openPollDialog(chat.id, { getStore: () => store, runCommand, showError, onClose: () => teamDomRefs.startPollEl.focus() })
 })
 
+// 用量 (usageDialog.ts).
+teamDomRefs.openUsageEl.addEventListener('click', () => {
+  openUsageDialog({ getStore: () => store, onClose: () => teamDomRefs.openUsageEl.focus() })
+})
+
 // 附上网页 from the tabs open in this window (webPagesDialog.ts).
 teamDomRefs.attachPagesEl.addEventListener('click', () => {
   void openWebPagesDialog({
@@ -779,6 +785,7 @@ function render(): void {
   replyComparisonView.refresh()
   teamFormationView.refresh()
   currentScheduledTasksDialog()?.refresh()
+  currentUsageDialog()?.refresh()
   renderTemplates()
   renderAgentControlSettings()
   renderReplyNotificationSettings()
@@ -1115,7 +1122,7 @@ async function boot(): Promise<void> {
   if (inSidePanel) {
     movePanelTools({
       sidebarEl: teamDomRefs.chatSidebarEl,
-      buttons: [teamDomRefs.openMessageSearchEl, teamDomRefs.openAllNotesEl, teamDomRefs.openPeopleLibraryEl, teamDomRefs.openInTabEl, settingsButtonEl],
+      buttons: [teamDomRefs.openMessageSearchEl, teamDomRefs.openAllNotesEl, teamDomRefs.openPeopleLibraryEl, teamDomRefs.openUsageEl, teamDomRefs.openInTabEl, settingsButtonEl],
       label: '工具',
       onUse: () => chatListDrawer.close(),
     })

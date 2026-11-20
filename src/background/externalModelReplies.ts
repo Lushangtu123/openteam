@@ -254,6 +254,8 @@ export async function finishExternalAssistantReply(
       takeMemoryProposals(store, chat, reply, deps.newId)
       delete reply.retry
       if (usage) reply.usage = usage
+      // Which model's settings wrote it, for the 用量 window's prices.
+      reply.modelId = delivery.model.id
       if (answeredByFallback) reply.answeredByFallback = answeredByFallback
       else delete reply.answeredByFallback
       markChatHasNewMessage(store, chat)

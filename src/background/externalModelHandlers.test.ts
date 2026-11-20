@@ -41,6 +41,7 @@ describe('background external model handlers', () => {
       apiKey: 'sk-test',
       modelName: 'local-chat-model',
       fallbackModelName: ' local-lite-model ',
+      pricing: { input: '2', output: '8', currency: 'CNY' },
     }, {})
 
     expect(currentStore.settings.externalModelOrder).toEqual(['external-model-1'])
@@ -49,6 +50,7 @@ describe('background external model handlers', () => {
       format: 'openai',
       modelName: 'local-chat-model',
       fallbackModelName: 'local-lite-model',
+      pricing: { input: 2, output: 8, currency: 'CNY' },
     })
 
     const update = routes.find(route => route.type === 'EXTERNAL_MODEL_UPDATE')!
@@ -73,6 +75,8 @@ describe('background external model handlers', () => {
     })
     // An empty backup field removes the backup.
     expect(currentStore.settings.externalModelsById['external-model-1'].fallbackModelName).toBeUndefined()
+    // Empty price fields remove the price too.
+    expect(currentStore.settings.externalModelsById['external-model-1'].pricing).toBeUndefined()
 
     currentStore.rolesById['role-1'] = {
       id: 'role-1',

@@ -4,6 +4,7 @@ import { normalizeTeamHandbooks } from './teamHandbooks'
 import { normalizeMemoryState } from './memoryStore'
 import { isChatSite } from './chatSites'
 import { normalizeSiteUsageRecord, type SiteUsageRecord } from './siteUsage'
+import { readModelPricing } from './pricing'
 import {
   DEFAULT_ORCHESTRATION_MAX_NODE_EXECUTIONS,
   DEFAULT_ORCHESTRATION_MAX_ROUNDS,
@@ -13,7 +14,7 @@ import {
 } from './types'
 import { OPENTEAM_CONTROL_DEFAULT_PORT, OPENTEAM_CONTROL_LEGACY_DEFAULT_PORT } from '../shared/localControlProtocol'
 import { defaultLanguageForEnvironment, normalizeLanguage } from '../shared/i18n'
-import type { ExternalModelConfig, GroupChat, GroupMessage, GroupRole, MemoryItem, MessageHighlight, OpenTeamSettings, OpenTeamStore, OpenTeamViewState, OrchestrationFlow, OrchestrationRun, RichNoteDocument, RoleTemplate } from './types'
+import type { ExternalModelConfig, ModelPricing, GroupChat, GroupMessage, GroupRole, MemoryItem, MessageHighlight, OpenTeamSettings, OpenTeamStore, OpenTeamViewState, OrchestrationFlow, OrchestrationRun, RichNoteDocument, RoleTemplate } from './types'
 import { normalizeMessageHighlightColor } from './highlightColors'
 import { DEFAULT_CUSTOM_ROLE_TEMPLATES } from './defaultCustomRoleTemplates'
 
@@ -878,6 +879,12 @@ function normalizeExternalModelRecord(raw: unknown): Record<string, ExternalMode
     }
     if (!id || !name || !baseUrl || !apiKey || !modelName || !format) continue
     const fallbackModelName = readTrimmedString(value.fallbackModelName)
+    let pricing: ModelPricing | undefined
+    try {
+      pricing = readModelPricing(value.pricing)
+    } catch {
+      pricing = undefined
+    }
     normalized[id] = {
       id,
       name,
@@ -886,6 +893,7 @@ function normalizeExternalModelRecord(raw: unknown): Record<string, ExternalMode
       apiKey,
       modelName,
       ...(fallbackModelName ? { fallbackModelName } : {}),
+      ...(pricing ? { pricing } : {}),
       createdAt,
       updatedAt,
     }
