@@ -70,4 +70,14 @@ describe('the page\'s scheduled task commands', () => {
     expect(runNow).toHaveBeenCalledWith('chat-1', 'sched-1')
     await expect(run('GROUP_SCHEDULED_TASK_RUN', { chatId: 'chat-1', taskId: 'gone' })).rejects.toThrow('找不到')
   })
+
+  it('keeps where a task sends its result, refuses one that does not exist, and drops it when left out', async () => {
+    const { store, run } = await setup()
+    store.settings.resultDestinations = [{ id: 'd1', kind: 'wecom', name: '群', url: 'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=k', createdAt: 1 }]
+    await run('GROUP_SCHEDULED_TASK_SAVE', { chatId: 'chat-1', task: { content: '总结', days: [1], time: '08:30', destinationId: 'd1' } })
+    expect(tasks(store)[0].destinationId).toBe('d1')
+    await expect(run('GROUP_SCHEDULED_TASK_SAVE', { chatId: 'chat-1', taskId: 'sched-1', task: { content: '总结', days: [1], time: '08:30', destinationId: 'gone' } })).rejects.toThrow('找不到这个推送地址')
+    await run('GROUP_SCHEDULED_TASK_SAVE', { chatId: 'chat-1', taskId: 'sched-1', task: { content: '总结', days: [1], time: '08:30' } })
+    expect(tasks(store)[0].destinationId).toBeUndefined()
+  })
 })

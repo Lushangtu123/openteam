@@ -223,4 +223,14 @@ describe('backup', () => {
       expect(restored.memoryItemsById?.['same-id'].content).toBe('the text here')
     })
   })
+
+  it('leaves out result destinations\' addresses and secrets unless keys are exported', () => {
+    const store = storeWithKeyedModel('sk-secret')
+    store.settings.resultDestinations = [{ id: 'd1', kind: 'feishu', name: '晨报群', url: 'https://open.feishu.cn/open-apis/bot/v2/hook/hook-secret', secret: 'sign-secret', createdAt: 1 }]
+    const backup = createBackup(store, { exportedAt: new Date('2026-11-05T08:00:00Z') })
+    expect(JSON.stringify(backup)).not.toContain('hook-secret')
+    expect(JSON.stringify(backup)).not.toContain('sign-secret')
+    expect(backup.store.settings.resultDestinations).toEqual([{ id: 'd1', kind: 'feishu', name: '晨报群', url: '', createdAt: 1 }])
+    expect(roundTrip(store, true).backup.store.settings.resultDestinations?.[0]).toMatchObject({ url: 'https://open.feishu.cn/open-apis/bot/v2/hook/hook-secret', secret: 'sign-secret' })
+  })
 })

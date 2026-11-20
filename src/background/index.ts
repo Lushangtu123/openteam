@@ -2,6 +2,8 @@ import { isChatSite } from '../group/chatSites'
 import { backgroundErrorForUser } from '../shared/connectionErrors'
 import { loadStore } from '../group/store'
 import { guardSpendCaps } from './spendCapGuard'
+import { createResultSender } from './resultSender'
+import { hostAccessPattern } from '../shared/hostAccess'
 import type { GroupChat, OpenTeamStore } from '../group/types'
 import { referencedImageIds } from '../group/backup'
 import { createBackupHandlers } from './backupHandlers'
@@ -299,6 +301,22 @@ const accountBalances = createAccountBalances({
   log,
 })
 
+// 把结果发出去: a scheduled task's round goes to its destination once it is over (resultSender.ts).
+const resultSender = createResultSender({
+  loadStore,
+  mutateStore,
+  broadcastStoreUpdated: store => broadcastStoreUpdated(store),
+  fetch: (url, init) => fetch(url, init),
+  async hasAccess(url) {
+    const pattern = hostAccessPattern(url)
+    return Boolean(pattern) && chrome.permissions.contains({ origins: [pattern!] })
+  },
+  now,
+  wait: ms => new Promise(resolve => setTimeout(resolve, ms)),
+  newId,
+  log,
+})
+
 const scheduledTasks = createScheduledTaskRunner({
   loadStore,
   route: message => Promise.resolve(routeMessage(message, {})),
@@ -350,6 +368,7 @@ const routeMessage = createMessageRouter([
   ...createScheduledTaskHandlers({ broadcastStoreUpdated, newId, now, log, schedulesChanged: () => scheduledTasks.sync(), runNow: (chatId, taskId) => scheduledTasks.runNow(chatId, taskId) }),
   ...createSiteUsageHandlers({ broadcastStoreUpdated, log }),
   ...accountBalances.routes,
+  ...resultSender.routes,
   ...createSiteCheckHandlers({ route: message => Promise.resolve(routeMessage(message, {})), broadcastStoreUpdated, runtimeFrames, waitFor: ms => new Promise(resolve => globalThis.setTimeout(resolve, ms)), now }),
   ...createExternalModelHandlers({ broadcastStoreUpdated, externalModelClient, checkLocalAgent, newId, now }),
   { type: 'LOCAL_AGENT_LIST', handler: async () => ({ ok: true, agents: await listLocalAgents() }) },
@@ -367,7 +386,7 @@ const routeMessage = createMessageRouter([
   },
   ...createRoleHandlers({ broadcastStoreUpdated, externalModelClient, log, newId, now, runtimeFrames, sendPrompt }),
   ...createOrchestrationHandlers({ broadcastStoreUpdated, broadcastAutoGenerateStream, externalModelClient, getChatStatusFromRoles, log, newId, now, promptDeliveryLimiter, requestRoleRecovery, runtimeFrames, sendPrompt }),
-  ...createMessageHandlers({ broadcastStoreUpdated, checkLinks: urls => checkLinks(urls, { fetch: (url, init) => fetch(url, init), hasAccess: pattern => chrome.permissions.contains({ origins: [pattern] }), now }), externalModelClient, getChatStatusFromRoles, imageAttachments, log, newId, now, onPromptSettled: notifyWhenAnswered, promptDeliveryLimiter, requestRoleRecovery, runtimeFrames, sendError, sendPrompt, sendRoleMessage }),
+  ...createMessageHandlers({ broadcastStoreUpdated, checkLinks: urls => checkLinks(urls, { fetch: (url, init) => fetch(url, init), hasAccess: pattern => chrome.permissions.contains({ origins: [pattern] }), now }), externalModelClient, getChatStatusFromRoles, imageAttachments, log, newId, now, onPromptSettled: (store, chatId, promptMessageId) => Promise.all([notifyWhenAnswered(store, chatId, promptMessageId), resultSender.onPromptSettled(store, chatId, promptMessageId)]), promptDeliveryLimiter, requestRoleRecovery, runtimeFrames, sendError, sendPrompt, sendRoleMessage }),
 ])
 
 // Replies their members can no longer give, ended at these moments (see interruptedReplies.ts).

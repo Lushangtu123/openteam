@@ -1837,6 +1837,75 @@ select.reply-compare-select {
   padding-top: 12px;
 }
 
+/* 推送地址: where scheduled tasks send their results. */
+.result-destinations {
+  display: grid;
+  gap: 8px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.result-destinations > p {
+  margin: 0;
+}
+
+.result-destination-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.result-destination-list[hidden],
+.result-destination-empty[hidden],
+.result-destination-secret[hidden] {
+  display: none;
+}
+
+.result-destination {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+
+.result-destination-text {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  gap: 2px;
+}
+
+.result-destination-name {
+  color: var(--text);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.result-destination-form {
+  display: grid;
+  grid-template-columns: minmax(0, 160px) minmax(0, 1fr);
+  gap: 8px;
+}
+
+.result-destination-form #result-destination-url,
+.result-destination-secret,
+.result-destination-form button {
+  grid-column: 1 / -1;
+}
+
+.result-destination-form button {
+  justify-self: start;
+}
+
+.result-destination-status {
+  margin: 0;
+  min-height: 1em;
+}
+
 .scheduled-task-form-title {
   margin: 0;
   font-size: 15px;

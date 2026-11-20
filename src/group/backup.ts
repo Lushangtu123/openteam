@@ -222,11 +222,14 @@ function addChat(store: OpenTeamStore, source: OpenTeamStore, chatId: string): v
   }
 }
 
+// Keys stay out of a backup unless asked for: API keys, and the result destinations' addresses and
+// secrets (a robot's address is its key).
 function withoutApiKeys(store: OpenTeamStore): OpenTeamStore {
   const externalModelsById = Object.fromEntries(
     Object.entries(store.settings.externalModelsById).map(([id, model]) => [id, { ...model, apiKey: '' }]),
   )
-  return { ...store, settings: { ...store.settings, externalModelsById } }
+  const resultDestinations = store.settings.resultDestinations?.map(({ secret: _secret, ...destination }) => ({ ...destination, url: '' }))
+  return { ...store, settings: { ...store.settings, externalModelsById, ...(resultDestinations ? { resultDestinations } : {}) } }
 }
 
 function isBackupImage(value: unknown): value is BackupImage {

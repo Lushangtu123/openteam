@@ -15,6 +15,8 @@ export interface ScheduledTaskInput {
   days: number[]
   time: string
   enabled: boolean
+  // Left out when the result goes nowhere.
+  destinationId?: string
 }
 
 type Schedule = Pick<ScheduledTask, 'days' | 'time'>
@@ -29,7 +31,8 @@ export function readScheduledTaskInput(value: unknown): ScheduledTaskInput {
   if (days.length === 0 || days.length !== new Set(rawDays).size) throw new Error('至少选一天，星期一到星期日')
   const time = typeof input.time === 'string' ? input.time.trim() : ''
   if (!TIME_PATTERN.test(time)) throw new Error('时间要写成 08:30 这样的 24 小时制')
-  return { content, days, time, enabled: input.enabled !== false }
+  const destinationId = typeof input.destinationId === 'string' && input.destinationId ? input.destinationId : undefined
+  return { content, days, time, enabled: input.enabled !== false, ...(destinationId ? { destinationId } : {}) }
 }
 
 // The task's times on the given calendar day (local), if the day is one of its days.

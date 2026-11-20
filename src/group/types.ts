@@ -6,6 +6,7 @@ import type { ChatSite } from './chatSites'
 import type { SiteUsageRecord } from './siteUsage'
 import type { AccountBalance } from './accountBalance'
 import type { ModelSpend } from './spendCap'
+import type { ResultDestination } from './resultDestinations'
 export type { ChatSite }
 export type OpenTeamLanguage = 'en' | 'zh-CN'
 export type RoleModelSource = 'site' | 'external'
@@ -98,6 +99,8 @@ export interface OpenTeamSettings {
   // Once every member of such a round has answered, one member writes a short summary. On unless
   // set to false.
   roundSummary?: boolean
+  // Where scheduled tasks can send their results (src/group/resultDestinations.ts).
+  resultDestinations?: ResultDestination[]
   // What the last group was created with, offered again for the next one.
   newChatCollaboration?: NewChatCollaboration
 }
@@ -393,6 +396,8 @@ export interface ScheduledTask {
   // HH:MM, 24-hour.
   time: string
   enabled: boolean
+  // Where the result goes once the round is over (OpenTeamSettings.resultDestinations).
+  destinationId?: string
   // Times up to this moment are never run: when the task was made, switched on or changed.
   armedAt: number
   // The latest time already run or skipped.
@@ -412,6 +417,16 @@ export interface ScheduledTaskRun {
   catchUp?: boolean
   detail?: string
   messageId?: string
+  // Sending the round's result to the task's destination.
+  delivery?: ScheduledTaskDelivery
+}
+
+export interface ScheduledTaskDelivery {
+  status: 'sending' | 'sent' | 'failed'
+  at: number
+  // The destination's name when it was sent.
+  destination: string
+  detail?: string
 }
 
 export type ProjectStatus = 'planning' | 'awaiting-approval' | 'running' | 'reviewing' | 'waiting-user' | 'finishing' | 'done' | 'stopped'

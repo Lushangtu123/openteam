@@ -26,6 +26,7 @@ export function createScheduledTaskHandlers(deps: ScheduledTaskHandlerDependenci
     const now = deps.now()
     const { store, result } = await mutateStore(store => {
       const chat = requireChat(store, chatId)
+      if (input.destinationId && !store.settings.resultDestinations?.some(item => item.id === input.destinationId)) throw new Error('找不到这个推送地址')
       const tasks = chat.scheduledTasks ?? []
       if (!taskId) {
         if (tasks.length >= MAX_SCHEDULED_TASKS_PER_CHAT) throw new Error(`一个群聊最多 ${MAX_SCHEDULED_TASKS_PER_CHAT} 个定时任务`)
@@ -37,6 +38,7 @@ export function createScheduledTaskHandlers(deps: ScheduledTaskHandlerDependenci
       if (!task) throw new Error('找不到这个定时任务')
       const rescheduled = input.time !== task.time || input.days.join() !== task.days.join() || (input.enabled && !task.enabled)
       Object.assign(task, input, { updatedAt: now })
+      if (!input.destinationId) delete task.destinationId
       // A changed time, or one switched back on, does not run times that have already passed.
       if (rescheduled) task.armedAt = now
       return task

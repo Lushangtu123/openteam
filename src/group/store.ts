@@ -7,6 +7,7 @@ import { normalizeSiteUsageRecord, type SiteUsageRecord } from './siteUsage'
 import { normalizeAccountBalances, type AccountBalance } from './accountBalance'
 import { readModelPricing } from './pricing'
 import { normalizeModelSpend, readDailyCap, type ModelSpend } from './spendCap'
+import { normalizeResultDestinations } from './resultDestinations'
 import {
   DEFAULT_ORCHESTRATION_MAX_NODE_EXECUTIONS,
   DEFAULT_ORCHESTRATION_MAX_ROUNDS,
@@ -841,8 +842,14 @@ function normalizeSettings(raw: unknown, storedVersion = CURRENT_STORE_VERSION):
     ...(raw.replyKeyPoints === false ? { replyKeyPoints: false } : {}),
     ...(raw.memoryProposals === true ? { memoryProposals: true } : {}),
     ...(raw.roundSummary === false ? { roundSummary: false } : {}),
+    ...resultDestinationsSetting(raw.resultDestinations),
     ...newChatCollaborationSetting(raw.newChatCollaboration),
   }
+}
+
+function resultDestinationsSetting(raw: unknown): Pick<OpenTeamSettings, 'resultDestinations'> {
+  const destinations = normalizeResultDestinations(raw)
+  return destinations.length ? { resultDestinations: destinations } : {}
 }
 
 function newChatCollaborationSetting(raw: unknown): Pick<OpenTeamSettings, 'newChatCollaboration'> {

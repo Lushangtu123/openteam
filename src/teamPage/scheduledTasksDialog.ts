@@ -3,6 +3,8 @@
 import { defaultMentionTargetForMessage } from '../group/mentionParser'
 import { describeSchedule, MAX_SCHEDULED_TASKS_PER_CHAT, nextSlotAfter, SCHEDULED_TASK_CONTENT_MAX } from '../group/scheduledTasks'
 import type { OpenTeamStore, ScheduledTask } from '../group/types'
+import { destinationKindName, readDestinationInput, type ResultDestination, type ResultDestinationKind } from '../group/resultDestinations'
+import { requestHostAccess } from '../shared/hostAccess'
 import { normalizeLanguage } from '../shared/i18n'
 import { createIcon } from './icons'
 
@@ -11,6 +13,8 @@ export interface ScheduledTasksDialogDependencies {
   runCommand(type: string, payload?: Record<string, unknown>): Promise<void>
   now?(): number
   confirm?(message: string): boolean
+  // Asks the browser to let OpenTeam reach a destination's site (from a click).
+  requestHostAccess?(url: string): Promise<boolean>
   // Puts the focus back where the window was opened from.
   onClose?(): void
 }
@@ -43,6 +47,9 @@ export function openScheduledTasksDialog(chatId: string, deps: ScheduledTasksDia
   let editingId: string | undefined
   let busy = false
   let drawnList = ''
+  let drawnDestinations = ''
+  let drawnChoices = ''
+  const requestAccess = deps.requestHostAccess ?? (url => requestHostAccess(url))
 
   const backdrop = element('div', 'modal-backdrop scheduled-tasks-modal')
   backdrop.addEventListener('click', event => {
@@ -112,6 +119,17 @@ export function openScheduledTasksDialog(chatId: string, deps: ScheduledTasksDia
   time.required = true
   timeField.append(timeLabel, time)
 
+  // 把结果发出去: where the round's result goes once it is answered (src/group/resultDestinations.ts).
+  const destinationField = element('div', 'field scheduled-task-destination-field')
+  const destinationLabel = element('label', '', t('答完后把结果发送到', 'When answered, send the result to'))
+  destinationLabel.htmlFor = 'scheduled-task-destination'
+  const destinationChoice = element('select')
+  destinationChoice.id = 'scheduled-task-destination'
+  destinationField.append(destinationLabel, destinationChoice, element('p', 'tiny', t(
+    '群里有汇总时发汇总，没有就发每位成员的回答。推送地址在窗口下方添加。',
+    'The summary when the group sums rounds up, otherwise every member\'s answer. Add destinations at the bottom of this window.',
+  )))
+
   const error = element('p', 'team-form-error')
   error.setAttribute('role', 'alert')
   const actions = element('div', 'team-setup-actions')
@@ -124,7 +142,7 @@ export function openScheduledTasksDialog(chatId: string, deps: ScheduledTasksDia
   const submit = element('button', 'btn btn-primary')
   submit.type = 'submit'
   actions.append(cancel, submit)
-  form.append(formTitle, contentField, daysField, timeField, error, actions)
+  form.append(formTitle, contentField, daysField, timeField, destinationField, error, actions)
   form.addEventListener('submit', event => {
     event.preventDefault()
     void save()
@@ -134,7 +152,48 @@ export function openScheduledTasksDialog(chatId: string, deps: ScheduledTasksDia
     renderMentionHint()
   })
 
-  dialog.append(header, list, empty, form)
+  // The destinations: added here, tested, deleted.
+  const destinationsSection = element('section', 'result-destinations')
+  destinationsSection.append(element('h3', 'scheduled-task-form-title', t('推送地址', 'Destinations')), element('p', 'tiny', t(
+    '在飞书、企业微信或钉钉群里添加「自定义机器人」，把它的 Webhook 地址填在这里；也可以填任何 https 地址，收到的是 JSON。地址就是钥匙，备份时和 API Key 一样默认不导出。',
+    'Add a custom robot to a Feishu, WeCom or DingTalk group and enter its webhook address here, or any https address, which receives JSON. The address is a key: backups leave it out, as they do API keys.',
+  )))
+  const destinationList = element('ul', 'result-destination-list')
+  const destinationEmpty = element('p', 'tiny result-destination-empty', t('还没有推送地址。', 'No destination yet.'))
+  const destinationForm = element('form', 'team-setup-form result-destination-form')
+  destinationForm.noValidate = true
+  const kindChoice = element('select')
+  kindChoice.id = 'result-destination-kind'
+  kindChoice.setAttribute('aria-label', t('推送方式', 'Kind'))
+  for (const kind of ['feishu', 'wecom', 'dingtalk', 'webhook'] as ResultDestinationKind[]) kindChoice.append(new Option(destinationKindName(kind, english()), kind))
+  const nameInput = element('input')
+  nameInput.id = 'result-destination-name'
+  nameInput.placeholder = t('名称（可选）', 'Name (optional)')
+  nameInput.setAttribute('aria-label', t('名称', 'Name'))
+  const urlInput = element('input')
+  urlInput.id = 'result-destination-url'
+  urlInput.type = 'url'
+  urlInput.setAttribute('aria-label', t('Webhook 地址', 'Webhook address'))
+  const secretWrap = element('div', 'result-destination-secret')
+  const secretInput = element('input')
+  secretInput.id = 'result-destination-secret'
+  secretInput.placeholder = t('签名密钥（开了签名校验 / 加签才填）', 'Signing secret (only if signing is on)')
+  secretInput.setAttribute('aria-label', t('签名密钥', 'Signing secret'))
+  secretWrap.append(secretInput)
+  const addDestination = element('button', 'btn', t('添加推送地址', 'Add destination'))
+  addDestination.type = 'submit'
+  destinationForm.append(kindChoice, nameInput, urlInput, secretWrap, addDestination)
+  const destinationStatus = element('p', 'tiny result-destination-status')
+  destinationStatus.setAttribute('role', 'status')
+  destinationsSection.append(destinationList, destinationEmpty, destinationForm, destinationStatus)
+  kindChoice.addEventListener('change', showKindFields)
+  destinationForm.addEventListener('submit', event => {
+    event.preventDefault()
+    void addNewDestination()
+  })
+  showKindFields()
+
+  dialog.append(header, list, empty, form, destinationsSection)
   backdrop.append(dialog)
   document.body.append(backdrop)
   document.addEventListener('keydown', handleEscape)
@@ -164,6 +223,7 @@ export function openScheduledTasksDialog(chatId: string, deps: ScheduledTasksDia
     }
     list.hidden = tasks.length === 0
     empty.hidden = tasks.length > 0
+    renderDestinations()
     empty.textContent = t('还没有定时任务。在下面写好消息、选好时间就能添加。', 'No scheduled task yet. Write a message and pick a time below to add one.')
     const full = !editingId && tasks.length >= MAX_SCHEDULED_TASKS_PER_CHAT
     submit.disabled = busy || full
@@ -178,14 +238,14 @@ export function openScheduledTasksDialog(chatId: string, deps: ScheduledTasksDia
     top.append(element('span', 'scheduled-task-when', describeSchedule(task.days, task.time, english())))
     if (!task.enabled) top.append(element('span', 'scheduled-task-badge', t('已停用', 'Off')))
     item.append(top, element('p', 'scheduled-task-content', task.content))
-    const meta = element('p', 'tiny scheduled-task-meta', [nextRunText(task), lastRunText(task)].filter(Boolean).join(english() ? ' · ' : '　'))
-    if (task.lastRun?.status === 'failed') meta.classList.add('scheduled-task-failed')
+    const meta = element('p', 'tiny scheduled-task-meta', [nextRunText(task), lastRunText(task), deliveryText(task)].filter(Boolean).join(english() ? ' · ' : '　'))
+    if (task.lastRun?.status === 'failed' || (task.destinationId && task.lastRun?.delivery?.status === 'failed')) meta.classList.add('scheduled-task-failed')
     item.append(meta)
     const buttons = element('div', 'scheduled-task-actions')
     buttons.append(
       action(task, 'run', t('立即运行', 'Run now'), 'retry', () => command('GROUP_SCHEDULED_TASK_RUN', { chatId, taskId: task.id })),
       action(task, 'edit', t('编辑', 'Edit'), 'edit', () => startEditing(task)),
-      action(task, 'toggle', task.enabled ? t('停用', 'Switch off') : t('启用', 'Switch on'), undefined, () => command('GROUP_SCHEDULED_TASK_SAVE', { chatId, taskId: task.id, task: { content: task.content, days: task.days, time: task.time, enabled: !task.enabled } })),
+      action(task, 'toggle', task.enabled ? t('停用', 'Switch off') : t('启用', 'Switch on'), undefined, () => command('GROUP_SCHEDULED_TASK_SAVE', { chatId, taskId: task.id, task: { content: task.content, days: task.days, time: task.time, enabled: !task.enabled, ...(task.destinationId ? { destinationId: task.destinationId } : {}) } })),
       action(task, 'delete', t('删除', 'Delete'), 'trash', () => {
         if (!confirm(t('确定删除这个定时任务吗？', 'Delete this scheduled task?'))) return
         if (editingId === task.id) startAdding()
@@ -222,6 +282,117 @@ export function openScheduledTasksDialog(chatId: string, deps: ScheduledTasksDia
     return t(`上次：${when} 没发出：${run.detail ?? ''}`, `Last: ${when}, not sent: ${run.detail ?? ''}`)
   }
 
+  // Where the task's result goes, and how the last one went.
+  function deliveryText(task: ScheduledTask): string {
+    if (!task.destinationId) return ''
+    const current = destinations().find(item => item.id === task.destinationId)
+    const delivery = task.lastRun?.delivery
+    const name = delivery?.destination ?? current?.name ?? ''
+    if (delivery?.status === 'sent') return t(`结果已发送到「${name}」`, `Result sent to "${name}"`)
+    if (delivery?.status === 'failed') return t(`结果没发到「${name}」：${delivery.detail ?? ''}`, `Result not sent to "${name}": ${delivery.detail ?? ''}`)
+    if (delivery?.status === 'sending') return t(`正在把结果发到「${name}」`, `Sending the result to "${name}"`)
+    return current ? t(`结果会发到「${current.name}」`, `Result goes to "${current.name}"`) : ''
+  }
+
+  function destinations(): ResultDestination[] {
+    return deps.getStore().settings.resultDestinations ?? []
+  }
+
+  // The list, and the task form's choices, drawn again only when the destinations changed.
+  function renderDestinations(): void {
+    const all = destinations()
+    const key = JSON.stringify([english(), all.map(item => [item.id, item.name, item.kind, Boolean(item.url)])])
+    if (key !== drawnChoices) {
+      drawnChoices = key
+      const chosen = destinationChoice.value
+      destinationChoice.replaceChildren(new Option(t('不发送', 'Nowhere'), ''), ...all.map(item => new Option(`${item.name}${t(`（${destinationKindName(item.kind, false)}）`, ` (${destinationKindName(item.kind, true)})`)}`, item.id)))
+      destinationChoice.value = all.some(item => item.id === chosen) ? chosen : ''
+    }
+    if (key === drawnDestinations) return
+    drawnDestinations = key
+    destinationList.replaceChildren(...all.map(destinationRow))
+    destinationList.hidden = all.length === 0
+    destinationEmpty.hidden = all.length > 0
+  }
+
+  function destinationRow(destination: ResultDestination): HTMLLIElement {
+    const item = element('li', 'result-destination')
+    const text = element('div', 'result-destination-text')
+    text.append(element('span', 'result-destination-name', destination.name), element('span', 'tiny', destinationKindName(destination.kind, english())))
+    if (!destination.url) text.append(element('span', 'tiny scheduled-task-failed', t('没有地址（从不含 Key 的备份恢复），请删掉后重新添加', 'No address (restored from a backup without keys); delete it and add it again')))
+    const test = element('button', 'btn btn-ghost btn-small', t('测试', 'Test'))
+    test.type = 'button'
+    test.dataset.destinationAction = 'test'
+    test.disabled = !destination.url
+    test.setAttribute('aria-label', t(`测试：${destination.name}`, `Test: ${destination.name}`))
+    test.addEventListener('click', () => void testDestination(destination))
+    const remove = element('button', 'btn btn-ghost btn-small', t('删除', 'Delete'))
+    remove.type = 'button'
+    remove.dataset.destinationAction = 'delete'
+    remove.setAttribute('aria-label', t(`删除：${destination.name}`, `Delete: ${destination.name}`))
+    remove.addEventListener('click', () => {
+      if (!confirm(t(`删除推送地址「${destination.name}」吗？用它的定时任务将不再发送结果。`, `Delete the destination "${destination.name}"? Tasks using it will send their results nowhere.`))) return
+      void destinationCommand('RESULT_DESTINATION_DELETE', { destinationId: destination.id }, t('已删除。', 'Deleted.'))
+    })
+    item.append(text, test, remove)
+    return item
+  }
+
+  function showKindFields(): void {
+    const kind = kindChoice.value as ResultDestinationKind
+    secretWrap.hidden = kind !== 'feishu' && kind !== 'dingtalk'
+    urlInput.placeholder = {
+      feishu: 'https://open.feishu.cn/open-apis/bot/v2/hook/…',
+      wecom: 'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=…',
+      dingtalk: 'https://oapi.dingtalk.com/robot/send?access_token=…',
+      webhook: 'https://…',
+    }[kind]
+  }
+
+  async function addNewDestination(): Promise<void> {
+    let destination: ReturnType<typeof readDestinationInput>
+    try {
+      destination = readDestinationInput({ kind: kindChoice.value, name: nameInput.value, url: urlInput.value, secret: secretInput.value })
+    } catch (caught) {
+      destinationStatus.textContent = caught instanceof Error ? caught.message : String(caught)
+      urlInput.focus()
+      return
+    }
+    if (!await allowed(destination.url)) return
+    const added = await destinationCommand('RESULT_DESTINATION_ADD', { destination }, t('已添加。可以点「测试」看看能不能收到。', 'Added. Click Test to see whether it arrives.'))
+    if (!added) return
+    nameInput.value = ''
+    urlInput.value = ''
+    secretInput.value = ''
+  }
+
+  async function testDestination(destination: ResultDestination): Promise<void> {
+    if (!await allowed(destination.url)) return
+    await destinationCommand('RESULT_DESTINATION_TEST', { destinationId: destination.id }, t(`测试消息已发到「${destination.name}」，去那里看看收到没有。`, `A test message was sent to "${destination.name}"; see whether it arrived.`))
+  }
+
+  // The browser asks the user to let OpenTeam reach the site, the first time.
+  async function allowed(url: string): Promise<boolean> {
+    if (await requestAccess(url)) return true
+    const host = new URL(url).hostname
+    destinationStatus.textContent = t(`需要你允许 OpenTeam 访问 ${host}，才能往这里推送。`, `OpenTeam needs your permission to reach ${host} to send there.`)
+    return false
+  }
+
+  async function destinationCommand(type: string, payload: Record<string, unknown>, done: string): Promise<boolean> {
+    destinationStatus.textContent = t('处理中…', 'Working…')
+    try {
+      await deps.runCommand(type, payload)
+      destinationStatus.textContent = done
+      return true
+    } catch (caught) {
+      destinationStatus.textContent = caught instanceof Error ? caught.message : String(caught)
+      return false
+    } finally {
+      if (openDialog === controller) render()
+    }
+  }
+
   // A message without @ in a group that answers only @mentions is just recorded; say so before it is saved.
   function renderMentionHint(): void {
     const current = chat()
@@ -241,6 +412,7 @@ export function openScheduledTasksDialog(chatId: string, deps: ScheduledTasksDia
     content.value = ''
     for (const box of dayBoxes) box.checked = box.value === '1'
     time.value = '09:00'
+    destinationChoice.value = ''
     error.textContent = ''
     render()
   }
@@ -253,6 +425,8 @@ export function openScheduledTasksDialog(chatId: string, deps: ScheduledTasksDia
     content.value = task.content
     for (const box of dayBoxes) box.checked = task.days.includes(Number(box.value))
     time.value = task.time
+    renderDestinations()
+    destinationChoice.value = destinations().some(item => item.id === task.destinationId) ? task.destinationId! : ''
     error.textContent = ''
     render()
     content.focus()
@@ -268,7 +442,7 @@ export function openScheduledTasksDialog(chatId: string, deps: ScheduledTasksDia
     const sent = await command('GROUP_SCHEDULED_TASK_SAVE', {
       chatId,
       ...(editing ? { taskId: editing.id } : {}),
-      task: { content: content.value.trim(), days, time: time.value, enabled: editing ? editing.enabled : true },
+      task: { content: content.value.trim(), days, time: time.value, enabled: editing ? editing.enabled : true, ...(destinationChoice.value ? { destinationId: destinationChoice.value } : {}) },
     })
     if (sent) startAdding()
   }
