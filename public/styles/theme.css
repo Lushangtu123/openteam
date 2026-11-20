@@ -1243,22 +1243,8 @@ select.reply-compare-select {
 }
 
 .team-handbook-select select {
-  appearance: none;
   min-width: 0;
-  padding-inline: 14px 40px;
-}
-
-.team-handbook-select::after {
-  content: "";
-  position: absolute;
-  top: 50%;
-  right: 12px;
-  width: 18px;
-  height: 18px;
-  transform: translateY(-50%);
-  background: currentColor;
-  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") center / contain no-repeat;
-  pointer-events: none;
+  padding-left: 14px;
 }
 
 .team-handbook-preview pre {
