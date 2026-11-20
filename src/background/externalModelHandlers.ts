@@ -1,5 +1,6 @@
 import type { ExternalModelConfig, ExternalModelFormat, OpenTeamStore, ModelPricing } from '../group/types'
 import { readModelPricing } from '../group/pricing'
+import { liftCapToday, readDailyCap } from '../group/spendCap'
 import { loadStore } from '../group/store'
 import type { ExternalModelClient } from './externalModelClient'
 import type { BackgroundMessageRoute } from './messageRouter'
@@ -11,6 +12,7 @@ export const EXTERNAL_MODEL_ROUTE_TYPES = [
   'EXTERNAL_MODEL_UPDATE',
   'EXTERNAL_MODEL_DELETE',
   'EXTERNAL_MODEL_TEST',
+  'MODEL_SPEND_CAP_LIFT',
 ] as const
 
 export interface ExternalModelHandlersDependencies {
@@ -79,11 +81,23 @@ export function createExternalModelHandlers(deps: ExternalModelHandlersDependenc
     return { ok: true, content: completion.content }
   }
 
+  // 今天继续用: the model's daily spending cap does not apply for the rest of today.
+  const handleCapLift = async (message: RuntimeMessage) => {
+    const modelId = requireString(message.modelId, '缺少外部模型 ID')
+    const { store } = await mutateStore(store => {
+      if (!store.settings.externalModelsById[modelId]) throw new Error(`找不到外部模型：${modelId}`)
+      liftCapToday(store, modelId, deps.now())
+    })
+    await deps.broadcastStoreUpdated(store)
+    return { ok: true, store }
+  }
+
   return [
     { type: 'EXTERNAL_MODEL_CREATE', handler: handleCreate },
     { type: 'EXTERNAL_MODEL_UPDATE', handler: handleUpdate },
     { type: 'EXTERNAL_MODEL_DELETE', handler: handleDelete },
     { type: 'EXTERNAL_MODEL_TEST', handler: handleTest },
+    { type: 'MODEL_SPEND_CAP_LIFT', handler: handleCapLift },
   ]
 }
 
@@ -102,16 +116,19 @@ function readExternalModelInput(message: RuntimeMessage, id: string, createdAt: 
     apiKey: requireString(message.apiKey, '模型 Key 不能为空'),
     modelName: requireString(message.modelName, '模型名称不能为空'),
     ...optionalFallback(message.fallbackModelName),
-    ...optionalPricing(message.pricing),
+    ...optionalPricingAndCap(message.pricing, message.dailyCap),
     createdAt,
     updatedAt,
   }
 }
 
-// Left out when no price is given, so that clearing both removes it.
-function optionalPricing(value: unknown): { pricing?: ModelPricing } {
+// Left out when no price is given, so that clearing both removes it. A daily cap (花费上限) is
+// counted from the price, so it needs one.
+function optionalPricingAndCap(value: unknown, cap: unknown): { pricing?: ModelPricing; dailyCap?: number } {
   const pricing = readModelPricing(value)
-  return pricing ? { pricing } : {}
+  const dailyCap = readDailyCap(cap)
+  if (dailyCap !== undefined && !pricing) throw new Error('先填单价，才能按估算花费设每日上限')
+  return { ...(pricing ? { pricing } : {}), ...(dailyCap !== undefined ? { dailyCap } : {}) }
 }
 
 // Left out when empty, so that clearing the field removes the backup.

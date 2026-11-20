@@ -344,6 +344,12 @@ function setupForm(options: { listModelNames?: (request: { format: string; baseU
       <p id="external-model-names-status"></p>
       <input id="external-model-fallback-name" />
       <select id="external-model-fallback-choices" hidden></select>
+      <input id="external-model-price-input" />
+      <input id="external-model-price-output" />
+      <select id="external-model-price-currency"><option value="CNY">元</option><option value="USD">美元</option></select>
+      <input id="external-model-daily-cap" />
+      <span id="external-model-daily-cap-unit">元 / 天</span>
+      <p id="external-model-daily-cap-today" hidden></p>
       <button id="reset-external-model-form" type="button"></button>
     </form>
   `
@@ -503,3 +509,33 @@ describe('editing a saved model with the fetched list', () => {
     expect(runCommand).toHaveBeenCalledWith('EXTERNAL_MODEL_UPDATE', expect.objectContaining({ modelId: 'm-1', modelName: 'gemini-flash-latest', fallbackModelName: 'gemini-flash-lite-latest' }))
   })
 })
+
+describe('a daily spending cap in the form', () => {
+  it('is saved with the price, named in the price\'s currency, and shows what the model spent today when edited', async () => {
+    const { store, view, $, choose, runCommand } = setupForm()
+    choose('#external-model-provider', 'gemini')
+    $<HTMLInputElement>('#external-model-api-key').value = 'sk-1'
+    $<HTMLInputElement>('#external-model-model-name').value = 'gemini-flash-latest'
+    $<HTMLInputElement>('#external-model-price-input').value = '2'
+    $<HTMLInputElement>('#external-model-price-output').value = '8'
+    choose('#external-model-price-currency', 'USD')
+    expect($('#external-model-daily-cap-unit').textContent).toBe('美元 / 天')
+    $<HTMLInputElement>('#external-model-daily-cap').value = ' 5 '
+    $<HTMLFormElement>('#external-model-form').requestSubmit()
+    await vi.waitFor(() => expect(runCommand).toHaveBeenCalled())
+    expect(runCommand).toHaveBeenCalledWith('EXTERNAL_MODEL_CREATE', expect.objectContaining({ pricing: { input: '2', output: '8', currency: 'USD' }, dailyCap: '5' }))
+
+    const today = new Date()
+    const day = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+    store.settings.externalModelOrder = ['m-1']
+    store.settings.externalModelsById['m-1'] = { id: 'm-1', name: 'Gemini', format: 'openai', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai', apiKey: 'sk-1', modelName: 'gemini-flash-latest', pricing: { input: 2, output: 8, currency: 'CNY' }, dailyCap: 5, createdAt: 1, updatedAt: 1 }
+    store.modelSpendById = { 'm-1': { day, spent: 1.2 } }
+    view.renderExternalModels()
+    ;[...document.querySelectorAll<HTMLButtonElement>('#external-models-list button')].find(button => button.textContent === '编辑')!.click()
+    expect($<HTMLInputElement>('#external-model-daily-cap').value).toBe('5')
+    expect($('#external-model-daily-cap-unit').textContent).toBe('元 / 天')
+    expect($('#external-model-daily-cap-today').textContent).toBe('今天估算已花 ¥1.20')
+    expect($<HTMLElement>('#external-model-daily-cap-today').hidden).toBe(false)
+  })
+})
+

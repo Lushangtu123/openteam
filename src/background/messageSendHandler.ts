@@ -7,10 +7,11 @@ import { isDiscussionRunning, startsDiscussion } from '../group/discussion'
 import { readScheduledRunRequest, recordScheduledRunSent } from '../group/scheduledTasks'
 import { defaultMentionTargetForMessage, parseGroupMentions, roleMentionLabelOptionsFromSettings } from '../group/mentionParser'
 import { siteLimitSkipReason } from '../group/siteUsage'
+import { capReachedReason, modelSpendToday } from '../group/spendCap'
 import { pollMessageText, readPollInput } from '../group/poll'
 import type { GroupMessage, GroupRole, MessagePoll } from '../group/types'
 import { normalizeLanguage } from '../shared/i18n'
-import { backupModelFor, memberSite, memberSiteLimit } from './memberBackup'
+import { backupModelFor, memberModelAtCap, memberSite, memberSiteLimit } from './memberBackup'
 import { upsertErrorAssistantAfterPrompt } from './replyMessages'
 import type { PromptDelivery } from './promptDelivery'
 import { type ExternalPromptDelivery, getExternalModelForRole, isExternalModelRole, prepareRolePromptDelivery } from './rolePromptDelivery'
@@ -117,13 +118,19 @@ export function createMessageSendHandler(ctx: MessageHandlerContext, roundHandle
       })
       // A web member whose site is limiting is passed over this time, unless its backup answers for it
       // (src/group/siteUsage.ts, siteDeliveries.ts).
-      const limited = targetRoles.filter(role => !unavailable.includes(role) && !backupModelFor(store, role) && memberSiteLimit(store, role, timestamp))
+      // An API member at its daily spending cap is passed over the same way (src/group/spendCap.ts).
+      const limited = targetRoles.filter(role => !unavailable.includes(role) && ((!backupModelFor(store, role) && memberSiteLimit(store, role, timestamp)) || memberModelAtCap(store, role, timestamp)))
       const deliverableTargetRoles = targetRoles.filter(role => !unavailable.includes(role) && !limited.includes(role))
       const english = normalizeLanguage(store.settings.language) === 'en'
-      const limitReason = (role: GroupRole) => siteLimitSkipReason(memberSite(store, role)!, memberSiteLimit(store, role, timestamp)!, timestamp, english)
+      const limitReason = (role: GroupRole) => {
+        const capped = memberModelAtCap(store, role, timestamp)
+        if (capped) return capReachedReason(capped, modelSpendToday(store, capped.id, timestamp), english)
+        return siteLimitSkipReason(memberSite(store, role)!, memberSiteLimit(store, role, timestamp)!, timestamp, english)
+      }
 
       if (limited.length > 0) deps.log.warn('message-send:site-limited-targets', { chatId: chat.id, skippedTargets: limited.map(role => ({ id: role.id, name: role.name, site: memberSite(store, role) })) })
-      if (limited.length > 0 && deliverableTargetRoles.length === 0) {
+      // A member at its spending cap gets a reply with 今天继续用, so the message is kept for it.
+      if (limited.length > 0 && deliverableTargetRoles.length === 0 && !limited.some(role => memberModelAtCap(store, role, timestamp))) {
         const unavailableNote = unavailable.length > 0 ? `以下成员不可用，请等待或恢复：${unavailable.map(role => role.name).join('、')}。` : ''
         throw new Error(`${unavailableNote}${limited.map(role => `「${role.name}」：${limitReason(role)}`).join('\n')}`)
       }
@@ -189,14 +196,18 @@ export function createMessageSendHandler(ctx: MessageHandlerContext, roundHandle
       chat.messageIds.push(userMessage.id)
       chat.nextMessageSeq += 1
       // Said in the chat, under the message, for each member passed over.
-      for (const role of limited) upsertErrorAssistantAfterPrompt(store, chat, role, userMessage.id, limitReason(role), timestamp, deps.newId)
+      for (const role of limited) {
+        const reply = upsertErrorAssistantAfterPrompt(store, chat, role, userMessage.id, limitReason(role), timestamp, deps.newId)
+        const capped = memberModelAtCap(store, role, timestamp)
+        if (capped) reply.spendCapModelId = capped.id
+      }
       deps.log.info('message-send:stored', { chatId: chat.id, messageId: userMessage.id, targetCount: parsed.targetRoleIds.length })
       chat.updatedAt = timestamp
       if (finalTargetRoleIds.length === 0) {
         return { message: userMessage, deliveries: [], externalDeliveries: [] }
       }
 
-      chat.status = 'running'
+      if (deliverableTargetRoles.length > 0) chat.status = 'running'
 
       const messages = getChatMessages(store, chat)
       const deliveries: PromptDelivery[] = []

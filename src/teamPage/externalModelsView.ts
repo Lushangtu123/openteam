@@ -2,6 +2,7 @@ import type { ExternalModelConfig, ExternalModelFormat, OpenTeamStore } from '..
 import { API_MODEL_PRESETS, listModelNames as fetchModelNames, presetForBaseUrl, type ModelListRequest } from '../shared/apiModelPresets'
 import { hasHostAccess, hostAccessLabel, hostAccessPattern, requestHostAccess } from '../shared/hostAccess'
 import { normalizeLanguage, translateUi } from '../shared/i18n'
+import { modelSpendToday, money } from '../group/spendCap'
 import type { LocalAgentInfo } from '../shared/localControlProtocol'
 
 export interface ExternalModelsViewDependencies {
@@ -49,6 +50,10 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
   const priceInputEl = form.querySelector<HTMLInputElement>('#external-model-price-input')
   const priceOutputEl = form.querySelector<HTMLInputElement>('#external-model-price-output')
   const priceCurrencyEl = form.querySelector<HTMLSelectElement>('#external-model-price-currency')
+  // 花费上限: at most this much a day, estimated from the price above.
+  const dailyCapEl = form.querySelector<HTMLInputElement>('#external-model-daily-cap')
+  const dailyCapUnitEl = form.querySelector<HTMLElement>('#external-model-daily-cap-unit')
+  const dailyCapTodayEl = form.querySelector<HTMLElement>('#external-model-daily-cap-today')
   const localStatusEl = form.querySelector<HTMLElement>('#local-agent-status')
   const localHint = localStatusEl?.textContent ?? ''
   const addButtonEl = form.ownerDocument.querySelector<HTMLButtonElement>('#add-external-model')
@@ -251,6 +256,7 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
     fetchNamesEl?.addEventListener('click', () => void fetchModelList())
     nameChoicesEl?.addEventListener('change', () => pickFrom(nameChoicesEl, deps.externalModelModelNameEl))
     fallbackChoicesEl?.addEventListener('change', () => pickFrom(fallbackChoicesEl, fallbackNameEl))
+    priceCurrencyEl?.addEventListener('change', showCapUnit)
     deps.externalModelFormatEl.addEventListener('change', showFieldsForFormat)
     localAgentEl?.addEventListener('change', showWorkspacesForAgent)
     deps.openExternalModelsEl.addEventListener('click', openExternalModels)
@@ -365,6 +371,8 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
           fallbackModelName: fallbackNameEl?.value.trim() ?? '',
           // 用量's estimate; both empty removes the price.
           pricing: { input: priceInputEl?.value.trim() ?? '', output: priceOutputEl?.value.trim() ?? '', currency: priceCurrencyEl?.value ?? 'CNY' },
+          // Empty removes the cap.
+          dailyCap: dailyCapEl?.value.trim() ?? '',
         }
     if (format !== 'local-agent') await allowAccess(deps.externalModelBaseUrlEl.value)
     await deps.runCommand(modelId ? 'EXTERNAL_MODEL_UPDATE' : 'EXTERNAL_MODEL_CREATE', modelId ? { modelId, ...payload } : payload)
@@ -403,6 +411,19 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
     }
   }
 
+  // The cap is in the price's currency.
+  function showCapUnit(): void {
+    if (dailyCapUnitEl) dailyCapUnitEl.textContent = ui(priceCurrencyEl?.value === 'USD' ? '美元 / 天' : '元 / 天')
+  }
+
+  // What the model being edited spent today, beside its cap.
+  function showSpentToday(model: ExternalModelConfig | undefined): void {
+    if (!dailyCapTodayEl) return
+    const spent = model?.pricing ? modelSpendToday(deps.getStore(), model.id, Date.now()).spent : 0
+    dailyCapTodayEl.hidden = !model?.pricing || spent === 0
+    dailyCapTodayEl.textContent = model && !dailyCapTodayEl.hidden ? (language() === 'en' ? `Spent today (estimated): ${money(model, spent)}` : `今天估算已花 ${money(model, spent)}`) : ''
+  }
+
   function fillForm(model: ExternalModelConfig): void {
     deps.externalModelIdEl.value = model.id
     deps.externalModelNameEl.value = model.name
@@ -414,6 +435,9 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
     if (priceInputEl) priceInputEl.value = model.pricing ? String(model.pricing.input) : ''
     if (priceOutputEl) priceOutputEl.value = model.pricing ? String(model.pricing.output) : ''
     if (priceCurrencyEl) priceCurrencyEl.value = model.pricing?.currency ?? 'CNY'
+    if (dailyCapEl) dailyCapEl.value = model.dailyCap !== undefined ? String(model.dailyCap) : ''
+    showCapUnit()
+    showSpentToday(model)
     if (workspaceEl) workspaceEl.value = model.workspace ?? ''
     presetFilledName = ''
     clearModelNames()
@@ -433,6 +457,9 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
     if (priceInputEl) priceInputEl.value = ''
     if (priceOutputEl) priceOutputEl.value = ''
     if (priceCurrencyEl) priceCurrencyEl.value = 'CNY'
+    if (dailyCapEl) dailyCapEl.value = ''
+    showCapUnit()
+    showSpentToday(undefined)
     if (workspaceEl) workspaceEl.value = ''
     presetFilledName = ''
     clearModelNames()

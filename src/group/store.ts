@@ -6,6 +6,7 @@ import { isChatSite } from './chatSites'
 import { normalizeSiteUsageRecord, type SiteUsageRecord } from './siteUsage'
 import { normalizeAccountBalances, type AccountBalance } from './accountBalance'
 import { readModelPricing } from './pricing'
+import { normalizeModelSpend, readDailyCap, type ModelSpend } from './spendCap'
 import {
   DEFAULT_ORCHESTRATION_MAX_NODE_EXECUTIONS,
   DEFAULT_ORCHESTRATION_MAX_ROUNDS,
@@ -48,6 +49,7 @@ interface OpenTeamMetaStore {
   externalChatMemoriesById?: NonNullable<OpenTeamStore['externalChatMemoriesById']>
   siteUsageBySite?: SiteUsageRecord
   accountBalancesById?: Record<string, AccountBalance>
+  modelSpendById?: Record<string, ModelSpend>
   settings: OpenTeamSettings
   viewState?: OpenTeamViewState
 }
@@ -127,6 +129,7 @@ export function createDefaultStore(): OpenTeamStore {
     memoryOrder: [],
     siteUsageBySite: {},
     accountBalancesById: {},
+    modelSpendById: {},
     settings: defaultSettings(),
     viewState: {
       chatReadSeqById: {},
@@ -250,6 +253,7 @@ function normalizeStore(raw: unknown): OpenTeamStore {
     ...normalizeMemoryState(raw.memoryItemsById, raw.memoryOrder),
     siteUsageBySite: normalizeSiteUsageRecord(raw.siteUsageBySite),
     accountBalancesById: normalizeAccountBalances(raw.accountBalancesById),
+    modelSpendById: normalizeModelSpend(raw.modelSpendById),
     settings: normalizeSettings(raw.settings, storedVersion),
     viewState: normalizeViewState(raw.viewState),
   }
@@ -314,6 +318,7 @@ function assembleV2Store(items: Map<string, unknown>): OpenTeamStore {
   store.externalChatMemoriesById = { ...(meta.externalChatMemoriesById ?? {}) }
   store.siteUsageBySite = normalizeSiteUsageRecord(meta.siteUsageBySite)
   store.accountBalancesById = normalizeAccountBalances(meta.accountBalancesById)
+  store.modelSpendById = normalizeModelSpend(meta.modelSpendById)
   const memory = items.get(MEMORY_STORE_KEY)
   if (isRecord(memory)) {
     store.memoryItemsById = readRecord(memory.itemsById)
@@ -363,6 +368,7 @@ function buildStorageItems(store: OpenTeamStore): Record<string, unknown> {
     externalChatMemoriesById: readExternalChatMemoryRecord(store.externalChatMemoriesById),
     siteUsageBySite: normalizeSiteUsageRecord(store.siteUsageBySite),
     accountBalancesById: normalizeAccountBalances(store.accountBalancesById),
+    modelSpendById: normalizeModelSpend(store.modelSpendById),
     settings: normalizeSettings(store.settings),
     viewState: normalizeViewState(store.viewState),
   }
@@ -529,6 +535,7 @@ function normalizeMetaStore(raw: unknown): OpenTeamMetaStore {
     externalChatMemoriesById: readExternalChatMemoryRecord(raw.externalChatMemoriesById),
     siteUsageBySite: normalizeSiteUsageRecord(raw.siteUsageBySite),
     accountBalancesById: normalizeAccountBalances(raw.accountBalancesById),
+    modelSpendById: normalizeModelSpend(raw.modelSpendById),
     settings: normalizeSettings(raw.settings, typeof raw.version === 'number' ? raw.version : 0),
     viewState: normalizeViewState(raw.viewState),
   }
@@ -892,6 +899,12 @@ function normalizeExternalModelRecord(raw: unknown): Record<string, ExternalMode
     } catch {
       pricing = undefined
     }
+    let dailyCap: number | undefined
+    try {
+      dailyCap = pricing ? readDailyCap(value.dailyCap) : undefined
+    } catch {
+      dailyCap = undefined
+    }
     normalized[id] = {
       id,
       name,
@@ -901,6 +914,7 @@ function normalizeExternalModelRecord(raw: unknown): Record<string, ExternalMode
       modelName,
       ...(fallbackModelName ? { fallbackModelName } : {}),
       ...(pricing ? { pricing } : {}),
+      ...(dailyCap !== undefined ? { dailyCap } : {}),
       createdAt,
       updatedAt,
     }

@@ -762,6 +762,15 @@
             </div>
             <p class="tiny">按服务商价格表填写，「用量」窗口据此估算费用；不填就只统计 token。</p>
           </div>
+          <div class="field api-model-field model-pricing-field">
+            <label class="field-label" for="external-model-daily-cap">每日花费上限（可选）</label>
+            <div class="model-pricing-row">
+              <input id="external-model-daily-cap" type="number" min="0" step="any" inputmode="decimal" placeholder="不限" />
+              <span id="external-model-daily-cap-unit" class="tiny">元 / 天</span>
+            </div>
+            <p id="external-model-daily-cap-today" class="tiny" hidden></p>
+            <p class="tiny">按上面的单价估算。今天花到八成时提醒，到上限后今天不再调用这个模型；要继续用，在回复下或「用量」窗口里点「今天继续用」。</p>
+          </div>
           <div class="template-actions">
             <button id="reset-external-model-form" class="btn" type="button">取消</button>
             <button class="btn btn-primary" type="submit">保存模型</button>

@@ -3,6 +3,7 @@
 import type { OpenTeamStore } from '../group/types'
 import { computeUsage, formatCost, rangeStart, type UsageRange, type UsageReport } from '../group/usageStats'
 import { spentInRange } from '../group/accountBalance'
+import { capBlocks, modelSpendToday, money as capMoney } from '../group/spendCap'
 import { normalizeLanguage } from '../shared/i18n'
 import { createIcon } from './icons'
 
@@ -11,6 +12,8 @@ export interface UsageDialogDependencies {
   now?(): number
   // Reads the DeepSeek and Kimi accounts' balances again (src/background/accountBalances.ts).
   refreshBalances?(): Promise<{ errors?: Array<{ label: string; error: string }> }>
+  // 今天继续用: lifts a model's daily spending cap for today (src/group/spendCap.ts).
+  liftSpendCap?(modelId: string): Promise<void>
   // Puts the focus back where the window was opened from.
   onClose?(): void
 }
@@ -124,13 +127,64 @@ export function openUsageDialog(deps: UsageDialogDependencies): { refresh(): voi
     }
     scope.value = chatId
     const report = computeUsage(store, { range, ...(chatId ? { chatId } : {}), now: now() })
-    const contentKey = JSON.stringify([english(), range, chatId, report, store.accountBalancesById ?? {}, balanceErrors, refreshing, new Date(now()).toDateString()])
+    const caps = cappedModels(store).map(model => [model.id, model.name, model.dailyCap, model.pricing?.currency, modelSpendToday(store, model.id, now())])
+    const contentKey = JSON.stringify([english(), range, chatId, report, store.accountBalancesById ?? {}, caps, balanceErrors, refreshing, new Date(now()).toDateString()])
     if (contentKey === drawnContent) return
     drawnContent = contentKey
     const scrolled = dialog.scrollTop
     const accounts = accountsSection(store)
-    content.replaceChildren(...sections(report), ...(accounts ? [accounts] : []))
+    const capList = capsSection(store)
+    content.replaceChildren(...sections(report), ...(capList ? [capList] : []), ...(accounts ? [accounts] : []))
     dialog.scrollTop = scrolled
+  }
+
+  function cappedModels(store: OpenTeamStore) {
+    return store.settings.externalModelOrder.flatMap(id => {
+      const model = store.settings.externalModelsById[id]
+      return model?.pricing && model.dailyCap !== undefined && model.format !== 'local-agent' ? [model] : []
+    })
+  }
+
+  // 花费上限: each capped model's estimated spend today, and 今天继续用 for one that is stopped.
+  function capsSection(store: OpenTeamStore): HTMLElement | undefined {
+    const models = cappedModels(store)
+    if (models.length === 0) return undefined
+    const section = element('section', 'usage-caps')
+    section.append(element('h3', 'usage-section-title', t('每日花费上限（估算）', 'Daily spending caps (estimated)')))
+    const states = models.map(model => {
+      const spend = modelSpendToday(store, model.id, now())
+      const blocked = capBlocks(store, model, now())
+      const state = spend.lifted
+        ? t('今天已放开', 'Lifted for today')
+        : blocked
+          ? t('已停用到明天', 'Stopped until midnight')
+          : spend.spent >= (model.dailyCap ?? 0) * 0.8
+            ? t('已过八成', 'Over 80%')
+            : t('正常', 'Within the cap')
+      return { model, spend, blocked, state }
+    })
+    const wrap = table('', [t('模型', 'Model'), t('今天估算花费', 'Spent today'), t('每日上限', 'Daily cap'), t('状态', 'State')], states.map(({ model, spend, state }) => [
+      model.name,
+      capMoney(model, spend.spent),
+      capMoney(model, model.dailyCap ?? 0),
+      state,
+    ]), 'usage-cap-table')
+    const rows = [...wrap.querySelectorAll('tbody tr')]
+    states.forEach(({ model, blocked }, index) => {
+      if (!blocked || !deps.liftSpendCap) return
+      const button = element('button', 'btn btn-ghost btn-small usage-cap-lift', t('今天继续用', 'Keep using today'))
+      button.type = 'button'
+      button.addEventListener('click', () => {
+        button.disabled = true
+        deps.liftSpendCap!(model.id).catch(() => { button.disabled = false })
+      })
+      rows[index]?.lastElementChild?.append(button)
+    })
+    section.append(wrap, element('p', 'tiny usage-account-note', t(
+      '按每个模型的单价估算，每次调用后累加，每天 0 点重新计算。到上限后这个模型今天不再被调用（回复、总结、项目任务、作为网页成员的备用都算）。在「设置 → 模型」里改上限。',
+      "Estimated from each model's price, added up after every call, and reset at midnight. At the cap the model is not called again today (replies, summaries, project tasks and backing up a web member all count). Change the caps under Settings → Models.",
+    )))
+    return section
   }
 
   // What the DeepSeek and Kimi accounts really spent, from their balances (like dsh-whale-widget).

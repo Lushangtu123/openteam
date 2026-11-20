@@ -2598,6 +2598,153 @@ describe('background message handlers', () => {
     expect(externalModelClient.complete).toHaveBeenCalledTimes(1)
     expect(response.store.messagesById['msg-2']).toMatchObject({ type: 'assistant', status: 'error' })
   })
+
+  it('shows only the reason when a model is at its daily spending cap, offers to lift it, and does not ask again', async () => {
+    vi.resetModules()
+    const startingStore = createStoreWithReadyRole()
+    startingStore.settings.externalModelOrder = ['model-1']
+    startingStore.settings.externalModelsById = {
+      'model-1': {
+        id: 'model-1',
+        name: 'API 模型',
+        format: 'openai',
+        baseUrl: 'https://api.example.test/v1',
+        apiKey: 'sk-test',
+        modelName: 'local-chat-model',
+        createdAt: 1,
+        updatedAt: 1,
+      },
+    }
+    startingStore.rolesById['role-1'].modelSource = 'external'
+    startingStore.rolesById['role-1'].externalModelId = 'model-1'
+
+    let currentStore = structuredClone(startingStore)
+    vi.doMock('./storeAccess', async importOriginal => {
+      const actual = await importOriginal<typeof import('./storeAccess')>()
+      return {
+        ...actual,
+        mutateStore: vi.fn(async (mutator: (store: OpenTeamStore) => unknown) => {
+          const result = await mutator(currentStore)
+          currentStore = structuredClone(currentStore)
+          return { store: currentStore, result }
+        }),
+      }
+    })
+
+    const { createMessageHandlers } = await import('./messageHandlers')
+    const externalModelClient = {
+      complete: vi.fn(async () => {
+        throw Object.assign(new Error('「API 模型」今天的估算花费 ¥5.00 已到每日上限 ¥5.00，明天 0 点前不再调用。点「今天继续用」可以放开今天的上限。'), { code: 'spend_cap' })
+      }),
+    }
+    let messageIdSeq = 0
+    // What the page was shown while the request was sent again.
+    const shown: Array<OpenTeamStore['messagesById'][string] | undefined> = []
+    const routes = createMessageHandlers({
+      broadcastStoreUpdated: vi.fn((store: OpenTeamStore) => { shown.push(structuredClone(store.messagesById['msg-2'])) }),
+      externalModelClient,
+      externalModelRetryDelaysMs: [0, 0, 0],
+      getChatStatusFromRoles: () => 'ready',
+      log: { debug: vi.fn(), info: vi.fn(), warn: vi.fn() },
+      newId: vi.fn((prefix: string) => prefix === 'msg' ? `${prefix}-${++messageIdSeq}` : `${prefix}-1`),
+      now: vi.fn(() => 100),
+      runtimeFrames: {
+        bind: vi.fn(),
+        getByAddress: vi.fn(),
+        getByRole: vi.fn(() => undefined),
+      },
+      sendRoleMessage: vi.fn(),
+      sendError: vi.fn(),
+      sendPrompt: vi.fn(),
+      waitForRetry: vi.fn(async () => undefined),
+    })
+
+    const sendRoute = routes.find(route => route.type === 'GROUP_MESSAGE_SEND')
+    const response = await sendRoute?.handler({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@all 用 API 回答' }, {}) as { store: OpenTeamStore }
+
+    expect(externalModelClient.complete).toHaveBeenCalledTimes(1)
+    expect(response.store.messagesById['msg-2']).toMatchObject({
+      type: 'assistant',
+      status: 'error',
+      content: '「API 模型」今天的估算花费 ¥5.00 已到每日上限 ¥5.00，明天 0 点前不再调用。点「今天继续用」可以放开今天的上限。',
+      spendCapModelId: 'model-1',
+    })
+  })
+
+  it('keeps the message and answers for an API member already at its spending cap, with the reason and a way to lift it', async () => {
+    vi.resetModules()
+    const startingStore = createStoreWithReadyRole()
+    startingStore.settings.externalModelOrder = ['model-1']
+    startingStore.settings.externalModelsById = {
+      'model-1': {
+        id: 'model-1',
+        name: 'API 模型',
+        format: 'openai',
+        baseUrl: 'https://api.example.test/v1',
+        apiKey: 'sk-test',
+        modelName: 'local-chat-model',
+        pricing: { input: 2, output: 8, currency: 'CNY' },
+        dailyCap: 5,
+        createdAt: 1,
+        updatedAt: 1,
+      },
+    }
+    startingStore.rolesById['role-1'].modelSource = 'external'
+    startingStore.rolesById['role-1'].externalModelId = 'model-1'
+    startingStore.settings.language = 'zh-CN'
+    const today = new Date(100)
+    startingStore.modelSpendById = { 'model-1': { day: `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`, spent: 5.5 } }
+
+    let currentStore = structuredClone(startingStore)
+    vi.doMock('./storeAccess', async importOriginal => {
+      const actual = await importOriginal<typeof import('./storeAccess')>()
+      return {
+        ...actual,
+        mutateStore: vi.fn(async (mutator: (store: OpenTeamStore) => unknown) => {
+          const result = await mutator(currentStore)
+          currentStore = structuredClone(currentStore)
+          return { store: currentStore, result }
+        }),
+      }
+    })
+
+    const { createMessageHandlers } = await import('./messageHandlers')
+    const externalModelClient = {
+      complete: vi.fn(async () => {
+        throw Object.assign(new Error('Unauthorized'), { status: 401 })
+      }),
+    }
+    let messageIdSeq = 0
+    // What the page was shown while the request was sent again.
+    const shown: Array<OpenTeamStore['messagesById'][string] | undefined> = []
+    const routes = createMessageHandlers({
+      broadcastStoreUpdated: vi.fn((store: OpenTeamStore) => { shown.push(structuredClone(store.messagesById['msg-2'])) }),
+      externalModelClient,
+      externalModelRetryDelaysMs: [0, 0, 0],
+      getChatStatusFromRoles: () => 'ready',
+      log: { debug: vi.fn(), info: vi.fn(), warn: vi.fn() },
+      newId: vi.fn((prefix: string) => prefix === 'msg' ? `${prefix}-${++messageIdSeq}` : `${prefix}-1`),
+      now: vi.fn(() => 100),
+      runtimeFrames: {
+        bind: vi.fn(),
+        getByAddress: vi.fn(),
+        getByRole: vi.fn(() => undefined),
+      },
+      sendRoleMessage: vi.fn(),
+      sendError: vi.fn(),
+      sendPrompt: vi.fn(),
+      waitForRetry: vi.fn(async () => undefined),
+    })
+
+    const sendRoute = routes.find(route => route.type === 'GROUP_MESSAGE_SEND')
+    const response = await sendRoute?.handler({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@all 用 API 回答' }, {}) as { store: OpenTeamStore }
+    expect(externalModelClient.complete).not.toHaveBeenCalled()
+    expect(response.store.messagesById['msg-1']).toMatchObject({ type: 'user', deliveryStatus: { 'role-1': 'error' } })
+    expect(response.store.messagesById['msg-2']).toMatchObject({ type: 'assistant', status: 'error', spendCapModelId: 'model-1' })
+    expect(response.store.messagesById['msg-2'].content).toContain('「API 模型」今天的估算花费 ¥5.50 已到每日上限 ¥5.00')
+    // Nobody was asked, so the group is not left waiting.
+    expect(response.store.chatsById['chat-1'].status).not.toBe('running')
+  })
   it('stops an active external model stream without requiring an iframe', async () => {
     vi.resetModules()
     const startingStore = createStoreWithReadyRole()

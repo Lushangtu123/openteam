@@ -1,6 +1,7 @@
 import { isChatSite } from '../group/chatSites'
 import { backgroundErrorForUser } from '../shared/connectionErrors'
 import { loadStore } from '../group/store'
+import { guardSpendCaps } from './spendCapGuard'
 import type { GroupChat, OpenTeamStore } from '../group/types'
 import { referencedImageIds } from '../group/backup'
 import { createBackupHandlers } from './backupHandlers'
@@ -95,7 +96,7 @@ const localAgentClient = createLocalAgentClient({
 })
 let cachedLanguage: unknown
 // API models answer directly; a local agent runs through the daemon, only as a group member.
-const externalModelClient: ExternalModelClient = {
+const modelClient: ExternalModelClient = {
   stream(input) {
     if (input.model.format === 'local-agent') return localAgentClient.stream(input)
     if (apiModelClient.stream) return apiModelClient.stream(input)
@@ -110,6 +111,18 @@ const externalModelClient: ExternalModelClient = {
     return { content }
   },
 }
+// Every API call passes the daily spending caps (花费上限, src/group/spendCap.ts).
+const externalModelClient = guardSpendCaps(modelClient, {
+  loadStore,
+  mutateStore,
+  broadcastStoreUpdated: store => broadcastStoreUpdated(store),
+  now: () => Date.now(),
+  notify(id, title, message) {
+    if (!chrome.notifications?.create) return
+    chrome.notifications.create(id, { type: 'basic', iconUrl: chrome.runtime.getURL('icons/openteam-128.png'), title, message, priority: 1 }, () => void chrome.runtime.lastError)
+  },
+  log,
+})
 
 async function listLocalAgents(): Promise<LocalAgentInfo[]> {
   const result = await controlClient.request('agent.list')

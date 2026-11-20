@@ -6,10 +6,11 @@ import { takeMemoryProposals } from '../group/memoryProposals'
 import type { GroupChat, GroupMessage, GroupRole, MessageTokenUsage, OpenTeamStore } from '../group/types'
 import type { ExternalModelClient, ExternalModelCompletionInput } from './externalModelClient'
 import { QUOTA_EXHAUSTED_CODE } from './externalModelClient'
+import { SPEND_CAP_CODE } from '../group/spendCap'
 import type { ExternalPromptDelivery } from './rolePromptDelivery'
 import { mutateStore, requireChat, requireRole } from './storeAccess'
 import type { ExternalModelRunRegistry, MessageHandlersDependencies } from './messageHandlerDeps'
-import { findPendingAssistantAfterPrompt, isAssistantMessageForRole, markChatHasNewMessage, staleReplyReason, upsertFailedAssistantAfterPrompt } from './replyMessages'
+import { findPendingAssistantAfterPrompt, isAssistantMessageForRole, markChatHasNewMessage, staleReplyReason, upsertErrorAssistantAfterPrompt, upsertFailedAssistantAfterPrompt } from './replyMessages'
 import { waitForRetryDelay } from './replyRetry'
 import { isPromptDeliveryStillActive, markDeliveryError, reportPromptSettled } from './siteDeliveries'
 
@@ -132,7 +133,14 @@ export async function sendExternalModelDelivery(deps: MessageHandlersDependencie
       await mutateStore(store => {
         const chat = store.chatsById[delivery.chatId]
         const role = store.rolesById[delivery.roleId]
-        if (chat && role) upsertFailedAssistantAfterPrompt(store, chat, role, delivery.messageId, reason, deps.now(), deps.newId)
+        if (!chat || !role) return
+        // At its spending cap the reason is all there is to say: asking again would be refused too, so
+        // the reply offers 今天继续用 for the model that refused (a web member's backup, too).
+        if ((error as { code?: unknown } | undefined)?.code === SPEND_CAP_CODE) {
+          upsertErrorAssistantAfterPrompt(store, chat, role, delivery.messageId, reason, deps.now(), deps.newId).spendCapModelId = delivery.model.id
+          return
+        }
+        upsertFailedAssistantAfterPrompt(store, chat, role, delivery.messageId, reason, deps.now(), deps.newId)
       })
     }
     // The latest store: what the caller hands the page must not be older than what was broadcast.
@@ -209,7 +217,9 @@ export async function updateExternalAssistantContent(
 // A 4xx answer other than 408 (timeout) and 429 (too many requests) does not change when asked again:
 // a wrong key, a model that does not exist, a request the server refuses.
 export function isPermanentModelError(error: unknown): boolean {
-  if ((error as { code?: unknown } | undefined)?.code === QUOTA_EXHAUSTED_CODE) return true
+  const code = (error as { code?: unknown } | undefined)?.code
+  // Out of quota, or at its daily spending cap (花费上限).
+  if (code === QUOTA_EXHAUSTED_CODE || code === SPEND_CAP_CODE) return true
   const status = (error as { status?: unknown } | undefined)?.status
   return typeof status === 'number' && status >= 400 && status < 500 && status !== 408 && status !== 429
 }

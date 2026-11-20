@@ -1242,6 +1242,99 @@ describe('team page messages view boundary', () => {
     expect(retryRoleReply).toHaveBeenCalledWith(role, message.id)
   })
 
+  it('offers Keep using today under a reply refused at the spending cap, lifting the cap and asking again in one click', async () => {
+    const now = Date.now()
+    const chat: GroupChat = {
+      id: 'chat-1',
+      name: '群聊',
+      mode: 'independent',
+      roleIds: ['role-1'],
+      messageIds: ['msg-assistant'],
+      nextMessageSeq: 2,
+      status: 'error',
+      createdAt: now,
+      updatedAt: now,
+    }
+    const role: GroupRole = {
+      id: 'role-1',
+      chatId: chat.id,
+      name: '工程师',
+      status: 'error',
+      modelSource: 'external',
+      externalModelId: 'ds',
+      contextCursor: 0,
+      createdAt: now,
+      updatedAt: now,
+    }
+    const message: GroupMessage = {
+      id: 'msg-assistant',
+      chatId: chat.id,
+      seq: 1,
+      type: 'assistant',
+      content: '「DeepSeek」今天的估算花费 ¥5.20 已到每日上限 ¥5.00，明天 0 点前不再调用。点「今天继续用」可以放开今天的上限。',
+      spendCapModelId: 'ds',
+      contentFormat: 'markdown',
+      roleId: role.id,
+      roleName: role.name,
+      createdAt: now,
+      status: 'error',
+    }
+    const store: OpenTeamStore = {
+      ...createDefaultStore(),
+      currentChatId: chat.id,
+      chatOrder: [chat.id],
+      chatsById: { [chat.id]: chat },
+      rolesById: { [role.id]: role },
+      messagesById: { [message.id]: message },
+    }
+    store.settings.language = 'zh-CN'
+    store.settings.externalModelsById = { ds: { id: 'ds', name: 'DeepSeek', format: 'openai', baseUrl: 'https://api.deepseek.com/v1', apiKey: 'k', modelName: 'deepseek-chat', pricing: { input: 2, output: 8, currency: 'CNY' }, dailyCap: 5, createdAt: 0, updatedAt: 0 } }
+    const today = new Date(now)
+    const day = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+    store.modelSpendById = { ds: { day, spent: 5.2, reached: true } }
+    const runCommand = vi.fn(async (_type: string, _payload?: Record<string, unknown>) => undefined)
+    const messagesEl = document.createElement('section')
+    const retryRoleReply = vi.fn(async () => undefined)
+
+    const view = createMessagesView({
+      state: createTeamPageState(),
+      getStore: () => store,
+      messagesEl,
+      getCurrentChat: () => chat,
+      getCurrentRoles: () => [role],
+      getCurrentMessages: () => [message],
+      emptyCard: () => document.createElement('div'),
+      openAddPersonDialog: vi.fn(),
+      messageTitle: message => message.roleName ?? 'AI 成员',
+      focusRoleFrame: vi.fn(),
+      insertMention: vi.fn(),
+      setReference: vi.fn(),
+      resyncMessageReply: vi.fn(async () => undefined),
+      retryRoleReply,
+      stopRoleReply: vi.fn(async () => undefined),
+      runCommand,
+      render: vi.fn(),
+      showError: vi.fn(),
+      showSuccess: vi.fn(),
+      log: { warn: vi.fn() },
+    })
+    view.renderMessages()
+
+    const keepUsing = messagesEl.querySelector<HTMLButtonElement>('.message-tools [aria-label="今天继续用"]')
+    expect(keepUsing?.textContent).toContain('今天继续用')
+    keepUsing!.click()
+    await vi.waitFor(() => expect(retryRoleReply).toHaveBeenCalledWith(role, message.id))
+    expect(runCommand).toHaveBeenCalledWith('MODEL_SPEND_CAP_LIFT', { modelId: 'ds' })
+    expect(runCommand.mock.invocationCallOrder[0]).toBeLessThan(retryRoleReply.mock.invocationCallOrder[0])
+
+    // Once lifted (or the next day) only 重新回复 is left.
+    store.modelSpendById = { ds: { day, spent: 5.2, reached: true, lifted: true } }
+    message.content += ' '
+    view.renderMessages()
+    expect(messagesEl.querySelector('.message-tools [aria-label="今天继续用"]')).toBeNull()
+    expect(messagesEl.querySelector('.message-tools [aria-label="重新回复"]')).not.toBeNull()
+  })
+
   it('stops a streaming external reply on pointer down before stream renders can replace the button', () => {
     const now = Date.now()
     const chat: GroupChat = {

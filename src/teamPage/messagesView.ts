@@ -24,6 +24,7 @@ import { openFilePreview } from './filePreviewDialog'
 import { hostAccessPattern } from '../shared/hostAccess'
 import { foldToKeyPoints } from './keyPointsFold'
 import type { ImageAttachmentBlobRecord } from '../shared/imageAttachmentRepository'
+import { capBlocks } from '../group/spendCap'
 import type { TeamPageState } from './appState'
 import { buildChatRenderItems, getChatStartupNotice, getStoppedReplyRoles, getVisibleThinkingRoles, THINKING_TIMEOUT_MS } from './chatExperience'
 
@@ -484,6 +485,15 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
       if (message.roleId && message.status === 'pending' && role) {
         tools.append(createMessageIconButton('停止回复', 'stop', () => deps.stopRoleReply(role).catch(error => deps.showError(error instanceof Error ? error.message : String(error))), { activateOnPointerDown: true, text: '停止' }))
       } else if (message.roleId && message.status === 'error' && role) {
+        // Refused at a model's daily spending cap (花费上限): lift it for today and ask again.
+        const cappedModel = message.spendCapModelId ? deps.getStore().settings.externalModelsById[message.spendCapModelId] : undefined
+        if (cappedModel && capBlocks(deps.getStore(), cappedModel, Date.now())) {
+          tools.append(createMessageIconButton('今天继续用', 'retry', () => {
+            deps.runCommand('MODEL_SPEND_CAP_LIFT', { modelId: cappedModel.id })
+              .then(() => deps.retryRoleReply(role, message.id))
+              .catch(error => deps.showError(error instanceof Error ? error.message : String(error)))
+          }, { text: '今天继续用' }))
+        }
         tools.append(createMessageIconButton('重新回复', 'retry', () => deps.retryRoleReply(role, message.id).catch(error => deps.showError(error instanceof Error ? error.message : String(error)))))
       } else if (message.roleId && role?.modelSource === 'external') {
         tools.append(createMessageIconButton('重新回复', 'retry', () => deps.retryRoleReply(role, message.id).catch(error => deps.showError(error instanceof Error ? error.message : String(error)))))

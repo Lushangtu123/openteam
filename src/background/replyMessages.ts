@@ -152,6 +152,7 @@ export function upsertErrorAssistantAfterPrompt(
     existingReply.contentFormat = 'markdown'
     existingReply.status = 'error'
     delete existingReply.retry
+    delete existingReply.spendCapModelId
     return existingReply
   }
 

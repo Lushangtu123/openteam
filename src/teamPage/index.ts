@@ -741,6 +741,7 @@ teamDomRefs.openUsageEl.addEventListener('click', () => {
       if (response.ok === false) throw new Error(response.error || '没读到余额')
       return { errors: response.errors }
     },
+    liftSpendCap: modelId => runCommand('MODEL_SPEND_CAP_LIFT', { modelId }),
     onClose: () => teamDomRefs.openUsageEl.focus(),
   })
 })

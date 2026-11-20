@@ -5,6 +5,7 @@
 // without a backup is not given summaries or discussion turns while its site is blocked or limiting
 // (canBeAskedNow).
 import { activeSiteLimit, isSiteLimitMessage, recordSiteLimit, type SiteLimit } from '../group/siteUsage'
+import { capBlocks } from '../group/spendCap'
 import type { ChatSite, ExternalModelConfig, GroupRole, OpenTeamStore, RoleSiteHealthStatus } from '../group/types'
 import type { PromptDelivery } from './promptDelivery'
 import { isExternalModelRole, type ExternalPromptDelivery } from './rolePromptDelivery'
@@ -49,9 +50,20 @@ export function noteMemberSiteLimit(store: OpenTeamStore, role: GroupRole, text:
   return recordSiteLimit(store, site, text, now)
 }
 
-// Whether the member should be given a summary or a discussion turn now.
+// An API member's model, when it is at its daily spending cap (花费上限, src/group/spendCap.ts).
+export function memberModelAtCap(store: OpenTeamStore, role: GroupRole, now: number): ExternalModelConfig | undefined {
+  if (!isExternalModelRole(role) || !role.externalModelId) return undefined
+  const model = store.settings.externalModelsById[role.externalModelId]
+  return model && capBlocks(store, model, now) ? model : undefined
+}
+
+// Whether the member should be given a summary or a discussion turn now. A backup at its spending
+// cap cannot answer for its member.
 export function canBeAskedNow(store: OpenTeamStore, role: GroupRole, now: number): boolean {
-  return !memberSiteUnavailable(store, role, now) || Boolean(backupModelFor(store, role))
+  if (memberModelAtCap(store, role, now)) return false
+  if (!memberSiteUnavailable(store, role, now)) return true
+  const backup = backupModelFor(store, role)
+  return Boolean(backup && !capBlocks(store, backup, now))
 }
 
 // The prompt the member's page could not take, for its backup: the same text, attempt and images.

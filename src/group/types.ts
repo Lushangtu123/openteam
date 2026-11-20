@@ -5,6 +5,7 @@ export type RoomMode = 'independent' | 'collaborative'
 import type { ChatSite } from './chatSites'
 import type { SiteUsageRecord } from './siteUsage'
 import type { AccountBalance } from './accountBalance'
+import type { ModelSpend } from './spendCap'
 export type { ChatSite }
 export type OpenTeamLanguage = 'en' | 'zh-CN'
 export type RoleModelSource = 'site' | 'external'
@@ -53,6 +54,8 @@ export interface OpenTeamStore {
   siteUsageBySite?: SiteUsageRecord
   // API accounts' balances and daily spend, read from the providers (src/group/accountBalance.ts).
   accountBalancesById?: Record<string, AccountBalance>
+  // What each priced API model spent today, against its daily cap (src/group/spendCap.ts).
+  modelSpendById?: Record<string, ModelSpend>
   settings: OpenTeamSettings
   viewState?: OpenTeamViewState
 }
@@ -146,6 +149,8 @@ export interface ExternalModelConfig {
   fallbackModelName?: string
   // What the user entered the model costs, per million tokens, for the 用量 window's estimate.
   pricing?: ModelPricing
+  // The most it may spend a day, in the price's currency, as estimated from that price (花费上限).
+  dailyCap?: number
   // For a local agent: its ID in the daemon's agent list, and the folder it works in.
   localAgentId?: string
   workspace?: string
@@ -653,6 +658,8 @@ export interface GroupMessage {
   modelId?: string
   // The backup model that wrote an API member's reply, when its main model could not.
   answeredByFallback?: string
+  // A reply refused because this API model reached its daily spending cap: it offers 今天继续用.
+  spendCapModelId?: string
   // On a web member's reply its site kept saying it was still writing, with no new text for
   // STALLED_GENERATING_MS (src/content/replyObserver.ts): taken as it stood, so the chat goes on.
   stalledWhileGenerating?: boolean

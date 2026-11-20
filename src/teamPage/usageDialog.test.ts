@@ -130,3 +130,32 @@ describe('the usage window while the store keeps changing', () => {
     expect(dialog.scrollTop).toBe(120)
   })
 })
+
+describe('the spending caps in the usage window', () => {
+  it('lists each capped model with today\'s spend, and lifts a reached cap for today', async () => {
+    const store: OpenTeamStore = createDefaultStore()
+    store.settings.language = 'zh-CN'
+    const model = (id: string, name: string, dailyCap: number) => ({ id, name, format: 'openai' as const, baseUrl: 'https://api.deepseek.com/v1', apiKey: 'k', modelName: 'x', pricing: { input: 2, output: 8, currency: 'CNY' as const }, dailyCap, createdAt: 0, updatedAt: 0 })
+    store.settings.externalModelsById = { ds: model('ds', 'DeepSeek', 5), kimi: model('kimi', 'Kimi', 10), free: { ...model('free', '没上限', 1), dailyCap: undefined } }
+    store.settings.externalModelOrder = ['ds', 'kimi', 'free']
+    store.modelSpendById = { ds: { day: '2026-11-19', spent: 5.2, reached: true }, kimi: { day: '2026-11-19', spent: 8.5, warned: true } }
+    const liftSpendCap = vi.fn(async () => {
+      store.modelSpendById!.ds = { day: '2026-11-19', spent: 5.2, reached: true, lifted: true }
+    })
+    openUsageDialog({ getStore: () => store, now: () => NOW, liftSpendCap })
+    const rows = () => [...document.querySelectorAll('.usage-caps tbody tr')].map(row => [...row.querySelectorAll('td')].map(cell => cell.textContent))
+    expect(rows()).toEqual([
+      ['DeepSeek', '¥5.20', '¥5.00', '已停用到明天今天继续用'],
+      ['Kimi', '¥8.50', '¥10.00', '已过八成'],
+    ])
+    document.querySelector<HTMLButtonElement>('.usage-caps button')!.click()
+    await vi.waitFor(() => expect(liftSpendCap).toHaveBeenCalledWith('ds'))
+    currentUsageDialog()?.refresh()
+    expect(rows()[0]).toEqual(['DeepSeek', '¥5.20', '¥5.00', '今天已放开'])
+  })
+
+  it('is left out when no model has a cap', () => {
+    setup()
+    expect(document.querySelector('.usage-caps')).toBeNull()
+  })
+})

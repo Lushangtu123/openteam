@@ -29,6 +29,7 @@ describe('background external model handlers', () => {
       'EXTERNAL_MODEL_UPDATE',
       'EXTERNAL_MODEL_DELETE',
       'EXTERNAL_MODEL_TEST',
+      'MODEL_SPEND_CAP_LIFT',
     ])
     expect(routes.map(route => route.type)).toEqual(EXTERNAL_MODEL_ROUTE_TYPES)
 
@@ -136,4 +137,40 @@ describe('background external model handlers', () => {
       prompt: expect.stringContaining('OpenTeam'),
     })
   })
+
+  it('saves a daily spending cap with a priced model, and lifts it for today when asked', async () => {
+    vi.resetModules()
+    const currentStore = createDefaultStore()
+    vi.doMock('./storeAccess', async importOriginal => {
+      const actual = await importOriginal<typeof import('./storeAccess')>()
+      return {
+        ...actual,
+        mutateStore: vi.fn(async (mutator: (store: OpenTeamStore) => unknown) => {
+          const result = await mutator(currentStore)
+          return { store: currentStore, result }
+        }),
+      }
+    })
+    const { createExternalModelHandlers } = await import('./externalModelHandlers')
+    const now = new Date(2026, 10, 19, 10).getTime()
+    const routes = createExternalModelHandlers({ broadcastStoreUpdated: vi.fn(), newId: vi.fn((prefix: string) => `${prefix}-1`), now: () => now })
+    const create = routes.find(route => route.type === 'EXTERNAL_MODEL_CREATE')!
+    const base = { type: 'EXTERNAL_MODEL_CREATE', name: 'DeepSeek', format: 'openai', baseUrl: 'https://api.deepseek.com/v1', apiKey: 'sk-test', modelName: 'deepseek-chat' }
+
+    await expect(create.handler({ ...base, dailyCap: '5' }, {})).rejects.toThrow('先填单价，才能按估算花费设每日上限')
+    await expect(create.handler({ ...base, pricing: { input: '2', output: '8', currency: 'CNY' }, dailyCap: '-1' }, {})).rejects.toThrow('每日花费上限要写成大于 0 的数字')
+    await create.handler({ ...base, pricing: { input: '2', output: '8', currency: 'CNY' }, dailyCap: ' 5 ' }, {})
+    expect(currentStore.settings.externalModelsById['external-model-1'].dailyCap).toBe(5)
+
+    currentStore.modelSpendById = { 'external-model-1': { day: '2026-11-19', spent: 6, reached: true } }
+    const lift = routes.find(route => route.type === 'MODEL_SPEND_CAP_LIFT')!
+    await lift.handler({ type: 'MODEL_SPEND_CAP_LIFT', modelId: 'external-model-1' }, {})
+    expect(currentStore.modelSpendById['external-model-1']).toEqual({ day: '2026-11-19', spent: 6, reached: true, lifted: true })
+    await expect(lift.handler({ type: 'MODEL_SPEND_CAP_LIFT', modelId: 'missing' }, {})).rejects.toThrow('找不到外部模型：missing')
+
+    const update = routes.find(route => route.type === 'EXTERNAL_MODEL_UPDATE')!
+    await update.handler({ ...base, type: 'EXTERNAL_MODEL_UPDATE', modelId: 'external-model-1', pricing: { input: '2', output: '8', currency: 'CNY' }, dailyCap: '' }, {})
+    expect(currentStore.settings.externalModelsById['external-model-1'].dailyCap).toBeUndefined()
+  })
 })
+
