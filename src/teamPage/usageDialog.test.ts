@@ -103,3 +103,30 @@ describe('the provider accounts in the usage window', () => {
     expect(document.querySelector('.usage-account-note')?.textContent).toContain('也包括 OpenTeam 以外')
   })
 })
+
+describe('the usage window while the store keeps changing', () => {
+  it('keeps what it shows as it is when nothing it shows changed, so it does not flash (seen live)', () => {
+    const { store, q } = setup()
+    const before = q('.usage-tiles')
+    const scope = q('.usage-scope')!.firstElementChild
+    // An update that changes nothing the window shows (a member's page status, say).
+    store.rolesById.kimi.siteHealth = { siteId: 'kimi', status: 'ready', updatedAt: 99 }
+    currentUsageDialog()?.refresh()
+    expect(q('.usage-tiles')).toBe(before)
+    expect(q('.usage-scope')!.firstElementChild).toBe(scope)
+  })
+
+  it('redraws when a figure changes, keeping where the window was scrolled to', () => {
+    const { store, q } = setup()
+    const dialog = q('.usage-dialog') as HTMLElement
+    dialog.scrollTop = 120
+    const before = q('.usage-tiles')
+    const reply = Object.values(store.messagesById)[0]
+    store.messagesById.extra = { ...reply, id: 'extra', seq: 99 }
+    store.chatsById[reply.chatId].messageIds.push('extra')
+    currentUsageDialog()?.refresh()
+    expect(q('.usage-tiles')).not.toBe(before)
+    expect(q('.usage-tile-value')?.textContent).toBe('4')
+    expect(dialog.scrollTop).toBe(120)
+  })
+})

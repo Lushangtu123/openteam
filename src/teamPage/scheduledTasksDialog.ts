@@ -42,6 +42,7 @@ export function openScheduledTasksDialog(chatId: string, deps: ScheduledTasksDia
   // The task being changed, or undefined while adding one.
   let editingId: string | undefined
   let busy = false
+  let drawnList = ''
 
   const backdrop = element('div', 'modal-backdrop scheduled-tasks-modal')
   backdrop.addEventListener('click', event => {
@@ -154,7 +155,13 @@ export function openScheduledTasksDialog(chatId: string, deps: ScheduledTasksDia
     if (!current) return close()
     title.textContent = t(`「${current.name}」的定时任务`, `Scheduled tasks for "${current.name}"`)
     const tasks = current.scheduledTasks ?? []
-    list.replaceChildren(...tasks.map(renderTask))
+    // Drawn again only when the tasks or what they read as changed: the page redraws on every store
+    // update, and a list built anew each time flashes and loses the focus on its buttons.
+    const listKey = JSON.stringify([english(), tasks, busy, Math.floor(now() / 60_000)])
+    if (listKey !== drawnList) {
+      drawnList = listKey
+      list.replaceChildren(...tasks.map(renderTask))
+    }
     list.hidden = tasks.length === 0
     empty.hidden = tasks.length > 0
     empty.textContent = t('还没有定时任务。在下面写好消息、选好时间就能添加。', 'No scheduled task yet. Write a message and pick a time below to add one.')

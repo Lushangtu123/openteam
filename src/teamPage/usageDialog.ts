@@ -37,6 +37,10 @@ export function openUsageDialog(deps: UsageDialogDependencies): { refresh(): voi
   let chatId = ''
   let balanceErrors: Array<{ label: string; error: string }> = []
   let refreshing = false
+  // The page redraws on every store update, every few seconds while members work; the window is
+  // drawn again only when something it shows changed, so it does not flash as it is scrolled.
+  let drawnScope = ''
+  let drawnContent = ''
 
   const backdrop = element('div', 'modal-backdrop usage-modal')
   backdrop.addEventListener('click', event => {
@@ -112,11 +116,21 @@ export function openUsageDialog(deps: UsageDialogDependencies): { refresh(): voi
     const store = deps.getStore()
     for (const button of rangeButtons) button.setAttribute('aria-pressed', String(button.dataset.range === range))
     if (chatId && !store.chatsById[chatId]) chatId = ''
-    scope.replaceChildren(option('', t('全部群聊', 'All groups')), ...store.chatOrder.flatMap(id => store.chatsById[id] ? [option(id, store.chatsById[id].name)] : []))
+    const groups = store.chatOrder.flatMap(id => store.chatsById[id] ? [[id, store.chatsById[id].name]] : [])
+    const scopeKey = JSON.stringify([english(), groups])
+    if (scopeKey !== drawnScope) {
+      drawnScope = scopeKey
+      scope.replaceChildren(option('', t('全部群聊', 'All groups')), ...groups.map(([id, name]) => option(id, name)))
+    }
     scope.value = chatId
     const report = computeUsage(store, { range, ...(chatId ? { chatId } : {}), now: now() })
+    const contentKey = JSON.stringify([english(), range, chatId, report, store.accountBalancesById ?? {}, balanceErrors, refreshing, new Date(now()).toDateString()])
+    if (contentKey === drawnContent) return
+    drawnContent = contentKey
+    const scrolled = dialog.scrollTop
     const accounts = accountsSection(store)
     content.replaceChildren(...sections(report), ...(accounts ? [accounts] : []))
+    dialog.scrollTop = scrolled
   }
 
   // What the DeepSeek and Kimi accounts really spent, from their balances (like dsh-whale-widget).

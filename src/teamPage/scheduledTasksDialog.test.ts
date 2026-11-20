@@ -98,6 +98,17 @@ describe('the scheduled tasks window', () => {
     await vi.waitFor(() => expect(document.querySelector('.team-form-error')?.textContent).toBe('找不到这个定时任务'))
   })
 
+  it('keeps its list as it is when nothing in it changed, so it does not flash or lose focus', () => {
+    const { store, dialog } = setup([task()])
+    const item = document.querySelector('.scheduled-task')
+    store.chatsById['chat-1'].updatedAt = 99
+    dialog.refresh()
+    expect(document.querySelector('.scheduled-task')).toBe(item)
+    store.chatsById['chat-1'].scheduledTasks![0].enabled = false
+    dialog.refresh()
+    expect(document.querySelector('.scheduled-task')).not.toBe(item)
+  })
+
   it('redraws from the latest store, and closes on Esc', () => {
     const { store, dialog } = setup()
     store.chatsById['chat-1'].scheduledTasks = [task()]
