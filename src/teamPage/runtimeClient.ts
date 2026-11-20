@@ -1,7 +1,7 @@
 import { createStoreSyncDecoder, type StoreSyncPayload } from '../group/storeSync'
 import type { OpenTeamStore, RoleSiteHealthReason, RoleSiteHealthStatus } from '../group/types'
 import type { OpenTeamControlConnectionStatus } from '../shared/localControlProtocol'
-import { BACKGROUND_GONE_MESSAGE, isReceiverGoneError } from '../shared/connectionErrors'
+import { BACKGROUND_GONE_MESSAGE, BACKGROUND_OUTDATED_MESSAGE, isReceiverGoneError, UNKNOWN_MESSAGE_ERROR } from '../shared/connectionErrors'
 
 export interface RuntimeResponse<T = unknown> {
   ok?: boolean
@@ -91,7 +91,7 @@ export function createTeamPageRuntimeClient(deps: TeamPageRuntimeClientDependenc
 
   const runCommand = async (type: string, payload: Record<string, unknown> = {}): Promise<void> => {
     const response = await sendRuntimeMessage(type, payload)
-    if (response.ok === false) throw new Error(response.error || `${type} failed`)
+    if (response.ok === false) throw new Error(response.error === UNKNOWN_MESSAGE_ERROR ? BACKGROUND_OUTDATED_MESSAGE : response.error || `${type} failed`)
     if (response.store) {
       deps.applyStore(response.store)
       return

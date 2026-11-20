@@ -1,4 +1,5 @@
 import type { RuntimeMessage } from './runtimeClient'
+import { UNKNOWN_MESSAGE_ERROR } from '../shared/connectionErrors'
 
 export type BackgroundMessageHandler = (message: RuntimeMessage, sender: chrome.runtime.MessageSender) => unknown | Promise<unknown>
 
@@ -19,5 +20,5 @@ export function createMessageRouter(routes: BackgroundMessageRoute[], fallback: 
 }
 
 function defaultFallback(): { ok: false; error: string } {
-  return { ok: false, error: 'Unknown OpenTeam message' }
+  return { ok: false, error: UNKNOWN_MESSAGE_ERROR }
 }

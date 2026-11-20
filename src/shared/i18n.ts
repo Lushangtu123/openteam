@@ -120,6 +120,7 @@ const UI_TRANSLATIONS: Record<string, string> = {
   '打开后，发给成员的提示词会多一句说明，成员可以在回复末尾提议值得记住的内容。提议显示在回复下面，你点保存后才进记忆库。': 'When on, members\' prompts carry one more instruction, and a member may end a reply by proposing something worth remembering. Proposals show under the reply and go into memory only when you save them.',
   '找不到这条记忆提议，可能已经处理过': 'This proposal cannot be found; it may have been answered already',
   '连不上成员的网页（它可能已关闭或刷新）。请在成员卡片的菜单里点「刷新网页」后再试。': 'Cannot reach the member\'s page (it may have been closed or reloaded). Choose Reload page in the member card\'s menu, then try again.',
+  'OpenTeam 的后台还是更新前的版本，不认识这个操作。请到 chrome://extensions 点 OpenTeam 的刷新按钮，再刷新本页后重试。': 'OpenTeam\'s background is still the version from before the update and does not know this action. Go to chrome://extensions, click the reload button on OpenTeam, then reload this page and try again.',
   'OpenTeam 后台暂时没有响应（扩展可能刚重新加载）。请刷新本页后再试。': 'OpenTeam\'s background is not responding (the extension may have just been reloaded). Reload this page, then try again.',
   '记住这条': 'Remember this',
   '采纳为决定': 'Adopt as a decision',

@@ -50,6 +50,12 @@ describe('team page runtime client', () => {
     await expect(client.runCommand('GROUP_CHAT_SWITCH', { chatId: 'chat-1' })).rejects.toThrow('The message port closed before a response was received.')
   })
 
+  it('says to reload the extension when its background is older than this page and does not know a command', async () => {
+    const { client } = await createClient(message => message.type === 'SITE_CHECK_SCHEDULE_TEST' ? { ok: false, error: 'Unknown OpenTeam message' } : { ok: false, error: '找不到这个推送地址' })
+    await expect(client.runCommand('SITE_CHECK_SCHEDULE_TEST', { destinationId: 'd' })).rejects.toThrow('OpenTeam 的后台还是更新前的版本，不认识这个操作。请到 chrome://extensions 点 OpenTeam 的刷新按钮，再刷新本页后重试。')
+    await expect(client.runCommand('OTHER', {})).rejects.toThrow('找不到这个推送地址')
+  })
+
   it('adds hostTabId to outgoing messages and applies command stores', async () => {
     vi.resetModules()
     const runtimeSendMessage = vi.fn((_message, callback) => callback({ ok: true, store: createDefaultStore() }))
