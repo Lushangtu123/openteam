@@ -246,3 +246,59 @@ describe('choosing several groups', () => {
     expect(barButton('Select all')).toBeTruthy()
   })
 })
+
+describe('the group list while the store keeps changing', () => {
+  function setup() {
+    const store = createDefaultStore()
+    store.settings.language = 'zh-CN'
+    for (const [id, name] of [['chat-1', '网站自检 11-17 09:14'], ['chat-2', '网站自检 11-17 09:07']]) {
+      store.chatsById[id] = { id, name, mode: 'independent', roleIds: [], messageIds: [], nextMessageSeq: 1, status: 'ready', createdAt: 1, updatedAt: 1 }
+    }
+    store.chatOrder = ['chat-1', 'chat-2']
+    const state = createTeamPageState()
+    state.selectedChatId = 'chat-1'
+    const chatListEl = document.createElement('div')
+    document.body.replaceChildren(chatListEl)
+    let summary = '最近一条'
+    const view = createChatListView({
+      state, getStore: () => store, applyStore: vi.fn(), storeSummaryEl: document.createElement('p'), chatListEl,
+      iframeHost: { removeChat: vi.fn(), restoreChat: vi.fn() }, getTemplates: () => [], getChatRecentSummary: () => summary,
+      roleToneClass: () => '', roleAvatarLabel: value => value.slice(0, 1), emptyCard: () => document.createElement('div'),
+      renderSelectedChat: vi.fn(), renderRolePanel: vi.fn(), sendRuntimeMessage: vi.fn() as never, runCommand: vi.fn(async () => undefined),
+      log: { warn: vi.fn() }, showError: vi.fn(),
+    })
+    view.renderChatList()
+    return { store, state, view, chatListEl, setSummary: (value: string) => { summary = value } }
+  }
+
+  it('keeps its rows when nothing they show changed, so hovering does not flash and a click is not lost (seen live)', () => {
+    const { store, view, chatListEl } = setup()
+    const row = chatListEl.querySelector('.chat-item')
+    // A store update the list does not show: a member's page status, say.
+    store.chatsById['chat-2'].status = 'running'
+    view.renderChatList()
+    expect(chatListEl.querySelector('.chat-item')).toBe(row)
+  })
+
+  it('redraws when something it shows changed: a name, the last message, the open group, a new message', () => {
+    const { store, state, view, chatListEl, setSummary } = setup()
+    const first = () => chatListEl.querySelector('.chat-item')
+    let row = first()
+    store.chatsById['chat-1'].name = '改名了'
+    view.renderChatList()
+    expect(first()).not.toBe(row)
+    row = first()
+    setSummary('新的一条')
+    view.renderChatList()
+    expect(first()).not.toBe(row)
+    row = first()
+    state.selectedChatId = 'chat-2'
+    view.renderChatList()
+    expect(first()).not.toBe(row)
+    row = first()
+    store.viewState = { ...store.viewState, chatHasNewMessageById: { 'chat-1': true } }
+    view.renderChatList()
+    expect(first()).not.toBe(row)
+    expect(first()?.classList.contains('has-activity')).toBe(true)
+  })
+})

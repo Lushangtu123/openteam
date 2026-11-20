@@ -61,8 +61,13 @@ export function createChatListView(deps: ChatListViewDependencies): ChatListView
     leaveSelection()
   })
 
+  // What the rows last drawn showed. The page redraws on every store update, every few seconds while
+  // members work; rebuilding unchanged rows made them flash under the mouse, and a click whose press
+  // and release fell either side of a rebuild was lost (seen live).
+  let drawnList: string | undefined
+
   function renderChatList() {
-    // Drawn anew each time: the control that had focus gets it back.
+    // Drawn anew when it changed: the control that had focus gets it back.
     const focusKey = (document.activeElement as HTMLElement | null)?.dataset?.focusKey
     renderChatListItems()
     if (focusKey) [...deps.chatListEl.querySelectorAll<HTMLElement>('[data-focus-key]')].find(element => element.dataset.focusKey === focusKey)?.focus()
@@ -72,17 +77,27 @@ export function createChatListView(deps: ChatListViewDependencies): ChatListView
     const store = deps.getStore()
     const allChats = store.chatOrder.map(chatId => store.chatsById[chatId]).filter((chat): chat is GroupChat => Boolean(chat))
     deps.storeSummaryEl.textContent = ui(`${allChats.length} 个群聊 · ${deps.getTemplates().length} 个角色`)
-    deps.chatListEl.replaceChildren()
     const query = deps.state.chatListQuery
     if (deps.chatListSearchBoxEl) deps.chatListSearchBoxEl.hidden = !shouldShowChatSearch(allChats.length, query)
     if (deps.chatListSearchEl) deps.chatListSearchEl.placeholder = ui('搜索群聊')
+    const listed = orderChatsForList(allChats, query, deps.getChatRecentSummary)
+    const shown = JSON.stringify([
+      language(), allChats.length, query, deps.state.selectedChatId, deps.state.chatMenuChatId, deps.state.chatSelection,
+      listed.map(chat => [
+        chat.id, chat.name, Boolean(chat.pinned), deps.getChatRecentSummary(chat), formatChatListTime(chat.updatedAt),
+        Boolean(store.viewState?.chatHasNewMessageById?.[chat.id]), Boolean(chat.memoryDisabled), chat.scheduledTasks?.length ?? 0,
+      ]),
+    ])
+    if (shown === drawnList) return
+    drawnList = shown
+    deps.chatListEl.replaceChildren()
 
     if (allChats.length === 0) {
       deps.chatListEl.append(deps.emptyCard(ui('还没有群聊'), ui('点上方的加号新建：按任务组队、从模板创建，或建一个空白群聊。')))
       return
     }
 
-    const chats = orderChatsForList(allChats, query, deps.getChatRecentSummary)
+    const chats = listed
     const selection = deps.state.chatSelection
     if (selection) deps.chatListEl.append(selectionBar(chats, selection))
     if (chats.length === 0) {
