@@ -98,6 +98,37 @@ describe('the 定时自检 window', () => {
     await vi.waitFor(() => expect(ctx.runCommand).toHaveBeenCalledTimes(2))
   })
 
+  it('says a save worked and when the next check is, until something is changed again', async () => {
+    const ctx = setup()
+    const saved = () => ctx.$('.site-check-schedule-saved')
+    expect(saved().hidden).toBe(true)
+    // The background stores it; the window shows what it was told.
+    ctx.runCommand.mockImplementationOnce(async (_type, payload) => {
+      ctx.store.settings.siteCheckSchedule = { ...(payload!.schedule as SiteCheckSchedule), armedAt: NOW }
+      return undefined
+    })
+    ctx.button('保存').click()
+    await vi.waitFor(() => expect(saved().hidden).toBe(false))
+    expect(saved().textContent).toMatch(/^已保存，下次检查：.+ 09:00$/)
+    expect(saved().querySelector('svg')).not.toBeNull()
+    expect(saved().getAttribute('role')).toBe('status')
+
+    ctx.$<HTMLInputElement>('#site-check-schedule-enabled').click()
+    expect(saved().hidden).toBe(true)
+
+    ctx.runCommand.mockImplementationOnce(async (_type, payload) => {
+      ctx.store.settings.siteCheckSchedule = { ...(payload!.schedule as SiteCheckSchedule), armedAt: NOW }
+      return undefined
+    })
+    ctx.button('保存').click()
+    await vi.waitFor(() => expect(saved().textContent).toBe('已保存，定时自检已停用'))
+
+    ctx.runCommand.mockRejectedValueOnce(new Error('找不到这个推送地址'))
+    ctx.button('保存').click()
+    await vi.waitFor(() => expect(ctx.$('.team-form-error').textContent).toBe('找不到这个推送地址'))
+    expect(saved().hidden).toBe(true)
+  })
+
   it('keeps what is being typed when the store updates, and closes with Esc', () => {
     const ctx = setup({ time: '09:00' })
     ctx.$<HTMLInputElement>('#site-check-schedule-time').value = '11:11'

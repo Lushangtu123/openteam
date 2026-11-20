@@ -120,13 +120,22 @@ export function openSiteCheckScheduleDialog(deps: SiteCheckScheduleDialogDepende
   runNow.addEventListener('click', () => void command(runNow, 'SITE_CHECK_SCHEDULE_RUN'))
   const save = element('button', 'btn btn-primary', t('保存', 'Save'))
   save.type = 'submit'
-  actions.append(runNow, save)
+  // Says the save worked, until something is changed again.
+  const saved = element('p', 'site-check-schedule-saved')
+  saved.setAttribute('role', 'status')
+  saved.hidden = true
+  actions.append(saved, runNow, save)
   form.append(enabledLabel, daysField, timeField, destinationField, error, actions)
   form.addEventListener('submit', event => {
     event.preventDefault()
     void saveSchedule()
   })
-  for (const input of [enabled, time, destinationChoice, ...dayBoxes]) input.addEventListener('change', () => { error.textContent = '' })
+  for (const input of [enabled, time, destinationChoice, ...dayBoxes]) {
+    input.addEventListener('change', () => {
+      error.textContent = ''
+      showSaved(false)
+    })
+  }
 
   dialog.append(header, status, form)
   backdrop.append(dialog)
@@ -211,8 +220,23 @@ export function openSiteCheckScheduleDialog(deps: SiteCheckScheduleDialogDepende
       time.focus()
       return
     }
+    showSaved(false)
     const done = await command(save, 'SITE_CHECK_SCHEDULE_SAVE', { schedule: { days, time: time.value, enabled: enabled.checked, ...(destinationChoice.value ? { destinationId: destinationChoice.value } : {}) } })
-    if (done) error.textContent = ''
+    if (done) {
+      error.textContent = ''
+      showSaved(true)
+    }
+  }
+
+  function showSaved(shown: boolean): void {
+    saved.hidden = !shown
+    if (!shown) return saved.replaceChildren()
+    const current = schedule()
+    const next = current?.enabled ? nextSlotAfter(current, now()) : undefined
+    const text = !current?.enabled
+      ? t('已保存，定时自检已停用', 'Saved; the scheduled check is off')
+      : next === undefined ? t('已保存', 'Saved') : t(`已保存，下次检查：${formatTime(next)}`, `Saved; next check: ${formatTime(next)}`)
+    saved.replaceChildren(createIcon('check'), element('span', '', text))
   }
 
   // One command at a time. The buttons are not disabled meanwhile: a save takes a moment, and buttons

@@ -2021,6 +2021,32 @@ select.reply-compare-select {
   max-width: 100%;
 }
 
+/* 定时自检's window: that the save worked, at the start of its buttons' row. */
+.site-check-schedule-saved {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 auto 0 0;
+  min-width: 0;
+  color: var(--success);
+  font-size: 13px;
+}
+
+.site-check-schedule-dialog .team-setup-actions {
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.site-check-schedule-saved[hidden] {
+  display: none;
+}
+
+.site-check-schedule-saved svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+
 .scheduled-task-hint.scheduled-task-warning {
   color: var(--danger);
 }
