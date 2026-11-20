@@ -2127,13 +2127,28 @@ select.reply-compare-select {
   display: none;
 }
 
-/* 用量: totals, answers per day, and tables by member, group and site. */
+/* 用量: totals, answers per day, and tables by member, group and site. The window is tall and
+   scrolled while the page behind keeps changing (replies arriving): a blurred backdrop is painted
+   again under it each time, which flashes as it scrolls (seen live), so it dims without blur and
+   the window paints on its own. */
+.modal-backdrop.usage-modal,
+:root[data-theme] .modal-backdrop.usage-modal {
+  backdrop-filter: none;
+  background: rgba(1, 5, 12, 0.66);
+}
+
+:root[data-theme="light"] .modal-backdrop.usage-modal {
+  background: rgba(17, 24, 39, 0.42);
+}
+
 .modal.usage-dialog {
   display: grid;
   gap: 12px;
   width: min(880px, 100%);
   max-height: calc(100vh - 48px);
   overflow: auto;
+  contain: paint;
+  overscroll-behavior: contain;
 }
 
 .usage-dialog .modal-header {
