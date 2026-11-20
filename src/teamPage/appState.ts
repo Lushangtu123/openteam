@@ -45,6 +45,9 @@ export interface TeamPageState {
   addPersonSearchQuery: string
   addPersonCategory: string
   pendingSwitchAnimationFrame?: number
+  // A group the user clicked whose switch has not reached the store yet. Store updates sent before
+  // it still name the old group; without this the page jumped back to it for a moment (seen live).
+  pendingChatSwitchId?: string
   thinkingTimeoutTimers: number[]
   loggedThinkingTimeoutRoleIds: Set<string>
   messageNodeCache: Map<string, CachedMessageNode>
@@ -86,6 +89,11 @@ export function createTeamPageState(): TeamPageState {
 
 export function pickSelectedChatId(state: TeamPageState): string | undefined {
   const store = state.store
+  const pending = state.pendingChatSwitchId
+  if (pending) {
+    if (store.chatsById[pending] && store.currentChatId !== pending) return pending
+    state.pendingChatSwitchId = undefined
+  }
   if (store.currentChatId && store.chatsById[store.currentChatId]) return store.currentChatId
   if (state.selectedChatId && store.chatsById[state.selectedChatId]) return state.selectedChatId
   return [...store.chatOrder]

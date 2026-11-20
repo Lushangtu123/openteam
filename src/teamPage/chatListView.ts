@@ -250,6 +250,7 @@ export function createChatListView(deps: ChatListViewDependencies): ChatListView
       return
     }
     deps.state.selectedChatId = chatId
+    deps.state.pendingChatSwitchId = chatId
     deps.state.selectedRoleId = undefined
     deps.state.selectedReference = undefined
     deps.state.peopleDrawerOpen = false
@@ -259,9 +260,14 @@ export function createChatListView(deps: ChatListViewDependencies): ChatListView
     if (deps.state.pendingSwitchAnimationFrame !== undefined) window.cancelAnimationFrame(deps.state.pendingSwitchAnimationFrame)
     deps.state.pendingSwitchAnimationFrame = window.requestAnimationFrame(() => {
       deps.state.pendingSwitchAnimationFrame = undefined
-      if (deps.state.selectedChatId !== chatId) return
+      if (deps.state.selectedChatId !== chatId) {
+        if (deps.state.pendingChatSwitchId === chatId) deps.state.pendingChatSwitchId = undefined
+        return
+      }
       deps.runCommand('GROUP_CHAT_SWITCH', { chatId })
         .catch(error => deps.showError(error.message))
+        // Done or refused, the store leads again.
+        .finally(() => { if (deps.state.pendingChatSwitchId === chatId) deps.state.pendingChatSwitchId = undefined })
     })
   }
 

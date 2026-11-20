@@ -50,6 +50,29 @@ describe('team page app state', () => {
     expect(pickSelectedChatId(state)).toBe('chat-new')
   })
 
+  it('keeps a group the user just clicked while the switch is on its way, so the old one does not flash back (seen live)', async () => {
+    const { createTeamPageState, pickSelectedChatId } = await import('./appState')
+    const state = createTeamPageState()
+    const chat = (id: string) => ({ id, name: id, mode: 'independent' as const, roleIds: [], messageIds: [], nextMessageSeq: 1, status: 'ready' as const, createdAt: 1, updatedAt: 1 })
+    state.store.chatOrder = ['chat-old', 'chat-new']
+    state.store.chatsById = { 'chat-old': chat('chat-old'), 'chat-new': chat('chat-new') }
+    // The click: the page shows the new group; a store update sent before the switch still names the old.
+    state.selectedChatId = 'chat-new'
+    state.pendingChatSwitchId = 'chat-new'
+    state.store.currentChatId = 'chat-old'
+    expect(pickSelectedChatId(state)).toBe('chat-new')
+    // The switch has landed: the store names it, and the store leads again.
+    state.store.currentChatId = 'chat-new'
+    expect(pickSelectedChatId(state)).toBe('chat-new')
+    expect(state.pendingChatSwitchId).toBeUndefined()
+    state.store.currentChatId = 'chat-old'
+    expect(pickSelectedChatId(state)).toBe('chat-old')
+    // A group deleted before its switch landed is not kept.
+    state.pendingChatSwitchId = 'chat-gone'
+    expect(pickSelectedChatId(state)).toBe('chat-old')
+    expect(state.pendingChatSwitchId).toBeUndefined()
+  })
+
   it('keeps mutable page state declarations out of the team page entrypoint', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/teamPage/index.ts'), 'utf8')
     const messagesSource = readFileSync(resolve(process.cwd(), 'src/teamPage/messagesView.ts'), 'utf8')

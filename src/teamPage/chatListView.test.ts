@@ -248,7 +248,7 @@ describe('choosing several groups', () => {
 })
 
 describe('the group list while the store keeps changing', () => {
-  function setup() {
+  function setup(runCommand: (type: string, payload?: Record<string, unknown>) => Promise<void> = vi.fn(async () => undefined)) {
     const store = createDefaultStore()
     store.settings.language = 'zh-CN'
     for (const [id, name] of [['chat-1', '网站自检 11-17 09:14'], ['chat-2', '网站自检 11-17 09:07']]) {
@@ -264,7 +264,7 @@ describe('the group list while the store keeps changing', () => {
       state, getStore: () => store, applyStore: vi.fn(), storeSummaryEl: document.createElement('p'), chatListEl,
       iframeHost: { removeChat: vi.fn(), restoreChat: vi.fn() }, getTemplates: () => [], getChatRecentSummary: () => summary,
       roleToneClass: () => '', roleAvatarLabel: value => value.slice(0, 1), emptyCard: () => document.createElement('div'),
-      renderSelectedChat: vi.fn(), renderRolePanel: vi.fn(), sendRuntimeMessage: vi.fn() as never, runCommand: vi.fn(async () => undefined),
+      renderSelectedChat: vi.fn(), renderRolePanel: vi.fn(), sendRuntimeMessage: vi.fn() as never, runCommand,
       log: { warn: vi.fn() }, showError: vi.fn(),
     })
     view.renderChatList()
@@ -300,5 +300,19 @@ describe('the group list while the store keeps changing', () => {
     view.renderChatList()
     expect(first()).not.toBe(row)
     expect(first()?.classList.contains('has-activity')).toBe(true)
+  })
+
+  it('marks a clicked group as on its way until the switch command has finished', async () => {
+    let finish: () => void = () => undefined
+    const runCommand = vi.fn((_type: string, _payload?: Record<string, unknown>) => new Promise<void>(resolve => { finish = resolve }))
+    const raf = vi.spyOn(window, 'requestAnimationFrame').mockImplementation(callback => { callback(0); return 1 })
+    const { state, chatListEl } = setup(runCommand)
+    ;(chatListEl.querySelectorAll('.chat-item')[1] as HTMLElement).click()
+    raf.mockRestore()
+    expect(state.selectedChatId).toBe('chat-2')
+    expect(state.pendingChatSwitchId).toBe('chat-2')
+    expect(runCommand).toHaveBeenCalledWith('GROUP_CHAT_SWITCH', { chatId: 'chat-2' })
+    finish()
+    await vi.waitFor(() => expect(state.pendingChatSwitchId).toBeUndefined())
   })
 })
