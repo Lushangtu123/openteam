@@ -25,6 +25,8 @@ export const OPENTEAM_CONTROL_CAPABILITIES = [
   'run.createAndPost',
   'memory.search',
   'memory.add',
+  'library.add',
+  'library.list',
   'site.check',
   'agent.list',
   'agent.run',

@@ -2,7 +2,7 @@
 import { spawn } from 'node:child_process'
 import { accessSync, constants, existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { delimiter, dirname, join, resolve } from 'node:path'
+import { basename, delimiter, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { DEFAULT_AGENT_CONFIG_PATH, DEFAULT_PORT, DEFAULT_TOKEN_PATH, readOrCreateToken, readRemoteFolder } from './openteam-daemon.mjs'
 import { chooseNodePath, createLaunchAgent, daemonEnvironment, describeLaunchAgent, nodeFileSystem, runLaunchctl } from './launch-agent.mjs'
@@ -107,6 +107,19 @@ export function buildCliRequest(argv) {
     }
   }
 
+  // 群资料库: a text file or text saved into a group's library; its documents listed.
+  if (group === 'library') {
+    if (subcommand === 'list') return command('library.list', { chatId: requireOption(options, 'chat') })
+    if (subcommand === 'add') {
+      const chatId = requireOption(options, 'chat')
+      if (typeof options.file === 'string') {
+        const name = basename(options.file)
+        return { kind: 'text-file-command', action: 'library.add', file: options.file, payload: { chatId, kind: 'file', title: typeof options.title === 'string' ? options.title : name, source: name } }
+      }
+      return command('library.add', { chatId, kind: 'note', title: typeof options.title === 'string' ? options.title : '', text: requireOption(options, 'text') })
+    }
+  }
+
   // 网站自检: every AI site is asked to reply OK; the result says, site by site, whether it works.
   if (group === 'site-check') {
     const checkOptions = parseOptions(argv.slice(1))
@@ -208,6 +221,11 @@ async function runRequest(request) {
   if (request.kind === 'command') {
     await ensureDaemon()
     return daemonFetch('/command', { method: 'POST', body: request.command })
+  }
+  if (request.kind === 'text-file-command') {
+    const text = readFileSync(resolve(process.cwd(), request.file), 'utf8')
+    await ensureDaemon()
+    return daemonFetch('/command', { method: 'POST', body: { id: newCommandId(), action: request.action, payload: { ...request.payload, text }, timeoutMs: DEFAULT_COMMAND_TIMEOUT_MS } })
   }
   if (request.kind === 'file-command') {
     const filePayload = JSON.parse(readFileSync(resolve(process.cwd(), request.file), 'utf8'))
@@ -587,6 +605,8 @@ export function help() {
       'openteamcli memory search --chat <chatId> --role name:<name>|role:<id> [--query <text>] [--limit <n>]',
       'openteamcli site-check [--no-wait] [--timeout <ms>]',
       'openteamcli memory add --scope global|chat|role [--chat <chatId>] [--role name:<name>|role:<id>] [--kind fact|decision|preference|note] --content <text> [--tags a,b] [--pinned]',
+      'openteamcli library add --chat <chatId> (--file <path> | --text <text>) [--title <title>]',
+      'openteamcli library list --chat <chatId>',
       'openteamcli agent list|run --agent <id> --content <prompt> --cwd <path>',
       'openteamcli agent add --preset claude-code|codex|gemini --cwd <folder>[,<folder>] [--id <id>] [--name <name>] [--env KEY=VALUE,...] [--mode <session mode>]',
       'openteamcli agent add --id <id> --name <name> --command "<command and arguments>" --cwd <folder>[,<folder>] [--remote-cwd <folder on the remote machine>]',

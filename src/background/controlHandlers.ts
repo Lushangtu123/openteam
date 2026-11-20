@@ -104,6 +104,10 @@ async function executeEnabledCommand(command: ControlHttpCommand, initialStore: 
       return searchMemory(command.payload, initialStore)
     case 'memory.add':
       return addMemory(command.payload, initialStore, deps)
+    case 'library.add':
+      return addLibraryDocument(command.payload, initialStore, deps)
+    case 'library.list':
+      return listLibrary(command.payload, initialStore)
     case 'site.check':
       return runSiteCheck(command.payload, deps)
     default:
@@ -395,6 +399,30 @@ async function addMemory(payload: unknown, store: OpenTeamStore, deps: ControlAc
     },
   })
   return { item: isRecord(response.item) ? memorySummary(response.item as unknown as MemoryItem) : response.item }
+}
+
+// 群资料库 (src/group/groupLibrary.ts): a document added as the user would, from a text file or text.
+async function addLibraryDocument(payload: unknown, store: OpenTeamStore, deps: ControlActionExecutorDependencies): Promise<unknown> {
+  const input = requireRecord(payload, '缺少资料参数')
+  const chat = requireChatIn(store, requireString(input.chatId, '缺少群聊 ID'))
+  const response = await routeOk(deps, {
+    type: 'LIBRARY_ADD',
+    chatId: chat.id,
+    doc: {
+      title: readString(input.title) ?? '',
+      kind: readString(input.kind) ?? 'note',
+      ...(readString(input.source) ? { source: readString(input.source) } : {}),
+      text: typeof input.text === 'string' ? input.text : '',
+    },
+  })
+  return { docId: response.docId }
+}
+
+// The group's documents, without their text.
+function listLibrary(payload: unknown, store: OpenTeamStore): unknown {
+  const input = requireRecord(payload, '缺少群聊参数')
+  const chat = requireChatIn(store, requireString(input.chatId, '缺少群聊 ID'))
+  return { docs: (store.libraryByChatId?.[chat.id] ?? []).map(({ text: _text, ...doc }) => doc) }
 }
 
 function memorySummary(item: MemoryItem, score?: number): Record<string, unknown> {

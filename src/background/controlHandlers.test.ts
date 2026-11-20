@@ -271,6 +271,18 @@ describe('memory through the control interface', () => {
     expect(forMember.data).toEqual({ item: { id: 'memory-new', scope: 'role', scopeId: 'role-fe', kind: 'note', content: '前端用 Vue 3。', source: 'user' } })
   })
 
+  it('adds a document to a group\'s library as the user, and lists the library without its text', async () => {
+    const { store, run, routeRuntimeMessage } = setup()
+    routeRuntimeMessage.mockImplementationOnce(async () => ({ ok: true, docId: 'library-doc-9' }))
+    const added = await run('library.add', { chatId: 'chat-1', kind: 'file', title: '需求.md', source: '需求.md', text: '预算提醒在八成时推送。' })
+    expect(routeRuntimeMessage.mock.calls[routeRuntimeMessage.mock.calls.length - 1][0]).toEqual({ type: 'LIBRARY_ADD', chatId: 'chat-1', doc: { title: '需求.md', kind: 'file', source: '需求.md', text: '预算提醒在八成时推送。' } })
+    expect(added.data).toEqual({ docId: 'library-doc-9' })
+    store.libraryByChatId = { 'chat-1': [{ id: 'd', title: '需求.md', kind: 'file', text: '秘密正文', chars: 4, addedAt: 1 }] }
+    const listed = await run('library.list', { chatId: 'chat-1' })
+    expect(listed.data).toEqual({ docs: [{ id: 'd', title: '需求.md', kind: 'file', chars: 4, addedAt: 1 }] })
+    expect((await run('library.add', { chatId: 'gone', text: 'x' })).error?.message).toBe('找不到群聊：gone')
+  })
+
   it('needs a scope, and the group for a group or member item', async () => {
     const { run, routeRuntimeMessage } = setup()
     expect((await run('memory.add', { content: '内容' })).error?.message).toBe('缺少记忆范围：global（全部群聊）、chat（本群）或 role（本群的一位成员）')

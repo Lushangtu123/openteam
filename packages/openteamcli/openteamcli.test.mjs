@@ -56,6 +56,11 @@ describe('openteamcli command builder', () => {
       command: { action: 'memory.add', payload: { scope: 'global', kind: 'fact', content: '回答简短' } },
     })
     expect(() => buildCliRequest(['memory', 'add', '--content', '回答简短'])).toThrow('缺少 --scope')
+    // 群资料库: a text file, or text given on the command line.
+    expect(buildCliRequest(['library', 'add', '--chat', 'chat-1', '--file', 'docs/需求.md'])).toEqual({ kind: 'text-file-command', action: 'library.add', file: 'docs/需求.md', payload: { chatId: 'chat-1', kind: 'file', title: '需求.md', source: '需求.md' } })
+    expect(buildCliRequest(['library', 'add', '--chat', 'chat-1', '--title', '纪要', '--text', '预算提醒在八成时推送'])).toMatchObject({ kind: 'command', command: { action: 'library.add', payload: { chatId: 'chat-1', kind: 'note', title: '纪要', text: '预算提醒在八成时推送' } } })
+    expect(buildCliRequest(['library', 'list', '--chat', 'chat-1'])).toMatchObject({ command: { action: 'library.list', payload: { chatId: 'chat-1' } } })
+    expect(() => buildCliRequest(['library', 'add', '--chat', 'chat-1'])).toThrow('缺少 --text')
     expect(() => buildCliRequest(['memory', 'search', '--chat', 'chat-1'])).toThrow('缺少 --role')
     expect(buildCliRequest(['run', 'create-and-post', '--file', 'task.json', '--wait'])).toMatchObject({
       kind: 'file-command',
@@ -95,6 +100,8 @@ describe('openteamcli command builder', () => {
         'openteamcli memory search --chat <chatId> --role name:<name>|role:<id> [--query <text>] [--limit <n>]',
         'openteamcli site-check [--no-wait] [--timeout <ms>]',
         'openteamcli memory add --scope global|chat|role [--chat <chatId>] [--role name:<name>|role:<id>] [--kind fact|decision|preference|note] --content <text> [--tags a,b] [--pinned]',
+        'openteamcli library add --chat <chatId> (--file <path> | --text <text>) [--title <title>]',
+        'openteamcli library list --chat <chatId>',
         'openteamcli agent list|run --agent <id> --content <prompt> --cwd <path>',
         'openteamcli agent add --preset claude-code|codex|gemini --cwd <folder>[,<folder>] [--id <id>] [--name <name>] [--env KEY=VALUE,...] [--mode <session mode>]',
         'openteamcli agent add --id <id> --name <name> --command "<command and arguments>" --cwd <folder>[,<folder>] [--remote-cwd <folder on the remote machine>]',
