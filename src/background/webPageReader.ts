@@ -34,6 +34,8 @@ export function createWebPageReader(deps: WebPageReaderDependencies) {
   function forReply(context: { chatId: string; roleId: string; roleName: string }, options: { english: boolean; signal?: AbortSignal; onRead?(page: ReadPage): void }) {
     let fetched = 0
     const declined = new Set<string>()
+    // Pages read in this reply: a backup model that starts over gets them again without a fetch.
+    const done = new Map<string, { text: string; page: ReadPage }>()
 
     return async function readWebPage(raw: string): Promise<string> {
       let target: { url: string; host: string }
@@ -41,6 +43,11 @@ export function createWebPageReader(deps: WebPageReaderDependencies) {
         target = checkReadableUrl(raw)
       } catch (error) {
         return `没有读：${error instanceof Error ? error.message : String(error)}`
+      }
+      const again = done.get(target.url)
+      if (again) {
+        options.onRead?.(again.page)
+        return again.text
       }
       if (fetched >= MAX_PAGES_PER_REPLY) return `这次回答最多读 ${MAX_PAGES_PER_REPLY} 个网页，没有再读 ${target.url}。`
       const site = hostAccessPattern(target.url)!
@@ -96,8 +103,11 @@ export function createWebPageReader(deps: WebPageReaderDependencies) {
         const url = response.url || target.url
         const page = html ? { url, ...htmlToText(body) } : { url, title: '', text: body.trim() }
         if (!page.text) return '网页里没有读到文字（可能要登录，或是靠脚本显示的）'
-        options.onRead?.({ url, title: page.title || target.host })
-        return pageTextForModel(page, options.english)
+        const entry = { url, title: page.title || target.host }
+        const text = pageTextForModel(page, options.english)
+        done.set(target.url, { text, page: entry })
+        options.onRead?.(entry)
+        return text
       } catch (error) {
         if (options.signal?.aborted) throw error
         deps.log.warn('web-page:read-failed', { host: target.host, error: error instanceof Error ? error.message : String(error) })

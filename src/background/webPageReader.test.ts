@@ -73,4 +73,15 @@ describe('an API member reading a page', () => {
     expect(await readPage('https://x.example.com/fail')).toBe('没有读到：HTTP 404')
     expect(await readPage('https://x.example.com/paper.pdf')).toBe('没有读：这是 application/pdf 文件，只能读网页')
   })
+
+  it('gives a page read earlier in the reply again without fetching it or counting it, for a backup model that starts over', async () => {
+    const { readPage, fetch, read } = setup({ allowed: ['https://n.example.com/*'] })
+    const first = await readPage('https://n.example.com/a')
+    expect(await readPage('https://n.example.com/a')).toBe(first)
+    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(read).toHaveLength(2)
+    for (const n of [1, 2]) await readPage(`https://n.example.com/${n}`)
+    expect(fetch).toHaveBeenCalledTimes(3)
+  })
 })
+

@@ -329,6 +329,24 @@ describe('ExternalModelClient Stability Baseline', () => {
       for await (const _chunk of createExternalModelClient(mockFetch).stream!({ model: mockConfig, prompt: 'Hi', onUsage, readWebPage: async () => '' })) { /* read */ }
       expect(onUsage).toHaveBeenCalledWith({ inputTokens: 900, outputTokens: 50, totalTokens: 950 })
     })
+
+    it('names a Gemini connection google, so Gemini\'s thought signatures go back with a tool call', async () => {
+      vi.mocked(streamText).mockReturnValue(createMockStreamResult(['ok']))
+      const gemini = { ...mockConfig, baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai' }
+      for await (const _chunk of createExternalModelClient(mockFetch).stream!({ model: gemini, prompt: 'Hi', readWebPage: async () => '' })) { /* read */ }
+      for await (const _chunk of createExternalModelClient(mockFetch).stream!({ model: mockConfig, prompt: 'Hi' })) { /* read */ }
+      const provider = (call: number) => (vi.mocked(streamText).mock.calls[call][0] as { model: { config?: { provider?: string } } }).model.config?.provider
+      expect(provider(0)).toBe('google.chat')
+      expect(provider(1)).toBe('openteam-test-model.chat')
+    })
+
+    it('tells the model it can read pages, so it does not say it cannot open a link', async () => {
+      vi.mocked(streamText).mockReturnValue(createMockStreamResult(['ok']))
+      for await (const _chunk of createExternalModelClient(mockFetch).stream!({ model: mockConfig, prompt: 'Hi', readWebPage: async () => '' })) { /* read */ }
+      for await (const _chunk of createExternalModelClient(mockFetch).stream!({ model: mockConfig, prompt: 'Hi' })) { /* read */ }
+      const system = (call: number) => (vi.mocked(streamText).mock.calls[call][0] as { system?: string }).system
+      expect(system(0)).toContain('read_web_page')
+      expect(system(1)).toBeUndefined()
+    })
   })
 })
-

@@ -2635,9 +2635,11 @@ describe('background message handlers', () => {
     const seen: Array<((url: string) => Promise<string>) | undefined> = []
     const externalModelClient = {
       complete: vi.fn(async () => ({ content: 'unused' })),
-      stream: vi.fn(async function* (input: { readWebPage?(url: string): Promise<string> }) {
+      stream: vi.fn(async function* (input: { readWebPage?(url: string): Promise<string>; onFallback?(name: string): void }) {
         seen.push(input.readWebPage)
         if (input.readWebPage) await input.readWebPage('https://www.iea.org/report')
+        // The second time, the main model fails after reading and its backup starts over without reading.
+        if (seen.length === 3) input.onFallback?.('backup-model')
         yield '读过了。'
       }),
     }
@@ -2680,6 +2682,14 @@ describe('background message handlers', () => {
     currentStore.settings.externalModelsById['model-1'].webReading = false
     await sendRoute?.handler({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@all 再说一次' }, {})
     expect(seen[1]).toBeUndefined()
+
+    // Pages read before the backup took over are not the backup's.
+    delete currentStore.settings.externalModelsById['model-1'].webReading
+    const third = await sendRoute?.handler({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@all 第三次' }, {}) as { store: OpenTeamStore }
+    const replies = Object.values(third.store.messagesById).filter(message => message.type === 'assistant')
+    const reply = replies[replies.length - 1]
+    expect(reply).toMatchObject({ answeredByFallback: 'backup-model' })
+    expect(reply.readPages).toBeUndefined()
   })
 
 

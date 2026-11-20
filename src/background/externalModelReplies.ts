@@ -29,9 +29,13 @@ export async function sendExternalModelDelivery(deps: MessageHandlersDependencie
   let usage: MessageTokenUsage | undefined
   const onUsage = (value: MessageTokenUsage) => { usage = value }
   let answeredByFallback: string | undefined
-  const onFallback = (modelName: string) => { answeredByFallback = modelName }
-  // 读网页: the pages read for this reply, shown under it.
+  // 读网页: the pages read for this reply, shown under it. A backup model starts over: what the
+  // failed main model read is not its.
   let readPages: ReadPage[] = []
+  const onFallback = (modelName: string) => {
+    answeredByFallback = modelName
+    readPages = []
+  }
   try {
     deps.log.info('external-model:send:start', {
       chatId: delivery.chatId,
