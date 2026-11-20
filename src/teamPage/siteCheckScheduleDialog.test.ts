@@ -74,6 +74,30 @@ describe('the 定时自检 window', () => {
     expect(ctx.button('立即运行').querySelector('svg')).not.toBeNull()
   })
 
+  it('leaves the buttons as they are while saving, so 立即运行 does not flash, and takes one click at a time', async () => {
+    const ctx = setup()
+    let finish = () => {}
+    ctx.runCommand.mockImplementationOnce(() => new Promise<undefined>(resolve => { finish = () => resolve(undefined) }))
+    const runNow = ctx.button('立即运行')
+    const save = ctx.button('保存')
+    const seen: boolean[] = []
+    const watch = new MutationObserver(() => seen.push(runNow.disabled, save.disabled))
+    watch.observe(document.querySelector('.site-check-schedule-dialog')!, { attributes: true, subtree: true })
+    save.click()
+    runNow.click()
+    save.click()
+    expect(runNow.disabled).toBe(false)
+    expect(save.disabled).toBe(false)
+    finish()
+    await vi.waitFor(() => expect(ctx.runCommand).toHaveBeenCalledTimes(1))
+    await new Promise(resolve => setTimeout(resolve, 0))
+    watch.disconnect()
+    expect(seen.every(disabled => !disabled)).toBe(true)
+    expect(ctx.runCommand).toHaveBeenCalledTimes(1)
+    runNow.click()
+    await vi.waitFor(() => expect(ctx.runCommand).toHaveBeenCalledTimes(2))
+  })
+
   it('keeps what is being typed when the store updates, and closes with Esc', () => {
     const ctx = setup({ time: '09:00' })
     ctx.$<HTMLInputElement>('#site-check-schedule-time').value = '11:11'

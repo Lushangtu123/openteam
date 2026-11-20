@@ -156,14 +156,12 @@ export function openSiteCheckScheduleDialog(deps: SiteCheckScheduleDialogDepende
   function render(): void {
     renderChoices()
     const current = schedule()
-    const key = JSON.stringify([english(), current, busy, Math.floor(now() / 60_000)])
+    const key = JSON.stringify([english(), current, Math.floor(now() / 60_000)])
     if (key !== drawnStatus) {
       drawnStatus = key
       status.textContent = statusText(current)
       status.classList.toggle('scheduled-task-failed', current?.lastRun?.status === 'failed' || current?.lastRun?.status === 'problems' || current?.lastRun?.delivery?.status === 'failed')
     }
-    save.disabled = busy
-    runNow.disabled = busy
   }
 
   // The destinations, drawn again only when they changed.
@@ -217,9 +215,11 @@ export function openSiteCheckScheduleDialog(deps: SiteCheckScheduleDialogDepende
     if (done) error.textContent = ''
   }
 
+  // One command at a time. The buttons are not disabled meanwhile: a save takes a moment, and buttons
+  // greyed out and back for it flash.
   async function command(button: HTMLButtonElement, type: string, payload?: Record<string, unknown>): Promise<boolean> {
+    if (busy) return false
     busy = true
-    render()
     try {
       await deps.runCommand(type, payload)
       return true
@@ -228,7 +228,6 @@ export function openSiteCheckScheduleDialog(deps: SiteCheckScheduleDialogDepende
       return false
     } finally {
       busy = false
-      render()
       button.focus()
     }
   }
