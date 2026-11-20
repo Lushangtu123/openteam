@@ -3,6 +3,7 @@ import { API_MODEL_PRESETS, listModelNames as fetchModelNames, presetForBaseUrl,
 import { hasHostAccess, hostAccessLabel, hostAccessPattern, requestHostAccess } from '../shared/hostAccess'
 import { normalizeLanguage, translateUi } from '../shared/i18n'
 import { modelSpendToday, money } from '../group/spendCap'
+import { fetchPriceList, matchModelPrice, PRICE_LIST_URL, type PriceEntry } from '../shared/modelPriceLookup'
 import type { LocalAgentInfo } from '../shared/localControlProtocol'
 
 export interface ExternalModelsViewDependencies {
@@ -31,6 +32,8 @@ export interface ExternalModelsViewDependencies {
   requestHostAccess?(baseUrl: string): Promise<boolean>
   // The provider's models for the address and key in the form (its /models list).
   listModelNames?(request: ModelListRequest): Promise<string[]>
+  // 查价格: OpenRouter's public price list (src/shared/modelPriceLookup.ts).
+  fetchPriceList?(): Promise<PriceEntry[]>
   showError(message: string): void
 }
 
@@ -54,6 +57,12 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
   const dailyCapEl = form.querySelector<HTMLInputElement>('#external-model-daily-cap')
   const dailyCapUnitEl = form.querySelector<HTMLElement>('#external-model-daily-cap-unit')
   const dailyCapTodayEl = form.querySelector<HTMLElement>('#external-model-daily-cap-today')
+  const lookupPriceEl = form.querySelector<HTMLButtonElement>('#lookup-external-model-price')
+  const priceChoicesEl = form.querySelector<HTMLSelectElement>('#external-model-price-choices')
+  const priceStatusEl = form.querySelector<HTMLElement>('#external-model-price-status')
+  // Read once a session: it is the same list for every model.
+  let priceList: PriceEntry[] | undefined
+  let priceCandidates: PriceEntry[] = []
   const localStatusEl = form.querySelector<HTMLElement>('#local-agent-status')
   const localHint = localStatusEl?.textContent ?? ''
   const addButtonEl = form.ownerDocument.querySelector<HTMLButtonElement>('#add-external-model')
@@ -257,6 +266,11 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
     nameChoicesEl?.addEventListener('change', () => pickFrom(nameChoicesEl, deps.externalModelModelNameEl))
     fallbackChoicesEl?.addEventListener('change', () => pickFrom(fallbackChoicesEl, fallbackNameEl))
     priceCurrencyEl?.addEventListener('change', showCapUnit)
+    lookupPriceEl?.addEventListener('click', () => void lookUpPrice())
+    priceChoicesEl?.addEventListener('change', () => {
+      const entry = priceCandidates.find(candidate => candidate.id === priceChoicesEl.value)
+      if (entry) fillPrice(entry)
+    })
     deps.externalModelFormatEl.addEventListener('change', showFieldsForFormat)
     localAgentEl?.addEventListener('change', showWorkspacesForAgent)
     deps.openExternalModelsEl.addEventListener('click', openExternalModels)
@@ -411,6 +425,77 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
     }
   }
 
+  // 查价格: the price of the model named in the form, from OpenRouter's list (no key is sent).
+  async function lookUpPrice(): Promise<void> {
+    clearPriceChoices()
+    const name = deps.externalModelModelNameEl.value.trim()
+    if (!name) {
+      showPriceStatus(ui('先填写模型名称'))
+      return
+    }
+    const original = lookupPriceEl?.textContent ?? ''
+    if (lookupPriceEl) {
+      lookupPriceEl.disabled = true
+      lookupPriceEl.textContent = ui('查询中')
+    }
+    try {
+      if (!priceList) {
+        if (!await requestAccess(PRICE_LIST_URL)) {
+          showPriceStatus(language() === 'en' ? 'OpenTeam needs your permission to reach openrouter.ai to look up prices.' : '需要你允许 OpenTeam 访问 openrouter.ai，才能查价格。')
+          return
+        }
+        priceList = await (deps.fetchPriceList ?? (() => fetchPriceList()))()
+      }
+      const match = matchModelPrice(priceList, name, deps.externalModelBaseUrlEl.value)
+      if (match.exact) {
+        fillPrice(match.exact)
+      } else if (match.candidates.length > 0) {
+        priceCandidates = match.candidates
+        if (priceChoicesEl) {
+          priceChoicesEl.replaceChildren(new Option(ui('选择对应的模型…'), ''), ...match.candidates.map(entry => new Option(`${entry.id} · $${entry.input} / $${entry.output}`, entry.id)))
+          priceChoicesEl.hidden = false
+          priceChoicesEl.focus()
+        }
+        showPriceStatus(language() === 'en' ? `The price list has no "${name}"; it may be an alias. Choose the model it stands for.` : `价格表里没有「${name}」这个名字，它可能是别名；请选择它对应的模型。`)
+      } else {
+        showPriceStatus(language() === 'en' ? `"${name}" is not in the price list; look up the price on the provider's site.` : `价格表里没有找到「${name}」，请到服务商官网查价格。`)
+      }
+    } catch (error) {
+      showPriceStatus(ui(error instanceof Error ? error.message : String(error)))
+    } finally {
+      if (lookupPriceEl) {
+        lookupPriceEl.disabled = false
+        lookupPriceEl.textContent = original
+      }
+    }
+  }
+
+  // Makers that charge in yuan at home, often at another price than their dollar one.
+  const YUAN_MAKERS = ['deepseek/', 'moonshotai/', 'qwen/', 'z-ai/']
+
+  function fillPrice(entry: PriceEntry): void {
+    if (priceInputEl) priceInputEl.value = String(entry.input)
+    if (priceOutputEl) priceOutputEl.value = String(entry.output)
+    if (priceCurrencyEl) priceCurrencyEl.value = 'USD'
+    showCapUnit()
+    const yuanMaker = YUAN_MAKERS.some(prefix => entry.id.startsWith(prefix))
+    showPriceStatus(language() === 'en'
+      ? `Filled in the price OpenRouter lists for "${entry.id}" (dollars per million tokens). Check it on the provider's site${yuanMaker ? '; this provider charges in yuan in China, possibly at another price' : ''}; within a free allowance nothing is spent.`
+      : `已填入 OpenRouter 列出的「${entry.id}」价格（美元 / 百万 token），以服务商官网为准${yuanMaker ? '；这家在国内按人民币计价，官网价格可能不同' : ''}；用免费额度时实际不花钱。`)
+  }
+
+  function showPriceStatus(text: string): void {
+    if (priceStatusEl) priceStatusEl.textContent = text
+  }
+
+  function clearPriceChoices(): void {
+    priceCandidates = []
+    if (priceChoicesEl) {
+      priceChoicesEl.replaceChildren()
+      priceChoicesEl.hidden = true
+    }
+  }
+
   // The cap is in the price's currency.
   function showCapUnit(): void {
     if (dailyCapUnitEl) dailyCapUnitEl.textContent = ui(priceCurrencyEl?.value === 'USD' ? '美元 / 天' : '元 / 天')
@@ -438,6 +523,8 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
     if (dailyCapEl) dailyCapEl.value = model.dailyCap !== undefined ? String(model.dailyCap) : ''
     showCapUnit()
     showSpentToday(model)
+    clearPriceChoices()
+    showPriceStatus('')
     if (workspaceEl) workspaceEl.value = model.workspace ?? ''
     presetFilledName = ''
     clearModelNames()
@@ -460,6 +547,8 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
     if (dailyCapEl) dailyCapEl.value = ''
     showCapUnit()
     showSpentToday(undefined)
+    clearPriceChoices()
+    showPriceStatus('')
     if (workspaceEl) workspaceEl.value = ''
     presetFilledName = ''
     clearModelNames()

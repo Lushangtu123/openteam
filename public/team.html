@@ -759,8 +759,11 @@
                 <option value="USD">美元</option>
               </select>
               <span class="tiny">/ 百万 token</span>
+              <button id="lookup-external-model-price" class="btn btn-small" type="button">查价格</button>
             </div>
-            <p class="tiny">按服务商价格表填写，「用量」窗口据此估算费用；不填就只统计 token。</p>
+            <select id="external-model-price-choices" class="external-model-choices" aria-label="选择对应的模型" hidden></select>
+            <p id="external-model-price-status" class="tiny" aria-live="polite"></p>
+            <p class="tiny">按服务商价格表填写，「用量」窗口据此估算费用；不填就只统计 token。「查价格」从 OpenRouter 的公开价格表里按模型名称查（美元），不发送 Key。</p>
           </div>
           <div class="field api-model-field model-pricing-field">
             <label class="field-label" for="external-model-daily-cap">每日花费上限（可选）</label>

@@ -3,6 +3,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createDefaultStore } from '../group/store'
 import { createExternalModelsView } from './externalModelsView'
+import type { PriceEntry } from '../shared/modelPriceLookup'
 
 describe('external models view', () => {
   it('adds a test action for saved external models', async () => {
@@ -320,7 +321,7 @@ describe('external models view', () => {
 })
 
 // A form with every field, for the preset, model list and backup tests.
-function setupForm(options: { listModelNames?: (request: { format: string; baseUrl: string; apiKey: string }) => Promise<string[]>, requestHostAccess?: () => Promise<boolean> } = {}) {
+function setupForm(options: { listModelNames?: (request: { format: string; baseUrl: string; apiKey: string }) => Promise<string[]>, requestHostAccess?: (baseUrl: string) => Promise<boolean>, fetchPriceList?: () => Promise<PriceEntry[]> } = {}) {
   const store = createDefaultStore()
   store.settings.language = 'zh-CN'
   document.body.innerHTML = `
@@ -347,6 +348,9 @@ function setupForm(options: { listModelNames?: (request: { format: string; baseU
       <input id="external-model-price-input" />
       <input id="external-model-price-output" />
       <select id="external-model-price-currency"><option value="CNY">元</option><option value="USD">美元</option></select>
+      <button id="lookup-external-model-price" type="button">查价格</button>
+      <select id="external-model-price-choices" hidden></select>
+      <p id="external-model-price-status"></p>
       <input id="external-model-daily-cap" />
       <span id="external-model-daily-cap-unit">元 / 天</span>
       <p id="external-model-daily-cap-today" hidden></p>
@@ -355,7 +359,8 @@ function setupForm(options: { listModelNames?: (request: { format: string; baseU
   `
   const $ = <T extends Element>(selector: string) => document.querySelector<T>(selector)!
   const listModelNames = vi.fn(options.listModelNames ?? (async () => ['gemini-flash-latest', 'gemini-flash-lite-latest']))
-  const requestHostAccess = vi.fn(options.requestHostAccess ?? (async () => true))
+  const requestHostAccess = vi.fn(options.requestHostAccess ?? (async (_baseUrl: string) => true))
+  const fetchPriceList = vi.fn(options.fetchPriceList ?? (async () => PRICES))
   const showError = vi.fn()
   const runCommand = vi.fn(async (_type: string, _payload?: Record<string, unknown>) => undefined)
   const view = createExternalModelsView({
@@ -379,6 +384,7 @@ function setupForm(options: { listModelNames?: (request: { format: string; baseU
     hasHostAccess: async () => true,
     requestHostAccess,
     listModelNames,
+    fetchPriceList,
     showError,
   })
   view.registerExternalModelsEvents()
@@ -387,8 +393,14 @@ function setupForm(options: { listModelNames?: (request: { format: string; baseU
     element.value = value
     element.dispatchEvent(new Event(element instanceof HTMLSelectElement ? 'change' : 'input', { bubbles: true }))
   }
-  return { store, view, $, choose, listModelNames, requestHostAccess, showError, runCommand }
+  return { store, view, $, choose, listModelNames, requestHostAccess, fetchPriceList, showError, runCommand }
 }
+
+const PRICES: PriceEntry[] = [
+  { id: 'google/gemini-3.8-flash', name: 'Google: Gemini 3.8 Flash', created: 300, input: 0.825, output: 4.125 },
+  { id: 'google/gemini-3.7-flash', name: 'Google: Gemini 3.7 Flash', created: 200, input: 0.75, output: 3.75 },
+  { id: 'deepseek/deepseek-chat', name: 'DeepSeek: Chat', created: 100, input: 0.2574, output: 1.0287 },
+]
 
 describe('provider presets and the model list', () => {
   it('offers every preset, and fills the format, address, name and key page from one', () => {
@@ -536,6 +548,62 @@ describe('a daily spending cap in the form', () => {
     expect($('#external-model-daily-cap-unit').textContent).toBe('元 / 天')
     expect($('#external-model-daily-cap-today').textContent).toBe('今天估算已花 ¥1.20')
     expect($<HTMLElement>('#external-model-daily-cap-today').hidden).toBe(false)
+  })
+})
+
+describe('looking up a model\'s price', () => {
+  it('fills the price in dollars for a model the list has, after the browser allows openrouter.ai', async () => {
+    const { $, choose, requestHostAccess, fetchPriceList } = setupForm()
+    choose('#external-model-provider', 'gemini')
+    $<HTMLInputElement>('#external-model-model-name').value = 'gemini-3.8-flash'
+    $<HTMLButtonElement>('#lookup-external-model-price').click()
+    await vi.waitFor(() => expect($<HTMLInputElement>('#external-model-price-input').value).toBe('0.825'))
+    expect(requestHostAccess).toHaveBeenCalledWith('https://openrouter.ai/api/v1/models')
+    expect(fetchPriceList).toHaveBeenCalledTimes(1)
+    expect($<HTMLInputElement>('#external-model-price-output').value).toBe('4.125')
+    expect($<HTMLSelectElement>('#external-model-price-currency').value).toBe('USD')
+    expect($('#external-model-daily-cap-unit').textContent).toBe('美元 / 天')
+    expect($('#external-model-price-status').textContent).toBe('已填入 OpenRouter 列出的「google/gemini-3.8-flash」价格（美元 / 百万 token），以服务商官网为准；用免费额度时实际不花钱。')
+  })
+
+  it('lets the user choose for a name such as gemini-flash-latest, and fills the one chosen', async () => {
+    const { $, choose } = setupForm()
+    choose('#external-model-provider', 'gemini')
+    $<HTMLInputElement>('#external-model-model-name').value = 'gemini-flash-latest'
+    $<HTMLButtonElement>('#lookup-external-model-price').click()
+    await vi.waitFor(() => expect($<HTMLSelectElement>('#external-model-price-choices').hidden).toBe(false))
+    const options = [...$<HTMLSelectElement>('#external-model-price-choices').options].map(option => option.textContent)
+    expect(options).toEqual(['选择对应的模型…', 'google/gemini-3.8-flash · $0.825 / $4.125', 'google/gemini-3.7-flash · $0.75 / $3.75'])
+    expect($('#external-model-price-status').textContent).toBe('价格表里没有「gemini-flash-latest」这个名字，它可能是别名；请选择它对应的模型。')
+    expect($<HTMLInputElement>('#external-model-price-input').value).toBe('')
+    choose('#external-model-price-choices', 'google/gemini-3.7-flash')
+    expect($<HTMLInputElement>('#external-model-price-input').value).toBe('0.75')
+    expect($<HTMLInputElement>('#external-model-price-output').value).toBe('3.75')
+  })
+
+  it('says to check the maker\'s own page for a maker that charges in yuan', async () => {
+    const { $, choose } = setupForm()
+    choose('#external-model-provider', 'deepseek')
+    $<HTMLInputElement>('#external-model-model-name').value = 'deepseek-chat'
+    $<HTMLButtonElement>('#lookup-external-model-price').click()
+    await vi.waitFor(() => expect($<HTMLInputElement>('#external-model-price-input').value).toBe('0.2574'))
+    expect($('#external-model-price-status').textContent).toContain('这家在国内按人民币计价，官网价格可能不同')
+  })
+
+  it('says why when there is no name, access is refused, or the list has nothing that fits', async () => {
+    const refused = setupForm({ requestHostAccess: async () => false })
+    refused.$<HTMLButtonElement>('#lookup-external-model-price').click()
+    expect(refused.$('#external-model-price-status').textContent).toBe('先填写模型名称')
+    refused.$<HTMLInputElement>('#external-model-model-name').value = 'gemini-3.8-flash'
+    refused.$<HTMLButtonElement>('#lookup-external-model-price').click()
+    await vi.waitFor(() => expect(refused.$('#external-model-price-status').textContent).toBe('需要你允许 OpenTeam 访问 openrouter.ai，才能查价格。'))
+    expect(refused.fetchPriceList).not.toHaveBeenCalled()
+
+    const { $, choose } = setupForm()
+    choose('#external-model-provider', 'qwen')
+    $<HTMLInputElement>('#external-model-model-name').value = 'qwen-max'
+    $<HTMLButtonElement>('#lookup-external-model-price').click()
+    await vi.waitFor(() => expect($('#external-model-price-status').textContent).toBe('价格表里没有找到「qwen-max」，请到服务商官网查价格。'))
   })
 })
 
