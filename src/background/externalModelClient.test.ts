@@ -3,7 +3,8 @@ import { createExternalModelClient, ExternalModelError, normalizeBaseUrl, normal
 import type { ExternalModelConfig } from '../group/types'
 import { streamText } from 'ai'
 
-vi.mock('ai', () => ({
+vi.mock('ai', async importOriginal => ({
+  ...(await importOriginal<typeof import('ai')>()),
   streamText: vi.fn(),
 }))
 
@@ -276,4 +277,58 @@ describe('ExternalModelClient Stability Baseline', () => {
     expect((rejection as ExternalModelError).status).toBe(408)
     await next
   })
+
+  describe('reading web pages', () => {
+    type ToolCall = { execute(input: { url: string }, options: unknown): Promise<string> }
+    const toolsOf = (call: number) => (vi.mocked(streamText).mock.calls[call][0] as { tools?: Record<string, ToolCall>; stopWhen?: unknown }).tools
+
+    it('offers a member a read_web_page tool that goes to OpenTeam\'s reader, for a few steps at most', async () => {
+      vi.mocked(streamText).mockReturnValueOnce(createMockStreamResult(['ok']))
+      const readWebPage = vi.fn(async (url: string) => `text of ${url}`)
+      for await (const _chunk of createExternalModelClient(mockFetch).stream!({ model: mockConfig, prompt: 'Hi', readWebPage })) { /* read */ }
+      const tools = toolsOf(0)!
+      expect(Object.keys(tools)).toEqual(['read_web_page'])
+      expect(await tools.read_web_page.execute({ url: 'https://example.com' }, {})).toBe('text of https://example.com')
+      expect((vi.mocked(streamText).mock.calls[0][0] as { stopWhen?: unknown }).stopWhen).toBeDefined()
+      // Without a reader, no tool.
+      vi.mocked(streamText).mockReturnValueOnce(createMockStreamResult(['ok']))
+      for await (const _chunk of createExternalModelClient(mockFetch).stream!({ model: mockConfig, prompt: 'Hi' })) { /* read */ }
+      expect(toolsOf(1)).toBeUndefined()
+    })
+
+    it('asks again without the tool when the provider does not take tools', async () => {
+      vi.mocked(streamText)
+        .mockReturnValueOnce({ ...createMockStreamResult([]), textStream: { async *[Symbol.asyncIterator]() { throw Object.assign(new Error('tools is not supported for this model'), { statusCode: 400 }) } } })
+        .mockReturnValueOnce(createMockStreamResult(['answer without tools']))
+      const chunks: string[] = []
+      for await (const chunk of createExternalModelClient(mockFetch).stream!({ model: mockConfig, prompt: 'Hi', readWebPage: async () => '' })) chunks.push(chunk)
+      expect(chunks).toEqual(['answer without tools'])
+      expect(toolsOf(0)).toBeDefined()
+      expect(toolsOf(1)).toBeUndefined()
+    })
+
+    it('does not time the request out while a page is being read (the user may be asked first)', async () => {
+      vi.mocked(streamText).mockImplementationOnce(((options: { tools: Record<string, ToolCall> }) => ({
+        ...createMockStreamResult([]),
+        textStream: {
+          async *[Symbol.asyncIterator]() {
+            yield 'Looking. '
+            yield await options.tools.read_web_page.execute({ url: 'https://example.com' }, {})
+          },
+        },
+      })) as never)
+      const readWebPage = () => new Promise<string>(resolve => setTimeout(() => resolve('Done.'), 120))
+      const chunks: string[] = []
+      for await (const chunk of createExternalModelClient(mockFetch, { timeoutMs: 40 }).stream!({ model: mockConfig, prompt: 'Hi', readWebPage })) chunks.push(chunk)
+      expect(chunks.join('')).toBe('Looking. Done.')
+    })
+
+    it('counts the tokens of every step', async () => {
+      vi.mocked(streamText).mockReturnValueOnce({ ...createMockStreamResult(['Hi']), usage: Promise.resolve({ inputTokens: 10, outputTokens: 1 }), totalUsage: Promise.resolve({ inputTokens: 900, outputTokens: 50 }) })
+      const onUsage = vi.fn()
+      for await (const _chunk of createExternalModelClient(mockFetch).stream!({ model: mockConfig, prompt: 'Hi', onUsage, readWebPage: async () => '' })) { /* read */ }
+      expect(onUsage).toHaveBeenCalledWith({ inputTokens: 900, outputTokens: 50, totalTokens: 950 })
+    })
+  })
 })
+

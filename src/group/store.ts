@@ -922,6 +922,7 @@ function normalizeExternalModelRecord(raw: unknown): Record<string, ExternalMode
       ...(fallbackModelName ? { fallbackModelName } : {}),
       ...(pricing ? { pricing } : {}),
       ...(dailyCap !== undefined ? { dailyCap } : {}),
+      ...(value.webReading === false ? { webReading: false } : {}),
       createdAt,
       updatedAt,
     }

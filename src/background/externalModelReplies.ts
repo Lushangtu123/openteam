@@ -6,6 +6,8 @@ import { takeMemoryProposals } from '../group/memoryProposals'
 import type { GroupChat, GroupMessage, GroupRole, MessageTokenUsage, OpenTeamStore } from '../group/types'
 import type { ExternalModelClient, ExternalModelCompletionInput } from './externalModelClient'
 import { QUOTA_EXHAUSTED_CODE } from './externalModelClient'
+import { normalizeLanguage } from '../shared/i18n'
+import type { ReadPage } from './webPageReader'
 import { SPEND_CAP_CODE } from '../group/spendCap'
 import type { ExternalPromptDelivery } from './rolePromptDelivery'
 import { mutateStore, requireChat, requireRole } from './storeAccess'
@@ -28,6 +30,8 @@ export async function sendExternalModelDelivery(deps: MessageHandlersDependencie
   const onUsage = (value: MessageTokenUsage) => { usage = value }
   let answeredByFallback: string | undefined
   const onFallback = (modelName: string) => { answeredByFallback = modelName }
+  // 读网页: the pages read for this reply, shown under it.
+  let readPages: ReadPage[] = []
   try {
     deps.log.info('external-model:send:start', {
       chatId: delivery.chatId,
@@ -45,6 +49,12 @@ export async function sendExternalModelDelivery(deps: MessageHandlersDependencie
     }
     replyMessageId = initialized.replyMessageId
     await deps.broadcastStoreUpdated(initialized.store)
+    const readWebPage = deps.webPageReader && delivery.model.format !== 'local-agent' && delivery.model.webReading !== false
+      ? deps.webPageReader.forReply(
+        { chatId: delivery.chatId, roleId: delivery.roleId, roleName: delivery.roleName ?? '' },
+        { english: normalizeLanguage(initialized.store.settings.language) === 'en', signal: controller.signal, onRead: page => readPages.push(page) },
+      )
+      : undefined
 
     const imageIds = delivery.imageAttachmentIds ?? []
     if (imageIds.length > 0 && !deps.imageAttachments?.loadUploads) throw new Error('当前环境不支持发送图片')
@@ -59,9 +69,10 @@ export async function sendExternalModelDelivery(deps: MessageHandlersDependencie
         content = ''
         usage = undefined
         answeredByFallback = undefined
+        readPages = []
         let updatedAt = Number.NEGATIVE_INFINITY
         const stream = typeof client.stream === 'function'
-          ? client.stream({ model: delivery.model, prompt: delivery.prompt, images, abortSignal: controller.signal, onUsage, onFallback, context })
+          ? client.stream({ model: delivery.model, prompt: delivery.prompt, images, abortSignal: controller.signal, onUsage, onFallback, context, ...(readWebPage ? { readWebPage } : {}) })
           : streamCompleteFallback(client, { model: delivery.model, prompt: delivery.prompt, images, abortSignal: controller.signal, onUsage, context })
         for await (const chunk of abortableChunks(stream, controller.signal)) {
           throwIfAborted(controller.signal)
@@ -105,7 +116,7 @@ export async function sendExternalModelDelivery(deps: MessageHandlersDependencie
     }
 
     // A web member's backup is named on its reply, as is an API model's own backup.
-    const finalized = await finishExternalAssistantReply(deps, delivery, replyMessageId, content, usage, answeredByFallback ?? delivery.answeredBy)
+    const finalized = await finishExternalAssistantReply(deps, delivery, replyMessageId, content, usage, answeredByFallback ?? delivery.answeredBy, readPages)
     if (finalized.ignored) {
       deps.log.warn('external-model:reply:ignored-stale', { chatId: delivery.chatId, roleId: delivery.roleId, messageId: delivery.messageId, reason: finalized.reason })
       return finalized.store
@@ -250,6 +261,7 @@ export async function finishExternalAssistantReply(
   content: string,
   usage?: MessageTokenUsage,
   answeredByFallback?: string,
+  readPages?: ReadPage[],
 ): Promise<{ ignored: true; reason: string; store: OpenTeamStore } | { ignored: false; store: OpenTeamStore }> {
   const timestamp = deps.now()
   const { store, result } = await mutateStore(store => {
@@ -268,6 +280,8 @@ export async function finishExternalAssistantReply(
       reply.modelId = delivery.model.id
       if (answeredByFallback) reply.answeredByFallback = answeredByFallback
       else delete reply.answeredByFallback
+      if (readPages?.length) reply.readPages = readPages.map(page => ({ url: page.url, title: page.title }))
+      else delete reply.readPages
       markChatHasNewMessage(store, chat)
 
       const userMessage = store.messagesById[delivery.messageId]

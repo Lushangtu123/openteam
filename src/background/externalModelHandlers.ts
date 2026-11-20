@@ -117,6 +117,8 @@ function readExternalModelInput(message: RuntimeMessage, id: string, createdAt: 
     modelName: requireString(message.modelName, '模型名称不能为空'),
     ...optionalFallback(message.fallbackModelName),
     ...optionalPricingAndCap(message.pricing, message.dailyCap),
+    // 读网页 is on unless switched off.
+    ...(message.webReading === false ? { webReading: false } : {}),
     createdAt,
     updatedAt,
   }

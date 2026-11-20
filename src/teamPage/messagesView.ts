@@ -474,6 +474,7 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     if (imageGrid) bubble.append(imageGrid)
     const fileList = attachmentsView.renderFileList(message)
     if (fileList) bubble.append(fileList)
+    if (message.readPages?.length) bubble.append(readPagesLine(message.readPages))
     const reviewSummary = renderOrchestrationReviewSummary(deps.getStore(), message)
     if (reviewSummary) bubble.append(reviewSummary)
     if (message.references?.length) bubble.append(referenceBox(message.references[0]))
@@ -935,6 +936,28 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
   }
 
   // options.text: a word shown beside the icon, for a button whose icon alone is not clear enough.
+  // 读网页: the pages an API member read for the reply, as links.
+  function readPagesLine(pages: NonNullable<GroupMessage['readPages']>): HTMLElement {
+    const line = document.createElement('div')
+    line.className = 'message-read-pages tiny'
+    const english = normalizeLanguage(deps.getStore().settings.language) === 'en'
+    const label = document.createElement('span')
+    label.className = 'message-read-pages-label'
+    label.textContent = english ? `Read ${pages.length} ${pages.length === 1 ? 'page' : 'pages'}: ` : `读了 ${pages.length} 个网页：`
+    line.append(label)
+    pages.forEach((page, index) => {
+      if (index > 0) line.append(document.createTextNode(english ? ', ' : '、'))
+      const link = document.createElement('a')
+      link.href = page.url
+      link.target = '_blank'
+      link.rel = 'noopener noreferrer'
+      link.title = page.url
+      link.textContent = page.title
+      line.append(link)
+    })
+    return line
+  }
+
   function createMessageIconButton(label: string, icon: MessageActionIcon, onClick: (button: HTMLButtonElement) => void, options: { activateOnPointerDown?: boolean; text?: string } = {}): HTMLButtonElement {
     const button = document.createElement('button')
     button.type = 'button'

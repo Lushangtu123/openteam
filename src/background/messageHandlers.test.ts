@@ -2599,6 +2599,90 @@ describe('background message handlers', () => {
     expect(response.store.messagesById['msg-2']).toMatchObject({ type: 'assistant', status: 'error' })
   })
 
+  it('lets an API member read web pages while it answers, keeping the pages it read on its reply, unless its model is switched off', async () => {
+    vi.resetModules()
+    const startingStore = createStoreWithReadyRole()
+    startingStore.settings.externalModelOrder = ['model-1']
+    startingStore.settings.externalModelsById = {
+      'model-1': {
+        id: 'model-1',
+        name: 'API 模型',
+        format: 'openai',
+        baseUrl: 'https://api.example.test/v1',
+        apiKey: 'sk-test',
+        modelName: 'local-chat-model',
+        createdAt: 1,
+        updatedAt: 1,
+      },
+    }
+    startingStore.rolesById['role-1'].modelSource = 'external'
+    startingStore.rolesById['role-1'].externalModelId = 'model-1'
+
+    let currentStore = structuredClone(startingStore)
+    vi.doMock('./storeAccess', async importOriginal => {
+      const actual = await importOriginal<typeof import('./storeAccess')>()
+      return {
+        ...actual,
+        mutateStore: vi.fn(async (mutator: (store: OpenTeamStore) => unknown) => {
+          const result = await mutator(currentStore)
+          currentStore = structuredClone(currentStore)
+          return { store: currentStore, result }
+        }),
+      }
+    })
+
+    const { createMessageHandlers } = await import('./messageHandlers')
+    const seen: Array<((url: string) => Promise<string>) | undefined> = []
+    const externalModelClient = {
+      complete: vi.fn(async () => ({ content: 'unused' })),
+      stream: vi.fn(async function* (input: { readWebPage?(url: string): Promise<string> }) {
+        seen.push(input.readWebPage)
+        if (input.readWebPage) await input.readWebPage('https://www.iea.org/report')
+        yield '读过了。'
+      }),
+    }
+    const webPageReader = {
+      forReply: vi.fn((_context: unknown, options: { onRead?(page: { url: string; title: string }): void }) => async (url: string) => {
+        options.onRead?.({ url, title: 'Electricity 2026' })
+        return 'page text'
+      }),
+    }
+    let messageIdSeq = 0
+    // What the page was shown while the request was sent again.
+    const shown: Array<OpenTeamStore['messagesById'][string] | undefined> = []
+    const routes = createMessageHandlers({
+      broadcastStoreUpdated: vi.fn((store: OpenTeamStore) => { shown.push(structuredClone(store.messagesById['msg-2'])) }),
+      externalModelClient,
+      webPageReader,
+      externalModelRetryDelaysMs: [0, 0, 0],
+      getChatStatusFromRoles: () => 'ready',
+      log: { debug: vi.fn(), info: vi.fn(), warn: vi.fn() },
+      newId: vi.fn((prefix: string) => prefix === 'msg' ? `${prefix}-${++messageIdSeq}` : `${prefix}-1`),
+      now: vi.fn(() => 100),
+      runtimeFrames: {
+        bind: vi.fn(),
+        getByAddress: vi.fn(),
+        getByRole: vi.fn(() => undefined),
+      },
+      sendRoleMessage: vi.fn(),
+      sendError: vi.fn(),
+      sendPrompt: vi.fn(),
+      waitForRetry: vi.fn(async () => undefined),
+    })
+
+    const sendRoute = routes.find(route => route.type === 'GROUP_MESSAGE_SEND')
+    const response = await sendRoute?.handler({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@all 用 API 回答' }, {}) as { store: OpenTeamStore }
+
+    expect(seen[0]).toBeDefined()
+    expect(webPageReader.forReply).toHaveBeenCalledWith(expect.objectContaining({ chatId: 'chat-1', roleId: 'role-1' }), expect.objectContaining({ english: expect.any(Boolean) }))
+    expect(response.store.messagesById['msg-2']).toMatchObject({ type: 'assistant', status: 'received', content: '读过了。', readPages: [{ url: 'https://www.iea.org/report', title: 'Electricity 2026' }] })
+
+    currentStore.settings.externalModelsById['model-1'].webReading = false
+    await sendRoute?.handler({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@all 再说一次' }, {})
+    expect(seen[1]).toBeUndefined()
+  })
+
+
   it('shows only the reason when a model is at its daily spending cap, offers to lift it, and does not ask again', async () => {
     vi.resetModules()
     const startingStore = createStoreWithReadyRole()

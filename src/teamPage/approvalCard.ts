@@ -1,11 +1,20 @@
 // What a local agent member waits on: a run to allow (with the whole task), or one of the agent's
-// actions. The buttons are the agent's own choices. The chat shows the cards, and so do windows that
+// actions. The buttons are the agent's own choices. An API member may also wait to read a page from
+// a new site (读网页): its 允许 asks the browser for that site first, from the click, as the browser
+// requires; if the browser is not allowed it, the answer is 不读. The chat shows the cards, and so do windows that
 // cover the chat while members reply (the team-formation card), so the question is never hidden.
 import type { GroupRole, PendingApproval } from '../group/types'
 
 export interface ApprovalCardDependencies {
   runCommand(type: string, payload?: Record<string, unknown>): Promise<void>
   showError(message: string): void
+  // Asks the browser to let OpenTeam reach a site (a host permission pattern).
+  requestSiteAccess?(site: string): Promise<boolean>
+}
+
+function requestSiteAccess(site: string): Promise<boolean> {
+  if (typeof chrome === 'undefined' || !chrome.permissions?.request) return Promise.resolve(false)
+  return chrome.permissions.request({ origins: [site] }).catch(() => false)
 }
 
 // One per place that shows the cards. A card is built once per question and reused while it waits,
@@ -69,7 +78,13 @@ function buildApprovalCard(chatId: string, role: GroupRole, approval: PendingApp
     button.textContent = option.label
     button.addEventListener('click', () => {
       for (const other of actions.querySelectorAll('button')) other.disabled = true
-      deps.runCommand('GROUP_LOCAL_AGENT_DECIDE', { chatId, roleId: role.id, approvalId: approval.id, optionId: option.id })
+      const allowSite = approval.kind === 'web-page' && allow && approval.site
+      // Asked from the click itself: the browser shows its prompt only for a user's click.
+      const decide = (optionId: string) => deps.runCommand('GROUP_LOCAL_AGENT_DECIDE', { chatId, roleId: role.id, approvalId: approval.id, optionId })
+      const answered = allowSite
+        ? (deps.requestSiteAccess ?? requestSiteAccess)(approval.site!).then(granted => decide(granted ? option.id : approval.options.find(other => !other.kind?.startsWith('allow'))?.id ?? option.id))
+        : decide(option.id)
+      answered
         .catch(error => {
           for (const other of actions.querySelectorAll('button')) other.disabled = false
           deps.showError(error instanceof Error ? error.message : String(error))

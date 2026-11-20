@@ -1242,6 +1242,88 @@ describe('team page messages view boundary', () => {
     expect(retryRoleReply).toHaveBeenCalledWith(role, message.id)
   })
 
+  it('lists the web pages an API member read under its reply, as links that open in a new tab', () => {
+    const now = Date.now()
+    const chat: GroupChat = {
+      id: 'chat-1',
+      name: '群聊',
+      mode: 'independent',
+      roleIds: ['role-1'],
+      messageIds: ['msg-assistant'],
+      nextMessageSeq: 2,
+      status: 'error',
+      createdAt: now,
+      updatedAt: now,
+    }
+    const role: GroupRole = {
+      id: 'role-1',
+      chatId: chat.id,
+      name: '工程师',
+      status: 'error',
+      chatSite: 'gemini',
+      contextCursor: 0,
+      createdAt: now,
+      updatedAt: now,
+    }
+    const message: GroupMessage = {
+      id: 'msg-assistant',
+      chatId: chat.id,
+      seq: 1,
+      type: 'assistant',
+      content: '根据 IEA 的报告，需求还在涨。',
+      readPages: [{ url: 'https://www.iea.org/report', title: 'Electricity 2026' }, { url: 'https://example.com/a', title: 'example.com' }],
+      contentFormat: 'markdown',
+      roleId: role.id,
+      roleName: role.name,
+      createdAt: now,
+      status: 'received',
+    }
+    const store: OpenTeamStore = {
+      ...createDefaultStore(),
+      currentChatId: chat.id,
+      chatOrder: [chat.id],
+      chatsById: { [chat.id]: chat },
+      rolesById: { [role.id]: role },
+      messagesById: { [message.id]: message },
+    }
+    store.settings.language = 'zh-CN'
+    const messagesEl = document.createElement('section')
+    const retryRoleReply = vi.fn(async () => undefined)
+
+    createMessagesView({
+      state: createTeamPageState(),
+      getStore: () => store,
+      messagesEl,
+      getCurrentChat: () => chat,
+      getCurrentRoles: () => [role],
+      getCurrentMessages: () => [message],
+      emptyCard: () => document.createElement('div'),
+      openAddPersonDialog: vi.fn(),
+      messageTitle: message => message.roleName ?? 'AI 成员',
+      focusRoleFrame: vi.fn(),
+      insertMention: vi.fn(),
+      setReference: vi.fn(),
+      resyncMessageReply: vi.fn(async () => undefined),
+      retryRoleReply,
+      stopRoleReply: vi.fn(async () => undefined),
+      runCommand: vi.fn(async () => undefined),
+      render: vi.fn(),
+      showError: vi.fn(),
+      showSuccess: vi.fn(),
+      log: { warn: vi.fn() },
+    }).renderMessages()
+
+    const list = messagesEl.querySelector('.message-read-pages')!
+    expect(list.querySelector('.message-read-pages-label')?.textContent).toBe('读了 2 个网页：')
+    const links = [...list.querySelectorAll('a')]
+    expect(links.map(link => [link.textContent, link.getAttribute('href'), link.target, link.rel])).toEqual([
+      ['Electricity 2026', 'https://www.iea.org/report', '_blank', 'noopener noreferrer'],
+      ['example.com', 'https://example.com/a', '_blank', 'noopener noreferrer'],
+    ])
+    expect(links[0].title).toBe('https://www.iea.org/report')
+    void retryRoleReply
+  })
+
   it('offers Keep using today under a reply refused at the spending cap, lifting the cap and asking again in one click', async () => {
     const now = Date.now()
     const chat: GroupChat = {

@@ -1030,6 +1030,19 @@ button.attachment-chip-meta:hover .attachment-chip-name {
   border-radius: 3px;
 }
 
+/* 读网页: the pages an API member read for its reply. */
+.message-read-pages {
+  margin-top: 6px;
+  color: var(--subtle);
+  overflow-wrap: anywhere;
+}
+
+.message-read-pages a {
+  color: var(--muted);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 /* Groups listed above the messages (Ctrl/⌘ K opens a group by its name). */
 .message-search-group-name {
   color: var(--text);

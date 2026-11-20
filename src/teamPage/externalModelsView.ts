@@ -55,6 +55,8 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
   const priceCurrencyEl = form.querySelector<HTMLSelectElement>('#external-model-price-currency')
   // 花费上限: at most this much a day, estimated from the price above.
   const dailyCapEl = form.querySelector<HTMLInputElement>('#external-model-daily-cap')
+  // 读网页: on unless switched off.
+  const webReadingEl = form.querySelector<HTMLInputElement>('#external-model-web-reading')
   const dailyCapUnitEl = form.querySelector<HTMLElement>('#external-model-daily-cap-unit')
   const dailyCapTodayEl = form.querySelector<HTMLElement>('#external-model-daily-cap-today')
   const lookupPriceEl = form.querySelector<HTMLButtonElement>('#lookup-external-model-price')
@@ -387,6 +389,7 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
           pricing: { input: priceInputEl?.value.trim() ?? '', output: priceOutputEl?.value.trim() ?? '', currency: priceCurrencyEl?.value ?? 'CNY' },
           // Empty removes the cap.
           dailyCap: dailyCapEl?.value.trim() ?? '',
+          webReading: webReadingEl?.checked ?? true,
         }
     if (format !== 'local-agent') await allowAccess(deps.externalModelBaseUrlEl.value)
     await deps.runCommand(modelId ? 'EXTERNAL_MODEL_UPDATE' : 'EXTERNAL_MODEL_CREATE', modelId ? { modelId, ...payload } : payload)
@@ -521,6 +524,7 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
     if (priceOutputEl) priceOutputEl.value = model.pricing ? String(model.pricing.output) : ''
     if (priceCurrencyEl) priceCurrencyEl.value = model.pricing?.currency ?? 'CNY'
     if (dailyCapEl) dailyCapEl.value = model.dailyCap !== undefined ? String(model.dailyCap) : ''
+    if (webReadingEl) webReadingEl.checked = model.webReading !== false
     showCapUnit()
     showSpentToday(model)
     clearPriceChoices()
@@ -545,6 +549,7 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
     if (priceOutputEl) priceOutputEl.value = ''
     if (priceCurrencyEl) priceCurrencyEl.value = 'CNY'
     if (dailyCapEl) dailyCapEl.value = ''
+    if (webReadingEl) webReadingEl.checked = true
     showCapUnit()
     showSpentToday(undefined)
     clearPriceChoices()

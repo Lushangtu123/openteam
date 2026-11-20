@@ -154,6 +154,8 @@ export interface ExternalModelConfig {
   pricing?: ModelPricing
   // The most it may spend a day, in the price's currency, as estimated from that price (花费上限).
   dailyCap?: number
+  // false: the model may not read web pages while it answers (读网页, on unless set to false).
+  webReading?: boolean
   // For a local agent: its ID in the daemon's agent list, and the folder it works in.
   localAgentId?: string
   workspace?: string
@@ -165,9 +167,12 @@ export interface ExternalModelConfig {
 // agent's actions (editing a file, running a command).
 export interface PendingApproval {
   id: string
-  kind: 'run' | 'permission'
+  // run / permission: a local agent's; web-page: an API member asks to read a page (webPageReader.ts).
+  kind: 'run' | 'permission' | 'web-page'
   title: string
   detail?: string
+  // For web-page: the site to allow, as a host permission pattern.
+  site?: string
   options: Array<{ id: string; label: string; kind?: string }>
   createdAt: number
 }
@@ -675,6 +680,8 @@ export interface GroupMessage {
   answeredByFallback?: string
   // A reply refused because this API model reached its daily spending cap: it offers 今天继续用.
   spendCapModelId?: string
+  // The web pages an API member read while it wrote this reply (读网页).
+  readPages?: Array<{ url: string; title: string }>
   // On a web member's reply its site kept saying it was still writing, with no new text for
   // STALLED_GENERATING_MS (src/content/replyObserver.ts): taken as it stood, so the chat goes on.
   stalledWhileGenerating?: boolean

@@ -1,4 +1,4 @@
-import { streamText } from 'ai'
+import { jsonSchema, stepCountIs, streamText, tool } from 'ai'
 import { createAnthropic } from '@ai-sdk/anthropic'
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import type { ExternalModelConfig } from '../group/types'
@@ -38,6 +38,9 @@ export interface ExternalModelCompletionInput {
   onFallback?(modelName: string): void
   // The member and message the reply is for (a local agent asks the user's approval on that member).
   context?: { chatId: string; roleId: string; messageId: string; roleName?: string }
+  // 读网页: given, the model may read web pages while it answers (src/background/webPageReader.ts).
+  // Resolves to the page's text, or why it was not read.
+  readWebPage?(url: string): Promise<string>
 }
 
 export interface ExternalModelUsage {
@@ -93,7 +96,7 @@ export function createExternalModelClient(fetchImpl: typeof fetch = fetch, optio
       try {
         let content = ''
         const normalizedUrl = normalizeBaseUrl(input.model.baseUrl, input.model.format)
-        const stream = streamExternalModel({ ...input, abortSignal: timeout.signal }, wrappedFetch)
+        const stream = streamExternalModel({ ...input, abortSignal: timeout.signal, ...pausingWhileReading(input, timeout) }, wrappedFetch)
         for await (const chunk of stream) {
           timeout.touch()
           content += chunk
@@ -146,7 +149,7 @@ async function* streamExternalModelWithTimeout(input: ExternalModelCompletionInp
   const timeout = createTimedAbortSignal(input.abortSignal, timeoutMs)
   try {
     // A group reply: OpenTeam's reply loop retries it and says so on the reply, so one attempt here.
-    for await (const chunk of streamExternalModel({ ...input, abortSignal: timeout.signal }, fetchImpl, 1)) {
+    for await (const chunk of streamExternalModel({ ...input, abortSignal: timeout.signal, ...pausingWhileReading(input, timeout) }, fetchImpl, 1)) {
       timeout.touch()
       yield chunk
     }
@@ -162,8 +165,24 @@ async function* streamExternalModelWithTimeout(input: ExternalModelCompletionInp
   }
 }
 
-// Aborts once `timeoutMs` pass without a touch().
-function createTimedAbortSignal(parentSignal: AbortSignal | undefined, timeoutMs: number): { signal: AbortSignal; touch(): void; clear(): void; timedOut(): boolean } {
+// The time without new text does not count while a page is read: the user may be asked first.
+function pausingWhileReading(input: ExternalModelCompletionInput, timeout: { pause(): void; touch(): void }): Pick<ExternalModelCompletionInput, 'readWebPage'> {
+  const read = input.readWebPage
+  if (!read) return {}
+  return {
+    async readWebPage(url) {
+      timeout.pause()
+      try {
+        return await read(url)
+      } finally {
+        timeout.touch()
+      }
+    },
+  }
+}
+
+// Aborts once `timeoutMs` pass without a touch(); pause() stops the clock until the next touch().
+function createTimedAbortSignal(parentSignal: AbortSignal | undefined, timeoutMs: number): { signal: AbortSignal; touch(): void; pause(): void; clear(): void; timedOut(): boolean } {
   const controller = new AbortController()
   let didTimeout = false
   const onTimeout = () => {
@@ -186,6 +205,9 @@ function createTimedAbortSignal(parentSignal: AbortSignal | undefined, timeoutMs
       clearTimeout(timeoutId)
       timeoutId = setTimeout(onTimeout, timeoutMs)
     },
+    pause() {
+      clearTimeout(timeoutId)
+    },
     clear() {
       clearTimeout(timeoutId)
       parentSignal?.removeEventListener('abort', abortFromParent)
@@ -201,6 +223,9 @@ function createTimedAbortSignal(parentSignal: AbortSignal | undefined, timeoutMs
 async function* streamExternalModel(input: ExternalModelCompletionInput, fetchImpl: typeof fetch, attempts = 3): AsyncIterable<string> {
   const maxRetries = attempts
   let attempt = 0
+  // Set once the provider refused the read_web_page tool: asked again without it.
+  let noTools = false
+  let sawText = false
 
   while (true) {
     try {
@@ -230,9 +255,12 @@ async function* streamExternalModel(input: ExternalModelCompletionInput, fetchIm
       // The text stream leaves errors out (an HTTP 500 just ends it empty); they arrive here, and
       // are thrown once the text ends, so the real reason and status reach the caller.
       let streamError: unknown
+      const tools = input.readWebPage && !noTools ? webPageTools(input.readWebPage) : undefined
       const result = streamText({
         model: provider(input.model.modelName as never),
         ...promptOrMessages(input),
+        // A page read is one step and the answer that follows another.
+        ...(tools ? { tools, stopWhen: stepCountIs(MAX_TOOL_STEPS) } : {}),
         abortSignal: input.abortSignal,
         maxRetries: 0,
         onError: ({ error }) => {
@@ -240,7 +268,6 @@ async function* streamExternalModel(input: ExternalModelCompletionInput, fetchIm
         },
       })
 
-      let sawText = false
       for await (const textPart of result.textStream) {
         if (!textPart) continue
         if (textPart.trim()) sawText = true
@@ -250,10 +277,15 @@ async function* streamExternalModel(input: ExternalModelCompletionInput, fetchIm
       // The AI library ends the text quietly when the request is aborted (a timeout, or the user).
       if (input.abortSignal?.aborted) throw new DOMException('Aborted', 'AbortError')
       if (!sawText) throw await emptyReplyError(result, answerStart, input.model.apiKey)
-      await reportUsage(result.usage, input.onUsage)
+      // Every step's tokens: a page read takes a step of its own.
+      await reportUsage(result.totalUsage ?? result.usage, input.onUsage)
       return
     } catch (error: any) {
       if (isAbortError(error)) throw error
+      if (input.readWebPage && !noTools && !sawText && isToolsRefused(error)) {
+        noTools = true
+        continue
+      }
       attempt++
       // The AI library reports the HTTP status as statusCode.
       const status = error.status || error.statusCode || error.response?.status
@@ -270,6 +302,30 @@ async function* streamExternalModel(input: ExternalModelCompletionInput, fetchIm
       await new Promise(resolve => setTimeout(resolve, delay))
     }
   }
+}
+
+const MAX_TOOL_STEPS = 5
+
+function webPageTools(readWebPage: (url: string) => Promise<string>) {
+  return {
+    read_web_page: tool({
+      description: 'Read the text of a web page (http or https). Use it to check or quote a specific page, such as a source you cite or a link in the conversation. The user may be asked to allow a site the first time; at most 3 pages per answer.',
+      inputSchema: jsonSchema<{ url: string }>({
+        type: 'object',
+        properties: { url: { type: 'string', description: 'The full address of the page, starting with https://' } },
+        required: ['url'],
+        additionalProperties: false,
+      }),
+      execute: async ({ url }) => readWebPage(url),
+    }),
+  }
+}
+
+// A provider or model that does not take tools says so with a 4xx about tools or functions.
+function isToolsRefused(error: any): boolean {
+  const status = error?.status || error?.statusCode || error?.response?.status
+  if (status !== undefined && status !== 400 && status !== 404 && status !== 422) return false
+  return /tool|function.?call/i.test(String(error?.message ?? '') + String(error?.responseBody ?? ''))
 }
 
 // Some servers send no usage; the reply is fine without it.

@@ -3,6 +3,7 @@ import { backgroundErrorForUser } from '../shared/connectionErrors'
 import { loadStore } from '../group/store'
 import { guardSpendCaps } from './spendCapGuard'
 import { createResultSender } from './resultSender'
+import { createWebPageReader } from './webPageReader'
 import { hostAccessPattern } from '../shared/hostAccess'
 import type { GroupChat, OpenTeamStore } from '../group/types'
 import { referencedImageIds } from '../group/backup'
@@ -87,6 +88,14 @@ const localAgentApprovals = createLocalAgentApprovals({
   now,
   mutateStore,
   broadcastStoreUpdated: store => broadcastStoreUpdated(store),
+})
+// 读网页: API members read pages as they answer; a new site waits on the user's answer, asked the way
+// local agents ask (webPageReader.ts).
+const webPageReader = createWebPageReader({
+  fetch: (url, init) => fetch(url, init),
+  hasAccess: pattern => chrome.permissions.contains({ origins: [pattern] }),
+  ask: (context, question, signal) => localAgentApprovals.ask(context, question, signal),
+  log,
 })
 const localAgentClient = createLocalAgentClient({
   control: {
@@ -386,7 +395,7 @@ const routeMessage = createMessageRouter([
   },
   ...createRoleHandlers({ broadcastStoreUpdated, externalModelClient, log, newId, now, runtimeFrames, sendPrompt }),
   ...createOrchestrationHandlers({ broadcastStoreUpdated, broadcastAutoGenerateStream, externalModelClient, getChatStatusFromRoles, log, newId, now, promptDeliveryLimiter, requestRoleRecovery, runtimeFrames, sendPrompt }),
-  ...createMessageHandlers({ broadcastStoreUpdated, checkLinks: urls => checkLinks(urls, { fetch: (url, init) => fetch(url, init), hasAccess: pattern => chrome.permissions.contains({ origins: [pattern] }), now }), externalModelClient, getChatStatusFromRoles, imageAttachments, log, newId, now, onPromptSettled: (store, chatId, promptMessageId) => Promise.all([notifyWhenAnswered(store, chatId, promptMessageId), resultSender.onPromptSettled(store, chatId, promptMessageId)]), promptDeliveryLimiter, requestRoleRecovery, runtimeFrames, sendError, sendPrompt, sendRoleMessage }),
+  ...createMessageHandlers({ webPageReader, broadcastStoreUpdated, checkLinks: urls => checkLinks(urls, { fetch: (url, init) => fetch(url, init), hasAccess: pattern => chrome.permissions.contains({ origins: [pattern] }), now }), externalModelClient, getChatStatusFromRoles, imageAttachments, log, newId, now, onPromptSettled: (store, chatId, promptMessageId) => Promise.all([notifyWhenAnswered(store, chatId, promptMessageId), resultSender.onPromptSettled(store, chatId, promptMessageId)]), promptDeliveryLimiter, requestRoleRecovery, runtimeFrames, sendError, sendPrompt, sendRoleMessage }),
 ])
 
 // Replies their members can no longer give, ended at these moments (see interruptedReplies.ts).
