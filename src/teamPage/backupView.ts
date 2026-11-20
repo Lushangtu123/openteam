@@ -79,6 +79,10 @@ export function createBackupView(deps: BackupViewDependencies): BackupView {
     // A fresh copy from the background, which owns the data.
     const response = await deps.sendRuntimeMessage('GROUP_STORE_GET')
     if (response.ok === false || !response.store) throw new Error(response.error || ui('读取群聊数据失败'))
+    // 群资料库: the store comes without the documents' text; the backup has it.
+    const library = await deps.sendRuntimeMessage('LIBRARY_EXPORT') as { ok?: boolean; error?: string; libraryByChatId?: OpenTeamStore['libraryByChatId'] }
+    if (library.ok === false) throw new Error(library.error || ui('读取资料库失败'))
+    if (library.libraryByChatId) response.store = { ...response.store, libraryByChatId: library.libraryByChatId }
     const images: BackupImage[] = []
     for (const id of referencedImageIds(response.store)) {
       const record = await deps.images.get(id).catch(() => undefined)

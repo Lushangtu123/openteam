@@ -1,5 +1,6 @@
 // What members' pages report: that they are ready, that a prompt went out, their state and health,
 // the reply as it is written and when it is done, and errors. Also replies cut off when pages closed.
+import { confirmLibrarySent, forgetLibrarySent } from '../group/groupLibrary'
 import { misreadReplyReason } from '../group/misreadReply'
 import { updateUserMessageDeliveryStatus } from '../group/deliveryStatus'
 import { confirmMemorySent, forgetMemorySent } from '../group/memoryPrompt'
@@ -167,6 +168,7 @@ export function createMemberPageHandlers(ctx: MessageHandlerContext) {
         role.contextCursor = 0
         role.conversationStartedAfterSeq = chat.nextMessageSeq - 1
         forgetMemorySent(role)
+        forgetLibrarySent(role)
       } else {
         updateConversation(role, conversationUrl, readOptionalString(message.conversationId))
       }
@@ -203,6 +205,7 @@ export function createMemberPageHandlers(ctx: MessageHandlerContext) {
       if (userMessage) role.contextCursor = Math.max(role.contextCursor, userMessage.seq)
       // The site has the prompt, and with it the memory items it carried.
       confirmMemorySent(role, messageId)
+      confirmLibrarySent(role, messageId)
       role.updatedAt = deps.now()
       chat.updatedAt = role.updatedAt
     })

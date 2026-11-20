@@ -1,3 +1,4 @@
+import { libraryPassagesForPrompt, noteLibraryPending, withLibraryBlock } from '../group/groupLibrary'
 import { buildUnsyncedContext } from '../group/contextSync'
 import { contextCharBudgetForRole } from '../group/contextBudget'
 import { buildExternalModelPrompt, type ExternalMemoryPatch } from '../group/externalModelContext'
@@ -81,7 +82,9 @@ export function prepareRolePromptDelivery(input: PrepareRolePromptDeliveryInput)
   const memoryItems = memoryItemsForPrompt({ store: input.store, chat: input.chat, role: input.role, message: input.userMessage, reference: input.reference })
   // With the user's switch on, the same requests are told how to propose something to remember.
   const asksForProposals = wantsMemoryProposals(input.store.settings, input.chat, input.userMessage)
-  const withAdditions = (prompt: string) => withTeamHandbook(withMemoryProposalInstruction(withMemoryBlock(prompt, memoryItems, language), asksForProposals, language), input.chat, language)
+  // 群资料库: the passages of the group's library this request brings up (groupLibrary.ts).
+  const libraryPassages = libraryPassagesForPrompt({ store: input.store, chat: input.chat, role: input.role, message: input.userMessage })
+  const withAdditions = (prompt: string) => withTeamHandbook(withMemoryProposalInstruction(withLibraryBlock(withMemoryBlock(prompt, memoryItems, language), libraryPassages, language), asksForProposals, language), input.chat, language)
 
   if (isExternalModelRole(input.role)) {
     const model = requireExternalModelForRole(input.store, input.role)
@@ -110,6 +113,7 @@ export function prepareRolePromptDelivery(input: PrepareRolePromptDeliveryInput)
   if (!binding?.ready) throw new Error('成员 iframe 尚未就绪，请先恢复成员')
   // A web member's site conversation keeps what it is sent: see memoryPrompt.ts.
   noteMemoryPending(input.role, input.userMessage.id, memoryItems)
+  noteLibraryPending(input.role, input.userMessage.id, libraryPassages)
   const unsyncedContext = buildUnsyncedContext(input.chat, input.role, input.messages, input.userMessage, maxContextChars, input.store.settings.language)
   const content = summary ?? buildPrompt({
     chat: input.chat,

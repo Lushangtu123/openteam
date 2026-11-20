@@ -1,3 +1,5 @@
+import { withoutLibraryText } from '../group/groupLibrary'
+import { createLibraryHandlers } from './libraryHandlers'
 import { isChatSite } from '../group/chatSites'
 import { backgroundErrorForUser } from '../shared/connectionErrors'
 import { loadStore } from '../group/store'
@@ -181,9 +183,10 @@ function newId(prefix: string): string {
   return `${prefix}-${cryptoApi?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`}`
 }
 
+// The page gets the store without the library's text (groupLibrary.ts): it can be megabytes.
 async function broadcastStoreUpdated(store: OpenTeamStore, excludeTabId?: number): Promise<void> {
   cachedLanguage = store.settings.language
-  await broadcastRuntimeStoreUpdated(store, { excludeTabId })
+  await broadcastRuntimeStoreUpdated(withoutLibraryText(store), { excludeTabId })
 }
 
 
@@ -265,7 +268,8 @@ function logBackgroundFailure(event: string, error: unknown, details: Record<str
 
 function sendResponseSafely(sendResponse: (response?: unknown) => void, response: unknown): void {
   try {
-    sendResponse(response)
+    const store = (response as { store?: OpenTeamStore } | undefined)?.store
+    sendResponse(store && typeof store === 'object' ? { ...(response as object), store: withoutLibraryText(store) } : response)
   } catch (error) {
     logBackgroundFailure('message-response:failed', error)
   }
@@ -378,6 +382,7 @@ const routeMessage = createMessageRouter([
   ...createSiteUsageHandlers({ broadcastStoreUpdated, log }),
   ...accountBalances.routes,
   ...resultSender.routes,
+  ...createLibraryHandlers({ broadcastStoreUpdated: store => broadcastStoreUpdated(store), newId, now }),
   ...createSiteCheckHandlers({ route: message => Promise.resolve(routeMessage(message, {})), broadcastStoreUpdated, runtimeFrames, waitFor: ms => new Promise(resolve => globalThis.setTimeout(resolve, ms)), now }),
   ...createExternalModelHandlers({ broadcastStoreUpdated, externalModelClient, checkLocalAgent, newId, now }),
   { type: 'LOCAL_AGENT_LIST', handler: async () => ({ ok: true, agents: await listLocalAgents() }) },

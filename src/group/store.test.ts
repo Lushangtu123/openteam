@@ -74,6 +74,7 @@ describe('group store', () => {
       siteUsageBySite: {},
       accountBalancesById: {},
       modelSpendById: {},
+      libraryByChatId: {},
       settings: {
         defaultMode: 'independent',
         maxContextChars: 6000,
@@ -752,6 +753,27 @@ describe('group store', () => {
     const loaded = await loadStore()
     expect(loaded.memoryOrder).toEqual(['memory-2', 'memory-1'])
     expect(loaded.memoryItemsById).toEqual(store.memoryItemsById)
+  })
+
+  it('keeps a group\'s library under a key of its own, out of the group\'s document, and drops it with the group', async () => {
+    const store = createDefaultStore()
+    store.chatsById['chat-1'] = { id: 'chat-1', name: '产品群', mode: 'collaborative', roleIds: [], messageIds: [], nextMessageSeq: 1, status: 'ready', createdAt: 1, updatedAt: 1 }
+    store.chatOrder = ['chat-1']
+    const doc = { id: 'doc-1', title: '需求文档', kind: 'file' as const, source: '需求.md', text: '预算提醒在八成时推送。', chars: 11, addedAt: 5 }
+    store.libraryByChatId = { 'chat-1': [doc] }
+
+    await saveStore(store)
+
+    expect(stored['openteam.library.chat-1']).toEqual({ version: 1, docs: [doc] })
+    expect(JSON.stringify(stored['openteam.chat.chat-1'])).not.toContain('预算提醒')
+    expect(JSON.stringify(stored[META_STORE_KEY])).not.toContain('预算提醒')
+    expect((await loadStore()).libraryByChatId).toEqual({ 'chat-1': [doc] })
+
+    const draft = await loadStore()
+    delete draft.chatsById['chat-1']
+    draft.chatOrder = []
+    await saveStore(draft)
+    expect(stored['openteam.library.chat-1']).toBeUndefined()
   })
 
   it('loads a store saved before the memory store existed with no memory items', async () => {

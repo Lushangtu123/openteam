@@ -1,6 +1,6 @@
 // Line icons for buttons built in code, drawn like the ones in team.html (24-unit box, stroked with
 // the text color). Buttons use these instead of symbol characters such as × or ↻.
-export type IconName = 'close' | 'refresh' | 'external' | 'more' | 'prompt' | 'trash' | 'plus' | 'minus' | 'copy' | 'quote' | 'check' | 'stop' | 'retry' | 'edit' | 'download' | 'compare' | 'flag' | 'summary' | 'memory' | 'poll' | 'globe'
+export type IconName = 'close' | 'refresh' | 'external' | 'more' | 'prompt' | 'trash' | 'plus' | 'minus' | 'copy' | 'quote' | 'check' | 'stop' | 'retry' | 'edit' | 'download' | 'compare' | 'flag' | 'summary' | 'memory' | 'poll' | 'globe' | 'library'
 
 const PATHS: Record<IconName, string[]> = {
   close: ['M6.5 6.5l11 11', 'M17.5 6.5l-11 11'],
@@ -23,6 +23,7 @@ const PATHS: Record<IconName, string[]> = {
   summary: ['M5 6.5h14', 'M5 11h14', 'M5 15.5h9', 'M5 20h5'],
   memory: ['M7.5 4.5h9A1.5 1.5 0 0 1 18 6v13.5l-6-4-6 4V6a1.5 1.5 0 0 1 1.5-1.5Z'],
   poll: ['M4.5 19.5h15', 'M7 19.5v-6', 'M12 19.5V5', 'M17 19.5v-9'],
+  library: ['M5 5h3.5v14H5Z', 'M10.25 5h3.5v14h-3.5Z', 'M15.4 6.1l3.3-.9 3 13.3-3.3.9Z'],
   globe: ['M12 3.5a8.5 8.5 0 1 0 0 17a8.5 8.5 0 1 0 0-17Z', 'M3.5 12h17', 'M12 3.5c2.2 2.4 3.3 5.2 3.3 8.5s-1.1 6.1-3.3 8.5', 'M12 3.5c-2.2 2.4-3.3 5.2-3.3 8.5s1.1 6.1 3.3 8.5'],
 }
 

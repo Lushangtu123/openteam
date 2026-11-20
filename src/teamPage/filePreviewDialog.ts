@@ -21,6 +21,8 @@ export interface FilePreviewOptions {
   onClose?(): void
   // Keeps an edit; resolves to why it cannot be kept, if it cannot. Without it the file is read-only.
   onSave?(text: string): string | undefined | Promise<string | undefined>
+  // 群资料库: keeps the file in the group's library; resolves to why not, if it could not.
+  onAddToLibrary?(): Promise<string | undefined>
 }
 
 export function openFilePreview(source: PreviewFile, options: FilePreviewOptions): { close(): void } {
@@ -65,6 +67,8 @@ export function openFilePreview(source: PreviewFile, options: FilePreviewOptions
   const actions = element('div', 'team-setup-actions file-preview-actions')
   const download = button(t('下载', 'Download'), 'download', () => downloadFile(file))
   const edit = button(t('编辑', 'Edit'), 'edit', () => startEditing())
+  // 群资料库: the file kept as the group's material.
+  const toLibrary = button(t('存入资料库', 'Save to library'), 'library', () => void addToLibrary())
   const done = button(t('关闭', 'Close'), undefined, () => close(), 'btn btn-primary')
   const cancelEdit = button(t('取消编辑', 'Cancel editing'), undefined, () => stopEditing())
   const save = button(t('保存', 'Save'), undefined, () => void saveEdit(), 'btn btn-primary')
@@ -91,7 +95,7 @@ export function openFilePreview(source: PreviewFile, options: FilePreviewOptions
     body.hidden = false
     editor.hidden = true
     error.textContent = ''
-    actions.replaceChildren(download, ...(options.onSave ? [edit] : []), done)
+    actions.replaceChildren(download, ...(options.onSave ? [edit] : []), ...(options.onAddToLibrary ? [toLibrary] : []), done)
   }
 
   function startEditing(): void {
@@ -139,7 +143,18 @@ export function openFilePreview(source: PreviewFile, options: FilePreviewOptions
     else close()
   }
 
-  function button(label: string, icon: 'download' | 'edit' | undefined, run: () => void, className = 'btn'): HTMLButtonElement {
+  async function addToLibrary(): Promise<void> {
+    toLibrary.disabled = true
+    const refused = await options.onAddToLibrary!().catch((caught: unknown) => caught instanceof Error ? caught.message : String(caught))
+    if (refused) {
+      error.textContent = refused
+      toLibrary.disabled = false
+      return
+    }
+    toLibrary.replaceChildren(createIcon('check'), element('span', '', t('已存入资料库', 'Saved to library')))
+  }
+
+  function button(label: string, icon: 'download' | 'edit' | 'library' | undefined, run: () => void, className = 'btn'): HTMLButtonElement {
     const node = element('button', className)
     node.type = 'button'
     if (icon) node.append(createIcon(icon))

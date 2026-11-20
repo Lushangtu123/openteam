@@ -54,6 +54,7 @@ function setup(options: { confirm?: boolean } = {}) {
   }
   const sendRuntimeMessage = vi.fn(async (type: string, _payload?: Record<string, unknown>) => {
     if (type === 'GROUP_STORE_GET') return { ok: true, store }
+    if (type === 'LIBRARY_EXPORT') return { ok: true, libraryByChatId: { 'chat-1': [{ id: 'doc-1', title: '需求文档', kind: 'file', text: '预算提醒在八成时推送。', chars: 11, addedAt: 1 }] } }
     return { ok: true, store, restored: { addedChatIds: ['chat-2'], skippedChatIds: ['chat-1'] } }
   })
   const includeApiKeysEl = document.createElement('input')
@@ -110,6 +111,14 @@ describe('team page backup', () => {
     deps.includeApiKeysEl.checked = true
     await view.exportBackup()
     expect(await readBlob(downloads[1].blob)).toContain('sk-secret')
+  })
+
+  it('puts the group library\'s text into the backup, which the page\'s copy of the data does not have', async () => {
+    const { view, downloads, sendRuntimeMessage } = setup()
+    expect(await view.exportBackup()).toBe(true)
+    expect(sendRuntimeMessage).toHaveBeenCalledWith('LIBRARY_EXPORT')
+    const file = JSON.parse(await readBlob(downloads[0].blob))
+    expect(file.store.libraryByChatId['chat-1'][0]).toMatchObject({ title: '需求文档', text: '预算提醒在八成时推送。' })
   })
 
   it('merges a backup: writes its images, then asks the background to restore it', async () => {

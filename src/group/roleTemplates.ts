@@ -1,3 +1,4 @@
+import { forgetLibrarySent } from './groupLibrary'
 import { forgetMemorySent } from './memoryPrompt'
 import { deleteMemoryForRole } from './memoryStore'
 import { normalizeChatGptGptsUrl, normalizeGrokProjectUrl } from './conversationUrl'
@@ -321,6 +322,7 @@ export function updateGroupRole(
     // Another model or site: a conversation that has been sent nothing, the persona included.
     role.conversationStartedAfterSeq = chat.nextMessageSeq - 1
     forgetMemorySent(role)
+    forgetLibrarySent(role)
     role.status = 'pending'
     delete role.geminiConversationId
     delete role.geminiConversationUrl

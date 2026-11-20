@@ -8,6 +8,7 @@ import { normalizeAccountBalances, type AccountBalance } from './accountBalance'
 import { readModelPricing } from './pricing'
 import { normalizeModelSpend, readDailyCap, type ModelSpend } from './spendCap'
 import { normalizeResultDestinations } from './resultDestinations'
+import { normalizeLibraryRecord } from './groupLibrary'
 import {
   DEFAULT_ORCHESTRATION_MAX_NODE_EXECUTIONS,
   DEFAULT_ORCHESTRATION_MAX_ROUNDS,
@@ -30,6 +31,10 @@ export const MESSAGE_CHUNK_KEY_PREFIX = 'openteam.messages.'
 export const MEMORY_STORE_KEY = 'openteam.memory.v1'
 export const MEMORY_DOCUMENT_VERSION = 1
 export const STORE_WRITER_KEY = 'openteam.storeWriter'
+// 群资料库: a group's documents, text included, under a key of their own, so that they are
+// rewritten only when the library changes. The key is absent while the group has none.
+export const LIBRARY_KEY_PREFIX = 'openteam.library.'
+export const LIBRARY_DOCUMENT_VERSION = 1
 export const CURRENT_STORE_VERSION = 7
 export const MESSAGE_CHUNK_SIZE = 100
 
@@ -131,6 +136,7 @@ export function createDefaultStore(): OpenTeamStore {
     siteUsageBySite: {},
     accountBalancesById: {},
     modelSpendById: {},
+    libraryByChatId: {},
     settings: defaultSettings(),
     viewState: {
       chatReadSeqById: {},
@@ -255,6 +261,7 @@ function normalizeStore(raw: unknown): OpenTeamStore {
     siteUsageBySite: normalizeSiteUsageRecord(raw.siteUsageBySite),
     accountBalancesById: normalizeAccountBalances(raw.accountBalancesById),
     modelSpendById: normalizeModelSpend(raw.modelSpendById),
+    libraryByChatId: normalizeLibraryRecord(raw.libraryByChatId),
     settings: normalizeSettings(raw.settings, storedVersion),
     viewState: normalizeViewState(raw.viewState),
   }
@@ -288,8 +295,9 @@ async function readV2Items(rawMeta: unknown, rawMemory: unknown): Promise<Map<st
   }
 
   const chunkKeys = chatDocuments.flatMap(document => document.messageChunkIds.map(chunkId => messageChunkStorageKey(document.chat.id, chunkId)))
-  const chunkResult = chunkKeys.length > 0 ? await chrome.storage.local.get(chunkKeys) : {}
-  for (const key of chunkKeys) {
+  const libraryKeys = chatDocuments.map(document => libraryStorageKey(document.chat.id))
+  const chunkResult = chunkKeys.length + libraryKeys.length > 0 ? await chrome.storage.local.get([...chunkKeys, ...libraryKeys]) : {}
+  for (const key of [...chunkKeys, ...libraryKeys]) {
     if (chunkResult[key] !== undefined) items.set(key, chunkResult[key])
   }
   return items
@@ -331,6 +339,9 @@ function assembleV2Store(items: Map<string, unknown>): OpenTeamStore {
   for (const document of chatDocuments) {
     store.chatsById[document.chat.id] = { ...document.chat, messageIds: [] }
     store.rolesById = { ...store.rolesById, ...document.rolesById }
+    const library = items.get(libraryStorageKey(document.chat.id))
+    const docs = isRecord(library) ? normalizeLibraryRecord({ [document.chat.id]: library.docs })[document.chat.id] : undefined
+    if (docs) store.libraryByChatId = { ...(store.libraryByChatId ?? {}), [document.chat.id]: docs }
 
     for (const chunkId of document.messageChunkIds) {
       const chunk = normalizeMessageChunk(items.get(messageChunkStorageKey(document.chat.id, chunkId)))
@@ -387,6 +398,8 @@ function buildStorageItems(store: OpenTeamStore): Record<string, unknown> {
 
     const rolesById = collectChatRoles(store, chat)
     const messages = collectChatMessages(store, chat, messagesByChatId.get(chatId) ?? [])
+    const libraryDocs = normalizeLibraryRecord({ [chatId]: store.libraryByChatId?.[chatId] ?? [] })[chatId]
+    if (libraryDocs) items[libraryStorageKey(chatId)] = { version: LIBRARY_DOCUMENT_VERSION, docs: libraryDocs }
     const messageChunkIds: string[] = []
 
     messages.forEach((_, index) => {
@@ -425,6 +438,7 @@ async function findStaleStorageKeys(activeKeys: Set<string>): Promise<string[]> 
     || key === MEMORY_STORE_KEY
     || key.startsWith(CHAT_KEY_PREFIX)
     || key.startsWith(MESSAGE_CHUNK_KEY_PREFIX)
+    || key.startsWith(LIBRARY_KEY_PREFIX)
   ) && !activeKeys.has(key))
 }
 
@@ -477,6 +491,7 @@ function isStoreStorageKey(key: string): boolean {
     || key === STORE_WRITER_KEY
     || key.startsWith(CHAT_KEY_PREFIX)
     || key.startsWith(MESSAGE_CHUNK_KEY_PREFIX)
+    || key.startsWith(LIBRARY_KEY_PREFIX)
 }
 
 // Compares values the way chrome.storage stores them: properties set to undefined are not stored.
@@ -813,6 +828,10 @@ function chunkIdForIndex(index: number): string {
 
 export function chatStorageKey(chatId: string): string {
   return `${CHAT_KEY_PREFIX}${chatId}`
+}
+
+function libraryStorageKey(chatId: string): string {
+  return `${LIBRARY_KEY_PREFIX}${chatId}`
 }
 
 export function messageChunkStorageKey(chatId: string, chunkId: string): string {

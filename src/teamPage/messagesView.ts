@@ -28,7 +28,7 @@ import { capBlocks } from '../group/spendCap'
 import type { TeamPageState } from './appState'
 import { buildChatRenderItems, getChatStartupNotice, getStoppedReplyRoles, getVisibleThinkingRoles, THINKING_TIMEOUT_MS } from './chatExperience'
 
-type MessageActionIcon = 'copy' | 'quote' | 'jump' | 'check' | 'stop' | 'retry' | 'download' | 'edit' | 'memory'
+type MessageActionIcon = 'copy' | 'quote' | 'jump' | 'check' | 'stop' | 'retry' | 'download' | 'edit' | 'memory' | 'library'
 
 const MAX_CACHED_MESSAGE_NODES = 400
 const COPY_FEEDBACK_MS = 1200
@@ -63,6 +63,9 @@ export interface MessagesViewDependencies {
   rememberProposal?(message: GroupMessage, proposal: MemoryProposal, opener: HTMLElement): void
   // Opens that window on a round summary's agreed points, to keep them as the user's decision.
   adoptSummary?(message: GroupMessage, opener: HTMLElement): void
+  // 群资料库: keeps a message's text, or an attached file's, in the group's library.
+  saveToLibrary?(message: GroupMessage, button: HTMLButtonElement): void
+  saveFileToLibrary?(file: { fileName: string; text: string }): Promise<string | undefined>
   // Answers a choice at the end of a member's reply.
   answerChoice?(role: GroupRole, choice: ReplyChoice): void
   insertTextIntoActiveNote?(text: string): void
@@ -132,7 +135,10 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     showError: deps.showError,
     resync: message => handleResyncMessage(message),
     iconButton: (label, icon, onClick) => createMessageIconButton(label, icon, onClick),
-    previewFile: file => openFilePreview(file, { english: normalizeLanguage(deps.getStore().settings.language) === 'en' }),
+    previewFile: file => openFilePreview(file, {
+      english: normalizeLanguage(deps.getStore().settings.language) === 'en',
+      ...(deps.saveFileToLibrary ? { onAddToLibrary: () => deps.saveFileToLibrary!(file) } : {}),
+    }),
   })
   let timeDividers = new Map<string, HTMLElement>()
   // Vote cards by vote message id, with the signature they were drawn for.
@@ -507,6 +513,8 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
         tools.append(createMessageIconButton('复制回复', 'copy', button => handleCopyMessage(button, message)))
         // A finished reply only: one still being written or one that failed is not worth keeping.
         if (deps.rememberMessage && message.status === 'received') tools.append(createMessageIconButton('记住这条', 'memory', button => deps.rememberMessage?.(message, button)))
+        // 群资料库: a finished reply kept as material for every later question.
+        if (deps.saveToLibrary && message.status === 'received') tools.append(createMessageIconButton('存入资料库', 'library', button => deps.saveToLibrary?.(message, button)))
         // A round's summary can be kept as a decision every member of the group gets.
         if (deps.adoptSummary && message.status === 'received' && isRoundSummaryReply(message)) {
           tools.append(createMessageIconButton('采纳为决定', 'check', button => deps.adoptSummary?.(message, button), { text: '采纳' }))
@@ -520,6 +528,7 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
       tools.className = 'message-tools'
       if (deps.editAndResend) tools.append(createMessageIconButton('编辑后重新发送', 'edit', () => deps.editAndResend?.(message)))
       if (deps.rememberMessage) tools.append(createMessageIconButton('记住这条', 'memory', button => deps.rememberMessage?.(message, button)))
+      if (deps.saveToLibrary) tools.append(createMessageIconButton('存入资料库', 'library', button => deps.saveToLibrary?.(message, button)))
       bubble.append(tools)
     }
 

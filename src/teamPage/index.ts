@@ -15,6 +15,9 @@ import { currentScheduledTasksDialog } from './scheduledTasksDialog'
 import { openPollDialog } from './pollDialog'
 import { openWebPagesDialog } from './webPagesDialog'
 import { openFilePreview } from './filePreviewDialog'
+import { currentLibraryDialog, openLibraryDialog } from './libraryDialog'
+import { readDocumentText } from './documentText'
+import { documentFormat } from '../group/messageUploads'
 import { currentUsageDialog, openUsageDialog } from './usageDialog'
 import { createComposerAttachments } from './composerAttachments'
 import { createComposerView } from './composerView'
@@ -301,6 +304,7 @@ const chatListView = createChatListView({
   runCommand,
   log,
   showError,
+  openLibrary: chatId => openLibrary(chatId),
 })
 const renderChatList = chatListView.renderChatList
 const switchChat = chatListView.switchChat
@@ -561,6 +565,8 @@ const messagesView = createMessagesView({
   insertMention,
   setReference,
   editAndResend: message => composerView.editMessage(message),
+  saveToLibrary: (message, button) => void saveMessageToLibrary(message, button),
+  saveFileToLibrary: file => saveFileToLibrary(file),
   rememberMessage: (message, opener) => openMemoryDialog({ message, chatId: message.chatId }, { getStore: () => store, runCommand, onClose: () => { if (opener.isConnected) opener.focus() } }),
   adoptSummary: (message, opener) => openMemoryDialog({ message, adopt: true, chatId: message.chatId }, { getStore: () => store, runCommand, onClose: () => { if (opener.isConnected) opener.focus() } }),
   rememberProposal: (message, proposal, opener) => openMemoryDialog({ message, proposal, chatId: message.chatId }, { getStore: () => store, runCommand, onClose: () => { if (opener.isConnected) opener.focus() } }),
@@ -766,6 +772,84 @@ teamDomRefs.attachPagesEl.addEventListener('click', () => {
   })
 })
 
+// 群资料库 (libraryDialog.ts, src/group/groupLibrary.ts).
+function openLibrary(chatId: string): void {
+  const english = () => normalizeLanguage(store.settings.language) === 'en'
+  openLibraryDialog(chatId, {
+    getStore: () => store,
+    runCommand,
+    async request(type, payload) {
+      const response = await sendRuntimeMessage(type, payload) as Record<string, unknown> & { ok?: boolean; error?: string }
+      if (response.ok === false) throw new Error(response.error || translateUi('操作失败', normalizeLanguage(store.settings.language)))
+      return response
+    },
+    readFile: readLibraryFile,
+    pickPages: () => new Promise((resolve, reject) => {
+      let picked = false
+      openWebPagesDialog({
+        english: english(),
+        listTabs: async () => (await chrome.tabs.query({ currentWindow: true })).flatMap(tab => tab.id !== undefined && tab.url ? [{ id: tab.id, url: tab.url, title: tab.title ?? '' }] : []),
+        requestAccess: patterns => chrome.permissions.request({ origins: patterns }),
+        async readPages(tabs) {
+          const response = await sendRuntimeMessage('WEB_PAGES_READ', { tabs }) as { ok?: boolean; error?: string; upload?: { fileName: string; mimeType: string; text: string }; failed?: Array<{ title: string; reason: string }> }
+          if (response.ok === false || !response.upload) throw new Error(response.error || '没有读到网页')
+          return { upload: response.upload, failed: response.failed }
+        },
+        addFile: file => {
+          picked = true
+          file.text().then(text => resolve({ title: file.name.replace(/\.md$/i, ''), source: tabsSource(text), text }), reject)
+        },
+        showError,
+        onClose: () => { if (!picked) resolve(undefined) },
+      }).catch(reject)
+    }),
+    previewText: (title, text) => openFilePreview({ fileName: /\.[a-z0-9]+$/i.test(title) ? title : `${title}.md`, text }, { english: english() }),
+  })
+}
+
+// The pages file starts each page with its address; the first one names the document's source.
+function tabsSource(text: string): string {
+  return /https?:\/\/\S+/.exec(text)?.[0] ?? ''
+}
+
+// A file's text for the library: PDF and Office files read, a text file as it is (2 MB at most).
+async function readLibraryFile(file: File): Promise<string> {
+  if (documentFormat(file.name)) {
+    return readDocumentText(file, {
+      pageLabel: page => translateUi(`—— 第 ${page} 页 ——`, normalizeLanguage(store.settings.language)),
+      sheetLabel: name => translateUi(`—— 工作表：${name} ——`, normalizeLanguage(store.settings.language)),
+    })
+  }
+  if (file.size > 2 * 1024 * 1024) throw new Error(`文件太大：${file.name}（文本文件最多 2 MB）`)
+  return file.text()
+}
+
+async function saveMessageToLibrary(message: GroupMessage, button: HTMLButtonElement): Promise<void> {
+  const speaker = message.type === 'user' ? translateUi('我', normalizeLanguage(store.settings.language)) : message.roleName ?? ''
+  const firstLine = message.content.trim().split('\n')[0].replace(/^#+\s*/, '').slice(0, 40)
+  button.disabled = true
+  try {
+    await runCommand('LIBRARY_ADD', { chatId: message.chatId, doc: { title: `${speaker}：${firstLine}`, kind: 'message', source: message.id, text: message.content } })
+    showSuccess(translateUi('已存入资料库', normalizeLanguage(store.settings.language)))
+  } catch (error) {
+    showError(error instanceof Error ? error.message : String(error))
+  } finally {
+    button.disabled = false
+  }
+}
+
+// An attached file, from its preview; resolves to why it was not kept, if it was not.
+async function saveFileToLibrary(file: { fileName: string; text: string }): Promise<string | undefined> {
+  const chatId = appState.selectedChatId
+  if (!chatId) return translateUi('先打开一个群聊', normalizeLanguage(store.settings.language))
+  try {
+    await runCommand('LIBRARY_ADD', { chatId, doc: { title: file.fileName, kind: 'file', source: file.fileName, text: file.text } })
+    return undefined
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error)
+  }
+}
+
 function renderPollButton(): void {
   teamDomRefs.attachPagesEl.hidden = !getCurrentChat()
   teamDomRefs.startPollEl.hidden = !getCurrentChat() || getCurrentRoles().length < 2
@@ -794,6 +878,7 @@ function render(): void {
   replyComparisonView.refresh()
   teamFormationView.refresh()
   currentScheduledTasksDialog()?.refresh()
+  currentLibraryDialog()?.refresh()
   currentUsageDialog()?.refresh()
   renderTemplates()
   renderAgentControlSettings()

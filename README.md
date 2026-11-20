@@ -47,6 +47,7 @@ Use it for learning, research and personal non-commercial work where one answer 
 **Memory that lasts across chats**
 
 - **Memory store**: save a fact, decision, preference or note from any message, for every group, one group or one member. Each member gets the pinned items and the ones relevant to the current request, within its context budget; a web member is sent only what it has not seen yet.
+- **Group library**: each group keeps its own material: upload files (text, Markdown, PDF, Word, PowerPoint, Excel), paste text, add web pages open in this window, or click **Save to library** on a reply or an attached file. For each question, discussion turn or project task, the passages that bear on it go to every member within a budget of their own, marked as material rather than instructions; a web member gets each passage once. The library is in the group menu, is copied with the group, and goes into backups.
 - **Kept apart where it should be**: in independent mode a member does not read what other members wrote. Members can also propose items for you to accept or dismiss (off by default).
 
 **Workspace**

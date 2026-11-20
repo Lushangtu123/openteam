@@ -1,3 +1,4 @@
+import { forgetLibrarySent } from '../group/groupLibrary'
 import { forgetMemorySent } from '../group/memoryPrompt'
 import { copyMemoryForChat, deleteMemoryForChat } from '../group/memoryStore'
 import { chatSiteLabel, isChatSite } from '../group/chatSites'
@@ -197,6 +198,7 @@ export function createChatHandlers(deps: ChatHandlersDependencies): BackgroundMe
     }
     for (const messageId of messageIds) delete store.messagesById[messageId]
     const memoryItemCount = deleteMemoryForChat(store, chat.id, roleIds)
+    if (store.libraryByChatId?.[chat.id]) delete store.libraryByChatId[chat.id]
 
     store.chatOrder = store.chatOrder.filter(id => id !== chat.id)
     delete store.chatsById[chat.id]
@@ -260,6 +262,7 @@ export function createChatHandlers(deps: ChatHandlersDependencies): BackgroundMe
         role.contextCursor = 0
         // Its site conversation starts over: it holds no memory items any more.
         forgetMemorySent(role)
+        forgetLibrarySent(role)
         role.updatedAt = timestamp
         delete role.geminiConversationId
         delete role.geminiConversationUrl
@@ -546,6 +549,9 @@ export function duplicateChat(store: OpenTeamStore, sourceChatId: unknown, deps:
   store.chatsById[chat.id] = chat
   store.chatOrder.unshift(chat.id)
   store.currentChatId = chat.id
+  // The copy has the library too, as documents of its own.
+  const library = store.libraryByChatId?.[sourceChat.id]
+  if (library?.length) store.libraryByChatId = { ...store.libraryByChatId, [chat.id]: library.map(doc => ({ ...doc, id: deps.newId('library-doc') })) }
 
   for (const sourceRoleId of sourceChat.roleIds) {
     const sourceRole = store.rolesById[sourceRoleId]

@@ -30,6 +30,8 @@ export interface ChatListViewDependencies {
   emptyCard(title: string, body: string): HTMLElement
   renderSelectedChat(): void
   renderRolePanel(): void
+  // Opens the group's 资料库.
+  openLibrary?(chatId: string): void
   sendRuntimeMessage<T>(type: string, payload?: Record<string, unknown>): Promise<RuntimeResponse<T>>
   runCommand(type: string, payload?: Record<string, unknown>): Promise<void>
   log: {
@@ -348,6 +350,19 @@ export function createChatListView(deps: ChatListViewDependencies): ChatListView
       renderChatList()
       openScheduledTasksDialog(chat.id, { getStore: deps.getStore, runCommand: deps.runCommand })
     })
+    // 群资料库 (libraryDialog.ts), with how many documents it has.
+    const library = document.createElement('button')
+    library.type = 'button'
+    library.className = 'btn btn-ghost'
+    library.dataset.chatLibrary = chat.id
+    const docCount = deps.getStore().libraryByChatId?.[chat.id]?.length ?? 0
+    library.textContent = docCount > 0 ? `${ui('资料库')} (${docCount})` : ui('资料库')
+    library.hidden = !deps.openLibrary
+    library.addEventListener('click', () => {
+      deps.state.chatMenuChatId = undefined
+      renderChatList()
+      deps.openLibrary?.(chat.id)
+    })
     const clearMessages = document.createElement('button')
     clearMessages.type = 'button'
     clearMessages.className = 'btn btn-ghost'
@@ -391,7 +406,7 @@ export function createChatListView(deps: ChatListViewDependencies): ChatListView
       if (!window.confirm(question)) return
       deleteChat(chat.id).catch(error => deps.showError(error.message))
     })
-    menu.append(pin, rename, duplicate, exportRecord, memory, schedule, clearMessages, closeFrames, select, remove)
+    menu.append(pin, rename, duplicate, exportRecord, memory, schedule, library, clearMessages, closeFrames, select, remove)
     return menu
   }
 

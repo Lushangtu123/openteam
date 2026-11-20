@@ -7,6 +7,7 @@ import type { SiteUsageRecord } from './siteUsage'
 import type { AccountBalance } from './accountBalance'
 import type { ModelSpend } from './spendCap'
 import type { ResultDestination } from './resultDestinations'
+import type { LibraryDoc } from './groupLibrary'
 export type { ChatSite }
 export type OpenTeamLanguage = 'en' | 'zh-CN'
 export type RoleModelSource = 'site' | 'external'
@@ -57,6 +58,9 @@ export interface OpenTeamStore {
   accountBalancesById?: Record<string, AccountBalance>
   // What each priced API model spent today, against its daily cap (src/group/spendCap.ts).
   modelSpendById?: Record<string, ModelSpend>
+  // 群资料库: each group's documents, by chat id (src/group/groupLibrary.ts). The page gets them
+  // without their text.
+  libraryByChatId?: Record<string, LibraryDoc[]>
   settings: OpenTeamSettings
   viewState?: OpenTeamViewState
 }
@@ -558,6 +562,9 @@ export interface RoleTemplate {
 export interface GroupRole {
   // A local agent member waiting for the user's answer.
   pendingApproval?: PendingApproval
+  // 群资料库 passages a web member's site conversation holds, and those its last prompt carried.
+  librarySent?: string[]
+  libraryPending?: { messageId: string; keys: string[] }
   id: string
   chatId: string
   createdBy?: 'orchestration-auto' | 'orchestration-template' | 'team-formation'

@@ -1324,6 +1324,85 @@ describe('team page messages view boundary', () => {
     void retryRoleReply
   })
 
+  it('keeps a finished reply in the group\'s library from its tools', () => {
+    const now = Date.now()
+    const chat: GroupChat = {
+      id: 'chat-1',
+      name: '群聊',
+      mode: 'independent',
+      roleIds: ['role-1'],
+      messageIds: ['msg-assistant'],
+      nextMessageSeq: 2,
+      status: 'error',
+      createdAt: now,
+      updatedAt: now,
+    }
+    const role: GroupRole = {
+      id: 'role-1',
+      chatId: chat.id,
+      name: '工程师',
+      status: 'error',
+      chatSite: 'gemini',
+      contextCursor: 0,
+      createdAt: now,
+      updatedAt: now,
+    }
+    const message: GroupMessage = {
+      id: 'msg-assistant',
+      chatId: chat.id,
+      seq: 1,
+      type: 'assistant',
+      content: '根据 IEA 的报告，需求还在涨。',
+      readPages: [{ url: 'https://www.iea.org/report', title: 'Electricity 2026' }, { url: 'https://example.com/a', title: 'example.com' }],
+      contentFormat: 'markdown',
+      roleId: role.id,
+      roleName: role.name,
+      createdAt: now,
+      status: 'received',
+    }
+    const store: OpenTeamStore = {
+      ...createDefaultStore(),
+      currentChatId: chat.id,
+      chatOrder: [chat.id],
+      chatsById: { [chat.id]: chat },
+      rolesById: { [role.id]: role },
+      messagesById: { [message.id]: message },
+    }
+    store.settings.language = 'zh-CN'
+    const messagesEl = document.createElement('section')
+    const retryRoleReply = vi.fn(async () => undefined)
+    const saveToLibrary = vi.fn()
+
+    createMessagesView({
+      state: createTeamPageState(),
+      getStore: () => store,
+      messagesEl,
+      getCurrentChat: () => chat,
+      getCurrentRoles: () => [role],
+      getCurrentMessages: () => [message],
+      emptyCard: () => document.createElement('div'),
+      openAddPersonDialog: vi.fn(),
+      messageTitle: message => message.roleName ?? 'AI 成员',
+      focusRoleFrame: vi.fn(),
+      insertMention: vi.fn(),
+      setReference: vi.fn(),
+      resyncMessageReply: vi.fn(async () => undefined),
+      retryRoleReply,
+      saveToLibrary,
+      stopRoleReply: vi.fn(async () => undefined),
+      runCommand: vi.fn(async () => undefined),
+      render: vi.fn(),
+      showError: vi.fn(),
+      showSuccess: vi.fn(),
+      log: { warn: vi.fn() },
+    }).renderMessages()
+
+    const button = messagesEl.querySelector<HTMLButtonElement>('.message-tools [aria-label="存入资料库"]')!
+    button.click()
+    expect(saveToLibrary).toHaveBeenCalledWith(message, button)
+    void retryRoleReply
+  })
+
   it('offers Keep using today under a reply refused at the spending cap, lifting the cap and asking again in one click', async () => {
     const now = Date.now()
     const chat: GroupChat = {

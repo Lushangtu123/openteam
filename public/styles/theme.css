@@ -1850,6 +1850,63 @@ select.reply-compare-select {
   padding-top: 12px;
 }
 
+/* 群资料库: a group's documents, and the ways to add one. */
+.library-dialog {
+  display: grid;
+  gap: 10px;
+}
+
+.library-summary,
+.library-status {
+  margin: 0;
+}
+
+.library-doc-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.library-doc-list[hidden],
+.library-note-form[hidden],
+.library-add-row [hidden] {
+  display: none;
+}
+
+.library-doc {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+
+.library-doc-text {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  gap: 2px;
+}
+
+.library-doc-title {
+  color: var(--text);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.library-add-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.library-note-form textarea {
+  min-height: 120px;
+}
+
 /* 推送地址: where scheduled tasks send their results. */
 .result-destinations {
   display: grid;

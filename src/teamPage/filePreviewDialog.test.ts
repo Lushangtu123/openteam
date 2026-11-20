@@ -95,3 +95,26 @@ describe('editing an attached file before it is sent', () => {
     expect(editor.hidden).toBe(false)
   })
 })
+
+describe('keeping an attached file in the group\'s library', () => {
+  it('has a button that keeps it, and says when it could not', async () => {
+    const onAddToLibrary = vi.fn(async () => undefined as string | undefined)
+    openFilePreview({ fileName: '需求文档.md', text: '# 需求' }, { english: false, onAddToLibrary })
+    const button = () => [...document.querySelectorAll<HTMLButtonElement>('.file-preview-actions button')].find(node => node.textContent?.includes('资料库'))!
+    expect(button().textContent).toBe('存入资料库')
+    button().click()
+    await vi.waitFor(() => expect(button().textContent).toBe('已存入资料库'))
+    expect(onAddToLibrary).toHaveBeenCalledTimes(1)
+
+    openFilePreview({ fileName: 'b.txt', text: 'x' }, { english: false, onAddToLibrary: async () => '一个群的资料库最多 30 份资料' })
+    button().click()
+    await vi.waitFor(() => expect(document.querySelector('.file-preview-dialog .team-form-error')?.textContent).toBe('一个群的资料库最多 30 份资料'))
+    expect(button().disabled).toBe(false)
+  })
+
+  it('has no such button where the file cannot be kept', () => {
+    openFilePreview({ fileName: 'a.txt', text: 'x' }, { english: false })
+    expect([...document.querySelectorAll('.file-preview-actions button')].some(node => node.textContent?.includes('资料库'))).toBe(false)
+  })
+})
+

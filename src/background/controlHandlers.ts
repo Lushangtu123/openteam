@@ -1,3 +1,4 @@
+import { withoutLibraryText } from '../group/groupLibrary'
 import { OPENTEAM_CONTROL_CAPABILITIES, controlFailure, controlSuccess, isRecord, type ControlHttpCommand, type ControlHttpResult } from '../shared/localControlProtocol'
 import type { GroupChat, GroupMessage, GroupRole, MemoryItem, OpenTeamStore, RoomMode, RuntimeFrameBinding } from '../group/types'
 import type { RuntimeMessage } from './runtimeClient'
@@ -78,7 +79,7 @@ export function redactStoreSecrets(store: OpenTeamStore): OpenTeamStore {
 async function executeEnabledCommand(command: ControlHttpCommand, initialStore: OpenTeamStore, deps: ControlActionExecutorDependencies): Promise<unknown> {
   switch (command.action) {
     case 'store.get':
-      return { store: initialStore, bindings: deps.runtimeFrames.list(), capabilities: OPENTEAM_CONTROL_CAPABILITIES }
+      return { store: withoutLibraryText(initialStore), bindings: deps.runtimeFrames.list(), capabilities: OPENTEAM_CONTROL_CAPABILITIES }
     case 'chat.list':
       return { chats: initialStore.chatOrder.map(chatId => chatSummary(initialStore.chatsById[chatId], initialStore)).filter(Boolean) }
     case 'chat.get':

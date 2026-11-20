@@ -316,3 +316,33 @@ describe('the group list while the store keeps changing', () => {
     await vi.waitFor(() => expect(state.pendingChatSwitchId).toBeUndefined())
   })
 })
+
+describe('the group menu\'s library entry', () => {
+  it('shows how many documents the group has, and opens its library', () => {
+    const store = createDefaultStore()
+    store.settings.language = 'zh-CN'
+    store.chatsById['chat-1'] = { id: 'chat-1', name: '产品群', mode: 'independent', roleIds: [], messageIds: [], nextMessageSeq: 1, status: 'ready', createdAt: 1, updatedAt: 1 }
+    store.chatOrder = ['chat-1']
+    store.libraryByChatId = { 'chat-1': [{ id: 'd', title: '需求', kind: 'file', chars: 1, addedAt: 1 }] }
+    const state = createTeamPageState()
+    state.selectedChatId = 'chat-1'
+    const chatListEl = document.createElement('div')
+    document.body.replaceChildren(chatListEl)
+    const openLibrary = vi.fn()
+    const view = createChatListView({
+      state, getStore: () => store, applyStore: vi.fn(), storeSummaryEl: document.createElement('p'), chatListEl,
+      iframeHost: { removeChat: vi.fn(), restoreChat: vi.fn() }, getTemplates: () => [], getChatRecentSummary: () => '',
+      roleToneClass: () => '', roleAvatarLabel: value => value.slice(0, 1), emptyCard: () => document.createElement('div'),
+      renderSelectedChat: vi.fn(), renderRolePanel: vi.fn(), sendRuntimeMessage: vi.fn() as never, runCommand: vi.fn(async () => undefined),
+      log: { warn: vi.fn() }, showError: vi.fn(), openLibrary,
+    })
+    view.renderChatList()
+    chatListEl.querySelector<HTMLButtonElement>('.chat-menu-btn')!.click()
+    const entry = chatListEl.querySelector<HTMLButtonElement>('[data-chat-library]')!
+    expect(entry.textContent).toBe('资料库 (1)')
+    entry.click()
+    expect(openLibrary).toHaveBeenCalledWith('chat-1')
+    expect(state.chatMenuChatId).toBeUndefined()
+  })
+})
+
