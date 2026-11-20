@@ -481,7 +481,9 @@
    button at its right, both under the text. */
 :root[data-theme] .composer {
   margin: 0 max(16px, calc((100% - 800px) / 2)) 18px;
-  padding: 12px 12px 10px;
+  /* The bottom keeps the room for the buttons, outside the text box: kept inside it, long text
+     scrolled under them (seen live). */
+  padding: 12px 12px 54px;
   border: 0;
   border-radius: 26px;
   background: var(--gpt-composer-bg);
@@ -498,10 +500,12 @@
 }
 
 :root[data-theme] #message-input {
-  height: 84px;
-  min-height: 84px;
-  max-height: 200px;
-  padding: 4px 8px 44px;
+  /* Grows with its text, up to six lines, then scrolls. */
+  height: auto;
+  field-sizing: content;
+  min-height: 40px;
+  max-height: 156px;
+  padding: 4px 8px;
   font-size: 16px;
   line-height: 1.5;
 }

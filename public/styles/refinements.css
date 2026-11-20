@@ -225,11 +225,18 @@
   grid-template-columns: minmax(0, 1fr);
 }
 
-/* Grok's one-line input bar becomes two lines while the switches show, so they do not cover the text. */
+/* Grok's one-line input bar becomes two lines while the switches show, so they do not cover the text:
+   the room for them is below the text box, which grows with its text. */
+:root[data-ui-style="grok"] .composer:has(.composer-modes:not([hidden])) {
+  padding-bottom: 64px;
+}
+
 :root[data-ui-style="grok"] .composer:has(.composer-modes:not([hidden])) #message-input {
-  height: 96px;
-  min-height: 96px;
-  padding: 12px 14px 56px;
+  height: auto;
+  field-sizing: content;
+  min-height: 40px;
+  max-height: 160px;
+  padding: 12px 14px 0;
 }
 
 @media (max-width: 860px) {
