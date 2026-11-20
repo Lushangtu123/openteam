@@ -79,7 +79,7 @@ export function createResultSender(deps: ResultSenderDependencies) {
   // Undefined once the destination took it; else why not.
   async function send(destination: ResultDestination, result: RoundResult, english: boolean): Promise<string | undefined> {
     if (!destination.url) return '没有推送地址（从不含 Key 的备份恢复的），请删掉后重新添加'
-    if (!await deps.hasAccess(destination.url)) return `没有访问 ${new URL(destination.url).hostname} 的权限：在定时任务窗口的推送地址里点「测试」重新允许`
+    if (!await deps.hasAccess(destination.url)) return `没有访问 ${new URL(destination.url).hostname} 的权限：点定时任务窗口里推送地址旁的「测试」，或定时自检的「测试推送」，重新允许`
     try {
       const request = await buildSendRequest(destination, result, deps.now(), english)
       const response = await deps.fetch(request.url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: request.body, credentials: 'omit' })

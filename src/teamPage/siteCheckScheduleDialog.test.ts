@@ -14,11 +14,12 @@ function setup(schedule?: Partial<SiteCheckSchedule>, destinations = true) {
   if (destinations) store.settings.resultDestinations = [{ id: 'dest-1', kind: 'feishu', name: '运维群', url: 'https://open.feishu.cn/open-apis/bot/v2/hook/x', createdAt: 0 }]
   if (schedule) store.settings.siteCheckSchedule = { days: [1], time: '09:00', enabled: true, armedAt: 0, ...schedule }
   const runCommand = vi.fn(async (_type: string, _payload?: Record<string, unknown>) => undefined)
-  const dialog = openSiteCheckScheduleDialog({ getStore: () => store, runCommand, now: () => NOW })
+  const requestHostAccess = vi.fn(async (_url: string) => true)
+  const dialog = openSiteCheckScheduleDialog({ getStore: () => store, runCommand, requestHostAccess, now: () => NOW })
   const $ = <T extends HTMLElement>(selector: string) => document.querySelector<T>(selector)!
   const days = () => [...document.querySelectorAll<HTMLInputElement>('.scheduled-task-day input')]
   const button = (label: string) => [...document.querySelectorAll<HTMLButtonElement>('.site-check-schedule-dialog button')].find(node => node.textContent?.trim() === label)!
-  return { store, runCommand, dialog, $, days, button }
+  return { store, runCommand, requestHostAccess, dialog, $, days, button }
 }
 
 afterEach(() => {
@@ -139,5 +140,48 @@ describe('the 定时自检 window', () => {
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
     expect(document.querySelector('.site-check-schedule-dialog')).toBeNull()
     expect(currentSiteCheckScheduleDialog()).toBeUndefined()
+  })
+
+  it('sends a test message to the chosen destination, asking for the site\'s access from the click', async () => {
+    const ctx = setup()
+    const status = () => ctx.$('.site-check-schedule-test-status').textContent
+    ctx.button('测试推送').click()
+    expect(status()).toBe('先选一个推送地址。')
+    expect(ctx.runCommand).not.toHaveBeenCalled()
+
+    ctx.$<HTMLSelectElement>('#site-check-schedule-destination').value = 'dest-1'
+    ctx.button('测试推送').click()
+    // Asked in the click itself: the browser shows its prompt only then.
+    expect(ctx.requestHostAccess).toHaveBeenCalledWith('https://open.feishu.cn/open-apis/bot/v2/hook/x')
+    expect(status()).toBe('正在发送…')
+    await vi.waitFor(() => expect(status()).toBe('测试消息已发到「运维群」，去那里看看收到没有。'))
+    expect(ctx.runCommand).toHaveBeenCalledWith('SITE_CHECK_SCHEDULE_TEST', { destinationId: 'dest-1' })
+
+    ctx.runCommand.mockRejectedValueOnce(new Error('没发出去：HTTP 404'))
+    ctx.button('测试推送').click()
+    await vi.waitFor(() => expect(status()).toBe('没发出去：HTTP 404'))
+
+    ctx.runCommand.mockClear()
+    ctx.requestHostAccess.mockResolvedValueOnce(false)
+    ctx.button('测试推送').click()
+    await vi.waitFor(() => expect(status()).toBe('需要你允许 OpenTeam 访问 open.feishu.cn，才能往这里推送。'))
+    expect(ctx.runCommand).not.toHaveBeenCalled()
+  })
+
+  it('asks for the destination\'s access as it saves, and says when it was not given', async () => {
+    const ctx = setup()
+    ctx.$<HTMLSelectElement>('#site-check-schedule-destination').value = 'dest-1'
+    ctx.requestHostAccess.mockResolvedValueOnce(false)
+    ctx.button('保存').click()
+    expect(ctx.requestHostAccess).toHaveBeenCalledWith('https://open.feishu.cn/open-apis/bot/v2/hook/x')
+    await vi.waitFor(() => expect(ctx.runCommand).toHaveBeenCalledWith('SITE_CHECK_SCHEDULE_SAVE', expect.anything()))
+    await vi.waitFor(() => expect(ctx.$('.team-form-error').textContent).toBe('已保存，但没有允许 OpenTeam 访问 open.feishu.cn，有网站要处理时会发不出去。点「测试推送」可以再允许一次。'))
+
+    ctx.requestHostAccess.mockClear()
+    ctx.$<HTMLSelectElement>('#site-check-schedule-destination').value = ''
+    ctx.button('保存').click()
+    await vi.waitFor(() => expect(ctx.$('.site-check-schedule-saved').hidden).toBe(false))
+    expect(ctx.requestHostAccess).not.toHaveBeenCalled()
+    expect(ctx.$('.team-form-error').textContent).toBe('')
   })
 })

@@ -3,9 +3,10 @@
 // 立即运行. It looks like a group's 定时任务 window, whose destinations it uses.
 import { describeSchedule, nextSlotAfter } from '../group/scheduledTasks'
 import { chatSiteLabel } from '../group/chatSites'
-import { destinationKindName } from '../group/resultDestinations'
+import { destinationKindName, type ResultDestination } from '../group/resultDestinations'
 import type { SiteCheckSchedule } from '../group/siteCheckSchedule'
 import type { OpenTeamStore } from '../group/types'
+import { hostAccessLabel, requestHostAccess } from '../shared/hostAccess'
 import { normalizeLanguage } from '../shared/i18n'
 import { createIcon } from './icons'
 
@@ -13,6 +14,8 @@ export interface SiteCheckScheduleDialogDependencies {
   getStore(): OpenTeamStore
   runCommand(type: string, payload?: Record<string, unknown>): Promise<void>
   now?(): number
+  // Asks the browser to let OpenTeam reach a destination's site (from a click).
+  requestHostAccess?(url: string): Promise<boolean>
   // Puts the focus back where the window was opened from.
   onClose?(): void
 }
@@ -39,6 +42,7 @@ export function openSiteCheckScheduleDialog(deps: SiteCheckScheduleDialogDepende
   openDialog?.close()
   const now = deps.now ?? (() => Date.now())
   const english = () => normalizeLanguage(deps.getStore().settings.language) === 'en'
+  const requestAccess = deps.requestHostAccess ?? (url => requestHostAccess(url))
   const t = (zh: string, en: string): string => english() ? en : zh
   let busy = false
   let drawnChoices = ''
@@ -109,7 +113,16 @@ export function openSiteCheckScheduleDialog(deps: SiteCheckScheduleDialogDepende
   const destinationChoice = element('select')
   destinationChoice.id = 'site-check-schedule-destination'
   const destinationHint = element('p', 'tiny')
-  destinationField.append(destinationLabel, destinationChoice, destinationHint)
+  // 测试推送: a test message to the chosen destination, which also asks for its site's access.
+  const destinationRow = element('div', 'site-check-schedule-destination-row')
+  const testPush = element('button', 'btn', t('测试推送', 'Test'))
+  testPush.type = 'button'
+  testPush.addEventListener('click', () => testDestination())
+  destinationRow.append(destinationChoice, testPush)
+  const testStatus = element('p', 'tiny site-check-schedule-test-status')
+  testStatus.setAttribute('role', 'status')
+  destinationField.append(destinationLabel, destinationRow, destinationHint, testStatus)
+  destinationChoice.addEventListener('change', () => { testStatus.textContent = '' })
 
   const error = element('p', 'team-form-error')
   error.setAttribute('role', 'alert')
@@ -220,12 +233,44 @@ export function openSiteCheckScheduleDialog(deps: SiteCheckScheduleDialogDepende
       time.focus()
       return
     }
+    // Asked in the click itself: the browser shows its prompt only then.
+    const destination = chosenDestination()
+    const access = destination ? requestAccess(destination.url) : Promise.resolve(true)
     showSaved(false)
     const done = await command(save, 'SITE_CHECK_SCHEDULE_SAVE', { schedule: { days, time: time.value, enabled: enabled.checked, ...(destinationChoice.value ? { destinationId: destinationChoice.value } : {}) } })
     if (done) {
       error.textContent = ''
       showSaved(true)
+      if (destination && !await access) error.textContent = t(`已保存，但没有允许 OpenTeam 访问 ${hostAccessLabel(destination.url)}，有网站要处理时会发不出去。点「测试推送」可以再允许一次。`, `Saved, but OpenTeam may not reach ${hostAccessLabel(destination.url)}, so sites that need attention cannot be sent there. Click Test to allow it.`)
     }
+  }
+
+  function chosenDestination(): ResultDestination | undefined {
+    const id = destinationChoice.value
+    return id ? deps.getStore().settings.resultDestinations?.find(item => item.id === id) : undefined
+  }
+
+  function testDestination(): void {
+    const destination = chosenDestination()
+    if (!destination) {
+      testStatus.textContent = t('先选一个推送地址。', 'Choose a destination first.')
+      return
+    }
+    // Asked in the click itself: the browser shows its prompt only then.
+    const access = requestAccess(destination.url)
+    testStatus.textContent = t('正在发送…', 'Sending…')
+    void (async () => {
+      if (!await access) {
+        testStatus.textContent = t(`需要你允许 OpenTeam 访问 ${hostAccessLabel(destination.url)}，才能往这里推送。`, `OpenTeam needs your permission to reach ${hostAccessLabel(destination.url)} to send there.`)
+        return
+      }
+      try {
+        await deps.runCommand('SITE_CHECK_SCHEDULE_TEST', { destinationId: destination.id })
+        testStatus.textContent = t(`测试消息已发到「${destination.name}」，去那里看看收到没有。`, `A test message was sent to "${destination.name}"; see whether it arrived.`)
+      } catch (caught) {
+        testStatus.textContent = caught instanceof Error ? caught.message : String(caught)
+      }
+    })()
   }
 
   function showSaved(shown: boolean): void {

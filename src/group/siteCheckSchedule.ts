@@ -35,6 +35,8 @@ export interface SiteCheckRun {
   problems?: Array<{ site: ChatSite; outcome: SiteCheckOutcome }>
   detail?: string
   delivery?: ScheduledTaskDelivery
+  // The page's notice that its result was not sent was put away (知道了).
+  noticeDismissed?: boolean
 }
 
 export interface SiteCheckScheduleInput {
@@ -103,6 +105,7 @@ function normalizeRun(raw: unknown): SiteCheckRun | undefined {
     ...(isRecord(delivery) && (delivery.status === 'sending' || delivery.status === 'sent' || delivery.status === 'failed') && typeof delivery.at === 'number'
       ? { delivery: { status: delivery.status, at: delivery.at, destination: typeof delivery.destination === 'string' ? delivery.destination : '', ...(typeof delivery.detail === 'string' && delivery.detail ? { detail: delivery.detail } : {}) } }
       : {}),
+    ...(raw.noticeDismissed === true ? { noticeDismissed: true } : {}),
   }
 }
 

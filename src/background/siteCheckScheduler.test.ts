@@ -63,7 +63,7 @@ async function setup(store: OpenTeamStore, options: { replies?: Record<string, '
     return { ok: false, error: `unexpected ${message.type}` }
   })
   const sent: RoundResult[] = []
-  const sendReport = vi.fn(async (_destinationId: string, result: RoundResult) => {
+  const sendReport = vi.fn(async (_destinationId: string, result: RoundResult): Promise<{ destination: string; detail?: string } | undefined> => {
     sent.push(result)
     return { destination: '运维群', ...(options.sendDetail ? { detail: options.sendDetail } : {}) }
   })
@@ -198,3 +198,28 @@ describe('setting 定时自检 from the page', () => {
     expect(schedule(store).lastRun?.slotAt).toBeUndefined()
   })
 })
+
+describe('定时自检\'s destination: a test, and its failure noticed', () => {
+  it('sends a test message to the chosen destination, saying why one did not arrive', async () => {
+    const store = storeWith({})
+    const ctx = await setup(store)
+    expect(await ctx.run('SITE_CHECK_SCHEDULE_TEST', { destinationId: 'dest-1' })).toMatchObject({ ok: true })
+    expect(ctx.sendReport).toHaveBeenCalledWith('dest-1', expect.anything(), false)
+    expect(ctx.sent[0]).toMatchObject({ chatName: '网站自检', question: '测试消息', answers: [{ member: 'OpenTeam', text: '能看到这条，定时自检发现要处理的网站时就会发到这里。' }] })
+    await expect(ctx.run('SITE_CHECK_SCHEDULE_TEST', { destinationId: '' })).rejects.toThrow('先选一个推送地址')
+
+    const failing = await setup(storeWith({}), { sendDetail: 'HTTP 404' })
+    await expect(failing.run('SITE_CHECK_SCHEDULE_TEST', { destinationId: 'dest-1' })).rejects.toThrow('没发出去：HTTP 404')
+    const gone = await setup(storeWith({}))
+    gone.sendReport.mockResolvedValueOnce(undefined)
+    await expect(gone.run('SITE_CHECK_SCHEDULE_TEST', { destinationId: 'dest-1' })).rejects.toThrow('找不到这个推送地址')
+  })
+
+  it('puts away the notice that a run\'s result was not sent, for that run', async () => {
+    const store = storeWith({ lastRun: { at: 5, status: 'problems', delivery: { status: 'failed', at: 6, destination: '运维群', detail: 'HTTP 404' } } })
+    const ctx = await setup(store)
+    await ctx.run('SITE_CHECK_NOTICE_DISMISS')
+    expect(schedule(store).lastRun?.noticeDismissed).toBe(true)
+  })
+})
+

@@ -17,7 +17,7 @@ import { SITE_CHECK_PAGE_WAIT_MS } from './siteCheckHandlers'
 import { mutateStore } from './storeAccess'
 
 export const SITE_CHECK_ALARM = 'openteam-site-check'
-export const SITE_CHECK_SCHEDULE_ROUTE_TYPES = ['SITE_CHECK_SCHEDULE_SAVE', 'SITE_CHECK_SCHEDULE_RUN'] as const
+export const SITE_CHECK_SCHEDULE_ROUTE_TYPES = ['SITE_CHECK_SCHEDULE_SAVE', 'SITE_CHECK_SCHEDULE_RUN', 'SITE_CHECK_SCHEDULE_TEST', 'SITE_CHECK_NOTICE_DISMISS'] as const
 const PAGE_WAIT_MS = 30_000
 const POLL_MS = 5_000
 // The check's own wait for the pages, its wait for the replies, and a little more.
@@ -219,9 +219,38 @@ export function createSiteCheckScheduler(deps: SiteCheckSchedulerDependencies) {
     return { ok: true }
   }
 
+  // 测试推送: a test message to the destination chosen in the window (saved or not).
+  const handleTest = async (message: RuntimeMessage) => {
+    const destinationId = typeof message.destinationId === 'string' ? message.destinationId : ''
+    if (!destinationId) throw new Error('先选一个推送地址')
+    const store = await deps.loadStore()
+    const english = normalizeLanguage(store.settings.language) === 'en'
+    const report: RoundResult = english
+      ? { chatName: 'Site check', schedule: '', question: 'Test message', answers: [{ member: 'OpenTeam', text: 'If you can read this, the scheduled site check will send the sites that need attention here.' }] }
+      : { chatName: '网站自检', schedule: '', question: '测试消息', answers: [{ member: 'OpenTeam', text: '能看到这条，定时自检发现要处理的网站时就会发到这里。' }] }
+    const sent = await deps.sendReport(destinationId, report, english)
+    if (!sent) throw new Error('找不到这个推送地址')
+    if (sent.detail) throw new Error(`没发出去：${sent.detail}`)
+    return { ok: true }
+  }
+
+  // The page's notice that the last run's result was not sent: put away for that run.
+  const handleNoticeDismiss = async () => {
+    const { store, result: changed } = await mutateStore(store => {
+      const run = store.settings.siteCheckSchedule?.lastRun
+      if (!run || run.noticeDismissed) return false
+      run.noticeDismissed = true
+      return true
+    })
+    if (changed) await deps.broadcastStoreUpdated(store)
+    return { ok: true, store }
+  }
+
   const routes: BackgroundMessageRoute[] = [
     { type: 'SITE_CHECK_SCHEDULE_SAVE', handler: handleSave },
     { type: 'SITE_CHECK_SCHEDULE_RUN', handler: handleRun },
+    { type: 'SITE_CHECK_SCHEDULE_TEST', handler: handleTest },
+    { type: 'SITE_CHECK_NOTICE_DISMISS', handler: handleNoticeDismiss },
   ]
   return { sync, checkDue, runNow, routes }
 }

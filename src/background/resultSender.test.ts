@@ -102,7 +102,7 @@ describe('a scheduled task\'s result', () => {
     const blocked = setup({ roundSummary: false, access: false })
     await blocked.settle('q')
     expect(blocked.fetch).not.toHaveBeenCalled()
-    expect(blocked.delivery()).toMatchObject({ status: 'failed', detail: '没有访问 qyapi.weixin.qq.com 的权限：在定时任务窗口的推送地址里点「测试」重新允许' })
+    expect(blocked.delivery()).toMatchObject({ status: 'failed', detail: '没有访问 qyapi.weixin.qq.com 的权限：点定时任务窗口里推送地址旁的「测试」，或定时自检的「测试推送」，重新允许' })
   })
 })
 

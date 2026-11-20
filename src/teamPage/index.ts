@@ -70,6 +70,7 @@ import { createSidePanel, isSidePanel } from './sidePanel'
 import { movePanelTools } from './panelTools'
 import { createPanelHandover } from './panelHandover'
 import { createSiteFaultNotice } from './siteFaultNotice'
+import { createSiteCheckDeliveryNotice } from './siteCheckDeliveryNotice'
 import { currentSiteCheckScheduleDialog, openSiteCheckScheduleDialog } from './siteCheckScheduleDialog'
 import { PANEL_PORT_NAME } from '../group/runtimeProtocol'
 import type { RolePageHealth } from './roleHealth'
@@ -876,6 +877,7 @@ function render(): void {
   updateNotice.render()
   backupReminderView.render()
   siteFaultNotice.render()
+  siteCheckDeliveryNotice.render()
   webPageOfferView.render()
   renderPanelHandoverNote()
   replyComparisonView.refresh()
@@ -1084,6 +1086,20 @@ const siteFaultNotice = createSiteFaultNotice({
   showError,
 })
 
+// 定时自检's result not sent: over the group list too (siteCheckDeliveryNotice.ts).
+const siteCheckDeliveryNotice = createSiteCheckDeliveryNotice({
+  element: document.getElementById('site-check-delivery-notice'),
+  language: () => normalizeLanguage(store.settings.language),
+  getStore: () => store,
+  openSchedule: () => openSiteCheckSchedule(),
+  runCommand,
+  showError,
+})
+
+function openSiteCheckSchedule(onClose?: () => void): void {
+  openSiteCheckScheduleDialog({ getStore: () => store, runCommand, onClose })
+}
+
 // 备份提醒: kept in its own storage key, outside the store and its backups.
 const backupReminderView = createBackupReminderView({
   document,
@@ -1265,7 +1281,7 @@ async function boot(): Promise<void> {
   document.querySelector<HTMLButtonElement>('#open-site-check-schedule')?.addEventListener('click', () => {
     settingsMenuEl.hidden = true
     settingsButtonEl.setAttribute('aria-expanded', 'false')
-    openSiteCheckScheduleDialog({ getStore: () => store, runCommand, onClose: () => settingsButtonEl.focus() })
+    openSiteCheckSchedule(() => settingsButtonEl.focus())
   })
   registerAllNotesEvents()
   languageSettingsController.registerEvents()

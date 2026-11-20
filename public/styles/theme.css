@@ -2032,6 +2032,25 @@ select.reply-compare-select {
   font-size: 13px;
 }
 
+.site-check-schedule-destination-row {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+
+.site-check-schedule-destination-row select {
+  flex: 1;
+  min-width: 0;
+}
+
+.site-check-schedule-destination-row .btn {
+  flex: none;
+}
+
+.site-check-schedule-test-status:empty {
+  display: none;
+}
+
 .site-check-schedule-dialog .team-setup-actions {
   flex-wrap: wrap;
   align-items: center;
