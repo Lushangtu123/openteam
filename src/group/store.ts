@@ -4,6 +4,7 @@ import { normalizeTeamHandbooks } from './teamHandbooks'
 import { normalizeMemoryState } from './memoryStore'
 import { isChatSite } from './chatSites'
 import { normalizeSiteUsageRecord, type SiteUsageRecord } from './siteUsage'
+import { normalizeAccountBalances, type AccountBalance } from './accountBalance'
 import { readModelPricing } from './pricing'
 import {
   DEFAULT_ORCHESTRATION_MAX_NODE_EXECUTIONS,
@@ -46,6 +47,7 @@ interface OpenTeamMetaStore {
   externalRoleMemoriesById?: NonNullable<OpenTeamStore['externalRoleMemoriesById']>
   externalChatMemoriesById?: NonNullable<OpenTeamStore['externalChatMemoriesById']>
   siteUsageBySite?: SiteUsageRecord
+  accountBalancesById?: Record<string, AccountBalance>
   settings: OpenTeamSettings
   viewState?: OpenTeamViewState
 }
@@ -124,6 +126,7 @@ export function createDefaultStore(): OpenTeamStore {
     memoryItemsById: {},
     memoryOrder: [],
     siteUsageBySite: {},
+    accountBalancesById: {},
     settings: defaultSettings(),
     viewState: {
       chatReadSeqById: {},
@@ -246,6 +249,7 @@ function normalizeStore(raw: unknown): OpenTeamStore {
     externalChatMemoriesById: readExternalChatMemoryRecord(raw.externalChatMemoriesById),
     ...normalizeMemoryState(raw.memoryItemsById, raw.memoryOrder),
     siteUsageBySite: normalizeSiteUsageRecord(raw.siteUsageBySite),
+    accountBalancesById: normalizeAccountBalances(raw.accountBalancesById),
     settings: normalizeSettings(raw.settings, storedVersion),
     viewState: normalizeViewState(raw.viewState),
   }
@@ -309,6 +313,7 @@ function assembleV2Store(items: Map<string, unknown>): OpenTeamStore {
   store.externalRoleMemoriesById = { ...(meta.externalRoleMemoriesById ?? {}) }
   store.externalChatMemoriesById = { ...(meta.externalChatMemoriesById ?? {}) }
   store.siteUsageBySite = normalizeSiteUsageRecord(meta.siteUsageBySite)
+  store.accountBalancesById = normalizeAccountBalances(meta.accountBalancesById)
   const memory = items.get(MEMORY_STORE_KEY)
   if (isRecord(memory)) {
     store.memoryItemsById = readRecord(memory.itemsById)
@@ -357,6 +362,7 @@ function buildStorageItems(store: OpenTeamStore): Record<string, unknown> {
     externalRoleMemoriesById: readExternalRoleMemoryRecord(store.externalRoleMemoriesById),
     externalChatMemoriesById: readExternalChatMemoryRecord(store.externalChatMemoriesById),
     siteUsageBySite: normalizeSiteUsageRecord(store.siteUsageBySite),
+    accountBalancesById: normalizeAccountBalances(store.accountBalancesById),
     settings: normalizeSettings(store.settings),
     viewState: normalizeViewState(store.viewState),
   }
@@ -522,6 +528,7 @@ function normalizeMetaStore(raw: unknown): OpenTeamMetaStore {
     externalRoleMemoriesById: readExternalRoleMemoryRecord(raw.externalRoleMemoriesById),
     externalChatMemoriesById: readExternalChatMemoryRecord(raw.externalChatMemoriesById),
     siteUsageBySite: normalizeSiteUsageRecord(raw.siteUsageBySite),
+    accountBalancesById: normalizeAccountBalances(raw.accountBalancesById),
     settings: normalizeSettings(raw.settings, typeof raw.version === 'number' ? raw.version : 0),
     viewState: normalizeViewState(raw.viewState),
   }

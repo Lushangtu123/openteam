@@ -163,7 +163,8 @@ function modelFor(store: OpenTeamStore, message: GroupMessage, role: GroupRole |
   return undefined
 }
 
-function rangeStart(range: UsageRange, now: number): number {
+// Where a range starts: local midnight today, 6 or 29 days before, or the beginning.
+export function rangeStart(range: UsageRange, now: number): number {
   if (range === 'all') return 0
   const midnight = new Date(now)
   midnight.setHours(0, 0, 0, 0)

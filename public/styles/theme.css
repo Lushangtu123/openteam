@@ -2284,6 +2284,43 @@ select.reply-compare-select {
   font-variant-numeric: tabular-nums;
 }
 
+.usage-accounts {
+  display: grid;
+  gap: 6px;
+}
+
+.usage-accounts-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.usage-accounts-head .usage-section-title {
+  margin: 0;
+  font-size: 14px;
+}
+
+.usage-refresh {
+  gap: 5px;
+}
+
+.usage-refresh svg {
+  width: 15px;
+  height: 15px;
+}
+
+.usage-account-error {
+  margin: 0;
+  color: var(--danger);
+}
+
+.usage-account-note {
+  margin: 0;
+  color: var(--muted);
+}
+
 .model-pricing-row {
   display: flex;
   flex-wrap: wrap;

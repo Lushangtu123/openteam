@@ -50,6 +50,7 @@ import { createSiteCheckHandlers } from './siteCheckHandlers'
 import { createScheduledTaskHandlers } from './scheduledTaskHandlers'
 import { createSiteUsageHandlers } from './siteUsageHandlers'
 import { checkLinks } from './linkCheck'
+import { ACCOUNT_BALANCE_ALARM, createAccountBalances } from './accountBalances'
 import { createScheduledTaskRunner, SCHEDULED_TASK_ALARM } from './scheduledTaskRunner'
 import { keepLogsAcrossRestarts } from './diagnosticsLogs'
 import { recentLogs } from '../shared/logger'
@@ -277,6 +278,14 @@ function syncPageMenu(language: string | undefined): void {
 }
 
 // 定时任务 (see scheduledTaskRunner.ts). It sends through this router, once it is made.
+const accountBalances = createAccountBalances({
+  fetch: (url, init) => fetch(url, init),
+  hash: async text => [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)))].slice(0, 8).map(byte => byte.toString(16).padStart(2, '0')).join(''),
+  broadcastStoreUpdated,
+  now,
+  log,
+})
+
 const scheduledTasks = createScheduledTaskRunner({
   loadStore,
   route: message => Promise.resolve(routeMessage(message, {})),
@@ -327,6 +336,7 @@ const routeMessage = createMessageRouter([
   // Runs through this router itself, once it is made.
   ...createScheduledTaskHandlers({ broadcastStoreUpdated, newId, now, log, schedulesChanged: () => scheduledTasks.sync(), runNow: (chatId, taskId) => scheduledTasks.runNow(chatId, taskId) }),
   ...createSiteUsageHandlers({ broadcastStoreUpdated, log }),
+  ...accountBalances.routes,
   ...createSiteCheckHandlers({ route: message => Promise.resolve(routeMessage(message, {})), broadcastStoreUpdated, runtimeFrames, waitFor: ms => new Promise(resolve => globalThis.setTimeout(resolve, ms)), now }),
   ...createExternalModelHandlers({ broadcastStoreUpdated, externalModelClient, checkLocalAgent, newId, now }),
   { type: 'LOCAL_AGENT_LIST', handler: async () => ({ ok: true, agents: await listLocalAgents() }) },
@@ -508,7 +518,14 @@ chrome.runtime.onStartup?.addListener(() => {
   initializeControlClient()
 })
 
+// 用量's real spend: DeepSeek and Kimi accounts' balances, read every hour and when 用量 opens.
+chrome.alarms?.create?.(ACCOUNT_BALANCE_ALARM, { periodInMinutes: 60 })
+
 chrome.alarms?.onAlarm?.addListener(alarm => {
+  if (alarm.name === ACCOUNT_BALANCE_ALARM) {
+    accountBalances.refresh().catch(error => log.warn('account-balance:refresh-failed', { error: errorReason(error) }))
+    return
+  }
   if (alarm.name === SCHEDULED_TASK_ALARM) {
     scheduledTasks.checkDue().catch(error => log.warn('scheduled-task:check-failed', { error: errorReason(error) }))
     return

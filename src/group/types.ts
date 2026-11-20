@@ -4,6 +4,7 @@ import type { MessageHighlightColor } from './highlightColors'
 export type RoomMode = 'independent' | 'collaborative'
 import type { ChatSite } from './chatSites'
 import type { SiteUsageRecord } from './siteUsage'
+import type { AccountBalance } from './accountBalance'
 export type { ChatSite }
 export type OpenTeamLanguage = 'en' | 'zh-CN'
 export type RoleModelSource = 'site' | 'external'
@@ -50,6 +51,8 @@ export interface OpenTeamStore {
   memoryOrder?: string[]
   // How much each AI site was used today, and whether it is limiting (src/group/siteUsage.ts).
   siteUsageBySite?: SiteUsageRecord
+  // API accounts' balances and daily spend, read from the providers (src/group/accountBalance.ts).
+  accountBalancesById?: Record<string, AccountBalance>
   settings: OpenTeamSettings
   viewState?: OpenTeamViewState
 }

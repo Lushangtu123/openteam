@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createDefaultStore } from '../group/store'
 import type { GroupMessage, GroupRole, OpenTeamStore } from '../group/types'
 import { currentUsageDialog, openUsageDialog } from './usageDialog'
@@ -80,5 +80,26 @@ describe('the usage window', () => {
     expect(q('.usage-empty')?.textContent).toBe('这段时间里还没有成员回答过。')
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
     expect(q('.usage-modal')).toBeNull()
+  })
+})
+
+describe('the provider accounts in the usage window', () => {
+  it('reads the balances when it opens, and shows each account\'s balance and real spend today and in the range', async () => {
+    const store: OpenTeamStore = createDefaultStore()
+    store.settings.language = 'zh-CN'
+    store.accountBalancesById = {
+      'deepseek-ab': { key: 'deepseek-ab', provider: 'deepseek', label: 'DeepSeek API', currency: 'CNY', balance: 107.25, checkedAt: at(19, 9), spentByDay: { '2026-11-15': 1, '2026-11-18': 0.5, '2026-11-19': 2.75 } },
+    }
+    let finish: (value: { errors: Array<{ label: string; error: string }> }) => void = () => undefined
+    const refreshBalances = vi.fn(() => new Promise<{ errors: Array<{ label: string; error: string }> }>(resolve => { finish = resolve }))
+    openUsageDialog({ getStore: () => store, now: () => NOW, refreshBalances })
+    expect(refreshBalances).toHaveBeenCalledTimes(1)
+    expect(document.querySelector('.usage-refresh')?.textContent).toBe('读取中…')
+    const rows = [...document.querySelectorAll('.usage-account-table tbody tr')].map(row => [...row.querySelectorAll('td')].slice(0, 4).map(cell => cell.textContent))
+    expect(rows).toEqual([['DeepSeek · DeepSeek API', '¥107.25', '¥2.75', '¥4.25']])
+    finish({ errors: [{ label: 'Kimi', error: 'HTTP 401' }] })
+    await vi.waitFor(() => expect(document.querySelector('.usage-account-error')?.textContent).toBe('没读到「Kimi」的余额：HTTP 401'))
+    expect(document.querySelector('.usage-refresh')?.textContent).toBe('刷新余额')
+    expect(document.querySelector('.usage-account-note')?.textContent).toContain('也包括 OpenTeam 以外')
   })
 })

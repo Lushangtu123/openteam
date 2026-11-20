@@ -1,13 +1,16 @@
 // 用量: what the members answered and what it cost, for a time range and all groups or one
 // (src/group/usageStats.ts): totals, answers per day, and tables by member, group and site.
 import type { OpenTeamStore } from '../group/types'
-import { computeUsage, formatCost, type UsageRange, type UsageReport } from '../group/usageStats'
+import { computeUsage, formatCost, rangeStart, type UsageRange, type UsageReport } from '../group/usageStats'
+import { spentInRange } from '../group/accountBalance'
 import { normalizeLanguage } from '../shared/i18n'
 import { createIcon } from './icons'
 
 export interface UsageDialogDependencies {
   getStore(): OpenTeamStore
   now?(): number
+  // Reads the DeepSeek and Kimi accounts' balances again (src/background/accountBalances.ts).
+  refreshBalances?(): Promise<{ errors?: Array<{ label: string; error: string }> }>
   // Puts the focus back where the window was opened from.
   onClose?(): void
 }
@@ -32,6 +35,8 @@ export function openUsageDialog(deps: UsageDialogDependencies): { refresh(): voi
   const t = (zh: string, en: string): string => english() ? en : zh
   let range: UsageRange = '7d'
   let chatId = ''
+  let balanceErrors: Array<{ label: string; error: string }> = []
+  let refreshing = false
 
   const backdrop = element('div', 'modal-backdrop usage-modal')
   backdrop.addEventListener('click', event => {
@@ -87,6 +92,21 @@ export function openUsageDialog(deps: UsageDialogDependencies): { refresh(): voi
   document.addEventListener('keydown', handleEscape)
   render()
   rangeButtons[1].focus()
+  void refreshBalances()
+
+  async function refreshBalances(): Promise<void> {
+    if (!deps.refreshBalances || refreshing) return
+    refreshing = true
+    render()
+    try {
+      balanceErrors = (await deps.refreshBalances()).errors ?? []
+    } catch (error) {
+      balanceErrors = [{ label: t('账户余额', 'Account balances'), error: error instanceof Error ? error.message : String(error) }]
+    } finally {
+      refreshing = false
+      if (openDialog === controller) render()
+    }
+  }
 
   function render(): void {
     const store = deps.getStore()
@@ -95,7 +115,43 @@ export function openUsageDialog(deps: UsageDialogDependencies): { refresh(): voi
     scope.replaceChildren(option('', t('全部群聊', 'All groups')), ...store.chatOrder.flatMap(id => store.chatsById[id] ? [option(id, store.chatsById[id].name)] : []))
     scope.value = chatId
     const report = computeUsage(store, { range, ...(chatId ? { chatId } : {}), now: now() })
-    content.replaceChildren(...sections(report))
+    const accounts = accountsSection(store)
+    content.replaceChildren(...sections(report), ...(accounts ? [accounts] : []))
+  }
+
+  // What the DeepSeek and Kimi accounts really spent, from their balances (like dsh-whale-widget).
+  function accountsSection(store: OpenTeamStore): HTMLElement | undefined {
+    const accounts = Object.values(store.accountBalancesById ?? {})
+    if (accounts.length === 0 && balanceErrors.length === 0 && !refreshing) return undefined
+    const section = element('section', 'usage-accounts')
+    const head = element('div', 'usage-accounts-head')
+    head.append(element('h3', 'usage-section-title', t('服务商账户（实际消耗）', 'Provider accounts (actual spend)')))
+    if (deps.refreshBalances) {
+      const refresh = element('button', 'btn btn-ghost btn-small usage-refresh')
+      refresh.type = 'button'
+      refresh.disabled = refreshing
+      refresh.append(createIcon('refresh'), element('span', '', refreshing ? t('读取中…', 'Reading…') : t('刷新余额', 'Refresh balances')))
+      refresh.addEventListener('click', () => void refreshBalances())
+      head.append(refresh)
+    }
+    section.append(head)
+    const money = (amount: number, currency: 'CNY' | 'USD') => formatCost({ [currency]: amount })
+    const start = rangeStart(range, now())
+    if (accounts.length > 0) {
+      section.append(table('', [t('账户', 'Account'), t('余额', 'Balance'), t('今天消耗', 'Spent today'), t('本时段消耗', 'Spent in range'), t('更新于', 'Updated')], accounts.map(account => [
+        `${account.provider === 'deepseek' ? 'DeepSeek' : 'Kimi'} · ${account.label}`,
+        money(account.balance, account.currency),
+        money(spentInRange(account, rangeStart('today', now()), now()), account.currency),
+        money(spentInRange(account, start, now()), account.currency),
+        `${new Date(account.checkedAt).toLocaleString(english() ? 'en-US' : 'zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })}${account.error ? t(`（上次读取失败：${account.error}）`, ` (last read failed: ${account.error})`) : ''}`,
+      ]), 'usage-account-table'))
+    }
+    for (const item of balanceErrors) section.append(element('p', 'usage-account-error tiny', t(`没读到「${item.label}」的余额：${item.error}`, `Could not read the balance of "${item.label}": ${item.error}`)))
+    section.append(element('p', 'tiny usage-account-note', t(
+      '从 DeepSeek、Kimi 读取的账户余额：每次余额减少就记为当天的消耗，充值不算。这是整个账户的消费，也包括 OpenTeam 以外（比如 DSH）用掉的，从 OpenTeam 开始读取时算起；每小时读一次，打开这个窗口时也会读。',
+      "Balances read from DeepSeek and Kimi: each drop counts as that day's spend, top-ups do not. It is the whole account's spend, use outside OpenTeam (DSH, say) included, from when OpenTeam began reading; it is read every hour and when this window opens.",
+    )))
+    return section
   }
 
   function sections(report: UsageReport): HTMLElement[] {
@@ -156,7 +212,7 @@ export function openUsageDialog(deps: UsageDialogDependencies): { refresh(): voi
   function table(caption: string, headings: string[], rows: string[][], className: string): HTMLElement {
     const wrap = element('div', `usage-table-wrap ${className}`)
     const node = element('table', 'usage-table')
-    node.append(element('caption', 'usage-section-title', caption))
+    if (caption) node.append(element('caption', 'usage-section-title', caption))
     const head = element('tr')
     for (const text of headings) {
       const cell = element('th', '', text)

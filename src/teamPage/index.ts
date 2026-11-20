@@ -734,7 +734,15 @@ teamDomRefs.startPollEl.addEventListener('click', () => {
 
 // 用量 (usageDialog.ts).
 teamDomRefs.openUsageEl.addEventListener('click', () => {
-  openUsageDialog({ getStore: () => store, onClose: () => teamDomRefs.openUsageEl.focus() })
+  openUsageDialog({
+    getStore: () => store,
+    async refreshBalances() {
+      const response = await sendRuntimeMessage('USAGE_BALANCES_REFRESH') as { ok?: boolean; error?: string; errors?: Array<{ label: string; error: string }> }
+      if (response.ok === false) throw new Error(response.error || '没读到余额')
+      return { errors: response.errors }
+    },
+    onClose: () => teamDomRefs.openUsageEl.focus(),
+  })
 })
 
 // 附上网页 from the tabs open in this window (webPagesDialog.ts).

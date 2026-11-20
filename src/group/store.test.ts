@@ -72,6 +72,7 @@ describe('group store', () => {
       memoryItemsById: {},
       memoryOrder: [],
       siteUsageBySite: {},
+      accountBalancesById: {},
       settings: {
         defaultMode: 'independent',
         maxContextChars: 6000,
