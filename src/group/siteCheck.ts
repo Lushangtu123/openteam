@@ -80,3 +80,24 @@ export function siteCheckSummary(results: SiteCheckResult[], language: OpenTeamL
   const parts = [`${ok} 个正常`, attention ? `${attention} 个需要处理` : '', waiting ? `${waiting} 个等待中` : ''].filter(Boolean)
   return `${waiting ? '检查中' : '检查完成'}：${parts.join('，')}`
 }
+
+// What a site's result means, and what to do about it.
+export function siteCheckExplanation(result: SiteCheckResult, en: boolean): string {
+  const detail = result.detail ? (en ? ` (${result.detail})` : `（${result.detail}）`) : ''
+  switch (result.outcome) {
+    case 'ok':
+      return en ? 'Sends, and its reply is read back.' : '能发送，也能读到回复。'
+    case 'waiting':
+      return en ? 'Waiting for its reply.' : '正在等它回复。'
+    case 'login':
+      return en ? 'The site asks to sign in. Click "Open site" on its member card, sign in, then check again.' : '网站要求登录。点成员卡片上的「打开网站」登录后，再查一次。'
+    case 'page-problem':
+      return en ? `Something covers or breaks the page${detail}. Open the AI pages to see it.` : `页面被挡住或出错${detail}。打开 AI 网页看看。`
+    case 'failed':
+      return en ? `Sending or reading the reply failed${detail}.` : `发送或读取回复失败${detail}。`
+    case 'not-sent':
+      return en ? 'The question did not reach the page in 5 minutes.' : '5 分钟内没能把提问送进页面。'
+    case 'no-reply':
+      return en ? 'The question reached the page, but no reply was read in 5 minutes. The site may have changed.' : '提问已送进页面，但 5 分钟内没读到回复，网站可能改版了。'
+  }
+}

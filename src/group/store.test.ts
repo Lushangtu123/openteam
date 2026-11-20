@@ -72,6 +72,7 @@ describe('group store', () => {
       memoryItemsById: {},
       memoryOrder: [],
       siteUsageBySite: {},
+      siteFaultsBySite: {},
       accountBalancesById: {},
       modelSpendById: {},
       libraryByChatId: {},

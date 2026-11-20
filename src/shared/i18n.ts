@@ -277,6 +277,8 @@ const UI_TRANSLATIONS: Record<string, string> = {
   '网站自检': 'Site check',
   '新建一个临时群，给每个 AI 网站发一句「只回复 OK」，看 OpenTeam 还能不能在上面收发消息。网站改版后先查这里。会用你的账号在每个网站各发一条消息。': 'Makes a throwaway group and asks every AI site to reply OK, to see whether OpenTeam can still send and read there. Check here first after a site changes. Sends one message on each site with your account.',
   '开始检查': 'Start check',
+  '定时自检': 'Scheduled site check',
+  '每天或每周几按时自动检查一次，网站改版了当天就知道；有网站要处理时可以推送到飞书、Slack、Telegram 等。': 'Checks automatically on the days and at the time you choose, so a site\'s redesign is found the same day; the sites that need attention can be sent to Feishu, Slack, Telegram and more.',
   '开始使用 OpenTeam': 'Get started with OpenTeam',
   '检查新版本': 'Check for new versions',
   '导出诊断信息': 'Export diagnostics',

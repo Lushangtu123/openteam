@@ -12,6 +12,7 @@ import type { ResumeReply } from '../group/runtimeProtocol'
 import { isExternalModelRole } from './rolePromptDelivery'
 import { backupModelFor, memberSite, noteMemberSiteLimit } from './memberBackup'
 import { isSiteLimitMessage, noteSiteTried, recordSiteSent, takeSiteRecovery } from '../group/siteUsage'
+import { clearSiteFault, layoutFaultStep, recordSiteFault } from '../group/siteFaults'
 import { messageTabId, rememberHost, type RuntimeMessage, senderFrameId, senderTabId } from './runtimeClient'
 import { mutateStore, requireChat, requireRole } from './storeAccess'
 import { markOrchestrationRoleError, maybeAdvanceOrchestrationRun } from './orchestrationRuntime'
@@ -285,6 +286,12 @@ export function createMemberPageHandlers(ctx: MessageHandlerContext) {
     const { store, result } = await mutateStore(store => {
       const chat = requireChat(store, identity.chatId)
       const role = requireRole(store, chat.id, identity.roleId)
+      // 网站失效提醒 (src/group/siteFaults.ts): a page with no input box, counted when it comes to that.
+      const site = memberSite(store, role)
+      const wasNoEditor = role.siteHealth?.status === 'error' && role.siteHealth.reason === 'no-editor'
+      if (site && status === 'error' && reason === 'no-editor' && !wasNoEditor) {
+        if (recordSiteFault(store, site, { key: `${role.id}:no-editor:${timestamp}:${store.siteFaultsBySite?.[site]?.count ?? 0}`, step: 'input', now: timestamp, decisive: Boolean(chat.siteCheck) })) deps.log.warn('site-fault:noticed', { ...identity, site, step: 'input' })
+      }
       role.siteHealth = {
         siteId,
         status,
@@ -397,6 +404,8 @@ export function createMemberPageHandlers(ctx: MessageHandlerContext) {
         // A reply to a prompt the site took while marked as limiting: it recovered.
         const site = memberSite(store, role)
         if (site && takeSiteRecovery(store, site, role.id)) deps.log.info('site-limit:recovered', { ...identity, site })
+        // It replied: whatever failed before, the site still works.
+        if (site && clearSiteFault(store, site)) deps.log.info('site-fault:cleared', { ...identity, site })
         if (!promptMessageId || role.lastPromptMessageId === promptMessageId) delete role.lastPromptMessageId
         if (!replyAttemptId || role.replyAttemptId === replyAttemptId) delete role.replyAttemptId
         chat.status = deps.getChatStatusFromRoles(store, chat)
@@ -559,6 +568,23 @@ export function createMemberPageHandlers(ctx: MessageHandlerContext) {
     const promptMessageId = readOptionalString(message.messageId)
     const replyAttemptId = readOptionalString(message.replyAttemptId)
     deps.log.warn('role-error:received', { ...identity, promptMessageId, replyAttemptId, reason, senderUrl: sender.url, tabId: messageTabId(message, sender), frameId: senderFrameId(sender) })
+
+    // 网站失效提醒: a failure that points at the site's page having changed is counted for the site.
+    const faultStep = layoutFaultStep(reason)
+    if (faultStep) {
+      const { store: faultStore, result: noticed } = await mutateStore(store => {
+        const chat = requireChat(store, identity.chatId)
+        const role = requireRole(store, chat.id, identity.roleId)
+        const site = memberSite(store, role)
+        if (!site) return false
+        const shown = recordSiteFault(store, site, { key: `${role.id}:${promptMessageId ?? deps.now()}`, step: faultStep, detail: reason, now: deps.now(), decisive: Boolean(chat.siteCheck) })
+        return shown ? site : false
+      })
+      if (noticed) {
+        deps.log.warn('site-fault:noticed', { ...identity, site: noticed, step: faultStep, reason })
+        await deps.broadcastStoreUpdated(faultStore)
+      }
+    }
 
     // The site said it is limiting: it is marked, so its members are not sent prompts for a while.
     if (isSiteLimitMessage(reason)) {

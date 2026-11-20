@@ -53,8 +53,9 @@ async function setup(options: { failOn?: string; readyAfter?: Record<string, num
   })
   const { SITE_CHECK_ROUTE_TYPES, createSiteCheckHandlers } = await import('./siteCheckHandlers')
   const routes = createSiteCheckHandlers({ route, broadcastStoreUpdated, runtimeFrames, waitFor, now: () => clock })
-  const start = () => Promise.resolve(routes.find(entry => entry.type === 'GROUP_SITE_CHECK_START')!.handler({ type: 'GROUP_SITE_CHECK_START' }, {})) as Promise<{ ok: boolean; chatId?: string }>
-  return { store, routes, routed, start, broadcastStoreUpdated, waitFor, SITE_CHECK_ROUTE_TYPES, checksAtSend: () => checksAtSend }
+  const start = (fields: Record<string, unknown> = {}) => Promise.resolve(routes.find(entry => entry.type === 'GROUP_SITE_CHECK_START')!.handler({ type: 'GROUP_SITE_CHECK_START', ...fields }, {})) as Promise<{ ok: boolean; chatId?: string }>
+  const run = (type: string, fields: Record<string, unknown> = {}) => Promise.resolve(routes.find(entry => entry.type === type)!.handler({ type, ...fields }, {}))
+  return { store, routes, run, routed, start, broadcastStoreUpdated, waitFor, SITE_CHECK_ROUTE_TYPES, checksAtSend: () => checksAtSend }
 }
 
 describe('background site check', () => {
@@ -101,3 +102,24 @@ describe('background site check', () => {
     expect(broadcastStoreUpdated).toHaveBeenCalledTimes(2)
   })
 })
+
+describe('a check from 定时自检, and 网站失效提醒\'s 知道了', () => {
+  it('marks the group as the scheduled one', async () => {
+    const { store, start } = await setup()
+    await start({ scheduled: true })
+    expect(store.chatsById['chat-check'].siteCheck).toMatchObject({ scheduled: true })
+    const other = await setup()
+    await other.start()
+    expect(other.store.chatsById['chat-check'].siteCheck?.scheduled).toBeUndefined()
+  })
+
+  it('puts a site\'s notice away until it fails again after a reply', async () => {
+    const { store, run, broadcastStoreUpdated } = await setup()
+    store.siteFaultsBySite = { kimi: { count: 2, keys: ['a', 'b'], firstAt: 1, lastAt: 2, step: 'reply' } }
+    await run('SITE_FAULT_DISMISS', { site: 'kimi' })
+    expect(store.siteFaultsBySite.kimi?.dismissed).toBe(true)
+    expect(broadcastStoreUpdated).toHaveBeenCalledTimes(1)
+    await expect(run('SITE_FAULT_DISMISS', { site: 'nosuch' })).rejects.toThrow('未知的网站')
+  })
+})
+

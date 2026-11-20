@@ -2,14 +2,15 @@
 // one member per site, the group marked as a check and opened. The question goes to everyone once
 // their pages have loaded (a message to members with no page yet is refused), or, after a wait, to
 // those that have; the others show as not reached.
-import { CHAT_SITE_INFO } from '../group/chatSites'
 import { SITE_CHECK_PERSONA, SITE_CHECK_PROMPT, SITE_CHECK_SITES } from '../group/siteCheck'
+import { dismissSiteFault } from '../group/siteFaults'
+import { CHAT_SITE_INFO, CHAT_SITES, type ChatSite } from '../group/chatSites'
 import type { OpenTeamStore, RuntimeFrameBinding } from '../group/types'
 import type { BackgroundMessageRoute } from './messageRouter'
 import type { RuntimeMessage } from './runtimeClient'
 import { mutateStore } from './storeAccess'
 
-export const SITE_CHECK_ROUTE_TYPES = ['GROUP_SITE_CHECK_START'] as const
+export const SITE_CHECK_ROUTE_TYPES = ['GROUP_SITE_CHECK_START', 'SITE_FAULT_DISMISS'] as const
 
 // How long the question waits for the members' pages to load, and how often it looks.
 export const SITE_CHECK_PAGE_WAIT_MS = 45_000
@@ -38,8 +39,10 @@ export function createSiteCheckHandlers(deps: SiteCheckHandlerDependencies): Bac
     return response
   }
 
-  const handleStart = async () => {
+  // scheduled: from 定时自检 (siteCheckScheduler.ts), which removes the group when every site worked.
+  const handleStart = async (message: RuntimeMessage) => {
     const startedAt = deps.now()
+    const scheduled = message.scheduled === true
     const created = await routeOk({ type: 'GROUP_CHAT_CREATE', name: `网站自检 ${timeLabel(startedAt)}`, mode: 'independent' })
     const chatId = created.chat?.id
     if (!chatId) throw new Error('网站自检的群聊没有建好')
@@ -50,7 +53,7 @@ export function createSiteCheckHandlers(deps: SiteCheckHandlerDependencies): Bac
     })
     const { store } = await mutateStore(store => {
       const chat = store.chatsById[chatId]
-      if (chat) chat.siteCheck = { startedAt }
+      if (chat) chat.siteCheck = { startedAt, ...(scheduled ? { scheduled: true } : {}) }
     })
     await deps.broadcastStoreUpdated(store)
     const switched = await routeOk({ type: 'GROUP_CHAT_SWITCH', chatId })
@@ -76,7 +79,19 @@ export function createSiteCheckHandlers(deps: SiteCheckHandlerDependencies): Bac
     }
   }
 
-  return [{ type: 'GROUP_SITE_CHECK_START', handler: handleStart }]
+  // 网站失效提醒's 知道了: the notice stays away until the site replies and fails again.
+  const handleFaultDismiss = async (message: RuntimeMessage) => {
+    const site = CHAT_SITES.find(item => item === message.site) as ChatSite | undefined
+    if (!site) throw new Error('未知的网站')
+    const { store, result: changed } = await mutateStore(store => dismissSiteFault(store, site))
+    if (changed) await deps.broadcastStoreUpdated(store)
+    return { ok: true, store }
+  }
+
+  return [
+    { type: 'GROUP_SITE_CHECK_START', handler: handleStart },
+    { type: 'SITE_FAULT_DISMISS', handler: handleFaultDismiss },
+  ]
 }
 
 // "11-17 09:05", in the computer's own time.

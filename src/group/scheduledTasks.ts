@@ -26,13 +26,19 @@ export function readScheduledTaskInput(value: unknown): ScheduledTaskInput {
   const content = typeof input.content === 'string' ? input.content.trim() : ''
   if (!content) throw new Error('写下到点时要发的消息')
   if (content.length > SCHEDULED_TASK_CONTENT_MAX) throw new Error(`消息最多 ${SCHEDULED_TASK_CONTENT_MAX} 个字`)
+  const { days, time } = readWeeklyTimes(input)
+  const destinationId = typeof input.destinationId === 'string' && input.destinationId ? input.destinationId : undefined
+  return { content, days, time, enabled: input.enabled !== false, ...(destinationId ? { destinationId } : {}) }
+}
+
+// The days of the week (0 is Sunday) and the time of day (HH:MM), checked.
+export function readWeeklyTimes(input: Record<string, unknown>): Schedule {
   const rawDays = Array.isArray(input.days) ? input.days : []
   const days = [...new Set(rawDays)].filter((day): day is number => Number.isInteger(day) && (day as number) >= 0 && (day as number) <= 6).sort((a, b) => a - b)
   if (days.length === 0 || days.length !== new Set(rawDays).size) throw new Error('至少选一天，星期一到星期日')
   const time = typeof input.time === 'string' ? input.time.trim() : ''
   if (!TIME_PATTERN.test(time)) throw new Error('时间要写成 08:30 这样的 24 小时制')
-  const destinationId = typeof input.destinationId === 'string' && input.destinationId ? input.destinationId : undefined
-  return { content, days, time, enabled: input.enabled !== false, ...(destinationId ? { destinationId } : {}) }
+  return { days, time }
 }
 
 // The task's times on the given calendar day (local), if the day is one of its days.
@@ -65,7 +71,7 @@ export function latestSlotAtOrBefore(schedule: Schedule, at: number): number | u
 
 // The time to deal with now, if any: run it (on time, or late within the catch-up window) or mark
 // it skipped. Only the latest missed time counts, so a long absence runs the task once at most.
-export function findDueSlot(task: ScheduledTask, now: number): { slot: number; run: boolean } | undefined {
+export function findDueSlot(task: Pick<ScheduledTask, 'enabled' | 'days' | 'time' | 'armedAt' | 'lastSlotAt'>, now: number): { slot: number; run: boolean } | undefined {
   if (!task.enabled) return undefined
   const slot = latestSlotAtOrBefore(task, now)
   if (slot === undefined || slot <= Math.max(task.armedAt, task.lastSlotAt ?? Number.NEGATIVE_INFINITY)) return undefined

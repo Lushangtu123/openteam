@@ -123,6 +123,17 @@ describe('the destinations', () => {
     expect(store().chatsById.c.scheduledTasks![0].destinationId).toBeUndefined()
   })
 
+  it('sends 定时自检\'s report to a destination by its id, and lets it go nowhere once deleted', async () => {
+    const { sender, fetch, store } = setup()
+    store().settings.siteCheckSchedule = { days: [1], time: '09:00', enabled: true, armedAt: 0, destinationId: 'd1' }
+    const report = { chatName: '网站自检', schedule: '每周一 09:00', question: '7 个网站里有 1 个需要处理，其余正常。', answers: [{ member: 'Kimi', text: '没读到回复', failed: true }] }
+    expect(await sender.sendTo('d1', report, false)).toEqual({ destination: '晨报群' })
+    expect(sentText(fetch)).toContain('7 个网站里有 1 个需要处理')
+    expect(await sender.sendTo('nosuch', report, false)).toBeUndefined()
+    await sender.routes.find(route => route.type === 'RESULT_DESTINATION_DELETE')!.handler({ type: 'RESULT_DESTINATION_DELETE', destinationId: 'd1' }, {})
+    expect(store().settings.siteCheckSchedule?.destinationId).toBeUndefined()
+  })
+
   it('says why a test did not arrive', async () => {
     const { sender } = setup({ reply: { status: 200, body: '{"errcode":93000,"errmsg":"invalid webhook url"}' } })
     const test = sender.routes.find(route => route.type === 'RESULT_DESTINATION_TEST')!

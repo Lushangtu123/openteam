@@ -69,6 +69,8 @@ import { normalizeLanguage, translateUi } from '../shared/i18n'
 import { createSidePanel, isSidePanel } from './sidePanel'
 import { movePanelTools } from './panelTools'
 import { createPanelHandover } from './panelHandover'
+import { createSiteFaultNotice } from './siteFaultNotice'
+import { currentSiteCheckScheduleDialog, openSiteCheckScheduleDialog } from './siteCheckScheduleDialog'
 import { PANEL_PORT_NAME } from '../group/runtimeProtocol'
 import type { RolePageHealth } from './roleHealth'
 
@@ -873,12 +875,14 @@ function render(): void {
   // In the language chosen now.
   updateNotice.render()
   backupReminderView.render()
+  siteFaultNotice.render()
   webPageOfferView.render()
   renderPanelHandoverNote()
   replyComparisonView.refresh()
   teamFormationView.refresh()
   currentScheduledTasksDialog()?.refresh()
   currentLibraryDialog()?.refresh()
+  currentSiteCheckScheduleDialog()?.refresh()
   currentUsageDialog()?.refresh()
   renderTemplates()
   renderAgentControlSettings()
@@ -1070,6 +1074,16 @@ const webPageOfferView = createWebPageOfferView({
   now: () => Date.now(),
 })
 
+// 网站失效提醒: over the group list, with 备份提醒 (src/group/siteFaults.ts).
+const siteFaultNotice = createSiteFaultNotice({
+  element: document.getElementById('site-fault-notice'),
+  language: () => normalizeLanguage(store.settings.language),
+  getStore: () => store,
+  startSiteCheck: () => startSiteCheck(),
+  runCommand,
+  showError,
+})
+
 // 备份提醒: kept in its own storage key, outside the store and its backups.
 const backupReminderView = createBackupReminderView({
   document,
@@ -1246,6 +1260,12 @@ async function boot(): Promise<void> {
     settingsMenuEl.hidden = true
     settingsButtonEl.setAttribute('aria-expanded', 'false')
     startSiteCheck()
+  })
+  // 定时自检 (siteCheckScheduleDialog.ts).
+  document.querySelector<HTMLButtonElement>('#open-site-check-schedule')?.addEventListener('click', () => {
+    settingsMenuEl.hidden = true
+    settingsButtonEl.setAttribute('aria-expanded', 'false')
+    openSiteCheckScheduleDialog({ getStore: () => store, runCommand, onClose: () => settingsButtonEl.focus() })
   })
   registerAllNotesEvents()
   languageSettingsController.registerEvents()

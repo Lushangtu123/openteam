@@ -112,6 +112,7 @@ export function createResultSender(deps: ResultSenderDependencies) {
       for (const chat of Object.values(store.chatsById)) {
         for (const task of chat.scheduledTasks ?? []) if (task.destinationId === destinationId) delete task.destinationId
       }
+      if (store.settings.siteCheckSchedule?.destinationId === destinationId) delete store.settings.siteCheckSchedule.destinationId
     })
     await deps.broadcastStoreUpdated(store)
     return { ok: true, store }
@@ -127,12 +128,20 @@ export function createResultSender(deps: ResultSenderDependencies) {
     return { ok: true }
   }
 
+  // 定时自检's report (siteCheckScheduler.ts): to the destination by its id; undefined when it is gone.
+  async function sendTo(destinationId: string, result: RoundResult, english: boolean): Promise<{ destination: string; detail?: string } | undefined> {
+    const destination = (await deps.loadStore()).settings.resultDestinations?.find(item => item.id === destinationId)
+    if (!destination) return undefined
+    const detail = await send(destination, result, english)
+    return { destination: destination.name, ...(detail ? { detail } : {}) }
+  }
+
   const routes: BackgroundMessageRoute[] = [
     { type: 'RESULT_DESTINATION_ADD', handler: handleAdd },
     { type: 'RESULT_DESTINATION_DELETE', handler: handleDelete },
     { type: 'RESULT_DESTINATION_TEST', handler: handleTest },
   ]
-  return { onPromptSettled, routes }
+  return { onPromptSettled, sendTo, routes }
 }
 
 // The destination of the task that sent the message, if it has one.

@@ -458,14 +458,24 @@
   margin-top: 14px;
 }
 
-/* 备份提醒 over the group list. Like the search box, it gets a row of the sidebar's grid only while it
-   shows, so the list keeps the row that stretches. */
-:root[data-theme] .sidebar:has(.backup-reminder:not([hidden])) {
+/* 备份提醒 and 网站失效提醒 over the group list. Like the search box, they get a row of the sidebar's
+   grid only while one shows, so the list keeps the row that stretches. */
+:root[data-theme] .sidebar:has(.sidebar-notices > :not([hidden])) {
   grid-template-rows: 66px auto minmax(0, 1fr);
 }
 
-:root[data-theme] .sidebar:has(.chat-list-search:not([hidden])):has(.backup-reminder:not([hidden])) {
+:root[data-theme] .sidebar:has(.chat-list-search:not([hidden])):has(.sidebar-notices > :not([hidden])) {
   grid-template-rows: 66px auto auto minmax(0, 1fr);
+}
+
+:root[data-theme] .sidebar-notices {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+:root[data-theme] .sidebar-notices:not(:has(> :not([hidden]))) {
+  display: none;
 }
 
 :root[data-theme] .backup-reminder {

@@ -3820,6 +3820,60 @@ describe('a web member whose site is limiting', () => {
     expect(ctx.store().siteUsageBySite?.kimi?.limitedAt).toBeUndefined()
     expect(ctx.store().siteUsageBySite?.kimi?.sent).toBe(1)
   })
+
+  describe('网站失效提醒: its page failing in ways that point at a changed site', () => {
+    function addPrompt(ctx: Awaited<ReturnType<typeof setupKimi>>, id: string) {
+      ctx.store().chatsById['chat-1'].messageIds.push(id)
+      ctx.store().messagesById[id] = { id, chatId: 'chat-1', seq: ctx.store().chatsById['chat-1'].messageIds.length, type: 'user', content: '问题', targetRoleIds: ['role-3'], createdAt: 0, status: 'sent', deliveryStatus: { 'role-3': 'error' } }
+    }
+
+    it('counts each prompt it failed once, and the site shows as possibly changed from the second', async () => {
+      const ctx = await setupKimi()
+      addPrompt(ctx, 'msg-a')
+      addPrompt(ctx, 'msg-b')
+      await ctx.route('TEAM_ROLE_ERROR', { chatId: 'chat-1', roleId: 'role-3', messageId: 'msg-a', reason: 'RESPONSE_NOT_FOUND' })
+      await ctx.route('TEAM_ROLE_ERROR', { chatId: 'chat-1', roleId: 'role-3', messageId: 'msg-a', reason: 'RESPONSE_NOT_FOUND' })
+      expect(ctx.store().siteFaultsBySite?.kimi).toMatchObject({ count: 1, step: 'reply' })
+      await ctx.route('TEAM_ROLE_ERROR', { chatId: 'chat-1', roleId: 'role-3', messageId: 'msg-b', reason: 'Kimi 发送按钮暂不可用，请稍后重试' })
+      expect(ctx.store().siteFaultsBySite?.kimi).toMatchObject({ count: 2, step: 'send', detail: 'Kimi 发送按钮暂不可用，请稍后重试', lastAt: 1_000 })
+    })
+
+    it('does not count a site that is limiting, nor an API member', async () => {
+      const ctx = await setupKimi()
+      addPrompt(ctx, 'msg-a')
+      await ctx.route('TEAM_ROLE_ERROR', { chatId: 'chat-1', roleId: 'role-3', messageId: 'msg-a', reason: 'You\'ve reached your usage limit' })
+      await ctx.route('TEAM_ROLE_ERROR', { chatId: 'chat-1', roleId: 'role-1', messageId: 'msg-a', reason: 'RESPONSE_NOT_FOUND' })
+      expect(ctx.store().siteFaultsBySite ?? {}).toEqual({})
+    })
+
+    it('takes one failure in a site check as enough', async () => {
+      const ctx = await setupKimi()
+      ctx.store().chatsById['chat-1'].siteCheck = { startedAt: 0 }
+      addPrompt(ctx, 'msg-a')
+      await ctx.route('TEAM_ROLE_ERROR', { chatId: 'chat-1', roleId: 'role-3', messageId: 'msg-a', reason: 'RESPONSE_NOT_FOUND' })
+      expect(ctx.store().siteFaultsBySite?.kimi?.count).toBe(2)
+    })
+
+    it('counts a page that has no input box when it comes to that, not each time it says so again', async () => {
+      const ctx = await setupKimi()
+      const report = (status: string, reason?: string) => ctx.route('TEAM_SITE_STATUS_UPDATE', { chatId: 'chat-1', roleId: 'role-3', siteId: 'kimi', status, ...(reason ? { reason } : {}) })
+      await report('error', 'no-editor')
+      await report('error', 'no-editor')
+      expect(ctx.store().siteFaultsBySite?.kimi).toMatchObject({ count: 1, step: 'input' })
+      await report('loading', 'no-editor')
+      await report('error', 'no-editor')
+      expect(ctx.store().siteFaultsBySite?.kimi?.count).toBe(2)
+    })
+
+    it('starts the count again when the site replies', async () => {
+      const ctx = await setupKimi({ status: 'thinking', lastPromptMessageId: 'msg-q', replyAttemptId: 'attempt-1' })
+      ctx.store().siteFaultsBySite = { kimi: { count: 3, keys: ['a', 'b', 'c'], firstAt: 1, lastAt: 2, step: 'reply' } }
+      ctx.store().chatsById['chat-1'].messageIds = ['msg-q']
+      ctx.store().messagesById['msg-q'] = { id: 'msg-q', chatId: 'chat-1', seq: 1, type: 'user', content: '问题', targetRoleIds: ['role-3'], createdAt: 0, status: 'sent', deliveryStatus: { 'role-3': 'sent' } }
+      await ctx.route('TEAM_ROLE_REPLY', { chatId: 'chat-1', roleId: 'role-3', messageId: 'msg-q', replyAttemptId: 'attempt-1', content: '回答' }, { tab: { id: 101 } as chrome.tabs.Tab, frameId: 7 })
+      expect(ctx.store().siteFaultsBySite?.kimi).toBeUndefined()
+    })
+  })
 })
 
 describe('a vote (投票)', () => {

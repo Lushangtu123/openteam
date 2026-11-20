@@ -7,6 +7,8 @@ import type { SiteUsageRecord } from './siteUsage'
 import type { AccountBalance } from './accountBalance'
 import type { ModelSpend } from './spendCap'
 import type { ResultDestination } from './resultDestinations'
+import type { SiteFaultRecord } from './siteFaults'
+import type { SiteCheckSchedule } from './siteCheckSchedule'
 import type { LibraryDoc } from './groupLibrary'
 export type { ChatSite }
 export type OpenTeamLanguage = 'en' | 'zh-CN'
@@ -54,6 +56,8 @@ export interface OpenTeamStore {
   memoryOrder?: string[]
   // How much each AI site was used today, and whether it is limiting (src/group/siteUsage.ts).
   siteUsageBySite?: SiteUsageRecord
+  // 网站失效提醒: each site's failures since its last reply (src/group/siteFaults.ts).
+  siteFaultsBySite?: SiteFaultRecord
   // API accounts' balances and daily spend, read from the providers (src/group/accountBalance.ts).
   accountBalancesById?: Record<string, AccountBalance>
   // What each priced API model spent today, against its daily cap (src/group/spendCap.ts).
@@ -105,6 +109,8 @@ export interface OpenTeamSettings {
   roundSummary?: boolean
   // Where scheduled tasks can send their results (src/group/resultDestinations.ts).
   resultDestinations?: ResultDestination[]
+  // 定时自检: the site check run on set days (src/group/siteCheckSchedule.ts).
+  siteCheckSchedule?: SiteCheckSchedule
   // What the last group was created with, offered again for the next one.
   newChatCollaboration?: NewChatCollaboration
 }
@@ -384,7 +390,8 @@ export interface GroupChat {
   discussion?: DiscussionRun
   // A 网站自检 group (src/group/siteCheck.ts): its result is shown at the end of the chat.
   // error: why the question could not be sent.
-  siteCheck?: { startedAt: number; error?: string }
+  // scheduled: started by 定时自检, which removes the group when every site worked.
+  siteCheck?: { startedAt: number; error?: string; scheduled?: boolean }
   // The group's latest 项目 (a coordinator plans tasks for the members and checks the results).
   project?: ProjectRun
   // No memory items are sent to this group's members.

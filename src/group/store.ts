@@ -4,10 +4,12 @@ import { normalizeTeamHandbooks } from './teamHandbooks'
 import { normalizeMemoryState } from './memoryStore'
 import { isChatSite } from './chatSites'
 import { normalizeSiteUsageRecord, type SiteUsageRecord } from './siteUsage'
+import { normalizeSiteFaultRecord, type SiteFaultRecord } from './siteFaults'
 import { normalizeAccountBalances, type AccountBalance } from './accountBalance'
 import { readModelPricing } from './pricing'
 import { normalizeModelSpend, readDailyCap, type ModelSpend } from './spendCap'
 import { normalizeResultDestinations } from './resultDestinations'
+import { normalizeSiteCheckSchedule } from './siteCheckSchedule'
 import { normalizeLibraryRecord } from './groupLibrary'
 import {
   DEFAULT_ORCHESTRATION_MAX_NODE_EXECUTIONS,
@@ -54,6 +56,7 @@ interface OpenTeamMetaStore {
   externalRoleMemoriesById?: NonNullable<OpenTeamStore['externalRoleMemoriesById']>
   externalChatMemoriesById?: NonNullable<OpenTeamStore['externalChatMemoriesById']>
   siteUsageBySite?: SiteUsageRecord
+  siteFaultsBySite?: SiteFaultRecord
   accountBalancesById?: Record<string, AccountBalance>
   modelSpendById?: Record<string, ModelSpend>
   settings: OpenTeamSettings
@@ -134,6 +137,7 @@ export function createDefaultStore(): OpenTeamStore {
     memoryItemsById: {},
     memoryOrder: [],
     siteUsageBySite: {},
+    siteFaultsBySite: {},
     accountBalancesById: {},
     modelSpendById: {},
     libraryByChatId: {},
@@ -259,6 +263,7 @@ function normalizeStore(raw: unknown): OpenTeamStore {
     externalChatMemoriesById: readExternalChatMemoryRecord(raw.externalChatMemoriesById),
     ...normalizeMemoryState(raw.memoryItemsById, raw.memoryOrder),
     siteUsageBySite: normalizeSiteUsageRecord(raw.siteUsageBySite),
+    siteFaultsBySite: normalizeSiteFaultRecord(raw.siteFaultsBySite),
     accountBalancesById: normalizeAccountBalances(raw.accountBalancesById),
     modelSpendById: normalizeModelSpend(raw.modelSpendById),
     libraryByChatId: normalizeLibraryRecord(raw.libraryByChatId),
@@ -326,6 +331,7 @@ function assembleV2Store(items: Map<string, unknown>): OpenTeamStore {
   store.externalRoleMemoriesById = { ...(meta.externalRoleMemoriesById ?? {}) }
   store.externalChatMemoriesById = { ...(meta.externalChatMemoriesById ?? {}) }
   store.siteUsageBySite = normalizeSiteUsageRecord(meta.siteUsageBySite)
+  store.siteFaultsBySite = normalizeSiteFaultRecord(meta.siteFaultsBySite)
   store.accountBalancesById = normalizeAccountBalances(meta.accountBalancesById)
   store.modelSpendById = normalizeModelSpend(meta.modelSpendById)
   const memory = items.get(MEMORY_STORE_KEY)
@@ -379,6 +385,7 @@ function buildStorageItems(store: OpenTeamStore): Record<string, unknown> {
     externalRoleMemoriesById: readExternalRoleMemoryRecord(store.externalRoleMemoriesById),
     externalChatMemoriesById: readExternalChatMemoryRecord(store.externalChatMemoriesById),
     siteUsageBySite: normalizeSiteUsageRecord(store.siteUsageBySite),
+    siteFaultsBySite: normalizeSiteFaultRecord(store.siteFaultsBySite),
     accountBalancesById: normalizeAccountBalances(store.accountBalancesById),
     modelSpendById: normalizeModelSpend(store.modelSpendById),
     settings: normalizeSettings(store.settings),
@@ -550,6 +557,7 @@ function normalizeMetaStore(raw: unknown): OpenTeamMetaStore {
     externalRoleMemoriesById: readExternalRoleMemoryRecord(raw.externalRoleMemoriesById),
     externalChatMemoriesById: readExternalChatMemoryRecord(raw.externalChatMemoriesById),
     siteUsageBySite: normalizeSiteUsageRecord(raw.siteUsageBySite),
+    siteFaultsBySite: normalizeSiteFaultRecord(raw.siteFaultsBySite),
     accountBalancesById: normalizeAccountBalances(raw.accountBalancesById),
     modelSpendById: normalizeModelSpend(raw.modelSpendById),
     settings: normalizeSettings(raw.settings, typeof raw.version === 'number' ? raw.version : 0),
@@ -863,7 +871,13 @@ function normalizeSettings(raw: unknown, storedVersion = CURRENT_STORE_VERSION):
     ...(raw.roundSummary === false ? { roundSummary: false } : {}),
     ...resultDestinationsSetting(raw.resultDestinations),
     ...newChatCollaborationSetting(raw.newChatCollaboration),
+    ...siteCheckScheduleSetting(raw.siteCheckSchedule),
   }
+}
+
+function siteCheckScheduleSetting(raw: unknown): Pick<OpenTeamSettings, 'siteCheckSchedule'> {
+  const schedule = normalizeSiteCheckSchedule(raw)
+  return schedule ? { siteCheckSchedule: schedule } : {}
 }
 
 function resultDestinationsSetting(raw: unknown): Pick<OpenTeamSettings, 'resultDestinations'> {

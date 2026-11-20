@@ -58,6 +58,7 @@ import { createSiteUsageHandlers } from './siteUsageHandlers'
 import { checkLinks } from './linkCheck'
 import { ACCOUNT_BALANCE_ALARM, createAccountBalances } from './accountBalances'
 import { createScheduledTaskRunner, SCHEDULED_TASK_ALARM } from './scheduledTaskRunner'
+import { createSiteCheckScheduler, SITE_CHECK_ALARM } from './siteCheckScheduler'
 import { keepLogsAcrossRestarts } from './diagnosticsLogs'
 import { recentLogs } from '../shared/logger'
 import { createControlClient } from './controlClient'
@@ -353,6 +354,28 @@ const scheduledTasks = createScheduledTaskRunner({
   log,
 })
 
+// 定时自检 (see siteCheckScheduler.ts): the site check on set days; problems go to a destination.
+const siteCheckScheduler = createSiteCheckScheduler({
+  loadStore,
+  route: message => Promise.resolve(routeMessage(message, {})),
+  broadcastStoreUpdated,
+  teamPageOpen: () => listHostTabIds().length > 0 || panelOpen(),
+  panelOpen,
+  async showTeamPage() {
+    const open = await chrome.tabs.query({ url: `${chrome.runtime.getURL('team.html')}*` })
+    for (const tab of open) if (tab.id !== undefined) rememberHost({} as chrome.runtime.MessageSender, tab.id)
+    await showTeamPage()
+  },
+  sendReport: (destinationId, result, english) => resultSender.sendTo(destinationId, result, english),
+  alarms: {
+    create: (name, info) => chrome.alarms?.create?.(name, info),
+    clear: name => chrome.alarms?.clear?.(name),
+  },
+  waitFor: ms => new Promise(resolve => globalThis.setTimeout(resolve, ms)),
+  now,
+  log,
+})
+
 const routeMessage = createMessageRouter([
   { type: 'GROUP_STORE_GET', handler: handleStoreGet },
   // The background's recent log entries, for 导出诊断信息 (already cleaned: src/shared/logger.ts).
@@ -382,6 +405,7 @@ const routeMessage = createMessageRouter([
   ...createSiteUsageHandlers({ broadcastStoreUpdated, log }),
   ...accountBalances.routes,
   ...resultSender.routes,
+  ...siteCheckScheduler.routes,
   ...createLibraryHandlers({ broadcastStoreUpdated: store => broadcastStoreUpdated(store), newId, now }),
   ...createSiteCheckHandlers({ route: message => Promise.resolve(routeMessage(message, {})), broadcastStoreUpdated, runtimeFrames, waitFor: ms => new Promise(resolve => globalThis.setTimeout(resolve, ms)), now }),
   ...createExternalModelHandlers({ broadcastStoreUpdated, externalModelClient, checkLocalAgent, newId, now }),
@@ -576,6 +600,10 @@ chrome.alarms?.onAlarm?.addListener(alarm => {
     scheduledTasks.checkDue().catch(error => log.warn('scheduled-task:check-failed', { error: errorReason(error) }))
     return
   }
+  if (alarm.name === SITE_CHECK_ALARM) {
+    siteCheckScheduler.checkDue().catch(error => log.warn('site-check-schedule:check-failed', { error: errorReason(error) }))
+    return
+  }
   if (alarm.name !== CONTROL_KEEPALIVE_ALARM) return
   syncControlClient().catch(error => log.warn('control-client:keepalive-sync-failed', { error: errorReason(error) }))
 })
@@ -719,6 +747,7 @@ initializeControlClient()
 void interruptedReplies.atBackgroundStart()
 // A task due while the browser was closed or the background asleep runs, or is skipped, now.
 scheduledTasks.checkDue().catch(error => log.warn('scheduled-task:check-failed', { error: errorReason(error) }))
+siteCheckScheduler.checkDue().catch(error => log.warn('site-check-schedule:check-failed', { error: errorReason(error) }))
 
 // An install that was updated from a version requiring every website gives that access back, once
 // (see allSitesAccess.ts). Skipped where the browser has no way to remove a permission.

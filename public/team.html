@@ -159,7 +159,10 @@
         <div id="chat-list-search-box" class="chat-list-search" hidden>
           <input id="chat-list-search" type="search" placeholder="搜索群聊" aria-label="搜索群聊" autocomplete="off" />
         </div>
-        <div id="backup-reminder" class="backup-reminder" role="status" hidden></div>
+        <div class="sidebar-notices">
+          <div id="site-fault-notice" class="backup-reminder site-fault-notice" role="status" hidden></div>
+          <div id="backup-reminder" class="backup-reminder" role="status" hidden></div>
+        </div>
         <div id="chat-list" class="chat-list"></div>
       </aside>
 
@@ -536,6 +539,13 @@
                   <p class="settings-row-hint">新建一个临时群，给每个 AI 网站发一句「只回复 OK」，看 OpenTeam 还能不能在上面收发消息。网站改版后先查这里。会用你的账号在每个网站各发一条消息。</p>
                 </div>
                 <button id="start-site-check" class="btn settings-action" type="button">开始检查</button>
+              </div>
+              <div class="settings-row">
+                <div class="settings-row-text">
+                  <div class="settings-row-title">定时自检</div>
+                  <p class="settings-row-hint">每天或每周几按时自动检查一次，网站改版了当天就知道；有网站要处理时可以推送到飞书、Slack、Telegram 等。</p>
+                </div>
+                <button id="open-site-check-schedule" class="btn settings-action" type="button">设置</button>
               </div>
             </section>
             <section class="settings-panel" role="tabpanel" data-settings-panel="agent" aria-label="本机智能体" hidden>
