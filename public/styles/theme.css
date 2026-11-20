@@ -1030,6 +1030,18 @@ button.attachment-chip-meta:hover .attachment-chip-name {
   border-radius: 3px;
 }
 
+/* Groups listed above the messages (Ctrl/⌘ K opens a group by its name). */
+.message-search-group-name {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.message-search-group + .message-search-result:not(.message-search-group) {
+  margin-top: 8px;
+}
+
 .message-row.message-search-hit .message-bubble,
 .message-row.message-search-hit .message-system-pill {
   animation: message-search-hit 2.4s ease-out;

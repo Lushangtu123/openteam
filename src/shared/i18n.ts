@@ -432,6 +432,10 @@ const UI_TRANSLATIONS: Record<string, string> = {
   '搜索消息': 'Search messages',
   '搜索消息（Ctrl/⌘ K）': 'Search messages (Ctrl/⌘ K)',
   '搜索所有群聊的消息…': 'Search messages in all chats…',
+  '搜索群聊和消息': 'Search groups and messages',
+  '搜索群聊和消息…': 'Search groups and messages…',
+  '输入群名打开群聊，或输入关键词搜索消息': 'Type a group name to open it, or keywords to search messages',
+  '搜索群聊和消息（Ctrl/⌘ K）': 'Search groups and messages (Ctrl/⌘ K)',
   '全部群聊': 'All chats',
   '没有找到消息': 'No messages found',
   '输入关键词，多个词用空格分开': 'Type keywords; separate several words with spaces',
@@ -1206,6 +1210,10 @@ function translateUiPattern(source: string): string | undefined {
   if (discussionRequested) return `Asked ${discussionRequested[1]} people to discuss their differences`
   const summaryRequested = source.match(/^已请 (.+) 汇总异同$/)
   if (summaryRequested) return `Asked ${summaryRequested[1]} to summarize the differences`
+  const searchGroupsAndMessages = source.match(/^找到 (\d+) 个群聊、(\d+) 条消息$/)
+  if (searchGroupsAndMessages) return `${searchGroupsAndMessages[1]} ${searchGroupsAndMessages[1] === '1' ? 'group' : 'groups'}, ${searchGroupsAndMessages[2]} ${searchGroupsAndMessages[2] === '1' ? 'message' : 'messages'} found`
+  const searchGroups = source.match(/^找到 (\d+) 个群聊$/)
+  if (searchGroups) return `${searchGroups[1]} ${searchGroups[1] === '1' ? 'group' : 'groups'} found`
   const searchCountLimited = source.match(/^找到 (\d+) 条消息，显示最近 (\d+) 条$/)
   if (searchCountLimited) return `${searchCountLimited[1]} messages found, showing the latest ${searchCountLimited[2]}`
   const searchCount = source.match(/^找到 (\d+) 条消息$/)

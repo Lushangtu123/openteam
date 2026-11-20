@@ -1066,6 +1066,7 @@ const messageSearchView = createMessageSearchView({
   getStore: () => store,
   getCurrentChatId: () => appState.selectedChatId,
   openMessage: openMessageInChat,
+  openChat: chatId => switchChat(chatId),
 })
 
 // Switches to the message's chat, scrolls it into view and highlights it for a moment.

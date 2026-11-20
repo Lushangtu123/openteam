@@ -1,9 +1,15 @@
 import { searchMessages, type MessageSearchResult } from '../group/messageSearch'
-import type { GroupMessage, OpenTeamStore } from '../group/types'
+import type { GroupChat, GroupMessage, OpenTeamStore } from '../group/types'
 import { normalizeLanguage, translateUi } from '../shared/i18n'
 import { formatMessageTime } from './chatExperience'
+import { orderChatsForList } from './chatListOrder'
 
 const SEARCH_DEBOUNCE_MS = 120
+// Groups listed above the messages: all of them while nothing is typed, else those whose name matches.
+const MAX_GROUPS = 8
+
+// Ctrl/⌘ K: one box to open a group by its name or find a message. Groups come first.
+type SearchEntry = { kind: 'chat'; chat: GroupChat } | { kind: 'message'; result: MessageSearchResult }
 
 export interface MessageSearchViewDependencies {
   openButtonEl: HTMLButtonElement
@@ -11,6 +17,8 @@ export interface MessageSearchViewDependencies {
   getCurrentChatId(): string | undefined
   // Shows the message in its chat.
   openMessage(chatId: string, messageId: string): void
+  // Opens the group, as a click on it in the group list does.
+  openChat(chatId: string): void
 }
 
 export interface MessageSearchView {
@@ -24,7 +32,7 @@ type SearchScope = 'all' | 'current'
 export function createMessageSearchView(deps: MessageSearchViewDependencies): MessageSearchView {
   let query = ''
   let scope: SearchScope = 'all'
-  let results: MessageSearchResult[] = []
+  let entries: SearchEntry[] = []
   let activeIndex = 0
   let dialog: { backdrop: HTMLElement; input: HTMLInputElement; scopeButtons: Record<SearchScope, HTMLButtonElement>; count: HTMLElement; list: HTMLElement } | undefined
   let searchTimer: number | undefined
@@ -55,7 +63,7 @@ export function createMessageSearchView(deps: MessageSearchViewDependencies): Me
     panel.className = 'modal message-search-dialog'
     panel.setAttribute('role', 'dialog')
     panel.setAttribute('aria-modal', 'true')
-    panel.setAttribute('aria-label', ui('搜索消息'))
+    panel.setAttribute('aria-label', ui('搜索群聊和消息'))
 
     const bar = document.createElement('label')
     bar.className = 'message-search-bar'
@@ -63,8 +71,8 @@ export function createMessageSearchView(deps: MessageSearchViewDependencies): Me
     const input = document.createElement('input')
     input.type = 'search'
     input.className = 'message-search-input'
-    input.placeholder = ui('搜索所有群聊的消息…')
-    input.setAttribute('aria-label', ui('搜索消息'))
+    input.placeholder = ui('搜索群聊和消息…')
+    input.setAttribute('aria-label', ui('搜索群聊和消息'))
     input.setAttribute('aria-controls', 'message-search-results')
     input.value = query
     input.addEventListener('input', () => {
@@ -138,26 +146,37 @@ export function createMessageSearchView(deps: MessageSearchViewDependencies): Me
     dialog.scopeButtons.current.setAttribute('aria-pressed', String(scope === 'current'))
     dialog.scopeButtons.current.disabled = !currentChatId
 
-    const outcome = searchMessages(deps.getStore(), query, { chatId: scope === 'current' ? currentChatId : undefined, speakerName })
-    results = outcome.results
+    const store = deps.getStore()
+    const outcome = searchMessages(store, query, { chatId: scope === 'current' ? currentChatId : undefined, speakerName })
+    const chats = scope === 'all' ? matchingChats(store) : []
+    entries = [...chats.map(chat => ({ kind: 'chat' as const, chat })), ...outcome.results.map(result => ({ kind: 'message' as const, result }))]
     activeIndex = 0
+    const shown = outcome.results.length
     dialog.count.textContent = !query.trim()
-      ? ui('输入关键词，多个词用空格分开')
-      : outcome.total === 0
-        ? ui('没有找到消息')
-        : outcome.total > results.length
-          ? ui(`找到 ${outcome.total} 条消息，显示最近 ${results.length} 条`)
-          : ui(`找到 ${outcome.total} 条消息`)
+      ? ui(chats.length > 0 ? '输入群名打开群聊，或输入关键词搜索消息' : '输入关键词，多个词用空格分开')
+      : chats.length > 0
+        ? ui(outcome.total > 0 ? `找到 ${chats.length} 个群聊、${outcome.total} 条消息` : `找到 ${chats.length} 个群聊`)
+        : outcome.total === 0
+          ? ui('没有找到消息')
+          : outcome.total > shown
+            ? ui(`找到 ${outcome.total} 条消息，显示最近 ${shown} 条`)
+            : ui(`找到 ${outcome.total} 条消息`)
     renderResults()
+  }
+
+  // In the group list's order (pinned first); by name only, since the messages below cover the rest.
+  function matchingChats(store: OpenTeamStore): GroupChat[] {
+    const chats = store.chatOrder.map(chatId => store.chatsById[chatId]).filter((chat): chat is GroupChat => Boolean(chat))
+    return orderChatsForList(chats, query, () => '').slice(0, MAX_GROUPS)
   }
 
   function renderResults(): void {
     if (!dialog) return
-    dialog.list.replaceChildren(...results.map((result, index) => resultItem(result, index)))
+    dialog.list.replaceChildren(...entries.map((entry, index) => entry.kind === 'chat' ? chatItem(entry.chat, index) : resultItem(entry.result, index)))
     syncActive()
   }
 
-  function resultItem(result: MessageSearchResult, index: number): HTMLElement {
+  function optionItem(index: number): HTMLLIElement {
     const item = document.createElement('li')
     item.className = 'message-search-result'
     item.id = `message-search-result-${index}`
@@ -168,6 +187,25 @@ export function createMessageSearchView(deps: MessageSearchViewDependencies): Me
       syncActive()
     })
     item.addEventListener('click', () => choose(index))
+    return item
+  }
+
+  function chatItem(chat: GroupChat, index: number): HTMLElement {
+    const item = optionItem(index)
+    item.classList.add('message-search-group')
+    const name = document.createElement('div')
+    name.className = 'message-search-group-name'
+    name.textContent = chat.name
+    const meta = document.createElement('div')
+    meta.className = 'message-search-meta'
+    const members = chat.roleIds.length
+    meta.textContent = english() ? `Group · ${members} ${members === 1 ? 'member' : 'members'}` : `群聊 · ${members} 位成员`
+    item.append(name, meta)
+    return item
+  }
+
+  function resultItem(result: MessageSearchResult, index: number): HTMLElement {
+    const item = optionItem(index)
 
     const meta = document.createElement('div')
     meta.className = 'message-search-meta'
@@ -211,8 +249,8 @@ export function createMessageSearchView(deps: MessageSearchViewDependencies): Me
   function handleKeydown(event: KeyboardEvent): void {
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault()
-      if (results.length === 0) return
-      activeIndex = (activeIndex + (event.key === 'ArrowDown' ? 1 : -1) + results.length) % results.length
+      if (entries.length === 0) return
+      activeIndex = (activeIndex + (event.key === 'ArrowDown' ? 1 : -1) + entries.length) % entries.length
       syncActive()
     } else if (event.key === 'Enter' && !event.isComposing) {
       event.preventDefault()
@@ -231,10 +269,11 @@ export function createMessageSearchView(deps: MessageSearchViewDependencies): Me
   }
 
   function choose(index: number): void {
-    const result = results[index]
-    if (!result) return
+    const entry = entries[index]
+    if (!entry) return
     close(false)
-    deps.openMessage(result.chatId, result.messageId)
+    if (entry.kind === 'chat') deps.openChat(entry.chat.id)
+    else deps.openMessage(entry.result.chatId, entry.result.messageId)
   }
 
   function speakerName(message: GroupMessage): string {
@@ -245,6 +284,10 @@ export function createMessageSearchView(deps: MessageSearchViewDependencies): Me
 
   function ui(source: string): string {
     return translateUi(source, normalizeLanguage(deps.getStore().settings.language))
+  }
+
+  function english(): boolean {
+    return normalizeLanguage(deps.getStore().settings.language) === 'en'
   }
 
   return { registerEvents, open, close }

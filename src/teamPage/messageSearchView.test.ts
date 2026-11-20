@@ -27,9 +27,10 @@ function setup(currentChatId = 'a') {
   const openButtonEl = document.createElement('button')
   document.body.append(openButtonEl)
   const openMessage = vi.fn()
-  const view = createMessageSearchView({ openButtonEl, getStore: () => store, getCurrentChatId: () => currentChatId, openMessage })
+  const openChat = vi.fn()
+  const view = createMessageSearchView({ openButtonEl, getStore: () => store, getCurrentChatId: () => currentChatId, openMessage, openChat })
   view.registerEvents()
-  return { view, openMessage, store }
+  return { view, openMessage, openChat, store }
 }
 
 function type(text: string): void {
@@ -43,7 +44,7 @@ function press(key: string, target: EventTarget = document.querySelector('.messa
   target.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, ...init }))
 }
 
-const resultTexts = () => [...document.querySelectorAll('.message-search-result')].map(item => item.querySelector('.message-search-snippet')?.textContent)
+const resultTexts = () => [...document.querySelectorAll('.message-search-result:not(.message-search-group)')].map(item => item.querySelector('.message-search-snippet')?.textContent)
 
 beforeEach(() => {
   vi.useFakeTimers()
@@ -59,7 +60,7 @@ describe('message search panel', () => {
     setup()
     press('k', document, { ctrlKey: true })
     expect(document.querySelector('.message-search-dialog')).not.toBeNull()
-    expect(document.querySelector('.message-search-count')?.textContent).toBe('输入关键词，多个词用空格分开')
+    expect(document.querySelector('.message-search-count')?.textContent).toBe('输入群名打开群聊，或输入关键词搜索消息')
 
     type('缓存')
 
@@ -123,9 +124,78 @@ describe('message search panel', () => {
 
     applyTeamLanguage('en')
 
-    expect(document.querySelector<HTMLInputElement>('.message-search-input')?.placeholder).toBe('Search messages in all chats…')
+    expect(document.querySelector<HTMLInputElement>('.message-search-input')?.placeholder).toBe('Search groups and messages…')
     expect(document.querySelector('.message-search-count')?.textContent).toBe('3 messages found')
     expect(resultTexts()[0]).toBe('讨论缓存命中率')
     expect(document.querySelector('.message-search-meta')?.textContent).toContain('技术方案')
   })
+
+  it('lists the groups when nothing is typed, pinned first, and opens one with Enter', () => {
+    const { store, openChat } = setup()
+    store.chatsById.b.pinned = true
+    store.chatsById.b.roleIds = ['r1', 'r2']
+    document.querySelector('button')!.click()
+    expect(groupNames()).toEqual(['技术方案', '产品评审'])
+    expect(document.querySelector('.message-search-group .message-search-meta')?.textContent).toBe('群聊 · 2 位成员')
+    expect(resultTexts()).toEqual([])
+    press('ArrowDown')
+    press('Enter')
+    expect(openChat).toHaveBeenCalledWith('a')
+    expect(document.querySelector('.message-search-dialog')).toBeNull()
+  })
+
+  it('puts the groups whose name matches above the messages, and moves from one to the other', () => {
+    const { openChat, openMessage } = setup()
+    document.querySelector('button')!.click()
+    type('方案')
+    expect(groupNames()).toEqual(['技术方案'])
+    expect(resultTexts()).toEqual(['缓存方案怎么样'])
+    expect(document.querySelector('.message-search-count')?.textContent).toBe('找到 1 个群聊、1 条消息')
+    const options = [...document.querySelectorAll('.message-search-results [role="option"]')]
+    expect(options.map(option => option.classList.contains('message-search-group'))).toEqual([true, false])
+    expect(new Set(options.map(option => option.id)).size).toBe(2)
+    press('Enter')
+    expect(openChat).toHaveBeenCalledWith('b')
+    expect(openMessage).not.toHaveBeenCalled()
+
+    document.querySelector('button')!.click()
+    press('ArrowDown')
+    press('Enter')
+    expect(openMessage).toHaveBeenCalledWith('a', 'a-0')
+  })
+
+  it('says when only groups match, and opens a group on click', () => {
+    const { openChat } = setup()
+    document.querySelector('button')!.click()
+    type('评审')
+    expect(document.querySelector('.message-search-count')?.textContent).toBe('找到 1 个群聊')
+    document.querySelector<HTMLElement>('.message-search-group')!.click()
+    expect(openChat).toHaveBeenCalledWith('a')
+  })
+
+  it('shows no groups while searching only the current group', () => {
+    setup('a')
+    document.querySelector('button')!.click()
+    type('方案')
+    ;[...document.querySelectorAll<HTMLButtonElement>('.message-search-scope button')][1].click()
+    expect(groupNames()).toEqual([])
+    expect(resultTexts()).toEqual(['缓存方案怎么样'])
+    expect(document.querySelector('.message-search-count')?.textContent).toBe('找到 1 条消息')
+  })
+
+  it('translates the group lines and counts into English', () => {
+    const { store } = setup()
+    store.settings.language = 'en'
+    document.querySelector('button')!.click()
+    expect(document.querySelector('.message-search-count')?.textContent).toBe('Type a group name to open it, or keywords to search messages')
+    expect(document.querySelector('.message-search-group .message-search-meta')?.textContent).toBe('Group · 0 members')
+    type('方案')
+    expect(document.querySelector('.message-search-count')?.textContent).toBe('1 group, 1 message found')
+    expect(document.querySelector<HTMLInputElement>('.message-search-input')?.placeholder).toBe('Search groups and messages…')
+  })
 })
+
+function groupNames(): Array<string | null | undefined> {
+  return [...document.querySelectorAll('.message-search-group')].map(item => item.querySelector('.message-search-group-name')?.textContent)
+}
+
