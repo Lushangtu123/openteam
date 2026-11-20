@@ -3,7 +3,7 @@
 import { defaultMentionTargetForMessage } from '../group/mentionParser'
 import { describeSchedule, MAX_SCHEDULED_TASKS_PER_CHAT, nextSlotAfter, SCHEDULED_TASK_CONTENT_MAX } from '../group/scheduledTasks'
 import type { OpenTeamStore, ScheduledTask } from '../group/types'
-import { destinationKindName, readDestinationInput, type ResultDestination, type ResultDestinationKind } from '../group/resultDestinations'
+import { destinationKindName, readDestinationInput, RESULT_DESTINATION_KINDS, type ResultDestination, type ResultDestinationKind } from '../group/resultDestinations'
 import { requestHostAccess } from '../shared/hostAccess'
 import { normalizeLanguage } from '../shared/i18n'
 import { createIcon } from './icons'
@@ -155,8 +155,8 @@ export function openScheduledTasksDialog(chatId: string, deps: ScheduledTasksDia
   // The destinations: added here, tested, deleted.
   const destinationsSection = element('section', 'result-destinations')
   destinationsSection.append(element('h3', 'scheduled-task-form-title', t('推送地址', 'Destinations')), element('p', 'tiny', t(
-    '在飞书、企业微信或钉钉群里添加「自定义机器人」，把它的 Webhook 地址填在这里；也可以填任何 https 地址，收到的是 JSON。地址就是钥匙，备份时和 API Key 一样默认不导出。',
-    'Add a custom robot to a Feishu, WeCom or DingTalk group and enter its webhook address here, or any https address, which receives JSON. The address is a key: backups leave it out, as they do API keys.',
+    '飞书、企业微信、钉钉：在群里添加「自定义机器人」；Slack、Discord：在频道里添加 Incoming Webhook / Webhook，把地址填在这里。Telegram：填机器人的 Token（在 BotFather 里拿到）和群组或频道的 Chat ID。也可以填任何 https 地址，收到的是 JSON。地址和 Token 就是钥匙，备份时和 API Key 一样默认不导出。',
+    'Feishu, WeCom, DingTalk: add a custom robot to the group; Slack, Discord: add an incoming webhook to the channel, and enter its address here. Telegram: enter the bot\'s token (from BotFather) and the group or channel\'s chat ID. Or any https address, which receives JSON. Addresses and tokens are keys: backups leave them out, as they do API keys.',
   )))
   const destinationList = element('ul', 'result-destination-list')
   const destinationEmpty = element('p', 'tiny result-destination-empty', t('还没有推送地址。', 'No destination yet.'))
@@ -165,7 +165,7 @@ export function openScheduledTasksDialog(chatId: string, deps: ScheduledTasksDia
   const kindChoice = element('select')
   kindChoice.id = 'result-destination-kind'
   kindChoice.setAttribute('aria-label', t('推送方式', 'Kind'))
-  for (const kind of ['feishu', 'wecom', 'dingtalk', 'webhook'] as ResultDestinationKind[]) kindChoice.append(new Option(destinationKindName(kind, english()), kind))
+  for (const kind of RESULT_DESTINATION_KINDS) kindChoice.append(new Option(destinationKindName(kind, english()), kind))
   const nameInput = element('input')
   nameInput.id = 'result-destination-name'
   nameInput.placeholder = t('名称（可选）', 'Name (optional)')
@@ -180,9 +180,16 @@ export function openScheduledTasksDialog(chatId: string, deps: ScheduledTasksDia
   secretInput.placeholder = t('签名密钥（开了签名校验 / 加签才填）', 'Signing secret (only if signing is on)')
   secretInput.setAttribute('aria-label', t('签名密钥', 'Signing secret'))
   secretWrap.append(secretInput)
+  // Telegram: the group or channel the bot posts to.
+  const chatWrap = element('div', 'result-destination-chat')
+  const chatInput = element('input')
+  chatInput.id = 'result-destination-chat-id'
+  chatInput.placeholder = t('Chat ID，如 -1001234567890 或 @频道名', 'Chat ID, such as -1001234567890 or @channel')
+  chatInput.setAttribute('aria-label', 'Chat ID')
+  chatWrap.append(chatInput)
   const addDestination = element('button', 'btn', t('添加推送地址', 'Add destination'))
   addDestination.type = 'submit'
-  destinationForm.append(kindChoice, nameInput, urlInput, secretWrap, addDestination)
+  destinationForm.append(kindChoice, nameInput, urlInput, secretWrap, chatWrap, addDestination)
   const destinationStatus = element('p', 'tiny result-destination-status')
   destinationStatus.setAttribute('role', 'status')
   destinationsSection.append(destinationList, destinationEmpty, destinationForm, destinationStatus)
@@ -318,7 +325,7 @@ export function openScheduledTasksDialog(chatId: string, deps: ScheduledTasksDia
   function destinationRow(destination: ResultDestination): HTMLLIElement {
     const item = element('li', 'result-destination')
     const text = element('div', 'result-destination-text')
-    text.append(element('span', 'result-destination-name', destination.name), element('span', 'tiny', destinationKindName(destination.kind, english())))
+    text.append(element('span', 'result-destination-name', destination.name), element('span', 'tiny', `${destinationKindName(destination.kind, english())}${destination.chatId ? ` · ${destination.chatId}` : ''}`))
     if (!destination.url) text.append(element('span', 'tiny scheduled-task-failed', t('没有地址（从不含 Key 的备份恢复），请删掉后重新添加', 'No address (restored from a backup without keys); delete it and add it again')))
     const test = element('button', 'btn btn-ghost btn-small', t('测试', 'Test'))
     test.type = 'button'
@@ -341,10 +348,16 @@ export function openScheduledTasksDialog(chatId: string, deps: ScheduledTasksDia
   function showKindFields(): void {
     const kind = kindChoice.value as ResultDestinationKind
     secretWrap.hidden = kind !== 'feishu' && kind !== 'dingtalk'
+    chatWrap.hidden = kind !== 'telegram'
+    urlInput.type = kind === 'telegram' ? 'text' : 'url'
+    urlInput.setAttribute('aria-label', kind === 'telegram' ? 'Bot Token' : t('Webhook 地址', 'Webhook address'))
     urlInput.placeholder = {
       feishu: 'https://open.feishu.cn/open-apis/bot/v2/hook/…',
       wecom: 'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=…',
       dingtalk: 'https://oapi.dingtalk.com/robot/send?access_token=…',
+      slack: 'https://hooks.slack.com/services/…',
+      discord: 'https://discord.com/api/webhooks/…',
+      telegram: t('Bot Token，如 123456789:AA…', 'Bot token, such as 123456789:AA…'),
       webhook: 'https://…',
     }[kind]
   }
@@ -352,7 +365,7 @@ export function openScheduledTasksDialog(chatId: string, deps: ScheduledTasksDia
   async function addNewDestination(): Promise<void> {
     let destination: ReturnType<typeof readDestinationInput>
     try {
-      destination = readDestinationInput({ kind: kindChoice.value, name: nameInput.value, url: urlInput.value, secret: secretInput.value })
+      destination = readDestinationInput({ kind: kindChoice.value, name: nameInput.value, url: urlInput.value, secret: secretInput.value, chatId: chatInput.value })
     } catch (caught) {
       destinationStatus.textContent = caught instanceof Error ? caught.message : String(caught)
       urlInput.focus()
@@ -364,6 +377,7 @@ export function openScheduledTasksDialog(chatId: string, deps: ScheduledTasksDia
     nameInput.value = ''
     urlInput.value = ''
     secretInput.value = ''
+    chatInput.value = ''
   }
 
   async function testDestination(destination: ResultDestination): Promise<void> {

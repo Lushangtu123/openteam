@@ -72,7 +72,7 @@ const result: RoundResult = {
   answers: [{ member: '分析师', text: '一、模型发布' }, { member: '记者', text: '', failed: true }],
 }
 const withSummary: RoundResult = { ...result, summary: { member: '分析师', text: '**共识**\n- 模型发布最重要' } }
-const destination = (kind: ResultDestination['kind'], fields: Partial<ResultDestination> = {}): ResultDestination => ({ id: 'd', kind, name: 'n', url: { feishu: 'https://open.feishu.cn/open-apis/bot/v2/hook/abc', wecom: 'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=k', dingtalk: 'https://oapi.dingtalk.com/robot/send?access_token=t', webhook: 'https://hooks.example.com/x' }[kind], createdAt: 1, ...fields })
+const destination = (kind: 'feishu' | 'wecom' | 'dingtalk' | 'webhook', fields: Partial<ResultDestination> = {}): ResultDestination => ({ id: 'd', kind, name: 'n', url: { feishu: 'https://open.feishu.cn/open-apis/bot/v2/hook/abc', wecom: 'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=k', dingtalk: 'https://oapi.dingtalk.com/robot/send?access_token=t', webhook: 'https://hooks.example.com/x' }[kind], createdAt: 1, ...fields })
 
 describe('what is sent', () => {
   it('is the summary when there is one, with who answered; otherwise every answer', async () => {
@@ -133,5 +133,68 @@ describe('the destination\'s answer', () => {
     expect(readSendResponse('dingtalk', 200, '{"errcode":310000,"errmsg":"keywords not in content"}')).toBe('keywords not in content（310000）')
     expect(readSendResponse('webhook', 204, '')).toBeUndefined()
     expect(readSendResponse('webhook', 500, 'boom')).toBe('HTTP 500')
+  })
+})
+
+describe('Slack, Discord and Telegram', () => {
+  const TOKEN = '123456789:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw'
+
+  it('take their own addresses, and a Telegram bot\'s token with the chat it posts to', () => {
+    expect(readDestinationInput({ kind: 'slack', url: 'https://hooks.slack.com/services/T1/B2/xyz' })).toEqual({ kind: 'slack', name: 'Slack', url: 'https://hooks.slack.com/services/T1/B2/xyz' })
+    expect(readDestinationInput({ kind: 'discord', url: 'https://discord.com/api/webhooks/1/abc' }).name).toBe('Discord')
+    expect(readDestinationInput({ kind: 'discord', url: 'https://discordapp.com/api/webhooks/1/abc' }).url).toBe('https://discordapp.com/api/webhooks/1/abc')
+    expect(readDestinationInput({ kind: 'telegram', url: ` ${TOKEN} `, chatId: ' -1001234567890 ' })).toEqual({ kind: 'telegram', name: 'Telegram 机器人', url: `https://api.telegram.org/bot${TOKEN}/sendMessage`, chatId: '-1001234567890' })
+    expect(readDestinationInput({ kind: 'telegram', url: `https://api.telegram.org/bot${TOKEN}/sendMessage`, chatId: '@morning_news' }).chatId).toBe('@morning_news')
+  })
+
+  it('refuse what is not theirs', () => {
+    expect(() => readDestinationInput({ kind: 'slack', url: 'https://hooks.slack.com/workflows/x' })).toThrow('Slack 的地址应以 https://hooks.slack.com/services/ 开头')
+    expect(() => readDestinationInput({ kind: 'discord', url: 'https://example.com/api/webhooks/1/abc' })).toThrow('Discord 的地址应以 https://discord.com/api/webhooks/ 开头')
+    expect(() => readDestinationInput({ kind: 'telegram', url: 'not-a-token', chatId: '1' })).toThrow('Telegram 机器人的 Token 应形如 123456789:AA…（在 BotFather 里拿到）')
+    expect(() => readDestinationInput({ kind: 'telegram', url: TOKEN })).toThrow('填上 Telegram 群组或频道的 Chat ID（如 -1001234567890 或 @频道名）')
+  })
+
+  it('keep a Telegram destination\'s chat when loaded', () => {
+    const telegram: ResultDestination = { id: 't', kind: 'telegram', name: 'TG', url: `https://api.telegram.org/bot${TOKEN}/sendMessage`, chatId: '-100', createdAt: 1 }
+    expect(normalizeResultDestinations([telegram])).toEqual([telegram])
+  })
+
+  it('send Slack its own Markdown', async () => {
+    const request = await buildSendRequest({ id: 's', kind: 'slack', name: 'S', url: 'https://hooks.slack.com/services/T1/B2/xyz', createdAt: 1 }, result, NOW, false)
+    expect(JSON.parse(request.body)).toEqual({ text: '*「晨报」定时任务*（工作日 09:00）\n> @所有人 总结今天的 AI 新闻\n\n*分析师*\n一、模型发布\n\n*记者*\n（没有回答）' })
+  })
+
+  it('send Discord a card per answer, or the summary with who answered, without pinging anyone', async () => {
+    const discord: ResultDestination = { id: 'd', kind: 'discord', name: 'D', url: 'https://discord.com/api/webhooks/1/abc', createdAt: 1 }
+    expect(JSON.parse((await buildSendRequest(discord, result, NOW, false)).body)).toEqual({
+      content: '**「晨报」定时任务**（工作日 09:00）\n> @所有人 总结今天的 AI 新闻',
+      embeds: [{ title: '分析师', description: '一、模型发布' }, { title: '记者', description: '（没有回答）' }],
+      allowed_mentions: { parse: [] },
+    })
+    expect(JSON.parse((await buildSendRequest(discord, withSummary, NOW, false)).body).embeds).toEqual([{ title: '汇总（分析师）', description: '**共识**\n- 模型发布最重要', footer: { text: '回答了：分析师；没回答：记者' } }])
+    // Discord takes 6000 characters across a message's cards.
+    const long: RoundResult = { ...result, answers: [{ member: '甲', text: '长'.repeat(5000) }, { member: '乙', text: '文'.repeat(5000) }] }
+    const embeds = JSON.parse((await buildSendRequest(discord, long, NOW, false)).body).embeds as Array<{ title: string; description: string }>
+    expect(embeds.map(embed => embed.title)).toEqual(['甲', '乙'])
+    expect(embeds.reduce((sum, embed) => sum + embed.title.length + embed.description.length, 0)).toBeLessThanOrEqual(6000)
+    expect(embeds[0].description).toContain('…（完整内容在 OpenTeam 里）')
+  })
+
+  it('send Telegram plain text to the chat, within 4096 characters', async () => {
+    const telegram: ResultDestination = { id: 't', kind: 'telegram', name: 'TG', url: `https://api.telegram.org/bot${TOKEN}/sendMessage`, chatId: '-100', createdAt: 1 }
+    const request = await buildSendRequest(telegram, withSummary, NOW, false)
+    expect(request.url).toBe(`https://api.telegram.org/bot${TOKEN}/sendMessage`)
+    expect(JSON.parse(request.body)).toEqual({ chat_id: '-100', text: '「晨报」定时任务（工作日 09:00）\n问题：@所有人 总结今天的 AI 新闻\n\n汇总（分析师）\n**共识**\n- 模型发布最重要\n\n回答了：分析师；没回答：记者', disable_web_page_preview: true })
+    const long: RoundResult = { ...result, answers: [{ member: '甲', text: 'x'.repeat(9000) }] }
+    expect((JSON.parse((await buildSendRequest(telegram, long, NOW, false)).body).text as string).length).toBeLessThanOrEqual(4096)
+  })
+
+  it('read each one\'s answer', () => {
+    expect(readSendResponse('slack', 200, 'ok')).toBeUndefined()
+    expect(readSendResponse('slack', 404, 'no_service')).toBe('HTTP 404：no_service')
+    expect(readSendResponse('discord', 204, '')).toBeUndefined()
+    expect(readSendResponse('discord', 401, '{"message":"Invalid Webhook Token","code":50027}')).toBe('Invalid Webhook Token（50027）')
+    expect(readSendResponse('telegram', 200, '{"ok":true,"result":{}}')).toBeUndefined()
+    expect(readSendResponse('telegram', 400, '{"ok":false,"error_code":400,"description":"Bad Request: chat not found"}')).toBe('Bad Request: chat not found（400）')
   })
 })

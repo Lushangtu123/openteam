@@ -1859,7 +1859,8 @@ select.reply-compare-select {
 
 .result-destination-list[hidden],
 .result-destination-empty[hidden],
-.result-destination-secret[hidden] {
+.result-destination-secret[hidden],
+.result-destination-chat[hidden] {
   display: none;
 }
 
@@ -1893,6 +1894,7 @@ select.reply-compare-select {
 
 .result-destination-form #result-destination-url,
 .result-destination-secret,
+.result-destination-chat,
 .result-destination-form button {
   grid-column: 1 / -1;
 }

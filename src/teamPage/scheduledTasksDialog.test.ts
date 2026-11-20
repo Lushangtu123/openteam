@@ -192,3 +192,28 @@ describe('sending a scheduled task\'s result', () => {
   })
 })
 
+
+describe('adding an overseas destination', () => {
+  it('offers Slack, Discord and Telegram, and asks a Telegram bot for its token and chat', async () => {
+    const { runCommand, q, requestHostAccess } = setup()
+    const kind = q<HTMLSelectElement>('#result-destination-kind')
+    expect([...kind.options].map(option => option.textContent)).toEqual(['飞书群机器人', '企业微信群机器人', '钉钉群机器人', 'Slack', 'Discord', 'Telegram 机器人', '通用 Webhook'])
+    expect(q<HTMLElement>('.result-destination-chat').hidden).toBe(true)
+    kind.value = 'telegram'
+    kind.dispatchEvent(new Event('change'))
+    expect(q<HTMLElement>('.result-destination-chat').hidden).toBe(false)
+    expect(q<HTMLElement>('.result-destination-secret').hidden).toBe(true)
+    expect(q<HTMLInputElement>('#result-destination-url').placeholder).toBe('Bot Token，如 123456789:AA…')
+    q<HTMLInputElement>('#result-destination-url').value = '123456789:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw'
+    q<HTMLInputElement>('#result-destination-chat-id').value = '-1001234567890'
+    q<HTMLFormElement>('.result-destination-form').dispatchEvent(new Event('submit', { cancelable: true }))
+    const url = 'https://api.telegram.org/bot123456789:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw/sendMessage'
+    await vi.waitFor(() => expect(runCommand).toHaveBeenCalledWith('RESULT_DESTINATION_ADD', { destination: { kind: 'telegram', name: 'Telegram 机器人', url, chatId: '-1001234567890' } }))
+    expect(requestHostAccess).toHaveBeenCalledWith(url)
+
+    kind.value = 'slack'
+    kind.dispatchEvent(new Event('change'))
+    expect(q<HTMLElement>('.result-destination-chat').hidden).toBe(true)
+    expect(q<HTMLInputElement>('#result-destination-url').placeholder).toBe('https://hooks.slack.com/services/…')
+  })
+})
