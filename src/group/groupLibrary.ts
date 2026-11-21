@@ -11,6 +11,9 @@ import { tokenizeMemoryText } from './memoryRetrieval'
 import type { GroupChat, GroupMessage, GroupRole, OpenTeamLanguage, OpenTeamStore } from './types'
 
 export type LibraryDocKind = 'file' | 'note' | 'page' | 'message'
+// How often a web page in the library is read again (libraryRefresher.ts).
+export type LibraryRefresh = 'daily' | 'weekly'
+export const LIBRARY_REFRESH_MS: Record<LibraryRefresh, number> = { daily: 24 * 60 * 60 * 1000, weekly: 7 * 24 * 60 * 60 * 1000 }
 
 export interface LibraryDoc {
   id: string
@@ -22,6 +25,13 @@ export interface LibraryDoc {
   text?: string
   chars: number
   addedAt: number
+  // A web page read again on this schedule; left out: never.
+  refresh?: LibraryRefresh
+  // When it was last read again, and when that last changed its text.
+  checkedAt?: number
+  updatedAt?: number
+  // Why the last reading did not work; the text is what it was.
+  refreshError?: string
 }
 
 export interface LibraryPassage {
@@ -46,7 +56,13 @@ const MAX_SENT_KEYS = 400
 const BM25_K1 = 1.2
 const BM25_B = 0.75
 
-export function addLibraryDoc(store: OpenTeamStore, chatId: string, input: { title: string; kind: LibraryDocKind; source?: string; text: string }, now: number, newId: (prefix: string) => string): LibraryDoc {
+// A web page with its address: it can be read again.
+export function isRefreshablePage(doc: Pick<LibraryDoc, 'kind' | 'source'>): boolean {
+  return doc.kind === 'page' && /^https?:\/\//i.test(doc.source ?? '')
+}
+
+// refresh: a web page is read again weekly unless told otherwise ('never').
+export function addLibraryDoc(store: OpenTeamStore, chatId: string, input: { title: string; kind: LibraryDocKind; source?: string; text: string; refresh?: LibraryRefresh | 'never' }, now: number, newId: (prefix: string) => string): LibraryDoc {
   if (!store.chatsById[chatId]) throw new Error(`找不到群聊：${chatId}`)
   if (!KINDS.includes(input.kind)) throw new Error('不认识这种资料')
   const text = input.text.replace(/\r\n?/g, '\n').trim()
@@ -64,8 +80,62 @@ export function addLibraryDoc(store: OpenTeamStore, chatId: string, input: { tit
     chars: text.length,
     addedAt: now,
   }
+  const refresh = input.refresh ?? 'weekly'
+  if (refresh !== 'never' && isRefreshablePage(doc)) doc.refresh = refresh
   store.libraryByChatId = { ...(store.libraryByChatId ?? {}), [chatId]: [...docs, doc] }
   return doc
+}
+
+export function setLibraryDocRefresh(store: OpenTeamStore, chatId: string, docId: string, refresh: LibraryRefresh | undefined): void {
+  const doc = store.libraryByChatId?.[chatId]?.find(item => item.id === docId)
+  if (!doc) throw new Error('找不到这份资料')
+  if (!isRefreshablePage(doc)) throw new Error('只有网页可以定时更新')
+  if (refresh) doc.refresh = refresh
+  else delete doc.refresh
+}
+
+// The web pages due to be read again: their schedule has passed since they were last read.
+export function libraryDocsDue(store: OpenTeamStore, now: number): Array<{ chatId: string; docId: string; url: string }> {
+  return Object.entries(store.libraryByChatId ?? {}).flatMap(([chatId, docs]) => docs.flatMap(doc => {
+    if (!doc.refresh || !isRefreshablePage(doc)) return []
+    return (doc.checkedAt ?? doc.addedAt) + LIBRARY_REFRESH_MS[doc.refresh] <= now ? [{ chatId, docId: doc.id, url: doc.source! }] : []
+  }))
+}
+
+// A web page read again: its new text, or why it could not be read. A changed page's passages go to
+// web members again. Its title stays the one the user knows it by.
+export function applyLibraryRefresh(store: OpenTeamStore, chatId: string, docId: string, outcome: { title?: string; text: string } | { error: string }, now: number): 'updated' | 'same' | 'failed' | 'gone' {
+  const docs = store.libraryByChatId?.[chatId]
+  const doc = docs?.find(item => item.id === docId)
+  if (!docs || !doc) return 'gone'
+  doc.checkedAt = now
+  const fail = (reason: string) => {
+    doc.refreshError = reason.slice(0, 200)
+    return 'failed' as const
+  }
+  if ('error' in outcome) return fail(outcome.error)
+  const text = outcome.text.replace(/\r\n?/g, '\n').trim().slice(0, MAX_LIBRARY_DOC_CHARS)
+  if (!text) return fail('网页里没有读到文字')
+  if (comparable(text) === comparable(doc.text ?? '')) {
+    delete doc.refreshError
+    return 'same'
+  }
+  const total = docs.reduce((sum, item) => sum + item.chars, 0) - doc.chars + text.length
+  if (total > MAX_LIBRARY_CHARS) return fail(`更新后会超过资料库 ${MAX_LIBRARY_CHARS} 字的上限，没有更新`)
+  doc.text = text
+  doc.chars = text.length
+  doc.updatedAt = now
+  delete doc.refreshError
+  for (const roleId of store.chatsById[chatId]?.roleIds ?? []) {
+    const role = store.rolesById[roleId]
+    if (role?.librarySent) role.librarySent = role.librarySent.filter(key => !key.startsWith(`${docId}:`))
+  }
+  return 'updated'
+}
+
+// Spacing aside: a page read again comes back with its spaces and blank lines laid out differently.
+function comparable(text: string): string {
+  return text.replace(/\s+/g, ' ').trim()
 }
 
 export function removeLibraryDoc(store: OpenTeamStore, chatId: string, docId: string): void {
@@ -181,6 +251,10 @@ export function normalizeLibraryRecord(raw: unknown): Record<string, LibraryDoc[
         text: value.text,
         chars: value.text.length,
         addedAt: typeof value.addedAt === 'number' ? value.addedAt : 0,
+        ...(value.refresh === 'daily' || value.refresh === 'weekly' ? { refresh: value.refresh as LibraryRefresh } : {}),
+        ...(typeof value.checkedAt === 'number' ? { checkedAt: value.checkedAt } : {}),
+        ...(typeof value.updatedAt === 'number' ? { updatedAt: value.updatedAt } : {}),
+        ...(typeof value.refreshError === 'string' && value.refreshError ? { refreshError: value.refreshError } : {}),
       }]
     })
     if (docs.length > 0) result[chatId] = docs

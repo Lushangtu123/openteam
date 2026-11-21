@@ -790,18 +790,21 @@ function openLibrary(chatId: string): void {
     readFile: readLibraryFile,
     pickPages: () => new Promise((resolve, reject) => {
       let picked = false
+      let readPages: Array<{ title: string; url: string; text: string }> = []
       openWebPagesDialog({
         english: english(),
         listTabs: async () => (await chrome.tabs.query({ currentWindow: true })).flatMap(tab => tab.id !== undefined && tab.url ? [{ id: tab.id, url: tab.url, title: tab.title ?? '' }] : []),
         requestAccess: patterns => chrome.permissions.request({ origins: patterns }),
         async readPages(tabs) {
-          const response = await sendRuntimeMessage('WEB_PAGES_READ', { tabs }) as { ok?: boolean; error?: string; upload?: { fileName: string; mimeType: string; text: string }; failed?: Array<{ title: string; reason: string }> }
+          const response = await sendRuntimeMessage('WEB_PAGES_READ', { tabs }) as { ok?: boolean; error?: string; upload?: { fileName: string; mimeType: string; text: string }; pages?: Array<{ title: string; url: string; text: string }>; failed?: Array<{ title: string; reason: string }> }
           if (response.ok === false || !response.upload) throw new Error(response.error || '没有读到网页')
+          readPages = response.pages ?? []
           return { upload: response.upload, failed: response.failed }
         },
-        addFile: file => {
+        // Each page a document of its own, with its address (the attachment is all of them in one).
+        addFile: () => {
           picked = true
-          file.text().then(text => resolve({ title: file.name.replace(/\.md$/i, ''), source: tabsSource(text), text }), reject)
+          resolve(readPages.filter(page => page.text).map(page => ({ title: page.title, source: page.url, text: page.text })))
         },
         showError,
         onClose: () => { if (!picked) resolve(undefined) },
@@ -809,11 +812,6 @@ function openLibrary(chatId: string): void {
     }),
     previewText: (title, text) => openFilePreview({ fileName: /\.[a-z0-9]+$/i.test(title) ? title : `${title}.md`, text }, { english: english() }),
   })
-}
-
-// The pages file starts each page with its address; the first one names the document's source.
-function tabsSource(text: string): string {
-  return /https?:\/\/\S+/.exec(text)?.[0] ?? ''
 }
 
 // A file's text for the library: PDF and Office files read, a text file as it is (2 MB at most).

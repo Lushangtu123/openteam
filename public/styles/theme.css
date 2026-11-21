@@ -1872,12 +1872,14 @@ select.reply-compare-select {
 
 .library-doc-list[hidden],
 .library-note-form[hidden],
+.library-url-form[hidden],
 .library-add-row [hidden] {
   display: none;
 }
 
 .library-doc {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
   border: 1px solid var(--line);
@@ -1887,9 +1889,37 @@ select.reply-compare-select {
 
 .library-doc-text {
   display: grid;
-  flex: 1;
+  flex: 1 1 220px;
   min-width: 0;
   gap: 2px;
+}
+
+/* A web page's 不更新 / 每天 / 每周, and why its last update failed. */
+:root[data-theme] .library-doc .library-doc-refresh {
+  flex: none;
+  width: auto;
+  height: 30px;
+  padding-top: 0;
+  padding-bottom: 0;
+  font-size: 13px;
+}
+
+.library-doc-error {
+  color: var(--danger);
+  overflow-wrap: anywhere;
+}
+
+.library-doc-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.library-doc .btn {
+  flex: none;
+  white-space: nowrap;
 }
 
 .library-doc-title {

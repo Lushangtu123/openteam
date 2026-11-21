@@ -7,6 +7,7 @@ import { guardSpendCaps } from './spendCapGuard'
 import { createResultSender } from './resultSender'
 import { createWebPageReader } from './webPageReader'
 import { createWebSearcher } from './webSearcher'
+import { createLibraryRefresher, LIBRARY_REFRESH_ALARM } from './libraryRefresher'
 import { hostAccessPattern } from '../shared/hostAccess'
 import type { GroupChat, OpenTeamStore } from '../group/types'
 import { referencedImageIds } from '../group/backup'
@@ -99,6 +100,18 @@ const webPageReader = createWebPageReader({
   fetch: (url, init) => fetch(url, init),
   hasAccess: pattern => chrome.permissions.contains({ origins: [pattern] }),
   ask: (context, question, signal) => localAgentApprovals.ask(context, question, signal),
+  log,
+})
+// 群资料库's web pages, read again on their schedule (libraryRefresher.ts).
+const libraryRefresher = createLibraryRefresher({
+  fetch: (url, init) => fetch(url, init),
+  hasAccess: pattern => chrome.permissions.contains({ origins: [pattern] }),
+  loadStore,
+  mutateStore,
+  broadcastStoreUpdated: store => broadcastStoreUpdated(store),
+  alarms: { create: (name, info) => chrome.alarms?.create?.(name, info) },
+  newId,
+  now,
   log,
 })
 // 联网搜索: API members search through Tavily with the user's key (webSearcher.ts).
@@ -417,6 +430,7 @@ const routeMessage = createMessageRouter([
   ...resultSender.routes,
   ...siteCheckScheduler.routes,
   ...webSearcher.routes,
+  ...libraryRefresher.routes,
   ...createLibraryHandlers({ broadcastStoreUpdated: store => broadcastStoreUpdated(store), newId, now }),
   ...createSiteCheckHandlers({ route: message => Promise.resolve(routeMessage(message, {})), broadcastStoreUpdated, runtimeFrames, waitFor: ms => new Promise(resolve => globalThis.setTimeout(resolve, ms)), now }),
   ...createExternalModelHandlers({ broadcastStoreUpdated, externalModelClient, checkLocalAgent, newId, now }),
@@ -611,6 +625,10 @@ chrome.alarms?.onAlarm?.addListener(alarm => {
     scheduledTasks.checkDue().catch(error => log.warn('scheduled-task:check-failed', { error: errorReason(error) }))
     return
   }
+  if (alarm.name === LIBRARY_REFRESH_ALARM) {
+    libraryRefresher.refreshDue().catch(error => log.warn('library-refresh:check-failed', { error: errorReason(error) }))
+    return
+  }
   if (alarm.name === SITE_CHECK_ALARM) {
     siteCheckScheduler.checkDue().catch(error => log.warn('site-check-schedule:check-failed', { error: errorReason(error) }))
     return
@@ -759,6 +777,9 @@ void interruptedReplies.atBackgroundStart()
 // A task due while the browser was closed or the background asleep runs, or is skipped, now.
 scheduledTasks.checkDue().catch(error => log.warn('scheduled-task:check-failed', { error: errorReason(error) }))
 siteCheckScheduler.checkDue().catch(error => log.warn('site-check-schedule:check-failed', { error: errorReason(error) }))
+// 群资料库's web pages: an hourly look for those due, and one now.
+libraryRefresher.start()
+libraryRefresher.refreshDue().catch(error => log.warn('library-refresh:check-failed', { error: errorReason(error) }))
 
 // An install that was updated from a version requiring every website gives that access back, once
 // (see allSitesAccess.ts). Skipped where the browser has no way to remove a permission.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addLibraryDoc, confirmLibrarySent, forgetLibrarySent, libraryPassages, libraryPassagesForPrompt, noteLibraryPending, normalizeLibraryRecord, removeLibraryDoc, withLibraryBlock, withoutLibraryText } from './groupLibrary'
+import { addLibraryDoc, applyLibraryRefresh, confirmLibrarySent, forgetLibrarySent, LIBRARY_REFRESH_MS, libraryDocsDue, libraryPassages, libraryPassagesForPrompt, noteLibraryPending, normalizeLibraryRecord, removeLibraryDoc, setLibraryDocRefresh, withLibraryBlock, withoutLibraryText } from './groupLibrary'
 import { createDefaultStore } from './store'
 import type { GroupMessage, GroupRole, OpenTeamStore } from './types'
 
@@ -97,3 +97,83 @@ describe('a group\'s library', () => {
     expect(normalizeLibraryRecord({ c: [doc, { id: 'x', title: 't', kind: 'odd', text: 'y', chars: 1, addedAt: 1 }, 'junk'], gone: 'nope' })).toEqual({ c: [doc] })
   })
 })
+
+describe('keeping a library\'s web pages up to date', () => {
+  const DAY = 24 * 60 * 60 * 1000
+  const page = (store: OpenTeamStore, newId: (prefix: string) => string, fields: Partial<Parameters<typeof addLibraryDoc>[2]> = {}) => addLibraryDoc(store, 'c', { title: '价格页', kind: 'page', source: 'https://example.com/pricing', text: '基础版每月 10 元。', ...fields }, NOW, newId)
+
+  it('refreshes a page weekly unless told otherwise, and nothing that is not a web page', () => {
+    const { store, newId } = setup()
+    expect(page(store, newId).refresh).toBe('weekly')
+    expect(page(store, newId, { refresh: 'daily' }).refresh).toBe('daily')
+    expect(page(store, newId, { refresh: 'never' }).refresh).toBeUndefined()
+    expect(addLibraryDoc(store, 'c', { title: 'f', kind: 'file', source: 'a.txt', text: 'x' }, NOW, newId).refresh).toBeUndefined()
+    expect(addLibraryDoc(store, 'c', { title: 'p', kind: 'page', source: 'file:///x', text: 'x' }, NOW, newId).refresh).toBeUndefined()
+  })
+
+  it('lists the pages due, from when they were last checked', () => {
+    const { store, newId } = setup()
+    const weekly = page(store, newId)
+    const daily = page(store, newId, { refresh: 'daily', source: 'https://example.com/news' })
+    page(store, newId, { refresh: 'never' })
+    expect(libraryDocsDue(store, NOW + DAY - 60 * 60 * 1000)).toEqual([])
+    expect(libraryDocsDue(store, NOW + DAY)).toEqual([{ chatId: 'c', docId: daily.id, url: 'https://example.com/news' }])
+    expect(libraryDocsDue(store, NOW + LIBRARY_REFRESH_MS.weekly).map(item => item.docId)).toEqual([weekly.id, daily.id])
+    applyLibraryRefresh(store, 'c', daily.id, { text: '新闻' }, NOW + DAY)
+    expect(libraryDocsDue(store, NOW + DAY + 1).map(item => item.docId)).toEqual([])
+  })
+
+  it('takes a changed page, telling web members its passages again, and only notes the check of one that did not change', () => {
+    const { store, newId } = setup()
+    const doc = page(store, newId)
+    store.rolesById.web.librarySent = [`${doc.id}:0`, 'other:0']
+    expect(applyLibraryRefresh(store, 'c', doc.id, { text: '基础版每月 10 元。\n' }, NOW + 1)).toBe('same')
+    expect(store.libraryByChatId?.c[0]).toMatchObject({ checkedAt: NOW + 1, text: '基础版每月 10 元。' })
+    expect(store.libraryByChatId?.c[0].updatedAt).toBeUndefined()
+    expect(store.rolesById.web.librarySent).toEqual([`${doc.id}:0`, 'other:0'])
+
+    expect(applyLibraryRefresh(store, 'c', doc.id, { title: '新标题', text: '基础版每月 12 元。' }, NOW + 2)).toBe('updated')
+    expect(store.libraryByChatId?.c[0]).toMatchObject({ title: '价格页', text: '基础版每月 12 元。', chars: 11, checkedAt: NOW + 2, updatedAt: NOW + 2 })
+    expect(store.rolesById.web.librarySent).toEqual(['other:0'])
+  })
+
+  it('keeps the old text when a page could not be read, saying why, until a later read works', () => {
+    const { store, newId } = setup()
+    const doc = page(store, newId)
+    expect(applyLibraryRefresh(store, 'c', doc.id, { error: 'HTTP 404' }, NOW + 1)).toBe('failed')
+    expect(store.libraryByChatId?.c[0]).toMatchObject({ text: '基础版每月 10 元。', checkedAt: NOW + 1, refreshError: 'HTTP 404' })
+    expect(applyLibraryRefresh(store, 'c', doc.id, { text: '  ' }, NOW + 2)).toBe('failed')
+    expect(store.libraryByChatId?.c[0].refreshError).toBe('网页里没有读到文字')
+    expect(applyLibraryRefresh(store, 'c', doc.id, { text: '基础版每月 10 元。' }, NOW + 3)).toBe('same')
+    expect(store.libraryByChatId?.c[0].refreshError).toBeUndefined()
+    expect(applyLibraryRefresh(store, 'c', 'gone', { text: 'x' }, NOW + 4)).toBe('gone')
+  })
+
+  it('cuts a page past a document\'s limit, and does not take one past the library\'s', () => {
+    const { store, newId } = setup()
+    const doc = page(store, newId)
+    expect(applyLibraryRefresh(store, 'c', doc.id, { text: 'y'.repeat(300_010) }, NOW + 1)).toBe('updated')
+    expect(store.libraryByChatId?.c[0].chars).toBe(300_000)
+    for (let index = 0; index < 5; index += 1) addLibraryDoc(store, 'c', { title: `big${index}`, kind: 'note', text: 'z'.repeat(300_000) }, NOW, newId)
+    const small = page(store, newId, { text: 'a' })
+    expect(applyLibraryRefresh(store, 'c', small.id, { text: 'b'.repeat(250_000) }, NOW + 2)).toBe('failed')
+    expect(store.libraryByChatId?.c.find(item => item.id === small.id)).toMatchObject({ text: 'a', refreshError: '更新后会超过资料库 2000000 字的上限，没有更新' })
+  })
+
+  it('is switched per page, and kept with the rest of the document', () => {
+    const { store, newId } = setup()
+    const doc = page(store, newId)
+    setLibraryDocRefresh(store, 'c', doc.id, 'daily')
+    expect(store.libraryByChatId?.c[0].refresh).toBe('daily')
+    setLibraryDocRefresh(store, 'c', doc.id, undefined)
+    expect(store.libraryByChatId?.c[0].refresh).toBeUndefined()
+    expect(() => setLibraryDocRefresh(store, 'c', 'gone', 'daily')).toThrow('找不到这份资料')
+    const file = addLibraryDoc(store, 'c', { title: 'f', kind: 'file', text: 'x' }, NOW, newId)
+    expect(() => setLibraryDocRefresh(store, 'c', file.id, 'daily')).toThrow('只有网页可以定时更新')
+
+    setLibraryDocRefresh(store, 'c', doc.id, 'weekly')
+    applyLibraryRefresh(store, 'c', doc.id, { error: 'HTTP 500' }, NOW + 1)
+    expect(normalizeLibraryRecord(JSON.parse(JSON.stringify(store.libraryByChatId))).c[0]).toEqual(store.libraryByChatId?.c[0])
+  })
+})
+

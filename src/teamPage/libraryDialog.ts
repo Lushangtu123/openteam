@@ -2,9 +2,11 @@
 // delete, and the ways to add one: files read into text, a pasted note, web pages open in this
 // window. Replies and attachments are saved into it from the chat. The background keeps the text;
 // the page has the list.
-import type { LibraryDoc, LibraryDocKind } from '../group/groupLibrary'
+import { isRefreshablePage, type LibraryDoc, type LibraryDocKind } from '../group/groupLibrary'
 import type { OpenTeamStore } from '../group/types'
+import { hostAccessLabel, requestHostAccess } from '../shared/hostAccess'
 import { normalizeLanguage } from '../shared/i18n'
+import { checkReadableUrl } from '../shared/webPageText'
 import { createIcon } from './icons'
 
 export interface LibraryDialogDependencies {
@@ -14,8 +16,10 @@ export interface LibraryDialogDependencies {
   request(type: string, payload?: Record<string, unknown>): Promise<Record<string, unknown>>
   // A file's text: a text file as it is, PDF and Office files read (documentText.ts).
   readFile(file: File): Promise<string>
-  // Web pages chosen from the open tabs, as one document; undefined when none were chosen.
-  pickPages?(): Promise<{ title: string; source: string; text: string } | undefined>
+  // Web pages chosen from the open tabs, each with its address; undefined when none were chosen.
+  pickPages?(): Promise<Array<{ title: string; source: string; text: string }> | undefined>
+  // Asks the browser to let OpenTeam reach a page's site (from a click).
+  requestHostAccess?(url: string): Promise<boolean>
   previewText(title: string, text: string): void
   confirm?(message: string): boolean
   now?(): number
@@ -40,6 +44,7 @@ export function openLibraryDialog(chatId: string, deps: LibraryDialogDependencie
   const confirm = deps.confirm ?? (message => window.confirm(message))
   const english = () => normalizeLanguage(deps.getStore().settings.language) === 'en'
   const t = (zh: string, en: string): string => english() ? en : zh
+  const requestAccess = deps.requestHostAccess ?? (url => requestHostAccess(url))
   let drawn = ''
 
   const backdrop = element('div', 'modal-backdrop library-modal')
@@ -84,7 +89,35 @@ export function openLibraryDialog(chatId: string, deps: LibraryDialogDependencie
   })
   const pagesButton = addButton('pages', t('打开的网页', 'Open web pages'), () => void addPages())
   pagesButton.hidden = !deps.pickPages
-  addRow.append(uploadButton, noteButton, pagesButton, fileInput)
+  const urlButton = addButton('url', t('网址', 'Address'), () => {
+    urlForm.hidden = !urlForm.hidden
+    if (!urlForm.hidden) urlInput.focus()
+  })
+  addRow.append(uploadButton, noteButton, pagesButton, urlButton, fileInput)
+
+  // A page by its address, fetched by the background and read again weekly.
+  const urlForm = element('form', 'team-setup-form library-url-form')
+  urlForm.noValidate = true
+  urlForm.hidden = true
+  const urlInput = element('input')
+  urlInput.id = 'library-url-input'
+  urlInput.type = 'url'
+  urlInput.placeholder = 'https://…'
+  urlInput.setAttribute('aria-label', t('网页地址', 'Page address'))
+  const urlActions = element('div', 'team-setup-actions')
+  const urlCancel = element('button', 'btn', t('取消', 'Cancel'))
+  urlCancel.type = 'button'
+  urlCancel.addEventListener('click', () => {
+    urlForm.hidden = true
+  })
+  const urlSave = element('button', 'btn btn-primary', t('加入', 'Add'))
+  urlSave.type = 'submit'
+  urlActions.append(urlCancel, urlSave)
+  urlForm.append(urlInput, urlActions)
+  urlForm.addEventListener('submit', event => {
+    event.preventDefault()
+    addUrl()
+  })
 
   const noteForm = element('form', 'team-setup-form library-note-form')
   noteForm.noValidate = true
@@ -116,7 +149,7 @@ export function openLibraryDialog(chatId: string, deps: LibraryDialogDependencie
   const status = element('p', 'tiny library-status')
   status.setAttribute('role', 'status')
 
-  dialog.append(header, summary, list, addRow, noteForm, status)
+  dialog.append(header, summary, list, addRow, noteForm, urlForm, status)
   backdrop.append(dialog)
   document.body.append(backdrop)
   document.addEventListener('keydown', handleEscape)
@@ -137,7 +170,7 @@ export function openLibraryDialog(chatId: string, deps: LibraryDialogDependencie
     title.textContent = t(`「${chat.name}」的资料库`, `Library of "${chat.name}"`)
     const all = docs()
     // Drawn again only when the documents changed: the page redraws on every store update.
-    const key = JSON.stringify([english(), all.map(doc => [doc.id, doc.title, doc.kind, doc.chars])])
+    const key = JSON.stringify([english(), all.map(doc => [doc.id, doc.title, doc.kind, doc.chars, doc.refresh, doc.checkedAt, doc.updatedAt, doc.refreshError])])
     if (key === drawn) return
     drawn = key
     const total = all.reduce((sum, doc) => sum + doc.chars, 0)
@@ -151,7 +184,10 @@ export function openLibraryDialog(chatId: string, deps: LibraryDialogDependencie
   function renderDoc(doc: LibraryDoc): HTMLLIElement {
     const item = element('li', 'library-doc')
     const text = element('div', 'library-doc-text')
-    text.append(element('span', 'library-doc-title', doc.title), element('span', 'tiny library-doc-meta', [kindName(doc.kind), size(doc.chars), formatDate(doc.addedAt)].join(' · ')))
+    const page = isRefreshablePage(doc)
+    const updated = page && doc.refresh && doc.updatedAt ? t(`${formatDate(doc.updatedAt)} 已更新`, `updated ${formatDate(doc.updatedAt)}`) : ''
+    text.append(element('span', 'library-doc-title', doc.title), element('span', 'tiny library-doc-meta', [kindName(doc.kind), size(doc.chars), formatDate(doc.addedAt), updated].filter(Boolean).join(' · ')))
+    if (page && doc.refreshError) text.append(element('span', 'tiny library-doc-error', t(`最近一次更新失败：${doc.refreshError}，资料还是上次的内容`, `The last update failed: ${doc.refreshError}; the material is as it was`)))
     const view = element('button', 'btn btn-ghost btn-small', t('查看', 'View'))
     view.type = 'button'
     view.dataset.libraryAction = 'view'
@@ -165,8 +201,79 @@ export function openLibraryDialog(chatId: string, deps: LibraryDialogDependencie
       if (!confirm(t(`从资料库删除「${doc.title}」吗？`, `Delete "${doc.title}" from the library?`))) return
       void command('LIBRARY_REMOVE', { chatId, docId: doc.id }, t('已删除。', 'Deleted.'))
     })
-    item.append(text, view, remove)
+    // The controls wrap together under the title when the row is narrow.
+    const actions = element('div', 'library-doc-actions')
+    if (page) actions.append(refreshChoice(doc), refreshButton(doc))
+    actions.append(view, remove)
+    item.append(text, actions)
     return item
+  }
+
+  function refreshChoice(doc: LibraryDoc): HTMLSelectElement {
+    const select = element('select', 'library-doc-refresh')
+    select.setAttribute('aria-label', t(`多久更新：${doc.title}`, `How often to update: ${doc.title}`))
+    select.append(new Option(t('不更新', 'Never update'), 'never'), new Option(t('每天更新', 'Update daily'), 'daily'), new Option(t('每周更新', 'Update weekly'), 'weekly'))
+    select.value = doc.refresh ?? 'never'
+    select.addEventListener('change', () => void command('LIBRARY_REFRESH_SET', { chatId, docId: doc.id, refresh: select.value }, ''))
+    return select
+  }
+
+  function refreshButton(doc: LibraryDoc): HTMLButtonElement {
+    const button = element('button', 'btn btn-ghost btn-small', t('立即更新', 'Update now'))
+    button.type = 'button'
+    button.dataset.libraryAction = 'refresh'
+    button.setAttribute('aria-label', t(`立即更新：${doc.title}`, `Update now: ${doc.title}`))
+    button.addEventListener('click', () => {
+      // Asked in the click itself: the browser shows its prompt only then.
+      const access = requestAccess(doc.source!)
+      void (async () => {
+        if (!await access) {
+          status.textContent = needAccess(doc.source!)
+          return
+        }
+        status.textContent = t(`正在读「${doc.title}」…`, `Reading "${doc.title}"…`)
+        try {
+          const answer = await deps.request('LIBRARY_REFRESH', { chatId, docId: doc.id })
+          status.textContent = answer.outcome === 'updated'
+            ? t(`「${doc.title}」已更新。`, `"${doc.title}" was updated.`)
+            : answer.outcome === 'same'
+            ? t(`「${doc.title}」没有变化。`, `"${doc.title}" has not changed.`)
+            : t(`「${doc.title}」这次没有读到，资料还是上次的内容。`, `"${doc.title}" could not be read this time; the material is as it was.`)
+        } catch (error) {
+          status.textContent = error instanceof Error ? error.message : String(error)
+        }
+      })()
+    })
+    return button
+  }
+
+  function needAccess(url: string): string {
+    const host = hostAccessLabel(url)
+    return t(`需要你允许 OpenTeam 访问 ${host}，才能读这个网页。`, `OpenTeam needs your permission to reach ${host} to read this page.`)
+  }
+
+  function addUrl(): void {
+    let url: string
+    try {
+      url = checkReadableUrl(urlInput.value).url
+    } catch (error) {
+      status.textContent = error instanceof Error ? error.message : String(error)
+      urlInput.focus()
+      return
+    }
+    // Asked in the click itself: the browser shows its prompt only then.
+    const access = requestAccess(url)
+    void (async () => {
+      if (!await access) {
+        status.textContent = needAccess(url)
+        return
+      }
+      status.textContent = t('正在读这个网页…', 'Reading the page…')
+      const added = await command('LIBRARY_ADD_URL', { chatId, url }, t('已加入网页，每周会自动更新一次。', 'Page added; it will update itself weekly.'))
+      if (!added) return
+      urlInput.value = ''
+      urlForm.hidden = true
+    })()
   }
 
   async function viewDoc(doc: LibraryDoc): Promise<void> {
@@ -215,14 +322,31 @@ export function openLibraryDialog(chatId: string, deps: LibraryDialogDependencie
     noteForm.hidden = true
   }
 
+  // Each page a document of its own, with its address, so it can be read again.
   async function addPages(): Promise<void> {
+    let pages: Awaited<ReturnType<NonNullable<LibraryDialogDependencies['pickPages']>>>
     try {
-      const pages = await deps.pickPages?.()
-      if (!pages) return
-      await command('LIBRARY_ADD', { chatId, doc: { title: pages.title, kind: 'page', source: pages.source, text: pages.text } }, t(`已加入「${pages.title}」。`, `Added "${pages.title}".`))
+      pages = await deps.pickPages?.()
     } catch (error) {
       status.textContent = error instanceof Error ? error.message : String(error)
+      return
     }
+    if (!pages?.length) return
+    const added: string[] = []
+    const failed: string[] = []
+    for (const page of pages) {
+      try {
+        await deps.runCommand('LIBRARY_ADD', { chatId, doc: { title: page.title, kind: 'page', source: page.source, text: page.text } })
+        added.push(page.title)
+      } catch (error) {
+        failed.push(`「${page.title}」${error instanceof Error ? error.message : String(error)}`)
+      }
+    }
+    status.textContent = [
+      added.length ? t(`已加入 ${added.length} 个网页：${added.join('、')}。`, `Added ${added.length} ${added.length === 1 ? 'page' : 'pages'}: ${added.join(', ')}.`) : '',
+      failed.length ? t(`没加入：${failed.join('；')}`, `Not added: ${failed.join('; ')}`) : '',
+    ].filter(Boolean).join('')
+    render()
   }
 
   async function command(type: string, payload: Record<string, unknown>, done: string): Promise<boolean> {

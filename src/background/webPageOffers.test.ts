@@ -153,6 +153,11 @@ describe('reading several open tabs at once', () => {
     expect(result.upload.fileName).toBe('网页对比-2个网页.md')
     expect(result.upload.text).toContain('## 1. 产品 A')
     expect(result.upload.text).toContain('## 2. 产品 B')
+    // Each page on its own too, for the group library (a document per page, read again by its address).
+    expect((result as unknown as { pages: unknown }).pages).toEqual([
+      { title: '产品 A', url: 'https://a.com/x', text: '产品 A 的正文' },
+      { title: '产品 B', url: 'https://b.com/y', text: '产品 B 的正文' },
+    ])
     expect(result.failed).toEqual([
       { title: '产品 C', reason: '读不了：Cannot access contents of the page' },
       { title: '产品 D', reason: '已经换了网页' },

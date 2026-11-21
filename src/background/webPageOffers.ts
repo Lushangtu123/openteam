@@ -91,7 +91,7 @@ export function createWebPageOffers(deps: WebPageOfferDependencies) {
       }
     }
     if (pages.length === 0) throw new Error(`没有读到网页：${failed.map(item => `「${item.title}」${item.reason}`).join('；')}`)
-    return { ok: true, upload: webPagesUpload(pages, await deps.language()), failed }
+    return { ok: true, upload: webPagesUpload(pages, await deps.language()), pages: pages.map(page => ({ title: page.title, url: page.url, text: page.text.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim() })), failed }
   }
 
   const dismiss: Handler = async () => {
