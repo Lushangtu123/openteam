@@ -754,6 +754,10 @@ function openUsage(): void {
       if (response.ok === false) throw new Error(response.error || '没读到余额')
       return { errors: response.errors }
     },
+    async refreshSearchAccount() {
+      const response = await sendRuntimeMessage('WEB_SEARCH_ACCOUNT_REFRESH') as { ok?: boolean; error?: string }
+      if (response.ok === false || response.error) throw new Error(response.error || translateUi('操作失败', normalizeLanguage(store.settings.language)))
+    },
     liftSpendCap: modelId => runCommand('MODEL_SPEND_CAP_LIFT', { modelId }),
     onClose: () => teamDomRefs.openUsageEl.focus(),
   })
@@ -1100,12 +1104,11 @@ const siteCheckDeliveryNotice = createSiteCheckDeliveryNotice({
   showError,
 })
 
-// 联网搜索 near the monthly allowance the user entered (webSearchQuotaNotice.ts).
+// 联网搜索 near the Tavily account's limit (webSearchQuotaNotice.ts).
 const webSearchQuotaNotice = createWebSearchQuotaNotice({
   element: document.getElementById('web-search-quota-notice'),
   language: () => normalizeLanguage(store.settings.language),
   getStore: () => store,
-  now: () => Date.now(),
   openUsage: () => openUsage(),
   runCommand,
   showError,

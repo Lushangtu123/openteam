@@ -4,6 +4,8 @@
 // for a new site as before. What the results say is material, not instructions.
 
 export const TAVILY_SEARCH_URL = 'https://api.tavily.com/search'
+// The key's and the account's credits for the billing cycle (src/shared/webSearchUsage.ts).
+export const TAVILY_USAGE_URL = 'https://api.tavily.com/usage'
 export const MAX_SEARCHES_PER_REPLY = 3
 const RESULTS_PER_SEARCH = 5
 const CONTENT_MAX = 700
@@ -12,8 +14,6 @@ const QUERY_MAX = 400
 export interface WebSearchSettings {
   provider: 'tavily'
   apiKey: string
-  // The searches the user's plan allows a month, if entered: a notice comes at 80% of it.
-  monthlyLimit?: number
 }
 
 export type SearchTopic = 'general' | 'news'
@@ -34,8 +34,7 @@ export interface WebSearchResult {
 export function normalizeWebSearchSettings(raw: unknown): WebSearchSettings | undefined {
   if (!isRecord(raw) || raw.provider !== 'tavily' || typeof raw.apiKey !== 'string') return undefined
   const apiKey = raw.apiKey.trim()
-  const monthlyLimit = typeof raw.monthlyLimit === 'number' && raw.monthlyLimit >= 1 ? Math.floor(raw.monthlyLimit) : undefined
-  return apiKey ? { provider: 'tavily', apiKey, ...(monthlyLimit ? { monthlyLimit } : {}) } : undefined
+  return apiKey ? { provider: 'tavily', apiKey } : undefined
 }
 
 // The key as the user pasted it: the "Bearer " a copied header has is dropped.
@@ -96,7 +95,7 @@ export function searchResultsForModel(query: string, results: WebSearchResult[],
 // Why a search did not work, in the user's words.
 export function searchErrorMessage(status: number, bodyText: string): string {
   if (status === 401) return 'Tavily 的 API Key 不对或已失效：到设置 → 模型 → 联网搜索 重新填写'
-  if (status === 432 || status === 433) return 'Tavily 的搜索额度用完了：到 tavily.com 查看用量，或等下个月额度恢复'
+  if (status === 432 || status === 433) return 'Tavily 的搜索额度用完了：到 tavily.com 查看用量，或等额度在下个周期恢复'
   if (status === 429) return 'Tavily 说搜索太频繁了，稍后再试'
   let detail = ''
   try {

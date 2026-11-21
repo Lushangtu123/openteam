@@ -6,6 +6,7 @@ import { spentInRange } from '../group/accountBalance'
 import { capBlocks, modelSpendToday, money as capMoney } from '../group/spendCap'
 import { normalizeLanguage } from '../shared/i18n'
 import { searchesInRange, searchQuotaState } from '../shared/webSearchUsage'
+import { accountUsageText } from './webSearchAccountText'
 import { createIcon } from './icons'
 
 export interface UsageDialogDependencies {
@@ -13,6 +14,8 @@ export interface UsageDialogDependencies {
   now?(): number
   // Reads the DeepSeek and Kimi accounts' balances again (src/background/accountBalances.ts).
   refreshBalances?(): Promise<{ errors?: Array<{ label: string; error: string }> }>
+  // Reads the Tavily account's credits again (src/background/webSearcher.ts); throws why not.
+  refreshSearchAccount?(): Promise<void>
   // 今天继续用: lifts a model's daily spending cap for today (src/group/spendCap.ts).
   liftSpendCap?(modelId: string): Promise<void>
   // Puts the focus back where the window was opened from.
@@ -41,6 +44,7 @@ export function openUsageDialog(deps: UsageDialogDependencies): { refresh(): voi
   let chatId = ''
   let balanceErrors: Array<{ label: string; error: string }> = []
   let refreshing = false
+  let searchAccountError = ''
   // The page redraws on every store update, every few seconds while members work; the window is
   // drawn again only when something it shows changed, so it does not flash as it is scrolled.
   let drawnScope = ''
@@ -101,6 +105,18 @@ export function openUsageDialog(deps: UsageDialogDependencies): { refresh(): voi
   render()
   rangeButtons[1].focus()
   void refreshBalances()
+  void refreshSearchAccount()
+
+  async function refreshSearchAccount(): Promise<void> {
+    if (!deps.refreshSearchAccount || !deps.getStore().settings.webSearch) return
+    try {
+      await deps.refreshSearchAccount()
+      searchAccountError = ''
+    } catch (error) {
+      searchAccountError = error instanceof Error ? error.message : String(error)
+    }
+    if (openDialog === controller) render()
+  }
 
   async function refreshBalances(): Promise<void> {
     if (!deps.refreshBalances || refreshing) return
@@ -129,7 +145,7 @@ export function openUsageDialog(deps: UsageDialogDependencies): { refresh(): voi
     scope.value = chatId
     const report = computeUsage(store, { range, ...(chatId ? { chatId } : {}), now: now() })
     const caps = cappedModels(store).map(model => [model.id, model.name, model.dailyCap, model.pricing?.currency, modelSpendToday(store, model.id, now())])
-    const contentKey = JSON.stringify([english(), range, chatId, report, store.accountBalancesById ?? {}, caps, balanceErrors, refreshing, new Date(now()).toDateString(), store.webSearchUsage ?? {}, store.settings.webSearch?.monthlyLimit, Boolean(store.settings.webSearch)])
+    const contentKey = JSON.stringify([english(), range, chatId, report, store.accountBalancesById ?? {}, caps, balanceErrors, refreshing, new Date(now()).toDateString(), store.webSearchUsage ?? {}, Boolean(store.settings.webSearch), searchAccountError])
     if (contentKey === drawnContent) return
     drawnContent = contentKey
     const scrolled = dialog.scrollTop
@@ -140,32 +156,33 @@ export function openUsageDialog(deps: UsageDialogDependencies): { refresh(): voi
     dialog.scrollTop = scrolled
   }
 
-  // 联网搜索: the searches in the range (by model), and this month against the allowance entered.
+  // 联网搜索: the searches in the range (by model), and the Tavily account's credits as Tavily said.
   function searchesSection(store: OpenTeamStore): HTMLElement | undefined {
     const inRange = searchesInRange(store.webSearchUsage, rangeStart(range, now()), now(), chatId || undefined)
     const everSearched = Object.keys(store.webSearchUsage?.days ?? {}).length > 0
     if (!store.settings.webSearch && !everSearched) return undefined
     const section = element('section', 'usage-searches')
     section.append(element('h3', 'usage-section-title', t('联网搜索（Tavily）', 'Web search (Tavily)')))
-    const quota = searchQuotaState(store.webSearchUsage, store.settings.webSearch?.monthlyLimit, now())
     const rangeText = inRange.total === 0
       ? (chatId ? t('这个群这段时间没有搜索。', 'No searches in this group in this time.') : t('这段时间没有搜索。', 'No searches in this time.'))
       : inRange.tests > 0
         ? t(`这段时间搜索 ${inRange.total} 次（其中测试 ${inRange.tests} 次）。`, `${inRange.total} searches in this time (${inRange.tests} of them tests).`)
         : t(`这段时间搜索 ${inRange.total} 次。`, `${inRange.total} searches in this time.`)
-    const monthText = quota.limit
-      ? t(`本月 ${quota.used} 次，额度 ${quota.limit} 次（${Math.round((quota.share ?? 0) * 100)}%）。`, `${quota.used} this month, of an allowance of ${quota.limit} (${Math.round((quota.share ?? 0) * 100)}%).`)
-      : t(`本月 ${quota.used} 次。`, `${quota.used} this month.`)
-    const summary = element('p', 'usage-searches-summary', `${rangeText}${english() ? ' ' : ''}${monthText}`)
-    if (quota.near) summary.classList.add('usage-searches-near')
-    section.append(summary)
+    section.append(element('p', 'usage-searches-summary', rangeText))
+    const account = store.settings.webSearch ? accountUsageText(store.webSearchUsage, english(), now()) : undefined
+    if (account) {
+      const line = element('p', 'usage-searches-account', t(`Tavily 账户：${account}`, `Tavily account: ${account}`))
+      if (searchQuotaState(store.webSearchUsage)?.near) line.classList.add('usage-searches-near')
+      section.append(line)
+    }
+    if (searchAccountError) section.append(element('p', 'usage-account-error tiny', t(`没读到 Tavily 的用量：${searchAccountError}`, `Could not read Tavily's usage: ${searchAccountError}`)))
     const models = Object.entries(inRange.byModel).sort((left, right) => right[1] - left[1])
     if (models.length > 0) {
       section.append(table('', [t('模型', 'Model'), t('搜索', 'Searches')], models.map(([modelId, count]) => [store.settings.externalModelsById[modelId]?.name ?? t('已删除的模型', 'A deleted model'), String(count)]), 'usage-search-models'))
     }
     section.append(element('p', 'tiny usage-account-note', t(
-      '每次搜索用掉 1 个 Tavily 额度。按自然月统计 OpenTeam 发出的搜索；Tavily 按你账户的周期重置额度。在「设置 → 模型 → 联网搜索」里填每月额度，用到八成时会提醒你。',
-      "Each search uses one Tavily credit. OpenTeam's searches are counted by calendar month; Tavily resets by your account's own cycle. Enter your monthly allowance under Settings → Models → Web search to be told at 80%.",
+      '每次搜索用掉 1 个 Tavily 额度。上面的次数是 OpenTeam 发出的搜索；账户用量来自 Tavily，包括这个 Key 在别处用掉的额度，用到八成时会提醒你。',
+      "Each search uses one Tavily credit. The counts above are OpenTeam's searches; the account's usage comes from Tavily, credits the key used elsewhere included, and you are told at 80%.",
     )))
     return section
   }

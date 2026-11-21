@@ -1,8 +1,9 @@
 // 联网搜索's use (src/shared/webSearch.ts): each Tavily search that came back is counted for its
 // local day, the API model that made it and its group; a search from the settings' 测试 counts as a
-// test. The 用量 window adds the days of a range up, and the month's count is held against the
-// allowance the user entered (Tavily counts its credits by the user's own plan; this is the
-// calendar month here). About a year of days is kept.
+// test. The 用量 window adds the days of a range up. What the Tavily account has used and may use
+// in its billing cycle is read from Tavily itself (GET /usage, src/background/webSearcher.ts), so
+// it includes what the key used before OpenTeam and elsewhere; the notice comes at 80% of it.
+// About a year of days is kept.
 
 export interface WebSearchDay {
   total: number
@@ -12,18 +13,35 @@ export interface WebSearchDay {
   tests?: number
 }
 
+// Tavily's answer to GET /usage, as last read: credits, for the current billing cycle.
+export interface TavilyAccount {
+  checkedAt: number
+  // The account's plan.
+  used: number
+  limit?: number
+  plan?: string
+  // The key's own limit, when the user set one in Tavily.
+  keyUsed?: number
+  keyLimit?: number
+}
+
 export interface WebSearchUsage {
   // Local day, YYYY-MM-DD.
   days: Record<string, WebSearchDay>
-  // The month (YYYY-MM) whose near-allowance notice was put away.
-  noticeMonth?: string
+  account?: TavilyAccount
+  // Where the near-allowance notice was put away: it comes back at the limit, with another limit,
+  // or once the count starts again in a new cycle.
+  noticeDismissed?: { used: number; limit: number; reached?: true }
 }
 
 export interface SearchQuotaState {
   used: number
-  limit?: number
-  share?: number
-  // At NEAR_SHARE of the allowance, or past it.
+  limit: number
+  share: number
+  // Whose limit: the plan's, or the key's own when that is the nearer.
+  scope: 'plan' | 'key'
+  checkedAt: number
+  // At NEAR_SHARE of the limit, or past it.
   near?: true
   reached?: true
 }
@@ -72,15 +90,40 @@ export function monthSearches(usage: WebSearchUsage | undefined, now: number): n
   return Object.entries(usage?.days ?? {}).reduce((sum, [name, day]) => name.startsWith(month) ? sum + day.total : sum, 0)
 }
 
-export function searchQuotaState(usage: WebSearchUsage | undefined, limit: number | undefined, now: number): SearchQuotaState {
-  const used = monthSearches(usage, now)
-  if (!limit) return { used }
-  const share = Math.round(used / limit * 100) / 100
-  return { used, limit, share, ...(share >= NEAR_SHARE ? { near: true as const } : {}), ...(used >= limit ? { reached: true as const } : {}) }
+// The account's credits against its limit: the plan's, or the key's own when that is nearer.
+// Undefined before Tavily was asked, or when it gives no limit.
+export function searchQuotaState(usage: WebSearchUsage | undefined): SearchQuotaState | undefined {
+  const account = usage?.account
+  if (!account) return undefined
+  const options: Array<{ used: number; limit: number; scope: 'plan' | 'key' }> = []
+  if (account.limit) options.push({ used: account.used, limit: account.limit, scope: 'plan' })
+  if (account.keyLimit) options.push({ used: account.keyUsed ?? 0, limit: account.keyLimit, scope: 'key' })
+  const nearest = options.sort((left, right) => right.used / right.limit - left.used / left.limit)[0]
+  if (!nearest) return undefined
+  const share = Math.round(nearest.used / nearest.limit * 100) / 100
+  return { ...nearest, share, checkedAt: account.checkedAt, ...(nearest.used >= nearest.limit * NEAR_SHARE ? { near: true as const } : {}), ...(nearest.used >= nearest.limit ? { reached: true as const } : {}) }
 }
 
-export function currentMonth(now: number): string {
-  return localDay(now).slice(0, 7)
+// Whether the near-allowance notice should show: near, and not put away at this point.
+export function searchQuotaNoticeDue(usage: WebSearchUsage | undefined): SearchQuotaState | undefined {
+  const state = searchQuotaState(usage)
+  if (!state?.near) return undefined
+  const dismissed = usage?.noticeDismissed
+  if (dismissed && dismissed.limit === state.limit && state.used >= dismissed.used && (dismissed.reached || !state.reached)) return undefined
+  return state
+}
+
+// Tavily's GET /usage answer, read; throws when it is not one.
+export function readTavilyAccount(raw: unknown, now: number): TavilyAccount {
+  const account = isRecord(raw) && isRecord(raw.account) ? raw.account : undefined
+  const key = isRecord(raw) && isRecord(raw.key) ? raw.key : undefined
+  if (!account && !key) throw new Error('Tavily 没有给出用量')
+  const used = credit(account?.plan_usage) ?? credit(key?.usage) ?? 0
+  const limit = credit(account?.plan_limit)
+  const keyLimit = credit(key?.limit)
+  const keyUsed = credit(key?.usage)
+  const plan = typeof account?.current_plan === 'string' && account.current_plan.trim() ? account.current_plan.trim().slice(0, 60) : undefined
+  return { checkedAt: now, used, ...(limit ? { limit } : {}), ...(plan ? { plan } : {}), ...(keyLimit ? { keyLimit, keyUsed: keyUsed ?? 0 } : {}) }
 }
 
 export function normalizeWebSearchUsage(raw: unknown): WebSearchUsage {
@@ -94,8 +137,27 @@ export function normalizeWebSearchUsage(raw: unknown): WebSearchUsage {
       ...(typeof value.tests === 'number' && value.tests > 0 ? { tests: Math.floor(value.tests) } : {}),
     }
   }
-  if (typeof raw.noticeMonth === 'string' && /^\d{4}-\d{2}$/.test(raw.noticeMonth)) usage.noticeMonth = raw.noticeMonth
+  const account = isRecord(raw.account) ? raw.account : undefined
+  if (account && typeof account.checkedAt === 'number' && credit(account.used) !== undefined) {
+    const limit = credit(account.limit)
+    const keyLimit = credit(account.keyLimit)
+    usage.account = {
+      checkedAt: account.checkedAt,
+      used: credit(account.used)!,
+      ...(limit ? { limit } : {}),
+      ...(typeof account.plan === 'string' && account.plan ? { plan: account.plan.slice(0, 60) } : {}),
+      ...(keyLimit ? { keyLimit, keyUsed: credit(account.keyUsed) ?? 0 } : {}),
+    }
+  }
+  const dismissed = isRecord(raw.noticeDismissed) ? raw.noticeDismissed : undefined
+  if (dismissed && credit(dismissed.used) !== undefined && credit(dismissed.limit)) {
+    usage.noticeDismissed = { used: credit(dismissed.used)!, limit: credit(dismissed.limit)!, ...(dismissed.reached === true ? { reached: true as const } : {}) }
+  }
   return usage
+}
+
+function credit(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.floor(value) : undefined
 }
 
 function counts(raw: unknown): Record<string, number> {

@@ -2097,37 +2097,51 @@ select.reply-compare-select {
   white-space: nowrap;
 }
 
-.usage-searches-summary {
+.usage-searches-summary,
+.usage-searches-account {
   margin: 0;
   color: var(--text);
 }
 
-.usage-searches-summary.usage-searches-near {
+.usage-searches-account.usage-searches-near,
+.web-search-account.web-search-account-near {
   color: var(--danger);
 }
 
-.web-search-limit-row {
+.web-search-account-row {
   border-top: 1px solid var(--line);
   padding-top: 12px;
 }
 
-.web-search-limit-row[hidden] {
+.web-search-account-row[hidden] {
   display: none;
 }
 
-.web-search-limit-line {
+.web-search-account-label {
+  margin: 0;
+  font-weight: 600;
+}
+
+.web-search-account-line {
   display: flex;
+  align-items: center;
   gap: 8px;
 }
 
-.web-search-limit-line input {
+.web-search-account {
   flex: 1;
   min-width: 0;
+  margin: 0;
+  color: var(--text);
 }
 
-.web-search-limit-line .btn {
+.web-search-account-line .btn {
   flex: none;
   white-space: nowrap;
+}
+
+.web-search-account-error:empty {
+  display: none;
 }
 
 .web-search-dialog .tiny a {

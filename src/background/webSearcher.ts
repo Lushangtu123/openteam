@@ -2,17 +2,20 @@
 // (the search_web tool, externalModelClient.ts). The user's key goes only to api.tavily.com, which the
 // user allowed when saving the key. At most MAX_SEARCHES_PER_REPLY searches a reply; the same search
 // in one reply is answered from the first. What the member gets back is always text, a failure
-// included, so it can go on answering. Also the settings' commands to save, remove and test the key.
+// included, so it can go on answering. Also the settings' commands to save, remove and test the key,
+// and Tavily's own count of the account's credits (GET /usage), read again after searches at most
+// every ACCOUNT_FRESH_MS and whenever the 联网搜索 or 用量 window opens.
 import type { OpenTeamStore } from '../group/types'
-import { MAX_SEARCHES_PER_REPLY, readSearchKey, readSearchRequest, readTavilyResults, searchErrorMessage, searchResultsForModel, TAVILY_SEARCH_URL, tavilyRequestBody, type WebSearchOptions, type WebSearchResult, type WebSearchSettings } from '../shared/webSearch'
-import { currentMonth, monthSearches, recordWebSearch } from '../shared/webSearchUsage'
+import { MAX_SEARCHES_PER_REPLY, readSearchKey, readSearchRequest, readTavilyResults, searchErrorMessage, searchResultsForModel, TAVILY_SEARCH_URL, TAVILY_USAGE_URL, tavilyRequestBody, type WebSearchOptions, type WebSearchResult, type WebSearchSettings } from '../shared/webSearch'
+import { monthSearches, readTavilyAccount, recordWebSearch, searchQuotaState, type TavilyAccount } from '../shared/webSearchUsage'
 import type { BackgroundMessageRoute } from './messageRouter'
 import type { RuntimeMessage } from './runtimeClient'
 import type { StoreMutationResult } from './storeAccess'
 
-export const WEB_SEARCH_ROUTE_TYPES = ['WEB_SEARCH_SAVE', 'WEB_SEARCH_TEST', 'WEB_SEARCH_LIMIT_SET', 'WEB_SEARCH_NOTICE_DISMISS'] as const
+export const WEB_SEARCH_ROUTE_TYPES = ['WEB_SEARCH_SAVE', 'WEB_SEARCH_TEST', 'WEB_SEARCH_ACCOUNT_REFRESH', 'WEB_SEARCH_NOTICE_DISMISS'] as const
 export const TAVILY_SITE = 'https://api.tavily.com/*'
 const SEARCH_TIMEOUT_MS = 20_000
+export const ACCOUNT_FRESH_MS = 5 * 60_000
 
 export interface WebSearcherDependencies {
   fetch(url: string, init: RequestInit): Promise<Response>
@@ -34,9 +37,47 @@ export type SearchWeb = (query: string, options?: WebSearchOptions) => Promise<s
 export function createWebSearcher(deps: WebSearcherDependencies) {
   const now = deps.now ?? (() => Date.now())
 
-  // A search that came back is counted (src/shared/webSearchUsage.ts).
-  async function count(from: { modelId?: string; chatId?: string; test?: boolean }): Promise<void> {
-    await deps.mutateStore(store => recordWebSearch(store.webSearchUsage ??= { days: {} }, from, now()))
+  // A search that came back is counted (src/shared/webSearchUsage.ts), and Tavily's own count is
+  // read again when the last reading is older than ACCOUNT_FRESH_MS.
+  async function count(key: string, from: { modelId?: string; chatId?: string; test?: boolean }): Promise<void> {
+    const { store } = await deps.mutateStore(store => recordWebSearch(store.webSearchUsage ??= { days: {} }, from, now()))
+    const checkedAt = store.webSearchUsage?.account?.checkedAt ?? 0
+    if (store.settings.webSearch?.apiKey === key && now() - checkedAt >= ACCOUNT_FRESH_MS) {
+      void refreshAccount(key).catch(error => deps.log.warn('web-search:usage-failed', { reason: error instanceof Error ? error.message : String(error) }))
+    }
+  }
+
+  // Tavily's count of the account's credits, for the key given; throws why it was not read.
+  async function readAccount(key: string): Promise<TavilyAccount> {
+    if (!await deps.hasAccess(TAVILY_SITE)) throw new Error('OpenTeam 没有访问 api.tavily.com 的权限，请到设置 → 模型 → 联网搜索 重新保存 Key')
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), SEARCH_TIMEOUT_MS)
+    try {
+      const response = await deps.fetch(TAVILY_USAGE_URL, { method: 'GET', headers: { authorization: `Bearer ${key}` }, credentials: 'omit', signal: controller.signal })
+      const text = await response.text()
+      if (!response.ok) throw new Error(searchErrorMessage(response.status, text).replace('搜索失败', '没读到用量'))
+      return readTavilyAccount(JSON.parse(text), now())
+    } catch (error) {
+      if (controller.signal.aborted) throw new Error('Tavily 20 秒内没有给出用量')
+      if (error instanceof SyntaxError) throw new Error('Tavily 没有给出用量')
+      throw error
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+
+  // Reads the saved key's credits and keeps them, unless the key changed meanwhile.
+  async function refreshAccount(key?: string): Promise<TavilyAccount> {
+    const apiKey = key ?? (await deps.loadStore()).settings.webSearch?.apiKey
+    if (!apiKey) throw new Error('还没有填 Tavily 的 API Key')
+    const account = await readAccount(apiKey)
+    const { store, result: kept } = await deps.mutateStore(store => {
+      if (store.settings.webSearch?.apiKey !== apiKey) return false
+      ;(store.webSearchUsage ??= { days: {} }).account = account
+      return true
+    })
+    if (kept) await deps.broadcastStoreUpdated(store)
+    return account
   }
   // One search; throws why it did not work.
   async function search(key: string, request: { query: string } & WebSearchOptions, maxResults?: number, signal?: AbortSignal): Promise<WebSearchResult[]> {
@@ -55,8 +96,13 @@ export function createWebSearcher(deps: WebSearcherDependencies) {
       })
       const text = await response.text()
       if (response.status === 432 || response.status === 433) {
-        const used = monthSearches((await deps.loadStore()).webSearchUsage, now())
-        throw new Error(`${searchErrorMessage(response.status, text)}（本月 OpenTeam 已搜索 ${used} 次）`)
+        const account = await refreshAccount(key).catch(() => undefined)
+        const usage = (await deps.loadStore()).webSearchUsage
+        const quota = account ? searchQuotaState(usage) : undefined
+        const counted = quota
+          ? `（Tavily 本期已用 ${quota.used} / ${quota.limit} 个额度）`
+          : `（本月 OpenTeam 已搜索 ${monthSearches(usage, now())} 次）`
+        throw new Error(`${searchErrorMessage(response.status, text)}${counted}`)
       }
       if (!response.ok) throw new Error(searchErrorMessage(response.status, text))
       return readTavilyResults(JSON.parse(text))
@@ -89,7 +135,7 @@ export function createWebSearcher(deps: WebSearcherDependencies) {
       searched += 1
       try {
         const results = await search(settings.apiKey, request, undefined, options.signal)
-        await count({ ...(options.chatId ? { chatId: options.chatId } : {}), ...(options.modelId ? { modelId: options.modelId } : {}) })
+        await count(settings.apiKey, { ...(options.chatId ? { chatId: options.chatId } : {}), ...(options.modelId ? { modelId: options.modelId } : {}) })
         const text = searchResultsForModel(request.query, results, options.english)
         done.set(key, text)
         options.onSearch?.({ query: request.query, results: results.length })
@@ -103,13 +149,17 @@ export function createWebSearcher(deps: WebSearcherDependencies) {
     }
   }
 
-  // A key, or remove: true to take it away.
+  // A key, or remove: true to take it away. Another key's account is forgotten; the window reads it.
   const handleSave = async (message: RuntimeMessage) => {
     const apiKey = message.remove === true ? undefined : readSearchKey(message.apiKey)
     const { store } = await deps.mutateStore(store => {
-      const monthlyLimit = store.settings.webSearch?.monthlyLimit
-      if (apiKey) store.settings.webSearch = { provider: 'tavily', apiKey, ...(monthlyLimit ? { monthlyLimit } : {}) }
+      const changed = store.settings.webSearch?.apiKey !== apiKey
+      if (apiKey) store.settings.webSearch = { provider: 'tavily', apiKey }
       else delete store.settings.webSearch
+      if (changed && store.webSearchUsage) {
+        delete store.webSearchUsage.account
+        delete store.webSearchUsage.noticeDismissed
+      }
     })
     await deps.broadcastStoreUpdated(store)
     return { ok: true, store }
@@ -121,28 +171,26 @@ export function createWebSearcher(deps: WebSearcherDependencies) {
     const apiKey = given ?? (await deps.loadStore()).settings.webSearch?.apiKey
     if (!apiKey) throw new Error('还没有填 Tavily 的 API Key')
     const results = await search(apiKey, { query: 'OpenTeam' }, 1)
-    await count({ test: true })
+    await count(apiKey, { test: true })
     return { ok: true, results: results.length }
   }
 
-  // The searches the user's plan allows a month; null takes it away.
-  const handleLimitSet = async (message: RuntimeMessage) => {
-    const value = message.monthlyLimit
-    if (value !== null && value !== undefined && !(typeof value === 'number' && Number.isInteger(value) && value >= 1)) throw new Error('每月额度要写一个正整数')
-    const { store } = await deps.mutateStore(store => {
-      const current = store.settings.webSearch
-      if (!current) throw new Error('还没有填 Tavily 的 API Key')
-      if (typeof value === 'number') current.monthlyLimit = value
-      else delete current.monthlyLimit
-    })
-    await deps.broadcastStoreUpdated(store)
-    return { ok: true, store }
+  // The account's credits read again, from the 联网搜索 and 用量 windows. Why it was not read is
+  // answered, not thrown: the window shows it, and a thrown error would also pop up over the page.
+  const handleAccountRefresh = async () => {
+    try {
+      return { ok: true, account: await refreshAccount() }
+    } catch (error) {
+      return { ok: true, error: error instanceof Error ? error.message : String(error) }
+    }
   }
 
-  // The near-allowance notice put away until next month.
+  // The near-allowance notice put away where it is now (src/shared/webSearchUsage.ts).
   const handleNoticeDismiss = async () => {
     const { store } = await deps.mutateStore(store => {
-      (store.webSearchUsage ??= { days: {} }).noticeMonth = currentMonth(now())
+      const usage = store.webSearchUsage ??= { days: {} }
+      const state = searchQuotaState(usage)
+      if (state) usage.noticeDismissed = { used: state.used, limit: state.limit, ...(state.reached ? { reached: true as const } : {}) }
     })
     await deps.broadcastStoreUpdated(store)
     return { ok: true, store }
@@ -151,7 +199,7 @@ export function createWebSearcher(deps: WebSearcherDependencies) {
   const routes: BackgroundMessageRoute[] = [
     { type: 'WEB_SEARCH_SAVE', handler: handleSave },
     { type: 'WEB_SEARCH_TEST', handler: handleTest },
-    { type: 'WEB_SEARCH_LIMIT_SET', handler: handleLimitSet },
+    { type: 'WEB_SEARCH_ACCOUNT_REFRESH', handler: handleAccountRefresh },
     { type: 'WEB_SEARCH_NOTICE_DISMISS', handler: handleNoticeDismiss },
   ]
   return { forReply, routes }

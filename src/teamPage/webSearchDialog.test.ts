@@ -5,6 +5,7 @@ import type { OpenTeamStore } from '../group/types'
 import { currentWebSearchDialog, openWebSearchDialog } from './webSearchDialog'
 
 const KEY = 'tvly-dev-0123456789abcd'
+const NOW = new Date(2026, 10, 21, 7, 58).getTime()
 
 function setup(saved?: string) {
   const store: OpenTeamStore = createDefaultStore()
@@ -16,10 +17,16 @@ function setup(saved?: string) {
       else store.settings.webSearch = { provider: 'tavily', apiKey: String(payload?.apiKey) }
     }
   })
-  const request = vi.fn(async (_type: string, _payload?: Record<string, unknown>) => ({ ok: true, results: 1 } as Record<string, unknown>))
+  const request = vi.fn(async (type: string, _payload?: Record<string, unknown>) => {
+    if (type === 'WEB_SEARCH_ACCOUNT_REFRESH') {
+      store.webSearchUsage = { ...(store.webSearchUsage ?? { days: {} }), account: { checkedAt: NOW, used: 812, limit: 1000, plan: 'Researcher' } }
+      return { ok: true } as Record<string, unknown>
+    }
+    return { ok: true, results: 1 } as Record<string, unknown>
+  })
   const requestHostAccess = vi.fn(async (_url: string) => true)
   const confirm = vi.fn(() => true)
-  const dialog = openWebSearchDialog({ getStore: () => store, runCommand, request, requestHostAccess, confirm })
+  const dialog = openWebSearchDialog({ getStore: () => store, runCommand, request, requestHostAccess, confirm, now: () => NOW })
   const $ = <T extends HTMLElement>(selector: string) => document.querySelector<T>(selector)!
   const button = (label: string) => [...document.querySelectorAll<HTMLButtonElement>('.web-search-dialog button')].find(node => node.textContent?.trim() === label)
   return { store, runCommand, request, requestHostAccess, confirm, dialog, $, button }
@@ -90,35 +97,26 @@ describe('the 联网搜索 window', () => {
   })
 })
 
-describe('the 联网搜索 window\'s monthly allowance', () => {
-  it('shows this month\'s searches and saves an allowance, or takes it away', async () => {
+describe('the 联网搜索 window\'s account usage', () => {
+  it('reads what the Tavily account used as it opens, shows it, and reads again on 刷新', async () => {
     const ctx = setup(KEY)
-    ctx.store.webSearchUsage = { days: { [today()]: { total: 37, byChat: {} } } }
-    ctx.dialog.refresh()
-    expect(ctx.$('.web-search-month').textContent).toBe('本月已搜索 37 次。')
-    const limit = ctx.$<HTMLInputElement>('#web-search-limit')
-    limit.value = '1000'
-    ctx.button('保存额度')!.click()
-    await vi.waitFor(() => expect(ctx.runCommand).toHaveBeenCalledWith('WEB_SEARCH_LIMIT_SET', { monthlyLimit: 1000 }))
-    ctx.store.settings.webSearch = { provider: 'tavily', apiKey: KEY, monthlyLimit: 1000 }
-    ctx.dialog.refresh()
-    expect(ctx.$('.web-search-month').textContent).toBe('本月已搜索 37 次，额度 1000 次（4%）。用到八成时会提醒你。')
-    limit.value = ''
-    ctx.button('保存额度')!.click()
-    await vi.waitFor(() => expect(ctx.runCommand).toHaveBeenCalledWith('WEB_SEARCH_LIMIT_SET', { monthlyLimit: null }))
-    limit.value = '0'
-    ctx.button('保存额度')!.click()
-    expect(ctx.$('.team-form-error').textContent).toBe('每月额度要写一个正整数')
+    expect(ctx.request).toHaveBeenCalledWith('WEB_SEARCH_ACCOUNT_REFRESH')
+    ctx.store.webSearchUsage!.days = { '2026-11-21': { total: 37, byChat: {} } }
+    await vi.waitFor(() => expect(ctx.$('.web-search-account').textContent).toBe('本期已用 812 / 1000 个额度（81%） · 套餐 Researcher · 07:58 读取'))
+    expect(ctx.$('.web-search-account').classList.contains('web-search-account-near')).toBe(true)
+    expect(ctx.$('.web-search-month').textContent).toBe('OpenTeam 本月搜索 37 次（测试也算）。')
+    ctx.request.mockResolvedValueOnce({ ok: true, error: 'Tavily 的 API Key 不对或已失效' })
+    ctx.button('刷新')!.click()
+    await vi.waitFor(() => expect(ctx.$('.web-search-account-error').textContent).toBe('没读到用量：Tavily 的 API Key 不对或已失效'))
+    expect(ctx.request.mock.calls.filter(([type]) => type === 'WEB_SEARCH_ACCOUNT_REFRESH')).toHaveLength(2)
   })
 
-  it('has no allowance to set before a key is saved', () => {
+  it('has no usage before a key is saved, and reads it once one is', async () => {
     const ctx = setup()
-    expect(ctx.$<HTMLElement>('.web-search-limit-row').hidden).toBe(true)
+    expect(ctx.$<HTMLElement>('.web-search-account-row').hidden).toBe(true)
+    expect(ctx.request).not.toHaveBeenCalled()
+    ctx.$<HTMLInputElement>('#web-search-key').value = KEY
+    ctx.button('保存')!.click()
+    await vi.waitFor(() => expect(ctx.request).toHaveBeenCalledWith('WEB_SEARCH_ACCOUNT_REFRESH'))
   })
 })
-
-function today(): string {
-  const date = new Date()
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
-}
-

@@ -161,24 +161,41 @@ describe('the spending caps in the usage window', () => {
 })
 
 describe('web searches in the usage window', () => {
-  it('shows the searches of the range by model, and this month against the allowance', () => {
+  it('shows the searches of the range by model, and the Tavily account as Tavily said', () => {
     const { store, q, cells } = setup()
-    store.settings.webSearch = { provider: 'tavily', apiKey: 'tvly-x', monthlyLimit: 100 }
+    store.settings.webSearch = { provider: 'tavily', apiKey: 'tvly-x' }
     store.webSearchUsage = { days: {
       '2026-11-19': { total: 4, byChat: { a: { ds: 3 } }, tests: 1 },
       '2026-11-05': { total: 2, byChat: { a: { ds: 2 } } },
-    } }
+    }, account: { checkedAt: at(19, 8), used: 850, limit: 1000, plan: 'Researcher' } }
     currentUsageDialog()?.refresh()
     expect(q('.usage-searches .usage-section-title')?.textContent).toBe('联网搜索（Tavily）')
-    expect(q('.usage-searches-summary')?.textContent).toBe('这段时间搜索 4 次（其中测试 1 次）。本月 6 次，额度 100 次（6%）。')
+    expect(q('.usage-searches-summary')?.textContent).toBe('这段时间搜索 4 次（其中测试 1 次）。')
+    expect(q('.usage-searches-account')?.textContent).toBe('Tavily 账户：本期已用 850 / 1000 个额度（85%） · 套餐 Researcher · 08:00 读取')
+    expect(q('.usage-searches-account')?.classList.contains('usage-searches-near')).toBe(true)
     expect(cells('usage-search-models')).toEqual([['DeepSeek API', '3']])
 
     ;(q('[data-range="all"]') as HTMLButtonElement).click()
-    expect(q('.usage-searches-summary')?.textContent).toBe('这段时间搜索 6 次（其中测试 1 次）。本月 6 次，额度 100 次（6%）。')
+    expect(q('.usage-searches-summary')?.textContent).toBe('这段时间搜索 6 次（其中测试 1 次）。')
     const scope = q('.usage-scope') as HTMLSelectElement
     scope.value = 'b'
     scope.dispatchEvent(new Event('change'))
-    expect(q('.usage-searches-summary')?.textContent).toBe('这个群这段时间没有搜索。本月 6 次，额度 100 次（6%）。')
+    expect(q('.usage-searches-summary')?.textContent).toBe('这个群这段时间没有搜索。')
+  })
+
+  it('reads the Tavily account again as it opens, and says why it could not', async () => {
+    const { store, q } = setup()
+    currentUsageDialog()?.close()
+    store.settings.webSearch = { provider: 'tavily', apiKey: 'tvly-x' }
+    const refreshSearchAccount = vi.fn(async () => {
+      store.webSearchUsage = { days: {}, account: { checkedAt: at(19, 20), used: 12, limit: 1000 } }
+    })
+    openUsageDialog({ getStore: () => store, now: () => NOW, refreshSearchAccount })
+    expect(refreshSearchAccount).toHaveBeenCalledTimes(1)
+    await vi.waitFor(() => expect(q('.usage-searches-account')?.textContent).toBe('Tavily 账户：本期已用 12 / 1000 个额度（1%） · 20:00 读取'))
+    currentUsageDialog()?.close()
+    openUsageDialog({ getStore: () => store, now: () => NOW, refreshSearchAccount: async () => { throw new Error('Tavily 的 API Key 不对或已失效') } })
+    await vi.waitFor(() => expect(q('.usage-searches .usage-account-error')?.textContent).toBe('没读到 Tavily 的用量：Tavily 的 API Key 不对或已失效'))
   })
 
   it('has no search section without a key or any search', () => {

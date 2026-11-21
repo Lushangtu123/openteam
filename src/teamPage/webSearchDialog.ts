@@ -1,12 +1,14 @@
 // The window for 联网搜索 (src/shared/webSearch.ts), from the settings' 模型 tab: the user's Tavily
 // key, pasted, tested, saved or removed. Saving and testing ask the browser for api.tavily.com from
-// the click, as the browser asks only then. The key is shown only by its ends.
+// the click, as the browser asks only then. The key is shown only by its ends. With a key saved it
+// shows what the Tavily account has used, read from Tavily as the window opens and on 刷新.
 import { maskedSearchKey, readSearchKey, TAVILY_SEARCH_URL } from '../shared/webSearch'
 import type { OpenTeamStore } from '../group/types'
 import { hostAccessLabel, requestHostAccess } from '../shared/hostAccess'
 import { normalizeLanguage } from '../shared/i18n'
 import { createIcon } from './icons'
-import { searchQuotaState } from '../shared/webSearchUsage'
+import { monthSearches, searchQuotaState } from '../shared/webSearchUsage'
+import { accountUsageText } from './webSearchAccountText'
 
 export interface WebSearchDialogDependencies {
   getStore(): OpenTeamStore
@@ -15,6 +17,7 @@ export interface WebSearchDialogDependencies {
   request(type: string, payload?: Record<string, unknown>): Promise<Record<string, unknown>>
   requestHostAccess?(url: string): Promise<boolean>
   confirm?(message: string): boolean
+  now?(): number
   onClose?(): void
 }
 
@@ -36,7 +39,9 @@ export function openWebSearchDialog(deps: WebSearchDialogDependencies): WebSearc
   const requestAccess = deps.requestHostAccess ?? (url => requestHostAccess(url))
   const confirm = deps.confirm ?? (message => window.confirm(message))
   const host = hostAccessLabel(TAVILY_SEARCH_URL)
+  const now = deps.now ?? (() => Date.now())
   let busy = false
+  let reading = false
 
   const backdrop = element('div', 'modal-backdrop scheduled-tasks-modal')
   backdrop.addEventListener('click', event => {
@@ -98,27 +103,22 @@ export function openWebSearchDialog(deps: WebSearchDialogDependencies): WebSearc
   const save = button(t('保存', 'Save'), 'btn btn-primary', () => undefined)
   save.type = 'submit'
   actions.append(saved, remove, test, save)
-  // The allowance the user's plan gives a month: a notice comes at 80% of it.
-  const limitRow = element('div', 'field web-search-limit-row')
-  const limitLabel = element('label', '', t('每月额度（可选）', 'Monthly allowance (optional)'))
-  limitLabel.htmlFor = 'web-search-limit'
-  const limitLine = element('div', 'web-search-limit-line')
-  const limitInput = element('input')
-  limitInput.id = 'web-search-limit'
-  limitInput.type = 'number'
-  limitInput.min = '1'
-  limitInput.step = '1'
-  limitInput.inputMode = 'numeric'
-  limitInput.placeholder = t('例如 1000', 'e.g. 1000')
-  const limitSave = button(t('保存额度', 'Save allowance'), 'btn', () => void saveLimit())
-  limitLine.append(limitInput, limitSave)
+  // What the Tavily account has used this billing cycle, from Tavily itself.
+  const accountRow = element('div', 'field web-search-account-row')
+  accountRow.append(element('p', 'web-search-account-label', t('Tavily 账户用量', 'Tavily account usage')))
+  const accountLine = element('div', 'web-search-account-line')
+  const accountText = element('p', 'web-search-account')
+  accountText.setAttribute('role', 'status')
+  const refresh = button(t('刷新', 'Refresh'), 'btn btn-small', () => void readAccount())
+  accountLine.append(accountText, refresh)
+  const accountError = element('p', 'tiny web-search-account-error')
+  accountError.setAttribute('role', 'alert')
   const month = element('p', 'tiny web-search-month')
-  month.setAttribute('role', 'status')
-  limitRow.append(limitLabel, limitLine, month, element('p', 'tiny', t(
-    '填你在 Tavily 的套餐每月能搜多少次，用到八成时 OpenTeam 会提醒你。这里按自然月统计 OpenTeam 的搜索（测试也算）；Tavily 那边按你账户的周期重置。',
-    "How many searches your Tavily plan allows a month; OpenTeam tells you at 80%. OpenTeam's searches (tests included) are counted by calendar month here; Tavily resets by your account's own cycle.",
+  accountRow.append(accountLine, accountError, month, element('p', 'tiny', t(
+    '数字来自 Tavily，包括这个 Key 以前和在别处用掉的额度，用到八成时 OpenTeam 会提醒你。每次搜索用掉 1 个额度。',
+    "The figures come from Tavily, credits the key used before and elsewhere included; OpenTeam tells you at 80%. Each search uses one credit.",
   )))
-  form.append(field, error, actions, limitRow)
+  form.append(field, error, actions, accountRow)
   form.addEventListener('submit', event => {
     event.preventDefault()
     void saveKey()
@@ -138,6 +138,7 @@ export function openWebSearchDialog(deps: WebSearchDialogDependencies): WebSearc
   openDialog = controller
   render()
   keyInput.focus()
+  if (deps.getStore().settings.webSearch?.apiKey) void readAccount()
   return controller
 
   function render(): void {
@@ -145,28 +146,30 @@ export function openWebSearchDialog(deps: WebSearchDialogDependencies): WebSearc
     const key = store.settings.webSearch?.apiKey
     state.textContent = key ? t(`已设置：${maskedSearchKey(key)}`, `Set: ${maskedSearchKey(key)}`) : t('还没有设置 Key，API 成员不会搜索。', 'No key yet: API members do not search.')
     remove.hidden = !key
-    limitRow.hidden = !key
-    const quota = searchQuotaState(store.webSearchUsage, store.settings.webSearch?.monthlyLimit, Date.now())
-    month.textContent = quota.limit
-      ? t(`本月已搜索 ${quota.used} 次，额度 ${quota.limit} 次（${Math.round((quota.share ?? 0) * 100)}%）。用到八成时会提醒你。`, `${quota.used} searches this month, of an allowance of ${quota.limit} (${Math.round((quota.share ?? 0) * 100)}%). You are told at 80%.`)
-      : t(`本月已搜索 ${quota.used} 次。`, `${quota.used} searches this month.`)
-    if (document.activeElement !== limitInput && !limitInput.value) limitInput.value = store.settings.webSearch?.monthlyLimit ? String(store.settings.webSearch.monthlyLimit) : ''
+    accountRow.hidden = !key
+    const usage = store.webSearchUsage
+    accountText.textContent = reading && !usage?.account
+      ? t('正在向 Tavily 读取…', 'Reading from Tavily…')
+      : accountUsageText(usage, english(), now()) ?? t('还没有读到。', 'Not read yet.')
+    accountText.classList.toggle('web-search-account-near', Boolean(searchQuotaState(usage)?.near))
+    refresh.disabled = reading
+    month.textContent = t(`OpenTeam 本月搜索 ${monthSearches(usage, now())} 次（测试也算）。`, `OpenTeam searched ${monthSearches(usage, now())} times this month (tests included).`)
   }
 
-  async function saveLimit(): Promise<void> {
-    const raw = limitInput.value.trim()
-    const value = raw ? Number(raw) : null
-    if (value !== null && !(Number.isInteger(value) && value >= 1)) {
-      error.textContent = t('每月额度要写一个正整数', 'The monthly allowance must be a whole number above 0')
-      limitInput.focus()
-      return
-    }
+  // Tavily's count read again; the store update redraws it.
+  async function readAccount(): Promise<void> {
+    if (reading) return
+    reading = true
+    accountError.textContent = ''
+    render()
     try {
-      await deps.runCommand('WEB_SEARCH_LIMIT_SET', { monthlyLimit: value })
-      error.textContent = ''
-      render()
+      const answer = await deps.request('WEB_SEARCH_ACCOUNT_REFRESH')
+      if (typeof answer.error === 'string') throw new Error(answer.error)
     } catch (caught) {
-      error.textContent = caught instanceof Error ? caught.message : String(caught)
+      accountError.textContent = t(`没读到用量：${caught instanceof Error ? caught.message : String(caught)}`, `Could not read the usage: ${caught instanceof Error ? caught.message : String(caught)}`)
+    } finally {
+      reading = false
+      if (openDialog === controller) render()
     }
   }
 
@@ -192,6 +195,7 @@ export function openWebSearchDialog(deps: WebSearchDialogDependencies): WebSearc
       saved.hidden = false
       render()
       if (!await access) error.textContent = t(`已保存，但没有允许 OpenTeam 访问 ${host}，搜索会失败。点「测试」可以再允许一次。`, `Saved, but OpenTeam may not reach ${host}, so searches will fail. Click Test to allow it.`)
+      else void readAccount()
     } catch (caught) {
       error.textContent = caught instanceof Error ? caught.message : String(caught)
     } finally {
