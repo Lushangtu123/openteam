@@ -194,21 +194,68 @@ describe('a backup model', () => {
   const answer = (text: string) => sse(chunk({ content: text }), chunk({}, 'stop'))
   const modelAsked = async (init?: RequestInit) => JSON.parse(String(init?.body)).model as string
 
-  it('answers when the main model is busy, and the reply is told so', async () => {
+  it('answers when the main model is still busy when asked again, and the reply is told so', async () => {
     const asked: string[] = []
     const client = createExternalModelClient(async (_url, init) => {
       const name = await modelAsked(init)
       asked.push(name)
       return name === 'main' ? busy() : answer('from backup')
-    })
+    }, { busyRetryDelayMs: 1 })
     const used: Array<[string, string | undefined]> = []
     let text = ''
     for await (const part of client.stream!({ model: { ...model, modelName: 'main', fallbackModelName: 'lite' }, prompt: 'Hi', onFallback: (name, reason) => used.push([name, reason]) })) text += part
 
     expect(text).toBe('from backup')
-    expect(asked).toEqual(['main', 'lite'])
+    // Busy is usually brief: the main model is asked once more before its backup.
+    expect(asked).toEqual(['main', 'main', 'lite'])
     // Why the main model did not answer, in the server's words.
     expect(used).toEqual([['lite', 'HTTP 503：This model is currently experiencing high demand.']])
+  })
+
+  it('is not needed when the main model answers on the second try, after a short wait', async () => {
+    const asked: string[] = []
+    const waited: number[] = []
+    let started = 0
+    const client = createExternalModelClient(async (_url, init) => {
+      asked.push(await modelAsked(init))
+      if (asked.length === 1) {
+        started = Date.now()
+        return busy()
+      }
+      waited.push(Date.now() - started)
+      return answer('from main')
+    }, { busyRetryDelayMs: 30 })
+    const used: string[] = []
+    let text = ''
+    for await (const part of client.stream!({ model: { ...model, modelName: 'main', fallbackModelName: 'lite' }, prompt: 'Hi', onFallback: name => used.push(name) })) text += part
+    expect(text).toBe('from main')
+    expect(asked).toEqual(['main', 'main'])
+    expect(used).toEqual([])
+    expect(waited[0]).toBeGreaterThanOrEqual(25)
+  })
+
+  it('goes straight to the backup when the main model is rate-limited, and stops waiting when the reply is stopped', async () => {
+    const asked: string[] = []
+    const limited = createExternalModelClient(async (_url, init) => {
+      const name = await modelAsked(init)
+      asked.push(name)
+      return name === 'main' ? new Response(JSON.stringify({ error: { message: 'Too many requests' } }), { status: 429, headers: { 'content-type': 'application/json' } }) : answer('from backup')
+    }, { busyRetryDelayMs: 1 })
+    for await (const part of limited.stream!({ model: { ...model, modelName: 'main', fallbackModelName: 'lite' }, prompt: 'Hi' })) void part
+    expect(asked).toEqual(['main', 'lite'])
+
+    const stopped: string[] = []
+    const controller = new AbortController()
+    const slow = createExternalModelClient(async (_url, init) => {
+      stopped.push(await modelAsked(init))
+      setTimeout(() => controller.abort(), 5)
+      return busy()
+    }, { busyRetryDelayMs: 10_000 })
+    const started = Date.now()
+    const failure = await (async () => { for await (const part of slow.stream!({ model: { ...model, modelName: 'main', fallbackModelName: 'lite' }, prompt: 'Hi', abortSignal: controller.signal })) void part })().catch(error => error)
+    expect(failure).toBeDefined()
+    expect(Date.now() - started).toBeLessThan(2_000)
+    expect(stopped).toEqual(['main'])
   })
 
   it('is not asked when the main model refuses the request itself, or has no backup', async () => {

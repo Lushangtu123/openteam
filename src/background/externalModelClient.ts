@@ -69,7 +69,12 @@ export interface ExternalModelClient {
 
 export interface ExternalModelClientOptions {
   timeoutMs?: number
+  // How long a busy main model (HTTP 503) is given before it is asked once more, ahead of its backup.
+  busyRetryDelayMs?: number
 }
+
+// A server's "busy, try again later" (Gemini's 503 high demand) usually passes within seconds.
+const DEFAULT_BUSY_RETRY_DELAY_MS = 2_500
 
 // How long a request may go without new text: before the first piece (a thinking model under load
 // can be slow to start) and between pieces. A long reply runs as long as text keeps coming.
@@ -78,6 +83,7 @@ const DEFAULT_EXTERNAL_MODEL_TIMEOUT_MS = 60_000
 export function createExternalModelClient(fetchImpl: typeof fetch = fetch, options: ExternalModelClientOptions = {}): ExternalModelClient {
   let lastResponseMetadata: Record<string, unknown> = {}
   const timeoutMs = options.timeoutMs ?? DEFAULT_EXTERNAL_MODEL_TIMEOUT_MS
+  const busyRetryDelayMs = options.busyRetryDelayMs ?? DEFAULT_BUSY_RETRY_DELAY_MS
 
   const wrappedFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     const response = await fetchImpl(input, init)
@@ -92,7 +98,7 @@ export function createExternalModelClient(fetchImpl: typeof fetch = fetch, optio
 
   return {
     stream(input) {
-      return streamWithFallback(input, wrappedFetch, timeoutMs)
+      return streamWithFallback(input, wrappedFetch, timeoutMs, busyRetryDelayMs)
     },
     async complete(input) {
       const timeout = createTimedAbortSignal(input.abortSignal, timeoutMs)
@@ -126,20 +132,54 @@ export function createExternalModelClient(fetchImpl: typeof fetch = fetch, optio
 }
 
 // A group reply: when the main model fails before any text in a way another model may not (busy,
-// rate-limited, out of quota, too slow), its backup answers instead, once.
-async function* streamWithFallback(input: ExternalModelCompletionInput, fetchImpl: typeof fetch, timeoutMs: number): AsyncIterable<string> {
+// rate-limited, out of quota, too slow), its backup answers instead, once. A main model that says it
+// is busy (503) is first asked once more after a short wait: that usually passes.
+async function* streamWithFallback(input: ExternalModelCompletionInput, fetchImpl: typeof fetch, timeoutMs: number, busyRetryDelayMs: number): AsyncIterable<string> {
+  const fallback = input.model.fallbackModelName?.trim()
+  const hasBackup = Boolean(fallback) && fallback !== input.model.modelName
   let sawText = false
-  try {
-    for await (const chunk of streamExternalModelWithTimeout(input, fetchImpl, timeoutMs)) {
-      sawText = true
-      yield chunk
+  let tries = 0
+  while (true) {
+    tries += 1
+    try {
+      for await (const chunk of streamExternalModelWithTimeout(input, fetchImpl, timeoutMs)) {
+        sawText = true
+        yield chunk
+      }
+      return
+    } catch (error) {
+      if (sawText || !hasBackup || input.abortSignal?.aborted || !isWorthAnotherModel(error)) throw error
+      if (tries === 1 && isBusy(error)) {
+        await waitUnlessAborted(busyRetryDelayMs, input.abortSignal)
+        if (input.abortSignal?.aborted) throw error
+        continue
+      }
+      yield* answerWithBackup(error)
+      return
     }
-  } catch (error) {
-    const fallback = input.model.fallbackModelName?.trim()
-    if (sawText || !fallback || fallback === input.model.modelName || input.abortSignal?.aborted || !isWorthAnotherModel(error)) throw error
-    input.onFallback?.(fallback, (error as Error).message?.trim().slice(0, 200) || undefined)
-    yield* streamExternalModelWithTimeout({ ...input, model: { ...input.model, modelName: fallback } }, fetchImpl, timeoutMs)
   }
+
+  async function* answerWithBackup(error: unknown): AsyncIterable<string> {
+    input.onFallback?.(fallback!, (error as Error).message?.trim().slice(0, 200) || undefined)
+    yield* streamExternalModelWithTimeout({ ...input, model: { ...input.model, modelName: fallback! } }, fetchImpl, timeoutMs)
+  }
+}
+
+function isBusy(error: unknown): boolean {
+  return error instanceof ExternalModelError && error.status === 503
+}
+
+function waitUnlessAborted(ms: number, signal: AbortSignal | undefined): Promise<void> {
+  return new Promise(resolve => {
+    if (signal?.aborted) return resolve()
+    const timer = setTimeout(done, ms)
+    signal?.addEventListener('abort', done, { once: true })
+    function done() {
+      clearTimeout(timer)
+      signal?.removeEventListener('abort', done)
+      resolve()
+    }
+  })
 }
 
 function isWorthAnotherModel(error: unknown): boolean {
