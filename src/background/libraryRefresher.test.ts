@@ -7,7 +7,7 @@ import { createLibraryRefresher, LIBRARY_REFRESH_ALARM, LIBRARY_REFRESH_ROUTE_TY
 const NOW = new Date(2026, 10, 21, 9).getTime()
 const html = (title: string, body: string) => `<html><head><title>${title}</title></head><body><nav>菜单</nav><main><p>${body}</p></main></body></html>`
 
-function setup(options: { pages?: Record<string, Response | (() => Response)>; access?: boolean } = {}) {
+function setup(options: { pages?: Record<string, Response | (() => Response)>; access?: boolean; readInTab?: (url: string) => Promise<{ title: string; url: string; text: string }> } = {}) {
   const store: OpenTeamStore = createDefaultStore()
   store.settings.language = 'zh-CN'
   store.chatsById.c = { id: 'c', name: '产品群', mode: 'collaborative', roleIds: [], messageIds: [], nextMessageSeq: 1, status: 'ready', createdAt: 0, updatedAt: 0 }
@@ -32,6 +32,7 @@ function setup(options: { pages?: Record<string, Response | (() => Response)>; a
     newId: prefix => `${prefix}-${++seq}`,
     now: () => clock,
     log: { warn: vi.fn() },
+    ...(options.readInTab ? { readInTab: options.readInTab } : {}),
   })
   const run = (type: string, fields: Record<string, unknown> = {}) => Promise.resolve(refresher.routes.find(route => route.type === type)!.handler({ type, ...fields }, {}))
   const addPage = (url: string, text = '旧内容', refresh?: 'daily' | 'weekly' | 'never') => addLibraryDoc(store, 'c', { title: '页面', kind: 'page', source: url, text, ...(refresh ? { refresh } : {}) }, NOW, prefix => `${prefix}-${++seq}`)
@@ -121,3 +122,38 @@ describe('the library\'s commands for web pages', () => {
     await expect(ctx.run('LIBRARY_ADD_URL', { chatId: 'c', url: 'https://example.com/missing' })).rejects.toThrow('没有读到：HTTP 404')
   })
 })
+
+describe('a page whose site refuses the quiet fetch', () => {
+  const refused = () => new Response('blocked', { status: 403, headers: { server: 'DataDome' } })
+  const NYT = 'https://www.nytimes.com/2026/11/20/us/fiona-hippo-internet-justice.html'
+
+  it('is read in a background tab instead, when added and when read again', async () => {
+    const readInTab = vi.fn(async (url: string) => ({ title: '河马 Fiona', url, text: '正文。' }))
+    const ctx = setup({ pages: { [NYT]: refused }, readInTab })
+    const added = await ctx.run('LIBRARY_ADD_URL', { chatId: 'c', url: NYT }) as { docId: string }
+    expect(readInTab).toHaveBeenCalledWith(NYT)
+    expect(doc(ctx.store, added.docId)).toMatchObject({ title: '河马 Fiona', source: NYT, text: '正文。', refresh: 'weekly' })
+
+    readInTab.mockResolvedValueOnce({ title: '河马 Fiona', url: NYT, text: '正文，更新了。' })
+    expect(await ctx.run('LIBRARY_REFRESH', { chatId: 'c', docId: added.docId })).toMatchObject({ outcome: 'updated' })
+    expect(doc(ctx.store, added.docId).text).toBe('正文，更新了。')
+  })
+
+  it('is read in a tab too when its text is written by scripts, but not when it is missing', async () => {
+    const readInTab = vi.fn(async (url: string) => ({ title: 'App', url, text: '脚本写出的正文' }))
+    const ctx = setup({ pages: { 'https://app.example/doc': new Response('<html><body><script>app()</script></body></html>', { headers: { 'content-type': 'text/html' } }) }, readInTab })
+    const added = await ctx.run('LIBRARY_ADD_URL', { chatId: 'c', url: 'https://app.example/doc' }) as { docId: string }
+    expect(doc(ctx.store, added.docId).text).toBe('脚本写出的正文')
+    await expect(ctx.run('LIBRARY_ADD_URL', { chatId: 'c', url: 'https://app.example/missing' })).rejects.toThrow('没有读到：HTTP 404')
+    expect(readInTab).toHaveBeenCalledTimes(1)
+  })
+
+  it('says both reasons when the tab could not read it either', async () => {
+    const ctx = setup({ pages: { [NYT]: refused }, readInTab: async () => { throw new Error('在标签页里 30 秒内没有打开') } })
+    const page = ctx.addPage(NYT)
+    ctx.setClock(NOW + LIBRARY_REFRESH_MS.weekly)
+    await ctx.refresher.refreshDue()
+    expect(doc(ctx.store, page.id).refreshError).toBe('网站拒绝了后台读取（HTTP 403），在标签页里也没读到：在标签页里 30 秒内没有打开')
+  })
+})
+

@@ -8,6 +8,7 @@ import { createResultSender } from './resultSender'
 import { createWebPageReader } from './webPageReader'
 import { createWebSearcher } from './webSearcher'
 import { createLibraryRefresher, LIBRARY_REFRESH_ALARM } from './libraryRefresher'
+import { createTabPageReader } from './tabPageReader'
 import { hostAccessPattern } from '../shared/hostAccess'
 import type { GroupChat, OpenTeamStore } from '../group/types'
 import { referencedImageIds } from '../group/backup'
@@ -113,6 +114,7 @@ const libraryRefresher = createLibraryRefresher({
   newId,
   now,
   log,
+  readInTab: url => tabPageReader.read(url),
 })
 // 联网搜索: API members search through Tavily with the user's key (webSearcher.ts).
 const webSearcher = createWebSearcher({
@@ -299,6 +301,16 @@ function sendResponseSafely(sendResponse: (response?: unknown) => void, response
   }
 }
 
+// A tab's page as text (readPageInTab, run in the tab).
+async function readTabPage(tabId: number): Promise<CapturedWebPage> {
+  const [result] = await chrome.scripting.executeScript({ target: { tabId }, func: readPageInTab })
+  if (!result?.result) throw new Error('the page gave no text')
+  return result.result as CapturedWebPage
+}
+
+// A page read in a background tab, for a library page whose site refuses the quiet fetch.
+const tabPageReader = createTabPageReader({ tabs: chrome.tabs, readTab: tabId => readTabPage(tabId) })
+
 // 附上网页: the page the icon or 发到 OpenTeam was used on (see webPageOffers.ts).
 const webPageOffers = createWebPageOffers({
   extensionOrigin: chrome.runtime.getURL(''),
@@ -308,11 +320,7 @@ const webPageOffers = createWebPageOffers({
     remove: key => chrome.storage.session.remove(key),
   },
   getTab: tabId => chrome.tabs.get(tabId).catch(() => undefined),
-  async readTab(tabId) {
-    const [result] = await chrome.scripting.executeScript({ target: { tabId }, func: readPageInTab })
-    if (!result?.result) throw new Error('the page gave no text')
-    return result.result as CapturedWebPage
-  },
+  readTab: tabId => readTabPage(tabId),
   language: async () => (await loadStore()).settings.language === 'en' ? 'en' : 'zh-CN',
   now,
 })

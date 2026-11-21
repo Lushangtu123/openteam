@@ -1,8 +1,9 @@
 // A group library's web pages read again (src/group/groupLibrary.ts): an alarm wakes the background
 // every hour, and the pages due are fetched as an API member reads a page (webPageReader.ts):
 // without the user's cookies, never from this computer or the local network, and only from sites
-// the user allowed (when the page was added, or with 立即更新). A page that cannot be read keeps its
-// text, and says why. Also the library's commands to read a page again now, to set how often, and to
+// the user allowed (when the page was added, or with 立即更新). A site that refuses that (bot
+// protection answers 401, 403, 429 or 503) or a page whose text a script writes is read in a
+// background tab instead (tabPageReader.ts). A page that cannot be read keeps its text, and says why. Also the library's commands to read a page again now, to set how often, and to
 // add a page by its address.
 import { addLibraryDoc, applyLibraryRefresh, isRefreshablePage, libraryDocsDue, setLibraryDocRefresh, type LibraryRefresh } from '../group/groupLibrary'
 import type { OpenTeamStore } from '../group/types'
@@ -29,7 +30,18 @@ export interface LibraryRefresherDependencies {
   newId(prefix: string): string
   now(): number
   log: { warn(event: string, details?: Record<string, unknown>): void }
+  // Reads a page in a tab opened in the background, for a site that refuses the fetch.
+  readInTab?(url: string): Promise<{ title: string; url: string; text: string }>
 }
+
+// The fetch was refused, or brought no text: a tab may read it. `refusal` says which.
+class RefusedFetch extends Error {
+  constructor(message: string, readonly refusal: string) {
+    super(message)
+  }
+}
+
+const REFUSED_STATUSES = new Set([401, 403, 429, 503])
 
 export function createLibraryRefresher(deps: LibraryRefresherDependencies) {
   let running: Promise<{ updated: number; same: number; failed: number }> | undefined
@@ -38,17 +50,32 @@ export function createLibraryRefresher(deps: LibraryRefresherDependencies) {
   async function readPage(raw: string): Promise<{ url: string; title: string; text: string }> {
     const target = checkReadableUrl(raw)
     if (!await deps.hasAccess(hostAccessPattern(target.url)!)) throw new Error(`没有访问 ${target.host} 的权限：在资料库里点「立即更新」重新允许`)
+    try {
+      return await fetchPage(target)
+    } catch (error) {
+      if (!deps.readInTab || !(error instanceof RefusedFetch)) throw error
+      try {
+        const page = await deps.readInTab(target.url)
+        return { url: target.url, title: page.title || target.host, text: page.text }
+      } catch (tabError) {
+        throw new Error(`${error.refusal}，在标签页里也没读到：${tabError instanceof Error ? tabError.message : String(tabError)}`)
+      }
+    }
+  }
+
+  async function fetchPage(target: { url: string; host: string }): Promise<{ url: string; title: string; text: string }> {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
     try {
       const response = await deps.fetch(target.url, { credentials: 'omit', redirect: 'follow', signal: controller.signal })
+      if (REFUSED_STATUSES.has(response.status)) throw new RefusedFetch(`HTTP ${response.status}`, `网站拒绝了后台读取（HTTP ${response.status}）`)
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
       const type = (response.headers.get('content-type') ?? '').split(';')[0].trim().toLowerCase()
       const isHtml = type === '' || type === 'text/html' || type === 'application/xhtml+xml'
       if (!isHtml && !type.startsWith('text/')) throw new Error(`这是 ${type} 文件，只能读网页`)
       const body = (await response.text()).slice(0, MAX_BODY_CHARS)
       const page = isHtml ? htmlToText(body) : { title: '', text: body.trim() }
-      if (!page.text) throw new Error('网页里没有读到文字（可能要登录，或是靠脚本显示的）')
+      if (!page.text) throw new RefusedFetch('网页里没有读到文字（可能要登录，或是靠脚本显示的）', '后台读到的网页没有文字')
       return { url: target.url, title: page.title || target.host, text: page.text }
     } catch (error) {
       if (controller.signal.aborted) throw new Error('20 秒内没有打开')
