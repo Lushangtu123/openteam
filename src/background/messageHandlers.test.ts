@@ -2692,6 +2692,77 @@ describe('background message handlers', () => {
     expect(reply.readPages).toBeUndefined()
   })
 
+  it('lets an API member search the web while it answers when a search key is set, keeping its searches on its reply, unless its model is switched off', async () => {
+    vi.resetModules()
+    const startingStore = createStoreWithReadyRole()
+    startingStore.settings.externalModelOrder = ['model-1']
+    startingStore.settings.externalModelsById = {
+      'model-1': { id: 'model-1', name: '本地模型', format: 'openai', baseUrl: 'https://api.example.test/v1', apiKey: 'sk-test', modelName: 'local-chat-model', createdAt: 1, updatedAt: 1 },
+    }
+    startingStore.settings.webSearch = { provider: 'tavily', apiKey: 'tvly-test' }
+    startingStore.rolesById['role-1'].modelSource = 'external'
+    startingStore.rolesById['role-1'].externalModelId = 'model-1'
+    let currentStore = structuredClone(startingStore)
+    vi.doMock('./storeAccess', async importOriginal => {
+      const actual = await importOriginal<typeof import('./storeAccess')>()
+      return {
+        ...actual,
+        mutateStore: vi.fn(async (mutator: (store: OpenTeamStore) => unknown) => {
+          const result = await mutator(currentStore)
+          currentStore = structuredClone(currentStore)
+          return { store: currentStore, result }
+        }),
+      }
+    })
+    const { createMessageHandlers } = await import('./messageHandlers')
+    const seen: Array<((query: string, options: object) => Promise<string>) | undefined> = []
+    const externalModelClient = {
+      complete: vi.fn(async () => ({ content: 'unused' })),
+      stream: vi.fn(async function* (input: { searchWeb?(query: string, options: object): Promise<string> }) {
+        seen.push(input.searchWeb)
+        if (input.searchWeb) await input.searchWeb('OpenTeam 最新版本', {})
+        yield '搜过了。'
+      }),
+    }
+    const webSearcher = {
+      forReply: vi.fn((settings: unknown, options: { onSearch?(done: { query: string; results: number }): void }) => settings ? async (query: string) => {
+        options.onSearch?.({ query, results: 4 })
+        return 'results'
+      } : undefined),
+    }
+    let messageIdSeq = 0
+    const routes = createMessageHandlers({
+      broadcastStoreUpdated: vi.fn(),
+      externalModelClient,
+      webSearcher,
+      externalModelRetryDelaysMs: [0, 0, 0],
+      getChatStatusFromRoles: () => 'ready',
+      log: { debug: vi.fn(), info: vi.fn(), warn: vi.fn() },
+      newId: vi.fn((prefix: string) => prefix === 'msg' ? `${prefix}-${++messageIdSeq}` : `${prefix}-1`),
+      now: vi.fn(() => 100),
+      runtimeFrames: { bind: vi.fn(), getByAddress: vi.fn(), getByRole: vi.fn(() => undefined) },
+      sendRoleMessage: vi.fn(),
+      sendError: vi.fn(),
+      sendPrompt: vi.fn(),
+      waitForRetry: vi.fn(async () => undefined),
+    })
+    const sendRoute = routes.find(route => route.type === 'GROUP_MESSAGE_SEND')!
+    const response = await sendRoute.handler({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@all 查一下' }, {}) as { store: OpenTeamStore }
+    expect(webSearcher.forReply).toHaveBeenCalledWith({ provider: 'tavily', apiKey: 'tvly-test' }, expect.objectContaining({ english: expect.any(Boolean) }))
+    expect(response.store.messagesById['msg-2']).toMatchObject({ status: 'received', content: '搜过了。', searches: [{ query: 'OpenTeam 最新版本', results: 4 }] })
+
+    currentStore.settings.externalModelsById['model-1'].webSearch = false
+    await sendRoute.handler({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@all 再查' }, {})
+    expect(seen[1]).toBeUndefined()
+
+    delete currentStore.settings.externalModelsById['model-1'].webSearch
+    delete currentStore.settings.webSearch
+    const third = await sendRoute.handler({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@all 没有 Key' }, {}) as { store: OpenTeamStore }
+    expect(seen[2]).toBeUndefined()
+    const replies = Object.values(third.store.messagesById).filter(message => message.type === 'assistant')
+    expect(replies[replies.length - 1].searches).toBeUndefined()
+  })
+
 
   it('adds the passages of the group\'s library that a question brings up to an API member\'s prompt', async () => {
     vi.resetModules()

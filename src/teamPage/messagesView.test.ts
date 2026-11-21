@@ -1272,6 +1272,7 @@ describe('team page messages view boundary', () => {
       type: 'assistant',
       content: '根据 IEA 的报告，需求还在涨。',
       readPages: [{ url: 'https://www.iea.org/report', title: 'Electricity 2026' }, { url: 'https://example.com/a', title: 'example.com' }],
+      searches: [{ query: 'IEA 2026 电力需求', results: 5 }, { query: 'data center power', results: 0 }],
       contentFormat: 'markdown',
       roleId: role.id,
       roleName: role.name,
@@ -1321,6 +1322,10 @@ describe('team page messages view boundary', () => {
       ['example.com', 'https://example.com/a', '_blank', 'noopener noreferrer'],
     ])
     expect(links[0].title).toBe('https://www.iea.org/report')
+    // 联网搜索: what it searched for, before the pages it read.
+    const searches = messagesEl.querySelector('.message-searches')!
+    expect(searches.textContent).toBe('搜索了：「IEA 2026 电力需求」、「data center power」（没有结果）')
+    expect(searches.nextElementSibling).toBe(list)
     void retryRoleReply
   })
 

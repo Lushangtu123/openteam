@@ -9,6 +9,7 @@ import type { ModelSpend } from './spendCap'
 import type { ResultDestination } from './resultDestinations'
 import type { SiteFaultRecord } from './siteFaults'
 import type { SiteCheckSchedule } from './siteCheckSchedule'
+import type { WebSearchSettings } from '../shared/webSearch'
 import type { LibraryDoc } from './groupLibrary'
 export type { ChatSite }
 export type OpenTeamLanguage = 'en' | 'zh-CN'
@@ -109,6 +110,8 @@ export interface OpenTeamSettings {
   roundSummary?: boolean
   // Where scheduled tasks can send their results (src/group/resultDestinations.ts).
   resultDestinations?: ResultDestination[]
+  // 联网搜索: the user's Tavily key, for API members' searches (src/shared/webSearch.ts).
+  webSearch?: WebSearchSettings
   // 定时自检: the site check run on set days (src/group/siteCheckSchedule.ts).
   siteCheckSchedule?: SiteCheckSchedule
   // What the last group was created with, offered again for the next one.
@@ -166,6 +169,9 @@ export interface ExternalModelConfig {
   dailyCap?: number
   // false: the model may not read web pages while it answers (读网页, on unless set to false).
   webReading?: boolean
+  // false: the model may not search the web while it answers (联网搜索, on unless set to false; it
+  // needs the user's search key in the settings).
+  webSearch?: boolean
   // For a local agent: its ID in the daemon's agent list, and the folder it works in.
   localAgentId?: string
   workspace?: string
@@ -696,6 +702,8 @@ export interface GroupMessage {
   spendCapModelId?: string
   // The web pages an API member read while it wrote this reply (读网页).
   readPages?: Array<{ url: string; title: string }>
+  // The searches an API member made while it wrote this reply (联网搜索), and how many results each had.
+  searches?: Array<{ query: string; results: number }>
   // On a web member's reply its site kept saying it was still writing, with no new text for
   // STALLED_GENERATING_MS (src/content/replyObserver.ts): taken as it stood, so the chat goes on.
   stalledWhileGenerating?: boolean

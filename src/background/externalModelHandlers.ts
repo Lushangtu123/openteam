@@ -119,6 +119,8 @@ function readExternalModelInput(message: RuntimeMessage, id: string, createdAt: 
     ...optionalPricingAndCap(message.pricing, message.dailyCap),
     // 读网页 is on unless switched off.
     ...(message.webReading === false ? { webReading: false } : {}),
+    // 联网搜索 too.
+    ...(message.webSearch === false ? { webSearch: false } : {}),
     createdAt,
     updatedAt,
   }

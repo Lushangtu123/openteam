@@ -229,7 +229,8 @@ function withoutApiKeys(store: OpenTeamStore): OpenTeamStore {
     Object.entries(store.settings.externalModelsById).map(([id, model]) => [id, { ...model, apiKey: '' }]),
   )
   const resultDestinations = store.settings.resultDestinations?.map(({ secret: _secret, ...destination }) => ({ ...destination, url: '' }))
-  return { ...store, settings: { ...store.settings, externalModelsById, ...(resultDestinations ? { resultDestinations } : {}) } }
+  const { webSearch: _webSearch, ...settings } = store.settings
+  return { ...store, settings: { ...settings, externalModelsById, ...(resultDestinations ? { resultDestinations } : {}) } }
 }
 
 function isBackupImage(value: unknown): value is BackupImage {

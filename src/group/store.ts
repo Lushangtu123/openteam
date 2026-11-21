@@ -10,6 +10,7 @@ import { readModelPricing } from './pricing'
 import { normalizeModelSpend, readDailyCap, type ModelSpend } from './spendCap'
 import { normalizeResultDestinations } from './resultDestinations'
 import { normalizeSiteCheckSchedule } from './siteCheckSchedule'
+import { normalizeWebSearchSettings } from '../shared/webSearch'
 import { normalizeLibraryRecord } from './groupLibrary'
 import {
   DEFAULT_ORCHESTRATION_MAX_NODE_EXECUTIONS,
@@ -872,7 +873,13 @@ function normalizeSettings(raw: unknown, storedVersion = CURRENT_STORE_VERSION):
     ...resultDestinationsSetting(raw.resultDestinations),
     ...newChatCollaborationSetting(raw.newChatCollaboration),
     ...siteCheckScheduleSetting(raw.siteCheckSchedule),
+    ...webSearchSetting(raw.webSearch),
   }
+}
+
+function webSearchSetting(raw: unknown): Pick<OpenTeamSettings, 'webSearch'> {
+  const webSearch = normalizeWebSearchSettings(raw)
+  return webSearch ? { webSearch } : {}
 }
 
 function siteCheckScheduleSetting(raw: unknown): Pick<OpenTeamSettings, 'siteCheckSchedule'> {
@@ -956,6 +963,7 @@ function normalizeExternalModelRecord(raw: unknown): Record<string, ExternalMode
       ...(pricing ? { pricing } : {}),
       ...(dailyCap !== undefined ? { dailyCap } : {}),
       ...(value.webReading === false ? { webReading: false } : {}),
+      ...(value.webSearch === false ? { webSearch: false } : {}),
       createdAt,
       updatedAt,
     }

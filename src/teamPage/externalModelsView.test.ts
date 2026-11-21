@@ -352,6 +352,7 @@ function setupForm(options: { listModelNames?: (request: { format: string; baseU
       <select id="external-model-price-choices" hidden></select>
       <p id="external-model-price-status"></p>
       <input id="external-model-web-reading" type="checkbox" checked />
+      <input id="external-model-web-search" type="checkbox" checked />
       <input id="external-model-daily-cap" />
       <span id="external-model-daily-cap-unit">元 / 天</span>
       <p id="external-model-daily-cap-today" hidden></p>
@@ -615,15 +616,18 @@ describe('reading web pages, in the form', () => {
     $<HTMLInputElement>('#external-model-api-key').value = 'sk-1'
     $<HTMLInputElement>('#external-model-model-name').value = 'deepseek-chat'
     expect($<HTMLInputElement>('#external-model-web-reading').checked).toBe(true)
+    expect($<HTMLInputElement>('#external-model-web-search').checked).toBe(true)
     $<HTMLInputElement>('#external-model-web-reading').checked = false
+    $<HTMLInputElement>('#external-model-web-search').checked = false
     $<HTMLFormElement>('#external-model-form').requestSubmit()
-    await vi.waitFor(() => expect(runCommand).toHaveBeenCalledWith('EXTERNAL_MODEL_CREATE', expect.objectContaining({ webReading: false })))
+    await vi.waitFor(() => expect(runCommand).toHaveBeenCalledWith('EXTERNAL_MODEL_CREATE', expect.objectContaining({ webReading: false, webSearch: false })))
 
     store.settings.externalModelOrder = ['m-1']
-    store.settings.externalModelsById['m-1'] = { id: 'm-1', name: 'DeepSeek', format: 'openai', baseUrl: 'https://api.deepseek.com/v1', apiKey: 'sk-1', modelName: 'deepseek-chat', webReading: false, createdAt: 1, updatedAt: 1 }
+    store.settings.externalModelsById['m-1'] = { id: 'm-1', name: 'DeepSeek', format: 'openai', baseUrl: 'https://api.deepseek.com/v1', apiKey: 'sk-1', modelName: 'deepseek-chat', webReading: false, webSearch: false, createdAt: 1, updatedAt: 1 }
     view.renderExternalModels()
     ;[...document.querySelectorAll<HTMLButtonElement>('#external-models-list button')].find(button => button.textContent === '编辑')!.click()
     expect($<HTMLInputElement>('#external-model-web-reading').checked).toBe(false)
+    expect($<HTMLInputElement>('#external-model-web-search').checked).toBe(false)
   })
 })
 

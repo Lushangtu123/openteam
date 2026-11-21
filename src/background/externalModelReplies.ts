@@ -8,6 +8,7 @@ import type { ExternalModelClient, ExternalModelCompletionInput } from './extern
 import { QUOTA_EXHAUSTED_CODE } from './externalModelClient'
 import { normalizeLanguage } from '../shared/i18n'
 import type { ReadPage } from './webPageReader'
+import type { SearchDone } from './webSearcher'
 import { SPEND_CAP_CODE } from '../group/spendCap'
 import type { ExternalPromptDelivery } from './rolePromptDelivery'
 import { mutateStore, requireChat, requireRole } from './storeAccess'
@@ -32,9 +33,12 @@ export async function sendExternalModelDelivery(deps: MessageHandlersDependencie
   // 读网页: the pages read for this reply, shown under it. A backup model starts over: what the
   // failed main model read is not its.
   let readPages: ReadPage[] = []
+  // 联网搜索: the searches made for this reply, shown under it, as the pages read are.
+  let searches: SearchDone[] = []
   const onFallback = (modelName: string) => {
     answeredByFallback = modelName
     readPages = []
+    searches = []
   }
   try {
     deps.log.info('external-model:send:start', {
@@ -59,6 +63,9 @@ export async function sendExternalModelDelivery(deps: MessageHandlersDependencie
         { english: normalizeLanguage(initialized.store.settings.language) === 'en', signal: controller.signal, onRead: page => readPages.push(page) },
       )
       : undefined
+    const searchWeb = deps.webSearcher && delivery.model.format !== 'local-agent' && delivery.model.webSearch !== false
+      ? deps.webSearcher.forReply(initialized.store.settings.webSearch, { english: normalizeLanguage(initialized.store.settings.language) === 'en', signal: controller.signal, onSearch: done => searches.push(done) })
+      : undefined
 
     const imageIds = delivery.imageAttachmentIds ?? []
     if (imageIds.length > 0 && !deps.imageAttachments?.loadUploads) throw new Error('当前环境不支持发送图片')
@@ -74,9 +81,10 @@ export async function sendExternalModelDelivery(deps: MessageHandlersDependencie
         usage = undefined
         answeredByFallback = undefined
         readPages = []
+        searches = []
         let updatedAt = Number.NEGATIVE_INFINITY
         const stream = typeof client.stream === 'function'
-          ? client.stream({ model: delivery.model, prompt: delivery.prompt, images, abortSignal: controller.signal, onUsage, onFallback, context, ...(readWebPage ? { readWebPage } : {}) })
+          ? client.stream({ model: delivery.model, prompt: delivery.prompt, images, abortSignal: controller.signal, onUsage, onFallback, context, ...(readWebPage ? { readWebPage } : {}), ...(searchWeb ? { searchWeb } : {}) })
           : streamCompleteFallback(client, { model: delivery.model, prompt: delivery.prompt, images, abortSignal: controller.signal, onUsage, context })
         for await (const chunk of abortableChunks(stream, controller.signal)) {
           throwIfAborted(controller.signal)
@@ -120,7 +128,7 @@ export async function sendExternalModelDelivery(deps: MessageHandlersDependencie
     }
 
     // A web member's backup is named on its reply, as is an API model's own backup.
-    const finalized = await finishExternalAssistantReply(deps, delivery, replyMessageId, content, usage, answeredByFallback ?? delivery.answeredBy, readPages)
+    const finalized = await finishExternalAssistantReply(deps, delivery, replyMessageId, content, usage, answeredByFallback ?? delivery.answeredBy, readPages, searches)
     if (finalized.ignored) {
       deps.log.warn('external-model:reply:ignored-stale', { chatId: delivery.chatId, roleId: delivery.roleId, messageId: delivery.messageId, reason: finalized.reason })
       return finalized.store
@@ -266,6 +274,7 @@ export async function finishExternalAssistantReply(
   usage?: MessageTokenUsage,
   answeredByFallback?: string,
   readPages?: ReadPage[],
+  searches?: SearchDone[],
 ): Promise<{ ignored: true; reason: string; store: OpenTeamStore } | { ignored: false; store: OpenTeamStore }> {
   const timestamp = deps.now()
   const { store, result } = await mutateStore(store => {
@@ -286,6 +295,8 @@ export async function finishExternalAssistantReply(
       else delete reply.answeredByFallback
       if (readPages?.length) reply.readPages = readPages.map(page => ({ url: page.url, title: page.title }))
       else delete reply.readPages
+      if (searches?.length) reply.searches = searches.map(done => ({ query: done.query, results: done.results }))
+      else delete reply.searches
       markChatHasNewMessage(store, chat)
 
       const userMessage = store.messagesById[delivery.messageId]

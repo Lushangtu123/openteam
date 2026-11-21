@@ -71,6 +71,7 @@ import { movePanelTools } from './panelTools'
 import { createPanelHandover } from './panelHandover'
 import { createSiteFaultNotice } from './siteFaultNotice'
 import { createSiteCheckDeliveryNotice } from './siteCheckDeliveryNotice'
+import { currentWebSearchDialog, openWebSearchDialog } from './webSearchDialog'
 import { currentSiteCheckScheduleDialog, openSiteCheckScheduleDialog } from './siteCheckScheduleDialog'
 import { PANEL_PORT_NAME } from '../group/runtimeProtocol'
 import type { RolePageHealth } from './roleHealth'
@@ -885,6 +886,7 @@ function render(): void {
   currentScheduledTasksDialog()?.refresh()
   currentLibraryDialog()?.refresh()
   currentSiteCheckScheduleDialog()?.refresh()
+  currentWebSearchDialog()?.refresh()
   currentUsageDialog()?.refresh()
   renderTemplates()
   renderAgentControlSettings()
@@ -1276,6 +1278,21 @@ async function boot(): Promise<void> {
     settingsMenuEl.hidden = true
     settingsButtonEl.setAttribute('aria-expanded', 'false')
     startSiteCheck()
+  })
+  // 联网搜索's key (webSearchDialog.ts).
+  document.querySelector<HTMLButtonElement>('#open-web-search')?.addEventListener('click', () => {
+    settingsMenuEl.hidden = true
+    settingsButtonEl.setAttribute('aria-expanded', 'false')
+    openWebSearchDialog({
+      getStore: () => store,
+      runCommand,
+      async request(type, payload) {
+        const response = await sendRuntimeMessage(type, payload) as Record<string, unknown> & { ok?: boolean; error?: string }
+        if (response.ok === false) throw new Error(response.error || translateUi('操作失败', normalizeLanguage(store.settings.language)))
+        return response
+      },
+      onClose: () => settingsButtonEl.focus(),
+    })
   })
   // 定时自检 (siteCheckScheduleDialog.ts).
   document.querySelector<HTMLButtonElement>('#open-site-check-schedule')?.addEventListener('click', () => {

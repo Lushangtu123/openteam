@@ -57,6 +57,7 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
   const dailyCapEl = form.querySelector<HTMLInputElement>('#external-model-daily-cap')
   // 读网页: on unless switched off.
   const webReadingEl = form.querySelector<HTMLInputElement>('#external-model-web-reading')
+  const webSearchEl = form.querySelector<HTMLInputElement>('#external-model-web-search')
   const dailyCapUnitEl = form.querySelector<HTMLElement>('#external-model-daily-cap-unit')
   const dailyCapTodayEl = form.querySelector<HTMLElement>('#external-model-daily-cap-today')
   const lookupPriceEl = form.querySelector<HTMLButtonElement>('#lookup-external-model-price')
@@ -390,6 +391,7 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
           // Empty removes the cap.
           dailyCap: dailyCapEl?.value.trim() ?? '',
           webReading: webReadingEl?.checked ?? true,
+          webSearch: webSearchEl?.checked ?? true,
         }
     if (format !== 'local-agent') await allowAccess(deps.externalModelBaseUrlEl.value)
     await deps.runCommand(modelId ? 'EXTERNAL_MODEL_UPDATE' : 'EXTERNAL_MODEL_CREATE', modelId ? { modelId, ...payload } : payload)
@@ -525,6 +527,7 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
     if (priceCurrencyEl) priceCurrencyEl.value = model.pricing?.currency ?? 'CNY'
     if (dailyCapEl) dailyCapEl.value = model.dailyCap !== undefined ? String(model.dailyCap) : ''
     if (webReadingEl) webReadingEl.checked = model.webReading !== false
+    if (webSearchEl) webSearchEl.checked = model.webSearch !== false
     showCapUnit()
     showSpentToday(model)
     clearPriceChoices()
@@ -550,6 +553,7 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
     if (priceCurrencyEl) priceCurrencyEl.value = 'CNY'
     if (dailyCapEl) dailyCapEl.value = ''
     if (webReadingEl) webReadingEl.checked = true
+    if (webSearchEl) webSearchEl.checked = true
     showCapUnit()
     showSpentToday(undefined)
     clearPriceChoices()

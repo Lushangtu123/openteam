@@ -480,6 +480,7 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     if (imageGrid) bubble.append(imageGrid)
     const fileList = attachmentsView.renderFileList(message)
     if (fileList) bubble.append(fileList)
+    if (message.searches?.length) bubble.append(searchesLine(message.searches))
     if (message.readPages?.length) bubble.append(readPagesLine(message.readPages))
     const reviewSummary = renderOrchestrationReviewSummary(deps.getStore(), message)
     if (reviewSummary) bubble.append(reviewSummary)
@@ -945,6 +946,19 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
   }
 
   // options.text: a word shown beside the icon, for a button whose icon alone is not clear enough.
+  // 联网搜索: what an API member searched for while it wrote the reply.
+  function searchesLine(searches: NonNullable<GroupMessage['searches']>): HTMLElement {
+    const line = document.createElement('div')
+    line.className = 'message-searches tiny'
+    const english = normalizeLanguage(deps.getStore().settings.language) === 'en'
+    const items = searches.map(done => {
+      const none = done.results === 0 ? (english ? ' (no results)' : '（没有结果）') : ''
+      return english ? `"${done.query}"${none}` : `「${done.query}」${none}`
+    })
+    line.textContent = english ? `Searched: ${items.join(', ')}` : `搜索了：${items.join('、')}`
+    return line
+  }
+
   // 读网页: the pages an API member read for the reply, as links.
   function readPagesLine(pages: NonNullable<GroupMessage['readPages']>): HTMLElement {
     const line = document.createElement('div')

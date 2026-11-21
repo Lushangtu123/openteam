@@ -43,6 +43,8 @@ describe('background external model handlers', () => {
       modelName: 'local-chat-model',
       fallbackModelName: ' local-lite-model ',
       pricing: { input: '2', output: '8', currency: 'CNY' },
+      webReading: true,
+      webSearch: false,
     }, {})
 
     expect(currentStore.settings.externalModelOrder).toEqual(['external-model-1'])
@@ -52,7 +54,10 @@ describe('background external model handlers', () => {
       modelName: 'local-chat-model',
       fallbackModelName: 'local-lite-model',
       pricing: { input: 2, output: 8, currency: 'CNY' },
+      // 读网页 and 联网搜索 are on unless switched off; only "off" is kept.
+      webSearch: false,
     })
+    expect(currentStore.settings.externalModelsById['external-model-1'].webReading).toBeUndefined()
 
     const update = routes.find(route => route.type === 'EXTERNAL_MODEL_UPDATE')!
     await update.handler({

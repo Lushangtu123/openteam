@@ -1,5 +1,7 @@
 // What the message handlers are given, and the shapes they share with the modules they use.
 import type { WebPageReader } from './webPageReader'
+import type { SearchDone, SearchWeb } from './webSearcher'
+import type { WebSearchSettings } from '../shared/webSearch'
 import type { LoadedUpload, UploadedImage } from './imageAttachments'
 import type { BackgroundToRoleMessage } from '../group/runtimeProtocol'
 import type { GroupChat, GroupMessage, LinkCheck, MessageImageAttachment, OpenTeamStore, ReplyImageSource } from '../group/types'
@@ -42,6 +44,8 @@ export interface MessageHandlersDependencies {
   externalModelClient?: ExternalModelClient
   // 读网页: API members may read web pages while they answer (webPageReader.ts).
   webPageReader?: WebPageReader
+  // 联网搜索: API members may search the web while they answer, with the user's key (webSearcher.ts).
+  webSearcher?: { forReply(settings: WebSearchSettings | undefined, options: { english: boolean; signal?: AbortSignal; onSearch?(done: SearchDone): void }): SearchWeb | undefined }
   externalModelRuns?: ExternalModelRunRegistry
   imageAttachments?: {
     captureReplyImages(input: { chatId: string; messageId: string; images: ReplyImageSource[] }): Promise<MessageImageAttachment[]>

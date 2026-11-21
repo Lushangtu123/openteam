@@ -349,4 +349,55 @@ describe('ExternalModelClient Stability Baseline', () => {
       expect(system(1)).toBeUndefined()
     })
   })
+
+  describe('searching the web', () => {
+    type SearchCall = { execute(input: { query: string; topic?: string; time_range?: string }, options: unknown): Promise<string> }
+    const callOf = (call: number) => vi.mocked(streamText).mock.calls[call][0] as { tools?: Record<string, SearchCall>; system?: string; stopWhen?: unknown }
+
+    it('offers a search_web tool that goes to OpenTeam\'s searcher, with the topic and time range it asks for', async () => {
+      vi.mocked(streamText).mockReturnValueOnce(createMockStreamResult(['ok']))
+      const searchWeb = vi.fn(async (query: string) => `results for ${query}`)
+      for await (const _chunk of createExternalModelClient(mockFetch).stream!({ model: mockConfig, prompt: 'Hi', searchWeb, readWebPage: async () => '' })) { /* read */ }
+      const options = callOf(0)
+      expect(Object.keys(options.tools!)).toEqual(['read_web_page', 'search_web'])
+      expect(await options.tools!.search_web.execute({ query: 'OpenTeam', topic: 'news', time_range: 'week' }, {})).toBe('results for OpenTeam')
+      expect(searchWeb).toHaveBeenCalledWith('OpenTeam', { topic: 'news', timeRange: 'week' })
+      expect(options.stopWhen).toBeDefined()
+      expect(options.system).toContain('search_web')
+      expect(options.system).toContain('read_web_page')
+    })
+
+    it('offers search alone when reading is off, and says so to the model', async () => {
+      vi.mocked(streamText).mockReturnValueOnce(createMockStreamResult(['ok']))
+      for await (const _chunk of createExternalModelClient(mockFetch).stream!({ model: mockConfig, prompt: 'Hi', searchWeb: async () => '' })) { /* read */ }
+      const options = callOf(0)
+      expect(Object.keys(options.tools!)).toEqual(['search_web'])
+      expect(options.system).toContain('search_web')
+      expect(options.system).not.toContain('read_web_page')
+    })
+
+    it('asks again without tools when the provider does not take them, and does not time out while searching', async () => {
+      vi.mocked(streamText)
+        .mockReturnValueOnce({ ...createMockStreamResult([]), textStream: { async *[Symbol.asyncIterator]() { throw Object.assign(new Error('tools is not supported for this model'), { statusCode: 400 }) } } })
+        .mockReturnValueOnce(createMockStreamResult(['answer without tools']))
+      const chunks: string[] = []
+      for await (const chunk of createExternalModelClient(mockFetch).stream!({ model: mockConfig, prompt: 'Hi', searchWeb: async () => '' })) chunks.push(chunk)
+      expect(chunks).toEqual(['answer without tools'])
+      expect(callOf(1).tools).toBeUndefined()
+
+      vi.mocked(streamText).mockImplementationOnce(((options: { tools: Record<string, SearchCall> }) => ({
+        ...createMockStreamResult([]),
+        textStream: {
+          async *[Symbol.asyncIterator]() {
+            yield 'Searching. '
+            yield await options.tools.search_web.execute({ query: 'q' }, {})
+          },
+        },
+      })) as never)
+      const slow = () => new Promise<string>(resolve => setTimeout(() => resolve('Found.'), 120))
+      const timed: string[] = []
+      for await (const chunk of createExternalModelClient(mockFetch, { timeoutMs: 40 }).stream!({ model: mockConfig, prompt: 'Hi', searchWeb: slow })) timed.push(chunk)
+      expect(timed.join('')).toBe('Searching. Found.')
+    })
+  })
 })

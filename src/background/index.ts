@@ -6,6 +6,7 @@ import { loadStore } from '../group/store'
 import { guardSpendCaps } from './spendCapGuard'
 import { createResultSender } from './resultSender'
 import { createWebPageReader } from './webPageReader'
+import { createWebSearcher } from './webSearcher'
 import { hostAccessPattern } from '../shared/hostAccess'
 import type { GroupChat, OpenTeamStore } from '../group/types'
 import { referencedImageIds } from '../group/backup'
@@ -98,6 +99,15 @@ const webPageReader = createWebPageReader({
   fetch: (url, init) => fetch(url, init),
   hasAccess: pattern => chrome.permissions.contains({ origins: [pattern] }),
   ask: (context, question, signal) => localAgentApprovals.ask(context, question, signal),
+  log,
+})
+// 联网搜索: API members search through Tavily with the user's key (webSearcher.ts).
+const webSearcher = createWebSearcher({
+  fetch: (url, init) => fetch(url, init),
+  hasAccess: pattern => chrome.permissions.contains({ origins: [pattern] }),
+  loadStore,
+  mutateStore,
+  broadcastStoreUpdated: store => broadcastStoreUpdated(store),
   log,
 })
 const localAgentClient = createLocalAgentClient({
@@ -406,6 +416,7 @@ const routeMessage = createMessageRouter([
   ...accountBalances.routes,
   ...resultSender.routes,
   ...siteCheckScheduler.routes,
+  ...webSearcher.routes,
   ...createLibraryHandlers({ broadcastStoreUpdated: store => broadcastStoreUpdated(store), newId, now }),
   ...createSiteCheckHandlers({ route: message => Promise.resolve(routeMessage(message, {})), broadcastStoreUpdated, runtimeFrames, waitFor: ms => new Promise(resolve => globalThis.setTimeout(resolve, ms)), now }),
   ...createExternalModelHandlers({ broadcastStoreUpdated, externalModelClient, checkLocalAgent, newId, now }),
@@ -424,7 +435,7 @@ const routeMessage = createMessageRouter([
   },
   ...createRoleHandlers({ broadcastStoreUpdated, externalModelClient, log, newId, now, runtimeFrames, sendPrompt }),
   ...createOrchestrationHandlers({ broadcastStoreUpdated, broadcastAutoGenerateStream, externalModelClient, getChatStatusFromRoles, log, newId, now, promptDeliveryLimiter, requestRoleRecovery, runtimeFrames, sendPrompt }),
-  ...createMessageHandlers({ webPageReader, broadcastStoreUpdated, checkLinks: urls => checkLinks(urls, { fetch: (url, init) => fetch(url, init), hasAccess: pattern => chrome.permissions.contains({ origins: [pattern] }), now }), externalModelClient, getChatStatusFromRoles, imageAttachments, log, newId, now, onPromptSettled: (store, chatId, promptMessageId) => Promise.all([notifyWhenAnswered(store, chatId, promptMessageId), resultSender.onPromptSettled(store, chatId, promptMessageId)]), promptDeliveryLimiter, requestRoleRecovery, runtimeFrames, sendError, sendPrompt, sendRoleMessage }),
+  ...createMessageHandlers({ webPageReader, webSearcher, broadcastStoreUpdated, checkLinks: urls => checkLinks(urls, { fetch: (url, init) => fetch(url, init), hasAccess: pattern => chrome.permissions.contains({ origins: [pattern] }), now }), externalModelClient, getChatStatusFromRoles, imageAttachments, log, newId, now, onPromptSettled: (store, chatId, promptMessageId) => Promise.all([notifyWhenAnswered(store, chatId, promptMessageId), resultSender.onPromptSettled(store, chatId, promptMessageId)]), promptDeliveryLimiter, requestRoleRecovery, runtimeFrames, sendError, sendPrompt, sendRoleMessage }),
 ])
 
 // Replies their members can no longer give, ended at these moments (see interruptedReplies.ts).

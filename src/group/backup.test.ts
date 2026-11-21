@@ -40,6 +40,14 @@ describe('backup', () => {
     expect(store.settings.externalModelsById['model-1'].apiKey).toBe('sk-secret')
   })
 
+  it('leaves the search key out unless keys are asked for', () => {
+    const store = storeWithKeyedModel('sk-secret')
+    store.settings.webSearch = { provider: 'tavily', apiKey: 'tvly-secret' }
+    expect(JSON.stringify(createBackup(store, { exportedAt: new Date('2026-11-05T08:00:00Z') }))).not.toContain('tvly-secret')
+    expect(roundTrip(store, true).backup.store.settings.webSearch).toEqual({ provider: 'tavily', apiKey: 'tvly-secret' })
+    expect(store.settings.webSearch?.apiKey).toBe('tvly-secret')
+  })
+
   it('writes API keys only when asked to, and names the models that come without one', () => {
     const store = storeWithKeyedModel('sk-secret')
 
