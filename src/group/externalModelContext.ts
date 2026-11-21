@@ -1,3 +1,4 @@
+import { sharedWithRole } from './chatMode'
 import { formatContextMessage } from './contextSync'
 import { buildPrompt } from './promptBuilder'
 import { describeAttachments } from './messageUploads'
@@ -104,7 +105,8 @@ function externalContextMessages(store: OpenTeamStore, chat: GroupChat, role: Gr
     .filter(message => message.id === userMessage.id || (!isRoundSummaryMessage(message, id => store.messagesById[id]) && !isOpenTeamRequest(message) && !isFailedReply(message)))
     .sort((left, right) => left.seq - right.seq || left.createdAt - right.createdAt)
 
-  if (chat.mode === 'collaborative') return messages
+  // A group made 协作 later does not share what its members said before (chatMode.ts).
+  if (chat.mode === 'collaborative') return messages.filter(message => message.id === userMessage.id || sharedWithRole(chat, role.id, message))
 
   return messages.filter(message => (
     message.id === userMessage.id ||

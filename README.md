@@ -29,7 +29,7 @@ Use it for learning, research and personal non-commercial work where one answer 
 **Ways to work together**
 
 - **Mentions**: `@person` asks one member, `@everyone` asks the whole team.
-- **Independent and collaborative modes**: compare separate answers first, then let members read, challenge and build on each other.
+- **Independent and collaborative modes**: compare separate answers first, then let members read, challenge and build on each other. A group can switch between them from the More menu; one made collaborative later does not share what its members answered before.
 - **Turn-by-turn discussion**: members speak one at a time and can hand the turn to someone else; no single member can take over the discussion.
 - **Project mode**: a coordinator breaks a goal into tasks with owners and "done" criteria. After you approve, members work in order or in parallel, the coordinator checks each result and asks for rework (with a limit, so tasks are not passed around forever), and finally writes the deliverable on a task board in the chat.
 - **Key points and round summaries**: replies to a group start with their key points; once everyone has answered, one member summarises agreements, disagreements, open questions and next steps. You can adopt a summary as a decision with one click.

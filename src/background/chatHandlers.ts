@@ -6,6 +6,7 @@ import { MAX_TEAM_HANDBOOKS, readTeamHandbook } from '../group/teamHandbooks'
 import { createGroupRole, createGroupRolesBatch, type GroupRoleBatchInput } from '../group/roleTemplates'
 import { planTeamRounds, readTeamFormation, splitPositions, TEAM_MAX_COPIES_PER_MODEL, TEAM_MAX_MEMBERS, TEAM_MAX_TEMPLATES, TEAM_MIN_MEMBERS, teamModelKey, teamTemplateFromChat } from '../group/teamFormation'
 import { applyCollaborationStyle, isCollaborationStyle, readNewChatCollaboration } from '../group/collaboration'
+import { isRoomMode, switchChatMode } from '../group/chatMode'
 import type { GroupChat, GroupMessage, GroupRole, OpenTeamStore, OrchestrationFlow, OrchestrationStage, RoomMode } from '../group/types'
 import type { BackgroundMessageRoute } from './messageRouter'
 import { messageTabId, type RuntimeMessage } from './runtimeClient'
@@ -139,6 +140,12 @@ export function createChatHandlers(deps: ChatHandlersDependencies): BackgroundMe
           delete chat.description
         }
         patchKeys.push('description')
+      }
+
+      // 独立专家 ⇄ 协作群聊, not while members answer (src/group/chatMode.ts).
+      if (patch.mode !== undefined) {
+        if (!isRoomMode(patch.mode)) throw new Error('群聊模式无效')
+        if (switchChatMode(store, chat, patch.mode)) patchKeys.push('mode')
       }
 
       if (patch.requireManualMention !== undefined) {

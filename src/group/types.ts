@@ -405,6 +405,9 @@ export interface GroupChat {
   project?: ProjectRun
   // No memory items are sent to this group's members.
   memoryDisabled?: boolean
+  // Set when an 独立专家 group was made 协作群聊: the last message before; earlier messages are not
+  // shared among the members (src/group/chatMode.ts).
+  sharedFromSeq?: number
   // Messages the group sends itself on set days at a set time (src/group/scheduledTasks.ts).
   scheduledTasks?: ScheduledTask[]
   createdAt: number

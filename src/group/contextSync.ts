@@ -1,4 +1,5 @@
 import { normalizeLanguage } from '../shared/i18n'
+import { sharedWithRole } from './chatMode'
 import { describeAttachments } from './messageUploads'
 import { isFailedReply, isOpenTeamRequest, isRoundSummaryMessage } from './roundSummary'
 import type { GroupChat, GroupMessage, GroupRole, OpenTeamLanguage } from './types'
@@ -25,6 +26,8 @@ export function getUnsyncedMessagesForRole(
     // wrote while the site could not take prompts (memberBackup.ts): the site is told about those.
     .filter(message => message.seq > role.contextCursor && message.id !== userMessage.id && (message.roleId !== role.id || Boolean(message.answeredByFallback)))
     .filter(message => isMessageVisibleToRole(message, role.id))
+    // A group made 协作 later does not share what its members said before (chatMode.ts).
+    .filter(message => sharedWithRole(chat, role.id, message))
     // Round summaries are for the user; they repeat what members already said. Discussion turn
     // requests are OpenTeam's own instructions.
     .filter(message => !isRoundSummaryMessage(message, id => messageById.get(id)) && !isOpenTeamRequest(message) && !isFailedReply(message))

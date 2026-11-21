@@ -198,6 +198,37 @@ describe('background chat handlers', () => {
     expect('memoryDisabled' in store.chatsById['chat-1']).toBe(false)
   })
 
+  it('changes a group\'s mode, and says why not while a member answers', async () => {
+    vi.resetModules()
+    const store = createDefaultStore()
+    store.chatsById['chat-1'] = { id: 'chat-1', name: '架构评审', mode: 'independent', roleIds: ['role-1'], messageIds: [], nextMessageSeq: 4, status: 'ready', createdAt: 0, updatedAt: 0 }
+    store.rolesById['role-1'] = { id: 'role-1', chatId: 'chat-1', name: '工程师', chatSite: 'chatgpt', status: 'ready', contextCursor: 0, createdAt: 0, updatedAt: 0 }
+    vi.doMock('./storeAccess', async importOriginal => {
+      const actual = await importOriginal<typeof import('./storeAccess')>()
+      return {
+        ...actual,
+        mutateStore: async (mutator: (store: OpenTeamStore) => unknown) => ({ store, result: await mutator(store) }),
+      }
+    })
+    const { createChatHandlers } = await import('./chatHandlers')
+    const routes = createChatHandlers({
+      broadcastStoreUpdated: vi.fn(),
+      getChatStatusFromRoles: () => 'ready',
+      log: { info: vi.fn(), warn: vi.fn() },
+      newId: vi.fn(),
+      now: vi.fn(() => 100),
+      runtimeFrames: { removeRole: vi.fn() },
+    })
+    const update = (mode: unknown) => Promise.resolve(routes.find(route => route.type === 'GROUP_CHAT_UPDATE')!.handler({ type: 'GROUP_CHAT_UPDATE', chatId: 'chat-1', mode }, {}))
+
+    await update('collaborative')
+    expect(store.chatsById['chat-1']).toMatchObject({ mode: 'collaborative', sharedFromSeq: 3, updatedAt: 100 })
+    await expect(update('team')).rejects.toThrow('群聊模式无效')
+    store.rolesById['role-1'].status = 'thinking'
+    await expect(update('independent')).rejects.toThrow('成员还在回答，等这一轮结束再切换模式')
+    expect(store.chatsById['chat-1'].mode).toBe('collaborative')
+  })
+
   it('deleting a chat removes its memory items and its members\', and duplicating one copies them', async () => {
     vi.resetModules()
     const store = createDefaultStore()

@@ -10,6 +10,7 @@ import { createChatHeaderView } from './chatHeaderView'
 import { NARROW_LAYOUT_QUERY, registerChatListDrawer } from './chatListDrawer'
 import { createComposerModesView } from './composerModesView'
 import { registerHeaderMenus } from './headerMenus'
+import { createChatModeSwitch } from './chatModeSwitch'
 import { createChatListView } from './chatListView'
 import { currentScheduledTasksDialog } from './scheduledTasksDialog'
 import { openPollDialog } from './pollDialog'
@@ -285,9 +286,19 @@ const composerModesView = createComposerModesView({
   showError: message => showError(message),
 })
 composerModesView.register()
+// 更多 → 改成协作群聊 / 改成独立专家 (chatModeSwitch.ts).
+const chatModeSwitch = createChatModeSwitch({
+  buttonEl: document.querySelector<HTMLButtonElement>('#switch-chat-mode'),
+  getLanguage: () => store.settings.language,
+  getCurrentChat,
+  runCommand,
+  showError: message => showError(message),
+})
+chatModeSwitch.register()
 const renderChatHeader = () => {
   chatHeaderView.renderChatHeader()
   composerModesView.render()
+  chatModeSwitch.render()
 }
 const chatListView = createChatListView({
   state: appState,

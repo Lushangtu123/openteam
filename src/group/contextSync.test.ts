@@ -28,3 +28,18 @@ describe('what a web member\'s site is told when it comes back', () => {
     expect(context.contextText).toContain('You (answered for you by the backup model "DeepSeek API" while your page could not take messages): 只能当参考。')
   })
 })
+
+describe('a web member\'s context in a group made 协作 later', () => {
+  it('leaves out what others said before the switch, even after its page started over', () => {
+    const role: GroupRole = { id: 'r', chatId: 'c', name: '研究员', chatSite: 'kimi', status: 'ready', contextCursor: 0, createdAt: 1, updatedAt: 1 }
+    const messages: GroupMessage[] = [
+      { id: 'm1', chatId: 'c', seq: 1, type: 'user', content: '工程师先看', targetRoleIds: ['e'], createdAt: 1, status: 'received' },
+      { id: 'e1', chatId: 'c', seq: 2, type: 'assistant', roleId: 'e', roleName: '工程师', content: '切换前的独立回答', createdAt: 2, status: 'received' },
+      { id: 'n1', chatId: 'c', seq: 3, type: 'user', content: '切换前只记在群里', targetRoleIds: [], createdAt: 3, status: 'received' },
+      { id: 'e2', chatId: 'c', seq: 4, type: 'assistant', roleId: 'e', roleName: '工程师', content: '切换后的发言', createdAt: 4, status: 'received' },
+      { id: 'm2', chatId: 'c', seq: 5, type: 'user', content: '一起讨论', targetRoleIds: ['r', 'e'], createdAt: 5, status: 'pending' },
+    ]
+    const chat: GroupChat = { id: 'c', name: '调研', mode: 'collaborative', roleIds: ['r', 'e'], messageIds: messages.map(message => message.id), nextMessageSeq: 6, status: 'ready', sharedFromSeq: 3, createdAt: 1, updatedAt: 1 }
+    expect(buildUnsyncedContext(chat, role, messages, messages[4], 6000, 'zh-CN').messages.map(message => message.id)).toEqual(['e2'])
+  })
+})

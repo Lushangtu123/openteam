@@ -29,6 +29,29 @@ describe('external model context', () => {
     expect(prompt.content).not.toContain('设计师不该自动进入专家上下文')
   })
 
+  it('in a group made 协作 later, shares only what was said since, plus the member\'s own earlier exchange', () => {
+    const store = createDefaultStore()
+    const chat = makeChat('collaborative')
+    const engineer = makeRole('role-engineer', '工程师')
+    const designer = makeRole('role-designer', '设计师')
+    const messages = [
+      makeUserMessage('msg-1', 1, '工程师先看架构', ['role-engineer']),
+      makeAssistantMessage('msg-2', 2, engineer, '工程师当时的独立回答'),
+      makeUserMessage('msg-3', 3, '设计师看界面', ['role-designer']),
+      makeAssistantMessage('msg-4', 4, designer, '设计师当时的独立回答'),
+      makeAssistantMessage('msg-5', 5, designer, '切换之后设计师说的话'),
+      makeUserMessage('msg-6', 6, '大家一起讨论', ['role-engineer', 'role-designer']),
+    ]
+    install(store, chat, [engineer, designer], messages)
+    chat.sharedFromSeq = 4
+
+    const prompt = buildExternalModelPrompt(store, chat, engineer, messages[5], [engineer, designer]).content
+    expect(prompt).toContain('工程师当时的独立回答')
+    expect(prompt).toContain('切换之后设计师说的话')
+    expect(prompt).not.toContain('设计师当时的独立回答')
+    expect(prompt).not.toContain('设计师看界面')
+  })
+
   it("leaves its own failed replies out of an API member's context, so it does not learn to write them", () => {
     const store = createDefaultStore()
     const chat = makeChat('collaborative')
