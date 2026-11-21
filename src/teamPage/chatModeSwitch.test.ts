@@ -40,8 +40,8 @@ describe('更多 → changing the group\'s mode', () => {
     await vi.waitFor(() => expect(ctx.showError).toHaveBeenCalledWith('成员还在回答，等这一轮结束再切换模式'))
   })
 
-  it('is not offered without a group, or for a 网站自检 group', () => {
+  it('is offered for any open group, a 网站自检 group too', () => {
     expect(setup(undefined).button.hidden).toBe(true)
-    expect(setup(chat({ siteCheck: { startedAt: 1 } })).button.hidden).toBe(true)
+    expect(setup(chat({ siteCheck: { startedAt: 1 } })).button.hidden).toBe(false)
   })
 })

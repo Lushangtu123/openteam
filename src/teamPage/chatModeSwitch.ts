@@ -1,6 +1,6 @@
 // 更多 → 改成协作群聊 / 改成独立专家: the open group's mode, changed after it was made
-// (src/group/chatMode.ts), after asking. Not offered for a 网站自检 group, which checks each site
-// on its own.
+// (src/group/chatMode.ts), after asking. A 网站自检 group too, once its check is over (while members
+// answer the mode does not change).
 import type { GroupChat } from '../group/types'
 import { normalizeLanguage, translateUi } from '../shared/i18n'
 
@@ -22,7 +22,7 @@ export function createChatModeSwitch(deps: ChatModeSwitchDependencies) {
     const button = deps.buttonEl
     if (!button) return
     const chat = deps.getCurrentChat()
-    button.hidden = !chat || Boolean(chat.siteCheck)
+    button.hidden = !chat
     if (!chat) return
     const toCollaborative = chat.mode !== 'collaborative'
     const label = button.querySelector('.header-menu-label')
