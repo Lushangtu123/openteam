@@ -5,6 +5,8 @@ import type { RuntimeMessage } from './runtimeClient'
 import { readNewChatCollaboration } from '../group/collaboration'
 import { MEMORY_MAX_RETRIEVED, memoryModeForChat, pinnedMemoryItems, searchMemoryItems, visibleMemoryItems } from '../group/memoryRetrieval'
 import { SITE_CHECK_TIMEOUT_MS, siteCheckNeedsAttention, siteCheckResults } from '../group/siteCheck'
+import type { RecentLogEntry } from '../shared/logger'
+import { queryLogs, readLogQuery } from '../shared/logQuery'
 
 export interface ControlActionExecutorDependencies {
   loadStore(): Promise<OpenTeamStore>
@@ -15,6 +17,8 @@ export interface ControlActionExecutorDependencies {
   openTeamPage(): Promise<void> | void
   waitFor(ms: number): Promise<void>
   now(): number
+  // The background's kept log, already cleaned (logger.ts recentLogs), for logs.read.
+  readLogs?(): RecentLogEntry[]
 }
 
 export interface TaskReadResult {
@@ -110,6 +114,9 @@ async function executeEnabledCommand(command: ControlHttpCommand, initialStore: 
       return listLibrary(command.payload, initialStore)
     case 'site.check':
       return runSiteCheck(command.payload, deps)
+    // The background's log, filtered (src/shared/logQuery.ts); it was cleaned when it was kept.
+    case 'logs.read':
+      return queryLogs(deps.readLogs?.() ?? [], readLogQuery(command.payload), deps.now())
     default:
       throw new Error(`不支持的控制命令：${command.action}`)
   }

@@ -150,6 +150,14 @@ openteamcli site-check [--no-wait] [--timeout <毫秒>]
 
 每次运行都会新建一个以时间命名的「网站自检」群，旧的可以在群聊列表里用「选择多个…」一次删掉。
 
+## 扩展的日志
+
+```bash
+openteamcli logs [--search <文字>] [--level warn|error] [--since 30m|2h|1d] [--limit <条数>]
+```
+
+读出 OpenTeam 后台最近记下的日志（最近 400 条，重启后也保留）：比如 API 模型为什么换成了备用模型（`external-model:fallback`）、资料库网页为什么没更新成功（`library-refresh:failed`）、成员网页报的错等。`--search` 只留事件名或详情里含这段文字的，`--level warn` 只留警告和错误，`--since` 只留最近一段时间的，`--limit` 只留最后几条（默认 100）。日志在记下时就已清理过，和「导出诊断信息」一样：不含消息内容、提示词和名字，链接只留网站，不含任何 Key。这是扩展的日志；`daemon logs` 是本机守护进程自己的日志。
+
 ## 发布检查
 
 发布新的 CLI 版本前，先更新 `packages/openteamcli/package.json` 里的版本号；npm 不允许重复发布已经存在的版本。

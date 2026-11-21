@@ -28,6 +28,7 @@ export const OPENTEAM_CONTROL_CAPABILITIES = [
   'library.add',
   'library.list',
   'site.check',
+  'logs.read',
   'agent.list',
   'agent.run',
   'agent.cancel',

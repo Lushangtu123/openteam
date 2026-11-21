@@ -203,6 +203,17 @@ openteamcli site-check
 
 它会新建一个「网站自检」群，给每个 AI 网站发一句「只回复 OK」，并打开 OpenTeam 页面；一般一分钟左右出结果，最长约六分半钟，期间不要再发别的任务。结果的 `results` 逐个列出网站：`ok` 正常；`login` 要用户去那个网站登录；`page-problem` 页面被验证页或弹窗挡住，请用户打开 AI 网页看看；`failed`、`not-sent`、`no-reply` 是发送或读取出了问题，`no-reply` 常常说明网站改版了。把需要处理的网站和原因（`detail`）告诉用户，不要自己去点浏览器。这会用用户的账号在每个网站发一条消息，用户没有要求时不要主动跑。
 
+## 查日志
+
+排查 OpenTeam 里出的问题（成员没回答、换了备用模型、资料库网页没更新、网页成员报错）时，先看扩展后台的日志，不要先让用户导出诊断信息：
+
+```bash
+openteamcli logs --level warn --since 1h
+openteamcli logs --search fallback --limit 20
+```
+
+`entries` 按时间排列，最新的在最后；`event` 是事件名，`details` 是详情。日志已去掉消息内容、名字和 Key。`daemon logs` 是守护进程自己的日志，和这个不同。
+
 ## 错误恢复
 
 优先看机器可读的 `error.code`。

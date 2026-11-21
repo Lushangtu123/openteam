@@ -3,6 +3,7 @@ import { createDefaultStore } from '../group/store'
 import type { GroupMessage, GroupRole, MemoryItem, OpenTeamStore } from '../group/types'
 import { createControlActionExecutor, readTaskResult } from './controlHandlers'
 import type { RuntimeMessage } from './runtimeClient'
+import { OPENTEAM_CONTROL_CAPABILITIES } from '../shared/localControlProtocol'
 
 describe('background control handlers', () => {
   it('routes create-and-post through existing chat, role, and message runtime commands', async () => {
@@ -402,3 +403,24 @@ describe('the site check through the control interface', () => {
     expect((await executor({ id: 'cmd-1', action: 'site.check' })).data).toMatchObject({ finished: true, error: '没有一个网站的页面打开了。' })
   })
 })
+
+describe('logs.read: the background log, from the command line', () => {
+  it('gives the kept entries that match, newest last', async () => {
+    const store = createDefaultStore()
+    store.settings.agentControlEnabled = true
+    const at = 1_800_000_000_000
+    const readLogs = vi.fn(() => [
+      { at: at - 3_600_000, level: 'info' as const, scope: 'background', event: 'external-model:send:start', details: {} },
+      { at: at - 60_000, level: 'warn' as const, scope: 'background', event: 'external-model:fallback', details: { reason: 'HTTP 503：busy' } },
+    ])
+    const executor = createControlActionExecutor({ loadStore: async () => store, routeRuntimeMessage: vi.fn(), runtimeFrames: { list: () => [] }, openTeamPage: vi.fn(), waitFor: async () => undefined, now: () => at, readLogs })
+    const run = async (payload: Record<string, unknown>) => executor({ id: 'cmd', action: 'logs.read', payload } as never) as Promise<{ ok: boolean; data?: { total: number; entries: Array<{ event: string; time: string }> } }>
+    const all = await run({})
+    expect(all.ok).toBe(true)
+    expect(all.data!.total).toBe(2)
+    expect(all.data!.entries.map(entry => entry.event)).toEqual(['external-model:send:start', 'external-model:fallback'])
+    expect((await run({ level: 'warn', withinMs: 600_000, search: 'fallback' })).data!.entries.map(entry => entry.event)).toEqual(['external-model:fallback'])
+    expect(OPENTEAM_CONTROL_CAPABILITIES).toContain('logs.read')
+  })
+})
+

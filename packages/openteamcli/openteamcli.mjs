@@ -120,6 +120,21 @@ export function buildCliRequest(argv) {
     }
   }
 
+  // The extension background's own log (not the daemon's: daemon logs), filtered; it was cleaned of
+  // keys, message text and names when it was kept.
+  if (group === 'logs') {
+    const logOptions = parseOptions(argv.slice(1))
+    const level = logOptions.level
+    if (level !== undefined && level !== 'warn' && level !== 'error') throw new Error('--level 只能是 warn 或 error')
+    const limit = numberOption(logOptions.limit)
+    return command('logs.read', {
+      ...(typeof logOptions.search === 'string' && logOptions.search.trim() ? { search: logOptions.search.trim() } : {}),
+      ...(level ? { level } : {}),
+      ...(logOptions.since !== undefined ? { withinMs: durationMs(logOptions.since) } : {}),
+      ...(limit ? { limit } : {}),
+    })
+  }
+
   // 网站自检: every AI site is asked to reply OK; the result says, site by site, whether it works.
   if (group === 'site-check') {
     const checkOptions = parseOptions(argv.slice(1))
@@ -455,6 +470,13 @@ function requireOption(options, key) {
   return value.trim()
 }
 
+// "30m", "2h", "1d", "45s" as milliseconds.
+function durationMs(value) {
+  const match = /^(\d+)(s|m|h|d)$/.exec(String(value).trim())
+  if (!match) throw new Error('--since 写成 30m、2h 或 1d 这样')
+  return Number(match[1]) * { s: 1_000, m: 60_000, h: 3_600_000, d: 86_400_000 }[match[2]]
+}
+
 function numberOption(value) {
   if (value === undefined) return undefined
   const parsed = Number(value)
@@ -604,6 +626,7 @@ export function help() {
       'openteamcli run create-and-post --file task.json --wait',
       'openteamcli memory search --chat <chatId> --role name:<name>|role:<id> [--query <text>] [--limit <n>]',
       'openteamcli site-check [--no-wait] [--timeout <ms>]',
+      'openteamcli logs [--search <text>] [--level warn|error] [--since 30m|2h|1d] [--limit <n>]',
       'openteamcli memory add --scope global|chat|role [--chat <chatId>] [--role name:<name>|role:<id>] [--kind fact|decision|preference|note] --content <text> [--tags a,b] [--pinned]',
       'openteamcli library add --chat <chatId> (--file <path> | --text <text>) [--title <title>]',
       'openteamcli library list --chat <chatId>',

@@ -99,6 +99,7 @@ describe('openteamcli command builder', () => {
         'openteamcli run create-and-post --file task.json --wait',
         'openteamcli memory search --chat <chatId> --role name:<name>|role:<id> [--query <text>] [--limit <n>]',
         'openteamcli site-check [--no-wait] [--timeout <ms>]',
+        'openteamcli logs [--search <text>] [--level warn|error] [--since 30m|2h|1d] [--limit <n>]',
         'openteamcli memory add --scope global|chat|role [--chat <chatId>] [--role name:<name>|role:<id>] [--kind fact|decision|preference|note] --content <text> [--tags a,b] [--pinned]',
         'openteamcli library add --chat <chatId> (--file <path> | --text <text>) [--title <title>]',
         'openteamcli library list --chat <chatId>',
@@ -206,3 +207,25 @@ describe('openteamcli site-check', () => {
     expect(JSON.stringify(help())).toContain('openteamcli site-check')
   })
 })
+
+describe('openteamcli logs', () => {
+  it('asks the extension for its background log, filtered as asked', () => {
+    expect(buildCliRequest(['logs'])).toMatchObject({ kind: 'command', command: { action: 'logs.read', payload: {} } })
+    expect(buildCliRequest(['logs', '--search', 'fallback', '--level', 'warn', '--since', '30m', '--limit', '20']).command.payload).toEqual({ search: 'fallback', level: 'warn', withinMs: 1_800_000, limit: 20 })
+    expect(buildCliRequest(['logs', '--since', '2h']).command.payload).toEqual({ withinMs: 7_200_000 })
+    expect(buildCliRequest(['logs', '--since', '1d']).command.payload).toEqual({ withinMs: 86_400_000 })
+    expect(buildCliRequest(['logs', '--since', '45s']).command.payload).toEqual({ withinMs: 45_000 })
+  })
+
+  it('refuses a level or a time it does not know', () => {
+    expect(() => buildCliRequest(['logs', '--level', 'debug'])).toThrow('--level 只能是 warn 或 error')
+    expect(() => buildCliRequest(['logs', '--since', 'yesterday'])).toThrow('--since 写成 30m、2h 或 1d 这样')
+  })
+
+  it('is in the help, apart from the daemon\'s own log', () => {
+    const text = JSON.stringify(help())
+    expect(text).toContain('openteamcli logs [--search <text>] [--level warn|error] [--since 30m|2h|1d] [--limit <n>]')
+    expect(text).toContain('openteamcli daemon start|status|stop|restart|logs')
+  })
+})
+

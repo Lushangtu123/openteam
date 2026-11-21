@@ -492,6 +492,7 @@ const executeControlCommand = createControlActionExecutor({
     return new Promise(resolve => globalThis.setTimeout(resolve, ms))
   },
   now,
+  readLogs: () => recentLogs(),
 })
 
 log.info('control-client:create', {

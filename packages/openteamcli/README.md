@@ -170,6 +170,14 @@ The exit code is 0 when every site works, 2 when one needs attention or did not 
 
 Each run makes a group named 网站自检 with the time; delete the old ones with Select several in the group list.
 
+## The extension's log
+
+```bash
+openteamcli logs [--search <text>] [--level warn|error] [--since 30m|2h|1d] [--limit <n>]
+```
+
+Reads what OpenTeam's background has logged lately (its last 400 entries, kept across restarts): why an API model handed a reply to its backup (`external-model:fallback`), why a library page could not be read again (`library-refresh:failed`), a member page's errors, and so on. `--search` keeps entries whose event or details contain the text, `--level warn` keeps warnings and errors, `--since` the recent ones, and `--limit` the last few (100 by default). Entries are cleaned when they are kept, as for 导出诊断信息: no message text, prompts or names, links without their path, and no keys. This is the extension's log; `daemon logs` is the local daemon's own.
+
 ## Local agents in OpenTeam groups
 
 Add a local ACP agent, then pick it in OpenTeam under 添加大模型 → 本机智能体（ACP）:
