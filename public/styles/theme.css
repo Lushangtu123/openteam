@@ -2097,6 +2097,39 @@ select.reply-compare-select {
   white-space: nowrap;
 }
 
+.usage-searches-summary {
+  margin: 0;
+  color: var(--text);
+}
+
+.usage-searches-summary.usage-searches-near {
+  color: var(--danger);
+}
+
+.web-search-limit-row {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.web-search-limit-row[hidden] {
+  display: none;
+}
+
+.web-search-limit-line {
+  display: flex;
+  gap: 8px;
+}
+
+.web-search-limit-line input {
+  flex: 1;
+  min-width: 0;
+}
+
+.web-search-limit-line .btn {
+  flex: none;
+  white-space: nowrap;
+}
+
 .web-search-dialog .tiny a {
   color: var(--text);
   text-decoration: underline;
@@ -2531,11 +2564,13 @@ select.reply-compare-select {
 }
 
 .usage-accounts,
-.usage-caps {
+.usage-caps,
+.usage-searches {
   display: grid;
   gap: 6px;
 }
 
+.usage-searches .usage-section-title,
 .usage-caps .usage-section-title {
   margin: 0;
   font-size: 14px;

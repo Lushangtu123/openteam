@@ -10,6 +10,7 @@ import type { ResultDestination } from './resultDestinations'
 import type { SiteFaultRecord } from './siteFaults'
 import type { SiteCheckSchedule } from './siteCheckSchedule'
 import type { WebSearchSettings } from '../shared/webSearch'
+import type { WebSearchUsage } from '../shared/webSearchUsage'
 import type { LibraryDoc } from './groupLibrary'
 export type { ChatSite }
 export type OpenTeamLanguage = 'en' | 'zh-CN'
@@ -59,6 +60,8 @@ export interface OpenTeamStore {
   siteUsageBySite?: SiteUsageRecord
   // 网站失效提醒: each site's failures since its last reply (src/group/siteFaults.ts).
   siteFaultsBySite?: SiteFaultRecord
+  // 联网搜索's count of searches (src/shared/webSearchUsage.ts).
+  webSearchUsage?: WebSearchUsage
   // API accounts' balances and daily spend, read from the providers (src/group/accountBalance.ts).
   accountBalancesById?: Record<string, AccountBalance>
   // What each priced API model spent today, against its daily cap (src/group/spendCap.ts).

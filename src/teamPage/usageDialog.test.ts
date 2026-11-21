@@ -159,3 +159,31 @@ describe('the spending caps in the usage window', () => {
     expect(document.querySelector('.usage-caps')).toBeNull()
   })
 })
+
+describe('web searches in the usage window', () => {
+  it('shows the searches of the range by model, and this month against the allowance', () => {
+    const { store, q, cells } = setup()
+    store.settings.webSearch = { provider: 'tavily', apiKey: 'tvly-x', monthlyLimit: 100 }
+    store.webSearchUsage = { days: {
+      '2026-11-19': { total: 4, byChat: { a: { ds: 3 } }, tests: 1 },
+      '2026-11-05': { total: 2, byChat: { a: { ds: 2 } } },
+    } }
+    currentUsageDialog()?.refresh()
+    expect(q('.usage-searches .usage-section-title')?.textContent).toBe('联网搜索（Tavily）')
+    expect(q('.usage-searches-summary')?.textContent).toBe('这段时间搜索 4 次（其中测试 1 次）。本月 6 次，额度 100 次（6%）。')
+    expect(cells('usage-search-models')).toEqual([['DeepSeek API', '3']])
+
+    ;(q('[data-range="all"]') as HTMLButtonElement).click()
+    expect(q('.usage-searches-summary')?.textContent).toBe('这段时间搜索 6 次（其中测试 1 次）。本月 6 次，额度 100 次（6%）。')
+    const scope = q('.usage-scope') as HTMLSelectElement
+    scope.value = 'b'
+    scope.dispatchEvent(new Event('change'))
+    expect(q('.usage-searches-summary')?.textContent).toBe('这个群这段时间没有搜索。本月 6 次，额度 100 次（6%）。')
+  })
+
+  it('has no search section without a key or any search', () => {
+    const { q } = setup()
+    expect(q('.usage-searches')).toBeNull()
+  })
+})
+

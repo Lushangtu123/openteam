@@ -68,7 +68,7 @@ export async function sendExternalModelDelivery(deps: MessageHandlersDependencie
       )
       : undefined
     const searchWeb = deps.webSearcher && delivery.model.format !== 'local-agent' && delivery.model.webSearch !== false
-      ? deps.webSearcher.forReply(initialized.store.settings.webSearch, { english: normalizeLanguage(initialized.store.settings.language) === 'en', signal: controller.signal, onSearch: done => searches.push(done) })
+      ? deps.webSearcher.forReply(initialized.store.settings.webSearch, { english: normalizeLanguage(initialized.store.settings.language) === 'en', signal: controller.signal, onSearch: done => searches.push(done), chatId: delivery.chatId, modelId: delivery.model.id })
       : undefined
 
     const imageIds = delivery.imageAttachmentIds ?? []

@@ -45,7 +45,7 @@ export interface MessageHandlersDependencies {
   // 读网页: API members may read web pages while they answer (webPageReader.ts).
   webPageReader?: WebPageReader
   // 联网搜索: API members may search the web while they answer, with the user's key (webSearcher.ts).
-  webSearcher?: { forReply(settings: WebSearchSettings | undefined, options: { english: boolean; signal?: AbortSignal; onSearch?(done: SearchDone): void }): SearchWeb | undefined }
+  webSearcher?: { forReply(settings: WebSearchSettings | undefined, options: { english: boolean; signal?: AbortSignal; onSearch?(done: SearchDone): void; chatId?: string; modelId?: string }): SearchWeb | undefined }
   externalModelRuns?: ExternalModelRunRegistry
   imageAttachments?: {
     captureReplyImages(input: { chatId: string; messageId: string; images: ReplyImageSource[] }): Promise<MessageImageAttachment[]>

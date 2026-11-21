@@ -4,6 +4,7 @@ import type { OpenTeamStore } from '../group/types'
 import { createWebSearcher, WEB_SEARCH_ROUTE_TYPES } from './webSearcher'
 
 const KEY = 'tvly-dev-0123456789'
+const NOW = new Date(2026, 10, 21, 10).getTime()
 
 function setup(options: { status?: number; body?: unknown; access?: boolean } = {}) {
   let store: OpenTeamStore = createDefaultStore()
@@ -21,6 +22,7 @@ function setup(options: { status?: number; body?: unknown; access?: boolean } = 
     },
     broadcastStoreUpdated,
     log: { warn: vi.fn() },
+    now: () => NOW,
   })
   const run = (type: string, fields: Record<string, unknown> = {}) => Promise.resolve(searcher.routes.find(route => route.type === type)!.handler({ type, ...fields }, {}))
   return { searcher, fetch, hasAccess, broadcastStoreUpdated, run, store: () => store }
@@ -59,7 +61,7 @@ describe('an API member searching while it answers', () => {
 
   it('says, as text the member can go on with, why a search did not work', async () => {
     const search = (options: Parameters<typeof setup>[0]) => setup(options).searcher.forReply({ provider: 'tavily', apiKey: KEY }, { english: false })!('q')
-    expect(await search({ status: 432, body: { detail: { error: 'limit' } } })).toBe('没有搜到：Tavily 的搜索额度用完了：到 tavily.com 查看用量，或等下个月额度恢复')
+    expect(await search({ status: 432, body: { detail: { error: 'limit' } } })).toBe('没有搜到：Tavily 的搜索额度用完了：到 tavily.com 查看用量，或等下个月额度恢复（本月 OpenTeam 已搜索 0 次）')
     expect(await search({ access: false })).toBe('没有搜到：OpenTeam 没有访问 api.tavily.com 的权限，请到设置 → 模型 → 联网搜索 重新保存 Key')
     expect(await setup().searcher.forReply({ provider: 'tavily', apiKey: KEY }, { english: false })!('  ')).toBe('没有搜：缺少搜索词')
     const failing = setup()
@@ -82,7 +84,7 @@ describe('an API member searching while it answers', () => {
 describe('the 联网搜索 key, from the settings', () => {
   it('saves a key, tests it, and removes it', async () => {
     const ctx = setup()
-    expect(WEB_SEARCH_ROUTE_TYPES).toEqual(['WEB_SEARCH_SAVE', 'WEB_SEARCH_TEST'])
+    expect(WEB_SEARCH_ROUTE_TYPES).toEqual(['WEB_SEARCH_SAVE', 'WEB_SEARCH_TEST', 'WEB_SEARCH_LIMIT_SET', 'WEB_SEARCH_NOTICE_DISMISS'])
     await ctx.run('WEB_SEARCH_SAVE', { apiKey: ` Bearer ${KEY} ` })
     expect(ctx.store().settings.webSearch).toEqual({ provider: 'tavily', apiKey: KEY })
     expect(ctx.broadcastStoreUpdated).toHaveBeenCalledTimes(1)
@@ -102,3 +104,42 @@ describe('the 联网搜索 key, from the settings', () => {
     expect((ctx.fetch.mock.calls[0][1].headers as Record<string, string>).authorization).toBe(`Bearer ${KEY}`)
   })
 })
+
+describe('counting the searches', () => {
+  it('counts each search that came back for its model and group, and a test as a test', async () => {
+    const ctx = setup()
+    const search = ctx.searcher.forReply({ provider: 'tavily', apiKey: KEY }, { english: false, chatId: 'c1', modelId: 'gemini' })!
+    await search('a')
+    await search('a')
+    await search('b')
+    expect(ctx.store().webSearchUsage?.days['2026-11-21']).toEqual({ total: 2, byChat: { c1: { gemini: 2 } } })
+    await ctx.run('WEB_SEARCH_TEST', { apiKey: KEY })
+    expect(ctx.store().webSearchUsage?.days['2026-11-21']).toMatchObject({ total: 3, tests: 1 })
+
+    const failing = setup({ status: 401 })
+    await failing.searcher.forReply({ provider: 'tavily', apiKey: KEY }, { english: false, chatId: 'c1', modelId: 'gemini' })!('a')
+    expect(failing.store().webSearchUsage?.days ?? {}).toEqual({})
+  })
+
+  it('says how many searches this month when the allowance is used up', async () => {
+    const ctx = setup({ status: 432, body: { detail: { error: 'limit' } } })
+    ctx.store().webSearchUsage = { days: { '2026-11-02': { total: 998, byChat: {} } } }
+    expect(await ctx.searcher.forReply({ provider: 'tavily', apiKey: KEY }, { english: false })!('q')).toBe('没有搜到：Tavily 的搜索额度用完了：到 tavily.com 查看用量，或等下个月额度恢复（本月 OpenTeam 已搜索 998 次）')
+  })
+
+  it('keeps the monthly allowance, also when the key changes, and puts the notice away for the month', async () => {
+    const ctx = setup()
+    await ctx.run('WEB_SEARCH_SAVE', { apiKey: KEY })
+    await ctx.run('WEB_SEARCH_LIMIT_SET', { monthlyLimit: 1000 })
+    expect(ctx.store().settings.webSearch).toEqual({ provider: 'tavily', apiKey: KEY, monthlyLimit: 1000 })
+    await ctx.run('WEB_SEARCH_SAVE', { apiKey: 'tvly-new-key' })
+    expect(ctx.store().settings.webSearch).toEqual({ provider: 'tavily', apiKey: 'tvly-new-key', monthlyLimit: 1000 })
+    await ctx.run('WEB_SEARCH_LIMIT_SET', { monthlyLimit: null })
+    expect(ctx.store().settings.webSearch).toEqual({ provider: 'tavily', apiKey: 'tvly-new-key' })
+    await expect(ctx.run('WEB_SEARCH_LIMIT_SET', { monthlyLimit: 0.5 })).rejects.toThrow('每月额度要写一个正整数')
+
+    await ctx.run('WEB_SEARCH_NOTICE_DISMISS')
+    expect(ctx.store().webSearchUsage?.noticeMonth).toBe('2026-11')
+  })
+})
+

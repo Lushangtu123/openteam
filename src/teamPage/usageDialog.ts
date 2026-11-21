@@ -5,6 +5,7 @@ import { computeUsage, formatCost, rangeStart, type UsageRange, type UsageReport
 import { spentInRange } from '../group/accountBalance'
 import { capBlocks, modelSpendToday, money as capMoney } from '../group/spendCap'
 import { normalizeLanguage } from '../shared/i18n'
+import { searchesInRange, searchQuotaState } from '../shared/webSearchUsage'
 import { createIcon } from './icons'
 
 export interface UsageDialogDependencies {
@@ -128,14 +129,45 @@ export function openUsageDialog(deps: UsageDialogDependencies): { refresh(): voi
     scope.value = chatId
     const report = computeUsage(store, { range, ...(chatId ? { chatId } : {}), now: now() })
     const caps = cappedModels(store).map(model => [model.id, model.name, model.dailyCap, model.pricing?.currency, modelSpendToday(store, model.id, now())])
-    const contentKey = JSON.stringify([english(), range, chatId, report, store.accountBalancesById ?? {}, caps, balanceErrors, refreshing, new Date(now()).toDateString()])
+    const contentKey = JSON.stringify([english(), range, chatId, report, store.accountBalancesById ?? {}, caps, balanceErrors, refreshing, new Date(now()).toDateString(), store.webSearchUsage ?? {}, store.settings.webSearch?.monthlyLimit, Boolean(store.settings.webSearch)])
     if (contentKey === drawnContent) return
     drawnContent = contentKey
     const scrolled = dialog.scrollTop
     const accounts = accountsSection(store)
     const capList = capsSection(store)
-    content.replaceChildren(...sections(report), ...(capList ? [capList] : []), ...(accounts ? [accounts] : []))
+    const searches = searchesSection(store)
+    content.replaceChildren(...sections(report), ...(searches ? [searches] : []), ...(capList ? [capList] : []), ...(accounts ? [accounts] : []))
     dialog.scrollTop = scrolled
+  }
+
+  // 联网搜索: the searches in the range (by model), and this month against the allowance entered.
+  function searchesSection(store: OpenTeamStore): HTMLElement | undefined {
+    const inRange = searchesInRange(store.webSearchUsage, rangeStart(range, now()), now(), chatId || undefined)
+    const everSearched = Object.keys(store.webSearchUsage?.days ?? {}).length > 0
+    if (!store.settings.webSearch && !everSearched) return undefined
+    const section = element('section', 'usage-searches')
+    section.append(element('h3', 'usage-section-title', t('联网搜索（Tavily）', 'Web search (Tavily)')))
+    const quota = searchQuotaState(store.webSearchUsage, store.settings.webSearch?.monthlyLimit, now())
+    const rangeText = inRange.total === 0
+      ? (chatId ? t('这个群这段时间没有搜索。', 'No searches in this group in this time.') : t('这段时间没有搜索。', 'No searches in this time.'))
+      : inRange.tests > 0
+        ? t(`这段时间搜索 ${inRange.total} 次（其中测试 ${inRange.tests} 次）。`, `${inRange.total} searches in this time (${inRange.tests} of them tests).`)
+        : t(`这段时间搜索 ${inRange.total} 次。`, `${inRange.total} searches in this time.`)
+    const monthText = quota.limit
+      ? t(`本月 ${quota.used} 次，额度 ${quota.limit} 次（${Math.round((quota.share ?? 0) * 100)}%）。`, `${quota.used} this month, of an allowance of ${quota.limit} (${Math.round((quota.share ?? 0) * 100)}%).`)
+      : t(`本月 ${quota.used} 次。`, `${quota.used} this month.`)
+    const summary = element('p', 'usage-searches-summary', `${rangeText}${english() ? ' ' : ''}${monthText}`)
+    if (quota.near) summary.classList.add('usage-searches-near')
+    section.append(summary)
+    const models = Object.entries(inRange.byModel).sort((left, right) => right[1] - left[1])
+    if (models.length > 0) {
+      section.append(table('', [t('模型', 'Model'), t('搜索', 'Searches')], models.map(([modelId, count]) => [store.settings.externalModelsById[modelId]?.name ?? t('已删除的模型', 'A deleted model'), String(count)]), 'usage-search-models'))
+    }
+    section.append(element('p', 'tiny usage-account-note', t(
+      '每次搜索用掉 1 个 Tavily 额度。按自然月统计 OpenTeam 发出的搜索；Tavily 按你账户的周期重置额度。在「设置 → 模型 → 联网搜索」里填每月额度，用到八成时会提醒你。',
+      "Each search uses one Tavily credit. OpenTeam's searches are counted by calendar month; Tavily resets by your account's own cycle. Enter your monthly allowance under Settings → Models → Web search to be told at 80%.",
+    )))
+    return section
   }
 
   function cappedModels(store: OpenTeamStore) {

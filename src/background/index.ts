@@ -124,6 +124,7 @@ const webSearcher = createWebSearcher({
   mutateStore,
   broadcastStoreUpdated: store => broadcastStoreUpdated(store),
   log,
+  now,
 })
 const localAgentClient = createLocalAgentClient({
   control: {

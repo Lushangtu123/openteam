@@ -89,3 +89,36 @@ describe('the 联网搜索 window', () => {
     expect(currentWebSearchDialog()).toBeUndefined()
   })
 })
+
+describe('the 联网搜索 window\'s monthly allowance', () => {
+  it('shows this month\'s searches and saves an allowance, or takes it away', async () => {
+    const ctx = setup(KEY)
+    ctx.store.webSearchUsage = { days: { [today()]: { total: 37, byChat: {} } } }
+    ctx.dialog.refresh()
+    expect(ctx.$('.web-search-month').textContent).toBe('本月已搜索 37 次。')
+    const limit = ctx.$<HTMLInputElement>('#web-search-limit')
+    limit.value = '1000'
+    ctx.button('保存额度')!.click()
+    await vi.waitFor(() => expect(ctx.runCommand).toHaveBeenCalledWith('WEB_SEARCH_LIMIT_SET', { monthlyLimit: 1000 }))
+    ctx.store.settings.webSearch = { provider: 'tavily', apiKey: KEY, monthlyLimit: 1000 }
+    ctx.dialog.refresh()
+    expect(ctx.$('.web-search-month').textContent).toBe('本月已搜索 37 次，额度 1000 次（4%）。用到八成时会提醒你。')
+    limit.value = ''
+    ctx.button('保存额度')!.click()
+    await vi.waitFor(() => expect(ctx.runCommand).toHaveBeenCalledWith('WEB_SEARCH_LIMIT_SET', { monthlyLimit: null }))
+    limit.value = '0'
+    ctx.button('保存额度')!.click()
+    expect(ctx.$('.team-form-error').textContent).toBe('每月额度要写一个正整数')
+  })
+
+  it('has no allowance to set before a key is saved', () => {
+    const ctx = setup()
+    expect(ctx.$<HTMLElement>('.web-search-limit-row').hidden).toBe(true)
+  })
+})
+
+function today(): string {
+  const date = new Date()
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+

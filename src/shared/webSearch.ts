@@ -12,6 +12,8 @@ const QUERY_MAX = 400
 export interface WebSearchSettings {
   provider: 'tavily'
   apiKey: string
+  // The searches the user's plan allows a month, if entered: a notice comes at 80% of it.
+  monthlyLimit?: number
 }
 
 export type SearchTopic = 'general' | 'news'
@@ -32,7 +34,8 @@ export interface WebSearchResult {
 export function normalizeWebSearchSettings(raw: unknown): WebSearchSettings | undefined {
   if (!isRecord(raw) || raw.provider !== 'tavily' || typeof raw.apiKey !== 'string') return undefined
   const apiKey = raw.apiKey.trim()
-  return apiKey ? { provider: 'tavily', apiKey } : undefined
+  const monthlyLimit = typeof raw.monthlyLimit === 'number' && raw.monthlyLimit >= 1 ? Math.floor(raw.monthlyLimit) : undefined
+  return apiKey ? { provider: 'tavily', apiKey, ...(monthlyLimit ? { monthlyLimit } : {}) } : undefined
 }
 
 // The key as the user pasted it: the "Bearer " a copied header has is dropped.

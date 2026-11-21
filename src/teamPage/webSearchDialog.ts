@@ -6,6 +6,7 @@ import type { OpenTeamStore } from '../group/types'
 import { hostAccessLabel, requestHostAccess } from '../shared/hostAccess'
 import { normalizeLanguage } from '../shared/i18n'
 import { createIcon } from './icons'
+import { searchQuotaState } from '../shared/webSearchUsage'
 
 export interface WebSearchDialogDependencies {
   getStore(): OpenTeamStore
@@ -97,7 +98,27 @@ export function openWebSearchDialog(deps: WebSearchDialogDependencies): WebSearc
   const save = button(t('保存', 'Save'), 'btn btn-primary', () => undefined)
   save.type = 'submit'
   actions.append(saved, remove, test, save)
-  form.append(field, error, actions)
+  // The allowance the user's plan gives a month: a notice comes at 80% of it.
+  const limitRow = element('div', 'field web-search-limit-row')
+  const limitLabel = element('label', '', t('每月额度（可选）', 'Monthly allowance (optional)'))
+  limitLabel.htmlFor = 'web-search-limit'
+  const limitLine = element('div', 'web-search-limit-line')
+  const limitInput = element('input')
+  limitInput.id = 'web-search-limit'
+  limitInput.type = 'number'
+  limitInput.min = '1'
+  limitInput.step = '1'
+  limitInput.inputMode = 'numeric'
+  limitInput.placeholder = t('例如 1000', 'e.g. 1000')
+  const limitSave = button(t('保存额度', 'Save allowance'), 'btn', () => void saveLimit())
+  limitLine.append(limitInput, limitSave)
+  const month = element('p', 'tiny web-search-month')
+  month.setAttribute('role', 'status')
+  limitRow.append(limitLabel, limitLine, month, element('p', 'tiny', t(
+    '填你在 Tavily 的套餐每月能搜多少次，用到八成时 OpenTeam 会提醒你。这里按自然月统计 OpenTeam 的搜索（测试也算）；Tavily 那边按你账户的周期重置。',
+    "How many searches your Tavily plan allows a month; OpenTeam tells you at 80%. OpenTeam's searches (tests included) are counted by calendar month here; Tavily resets by your account's own cycle.",
+  )))
+  form.append(field, error, actions, limitRow)
   form.addEventListener('submit', event => {
     event.preventDefault()
     void saveKey()
@@ -120,9 +141,33 @@ export function openWebSearchDialog(deps: WebSearchDialogDependencies): WebSearc
   return controller
 
   function render(): void {
-    const key = deps.getStore().settings.webSearch?.apiKey
+    const store = deps.getStore()
+    const key = store.settings.webSearch?.apiKey
     state.textContent = key ? t(`已设置：${maskedSearchKey(key)}`, `Set: ${maskedSearchKey(key)}`) : t('还没有设置 Key，API 成员不会搜索。', 'No key yet: API members do not search.')
     remove.hidden = !key
+    limitRow.hidden = !key
+    const quota = searchQuotaState(store.webSearchUsage, store.settings.webSearch?.monthlyLimit, Date.now())
+    month.textContent = quota.limit
+      ? t(`本月已搜索 ${quota.used} 次，额度 ${quota.limit} 次（${Math.round((quota.share ?? 0) * 100)}%）。用到八成时会提醒你。`, `${quota.used} searches this month, of an allowance of ${quota.limit} (${Math.round((quota.share ?? 0) * 100)}%). You are told at 80%.`)
+      : t(`本月已搜索 ${quota.used} 次。`, `${quota.used} searches this month.`)
+    if (document.activeElement !== limitInput && !limitInput.value) limitInput.value = store.settings.webSearch?.monthlyLimit ? String(store.settings.webSearch.monthlyLimit) : ''
+  }
+
+  async function saveLimit(): Promise<void> {
+    const raw = limitInput.value.trim()
+    const value = raw ? Number(raw) : null
+    if (value !== null && !(Number.isInteger(value) && value >= 1)) {
+      error.textContent = t('每月额度要写一个正整数', 'The monthly allowance must be a whole number above 0')
+      limitInput.focus()
+      return
+    }
+    try {
+      await deps.runCommand('WEB_SEARCH_LIMIT_SET', { monthlyLimit: value })
+      error.textContent = ''
+      render()
+    } catch (caught) {
+      error.textContent = caught instanceof Error ? caught.message : String(caught)
+    }
   }
 
   async function saveKey(): Promise<void> {

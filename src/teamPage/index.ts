@@ -71,6 +71,7 @@ import { movePanelTools } from './panelTools'
 import { createPanelHandover } from './panelHandover'
 import { createSiteFaultNotice } from './siteFaultNotice'
 import { createSiteCheckDeliveryNotice } from './siteCheckDeliveryNotice'
+import { createWebSearchQuotaNotice } from './webSearchQuotaNotice'
 import { currentWebSearchDialog, openWebSearchDialog } from './webSearchDialog'
 import { currentSiteCheckScheduleDialog, openSiteCheckScheduleDialog } from './siteCheckScheduleDialog'
 import { PANEL_PORT_NAME } from '../group/runtimeProtocol'
@@ -743,7 +744,9 @@ teamDomRefs.startPollEl.addEventListener('click', () => {
 })
 
 // 用量 (usageDialog.ts).
-teamDomRefs.openUsageEl.addEventListener('click', () => {
+teamDomRefs.openUsageEl.addEventListener('click', () => openUsage())
+
+function openUsage(): void {
   openUsageDialog({
     getStore: () => store,
     async refreshBalances() {
@@ -754,7 +757,7 @@ teamDomRefs.openUsageEl.addEventListener('click', () => {
     liftSpendCap: modelId => runCommand('MODEL_SPEND_CAP_LIFT', { modelId }),
     onClose: () => teamDomRefs.openUsageEl.focus(),
   })
-})
+}
 
 // 附上网页 from the tabs open in this window (webPagesDialog.ts).
 teamDomRefs.attachPagesEl.addEventListener('click', () => {
@@ -877,6 +880,7 @@ function render(): void {
   backupReminderView.render()
   siteFaultNotice.render()
   siteCheckDeliveryNotice.render()
+  webSearchQuotaNotice.render()
   webPageOfferView.render()
   renderPanelHandoverNote()
   replyComparisonView.refresh()
@@ -1092,6 +1096,17 @@ const siteCheckDeliveryNotice = createSiteCheckDeliveryNotice({
   language: () => normalizeLanguage(store.settings.language),
   getStore: () => store,
   openSchedule: () => openSiteCheckSchedule(),
+  runCommand,
+  showError,
+})
+
+// 联网搜索 near the monthly allowance the user entered (webSearchQuotaNotice.ts).
+const webSearchQuotaNotice = createWebSearchQuotaNotice({
+  element: document.getElementById('web-search-quota-notice'),
+  language: () => normalizeLanguage(store.settings.language),
+  getStore: () => store,
+  now: () => Date.now(),
+  openUsage: () => openUsage(),
   runCommand,
   showError,
 })

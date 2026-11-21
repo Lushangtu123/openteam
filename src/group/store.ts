@@ -11,6 +11,7 @@ import { normalizeModelSpend, readDailyCap, type ModelSpend } from './spendCap'
 import { normalizeResultDestinations } from './resultDestinations'
 import { normalizeSiteCheckSchedule } from './siteCheckSchedule'
 import { normalizeWebSearchSettings } from '../shared/webSearch'
+import { normalizeWebSearchUsage, type WebSearchUsage } from '../shared/webSearchUsage'
 import { normalizeLibraryRecord } from './groupLibrary'
 import {
   DEFAULT_ORCHESTRATION_MAX_NODE_EXECUTIONS,
@@ -58,6 +59,7 @@ interface OpenTeamMetaStore {
   externalChatMemoriesById?: NonNullable<OpenTeamStore['externalChatMemoriesById']>
   siteUsageBySite?: SiteUsageRecord
   siteFaultsBySite?: SiteFaultRecord
+  webSearchUsage?: WebSearchUsage
   accountBalancesById?: Record<string, AccountBalance>
   modelSpendById?: Record<string, ModelSpend>
   settings: OpenTeamSettings
@@ -139,6 +141,7 @@ export function createDefaultStore(): OpenTeamStore {
     memoryOrder: [],
     siteUsageBySite: {},
     siteFaultsBySite: {},
+    webSearchUsage: { days: {} },
     accountBalancesById: {},
     modelSpendById: {},
     libraryByChatId: {},
@@ -265,6 +268,7 @@ function normalizeStore(raw: unknown): OpenTeamStore {
     ...normalizeMemoryState(raw.memoryItemsById, raw.memoryOrder),
     siteUsageBySite: normalizeSiteUsageRecord(raw.siteUsageBySite),
     siteFaultsBySite: normalizeSiteFaultRecord(raw.siteFaultsBySite),
+    webSearchUsage: normalizeWebSearchUsage(raw.webSearchUsage),
     accountBalancesById: normalizeAccountBalances(raw.accountBalancesById),
     modelSpendById: normalizeModelSpend(raw.modelSpendById),
     libraryByChatId: normalizeLibraryRecord(raw.libraryByChatId),
@@ -333,6 +337,7 @@ function assembleV2Store(items: Map<string, unknown>): OpenTeamStore {
   store.externalChatMemoriesById = { ...(meta.externalChatMemoriesById ?? {}) }
   store.siteUsageBySite = normalizeSiteUsageRecord(meta.siteUsageBySite)
   store.siteFaultsBySite = normalizeSiteFaultRecord(meta.siteFaultsBySite)
+  store.webSearchUsage = normalizeWebSearchUsage(meta.webSearchUsage)
   store.accountBalancesById = normalizeAccountBalances(meta.accountBalancesById)
   store.modelSpendById = normalizeModelSpend(meta.modelSpendById)
   const memory = items.get(MEMORY_STORE_KEY)
@@ -387,6 +392,7 @@ function buildStorageItems(store: OpenTeamStore): Record<string, unknown> {
     externalChatMemoriesById: readExternalChatMemoryRecord(store.externalChatMemoriesById),
     siteUsageBySite: normalizeSiteUsageRecord(store.siteUsageBySite),
     siteFaultsBySite: normalizeSiteFaultRecord(store.siteFaultsBySite),
+    webSearchUsage: normalizeWebSearchUsage(store.webSearchUsage),
     accountBalancesById: normalizeAccountBalances(store.accountBalancesById),
     modelSpendById: normalizeModelSpend(store.modelSpendById),
     settings: normalizeSettings(store.settings),
@@ -559,6 +565,7 @@ function normalizeMetaStore(raw: unknown): OpenTeamMetaStore {
     externalChatMemoriesById: readExternalChatMemoryRecord(raw.externalChatMemoriesById),
     siteUsageBySite: normalizeSiteUsageRecord(raw.siteUsageBySite),
     siteFaultsBySite: normalizeSiteFaultRecord(raw.siteFaultsBySite),
+    webSearchUsage: normalizeWebSearchUsage(raw.webSearchUsage),
     accountBalancesById: normalizeAccountBalances(raw.accountBalancesById),
     modelSpendById: normalizeModelSpend(raw.modelSpendById),
     settings: normalizeSettings(raw.settings, typeof raw.version === 'number' ? raw.version : 0),
