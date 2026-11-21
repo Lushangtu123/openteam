@@ -769,6 +769,8 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     const web = roleForMessage(message)?.modelSource !== 'external'
     label.title = web
       ? (en ? `Its web page could not take the prompt this time; the backup API model ${modelName} answered` : `网页这次接不了提问，由备用 API 模型 ${modelName} 代答`)
+      : message.fallbackReason
+      ? (en ? `The main model could not answer this time (${message.fallbackReason}); the backup model ${modelName} did` : `主模型这次没能回答（${message.fallbackReason}），由备用模型 ${modelName} 回答`)
       : (en ? `The main model could not answer this time; the backup model ${modelName} did` : `主模型这次没能回答，由备用模型 ${modelName} 回答`)
     return label
   }
@@ -1095,6 +1097,7 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
       status: message.status,
       usage: message.usage,
       answeredByFallback: message.answeredByFallback,
+      fallbackReason: message.fallbackReason,
       scheduledTaskId: message.scheduledTaskId,
       stalledWhileGenerating: message.stalledWhileGenerating,
       retry: message.retry,

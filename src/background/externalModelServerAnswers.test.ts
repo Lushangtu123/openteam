@@ -201,13 +201,14 @@ describe('a backup model', () => {
       asked.push(name)
       return name === 'main' ? busy() : answer('from backup')
     })
-    const used: string[] = []
+    const used: Array<[string, string | undefined]> = []
     let text = ''
-    for await (const part of client.stream!({ model: { ...model, modelName: 'main', fallbackModelName: 'lite' }, prompt: 'Hi', onFallback: name => used.push(name) })) text += part
+    for await (const part of client.stream!({ model: { ...model, modelName: 'main', fallbackModelName: 'lite' }, prompt: 'Hi', onFallback: (name, reason) => used.push([name, reason]) })) text += part
 
     expect(text).toBe('from backup')
     expect(asked).toEqual(['main', 'lite'])
-    expect(used).toEqual(['lite'])
+    // Why the main model did not answer, in the server's words.
+    expect(used).toEqual([['lite', 'HTTP 503：This model is currently experiencing high demand.']])
   })
 
   it('is not asked when the main model refuses the request itself, or has no backup', async () => {

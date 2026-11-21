@@ -698,6 +698,8 @@ export interface GroupMessage {
   modelId?: string
   // The backup model that wrote an API member's reply, when its main model could not.
   answeredByFallback?: string
+  // Why the main model did not answer, when its backup did (an API model's own backup).
+  fallbackReason?: string
   // A reply refused because this API model reached its daily spending cap: it offers 今天继续用.
   spendCapModelId?: string
   // The web pages an API member read while it wrote this reply (读网页).

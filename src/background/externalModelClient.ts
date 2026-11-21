@@ -34,8 +34,9 @@ export interface ExternalModelCompletionInput {
   abortSignal?: AbortSignal
   // Told how many tokens the reply used, once the model reports it at the end of the stream.
   onUsage?(usage: ExternalModelUsage): void
-  // Told when the model's backup takes over a group reply, with the backup's name.
-  onFallback?(modelName: string): void
+  // Told when the model's backup takes over a group reply, with the backup's name and why the main
+  // model did not answer.
+  onFallback?(modelName: string, reason?: string): void
   // The member and message the reply is for (a local agent asks the user's approval on that member).
   context?: { chatId: string; roleId: string; messageId: string; roleName?: string }
   // 读网页: given, the model may read web pages while it answers (src/background/webPageReader.ts).
@@ -136,7 +137,7 @@ async function* streamWithFallback(input: ExternalModelCompletionInput, fetchImp
   } catch (error) {
     const fallback = input.model.fallbackModelName?.trim()
     if (sawText || !fallback || fallback === input.model.modelName || input.abortSignal?.aborted || !isWorthAnotherModel(error)) throw error
-    input.onFallback?.(fallback)
+    input.onFallback?.(fallback, (error as Error).message?.trim().slice(0, 200) || undefined)
     yield* streamExternalModelWithTimeout({ ...input, model: { ...input.model, modelName: fallback } }, fetchImpl, timeoutMs)
   }
 }

@@ -190,6 +190,11 @@ describe('team page messages view boundary', () => {
     expect(label()?.textContent).toBe('备用 gemini-flash-lite-latest')
     expect(label()?.title).toBe('主模型这次没能回答，由备用模型 gemini-flash-lite-latest 回答')
 
+    // Why, when it is known.
+    messages[1] = { ...messages[1], fallbackReason: 'HTTP 503：This model is currently experiencing high demand.' }
+    view.renderMessages()
+    expect(label()?.title).toBe('主模型这次没能回答（HTTP 503：This model is currently experiencing high demand.），由备用模型 gemini-flash-lite-latest 回答')
+
     deps.getStore().settings.language = 'en'
     messages[1] = { ...messages[1], answeredByFallback: 'lite' }
     view.renderMessages()

@@ -35,10 +35,14 @@ export async function sendExternalModelDelivery(deps: MessageHandlersDependencie
   let readPages: ReadPage[] = []
   // 联网搜索: the searches made for this reply, shown under it, as the pages read are.
   let searches: SearchDone[] = []
-  const onFallback = (modelName: string) => {
+  // Why the main model did not answer, kept on the reply and in the log.
+  let fallbackReason: string | undefined
+  const onFallback = (modelName: string, reason?: string) => {
     answeredByFallback = modelName
+    fallbackReason = reason
     readPages = []
     searches = []
+    deps.log.warn('external-model:fallback', { chatId: delivery.chatId, roleId: delivery.roleId, messageId: delivery.messageId, modelId: delivery.model.id, mainModel: delivery.model.modelName, fallback: modelName, reason })
   }
   try {
     deps.log.info('external-model:send:start', {
@@ -80,6 +84,7 @@ export async function sendExternalModelDelivery(deps: MessageHandlersDependencie
         content = ''
         usage = undefined
         answeredByFallback = undefined
+        fallbackReason = undefined
         readPages = []
         searches = []
         let updatedAt = Number.NEGATIVE_INFINITY
@@ -128,7 +133,7 @@ export async function sendExternalModelDelivery(deps: MessageHandlersDependencie
     }
 
     // A web member's backup is named on its reply, as is an API model's own backup.
-    const finalized = await finishExternalAssistantReply(deps, delivery, replyMessageId, content, usage, answeredByFallback ?? delivery.answeredBy, readPages, searches)
+    const finalized = await finishExternalAssistantReply(deps, delivery, replyMessageId, content, usage, answeredByFallback ?? delivery.answeredBy, readPages, searches, answeredByFallback ? fallbackReason : undefined)
     if (finalized.ignored) {
       deps.log.warn('external-model:reply:ignored-stale', { chatId: delivery.chatId, roleId: delivery.roleId, messageId: delivery.messageId, reason: finalized.reason })
       return finalized.store
@@ -275,6 +280,7 @@ export async function finishExternalAssistantReply(
   answeredByFallback?: string,
   readPages?: ReadPage[],
   searches?: SearchDone[],
+  fallbackReason?: string,
 ): Promise<{ ignored: true; reason: string; store: OpenTeamStore } | { ignored: false; store: OpenTeamStore }> {
   const timestamp = deps.now()
   const { store, result } = await mutateStore(store => {
@@ -293,6 +299,8 @@ export async function finishExternalAssistantReply(
       reply.modelId = delivery.model.id
       if (answeredByFallback) reply.answeredByFallback = answeredByFallback
       else delete reply.answeredByFallback
+      if (fallbackReason) reply.fallbackReason = fallbackReason
+      else delete reply.fallbackReason
       if (readPages?.length) reply.readPages = readPages.map(page => ({ url: page.url, title: page.title }))
       else delete reply.readPages
       if (searches?.length) reply.searches = searches.map(done => ({ query: done.query, results: done.results }))
