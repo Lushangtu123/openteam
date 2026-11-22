@@ -1311,9 +1311,17 @@ select.reply-compare-select {
   gap: 4px;
 }
 
-/* Long API model names shorten instead of pushing the stepper out of the row. A block (for the
-   ellipsis) keeps the label centred with a line as tall as the badge. */
-.team-setup-member > .role-site-badge {
+/* Long API model names shorten instead of pushing the stepper out of the row, or the window wider
+   than the screen. A block (for the ellipsis) keeps the label centred with a line as tall as the
+   badge. The list and its field may be narrower than the longest name: grid items are not, by
+   default, and a long name then made the window scroll sideways (seen live). */
+.team-setup-form > .field,
+.team-setup-members {
+  min-width: 0;
+}
+
+.team-setup-member > .role-site-badge,
+.member-pick-model > .role-site-badge {
   display: block;
   flex: 0 1 auto;
   min-width: 0;
@@ -3358,13 +3366,6 @@ select.reply-compare-select {
   min-width: 0;
   width: 100%;
   cursor: pointer;
-}
-
-.member-pick-model .role-site-badge {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .member-pick-warning {

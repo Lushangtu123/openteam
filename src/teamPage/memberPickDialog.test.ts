@@ -147,4 +147,29 @@ describe('letting an AI pick members for a task', () => {
       delete document.documentElement.dataset.uiStyle
     }
   })
+
+  it('lets long model names shorten instead of making the window scroll sideways', () => {
+    const style = document.createElement('style')
+    style.textContent = ['base', 'theme', 'chatgpt', 'grok', 'refinements'].map(name => readFileSync(`public/styles/${name}.css`, 'utf8')).join('\n')
+    document.head.append(style)
+    document.documentElement.dataset.theme = 'dark'
+    try {
+      const ctx = setup()
+      const list = document.querySelector<HTMLElement>('.member-pick-models')!
+      const shrinks = (node: Element) => {
+        const css = getComputedStyle(node)
+        return { minWidth: css.minWidth, flexShrink: css.flexShrink, overflow: css.overflow, whiteSpace: css.whiteSpace }
+      }
+      // The list and its field may be narrower than the longest name (grid items are not, by default).
+      expect(getComputedStyle(list).minWidth).toBe('0px')
+      expect(getComputedStyle(list.closest('.field')!).minWidth).toBe('0px')
+      // A model's badge shortens with an ellipsis, beside its tick box and beside its stepper.
+      expect(shrinks(list.querySelector('.member-pick-model .role-site-badge')!)).toEqual({ minWidth: '0px', flexShrink: '1', overflow: 'hidden', whiteSpace: 'nowrap' })
+      ctx.$<HTMLInputElement>('input[name="member-pick-mode"][value="claim"]').click()
+      expect(shrinks(list.querySelector('.team-setup-member > .role-site-badge')!)).toEqual({ minWidth: '0px', flexShrink: '1', overflow: 'hidden', whiteSpace: 'nowrap' })
+    } finally {
+      style.remove()
+      delete document.documentElement.dataset.theme
+    }
+  })
 })
