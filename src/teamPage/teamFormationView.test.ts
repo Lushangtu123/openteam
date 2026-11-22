@@ -325,6 +325,36 @@ describe('team formation view', () => {
     expect(footerButton('确认分工，按项目开工').disabled).toBe(false)
   })
 
+  it('lets new members joining a group claim around the members there, and settles them in without a kickoff', async () => {
+    const store = makeStore()
+    // 工程师 was in the group; Claude and ChatGPT just joined.
+    store.rolesById.old = { id: 'old', chatId: 'c1', name: '工程师', description: '负责实现', status: 'ready', contextCursor: 0, chatSite: 'deepseek', createdAt: 1, updatedAt: 1 }
+    store.chatsById.c1.roleIds = ['old', 'r1', 'r2']
+    store.chatsById.c1.teamFormation = { ...store.chatsById.c1.teamFormation!, rounds: [['r1', 'r2']], joiningRoleIds: ['r1', 'r2'] }
+    const { view, runCommand, showSuccess } = setup(store)
+    view.openCard('c1')
+    expect(rowState().map(row => row.name)).toEqual(['Claude', 'ChatGPT'])
+    footerButton('邀请它们自荐').click()
+    await vi.waitFor(() => expect(store.chatsById.c1.teamFormation!.invitationIds).toEqual(['inv1']))
+    await settle()
+    const invitation = String(runCommand.mock.calls.find(call => call[0] === 'GROUP_MESSAGE_SEND')![1]!.raw)
+    expect(invitation).toMatch(/^@Claude（Claude） @ChatGPT（ChatGPT） /)
+    expect(invitation).toContain('- 工程师：负责实现（DeepSeek）')
+
+    reply(store, 'a1', 'r1', 'inv1', claimReply('产品负责人'))
+    reply(store, 'a2', 'r2', 'inv1', claimReply('工程师'))
+    view.refresh()
+    // The second one took the name the group has already: it is numbered.
+    expect([...document.querySelectorAll('.team-card-footer button')].map(button => button.textContent)).toEqual(['让重复的重选', '确认分工'])
+    footerButton('确认分工').click()
+    await vi.waitFor(() => expect(showSuccess).toHaveBeenCalledWith('2 位新成员已就位'))
+    const updates = runCommand.mock.calls.filter(([type]) => type === 'GROUP_ROLE_UPDATE').map(([, payload]) => [payload!.roleId, (payload!.patch as Record<string, unknown>).name])
+    expect(updates).toEqual([['r1', '产品负责人'], ['r2', '工程师2']])
+    expect(runCommand.mock.calls.some(([type, payload]) => type === 'GROUP_MESSAGE_SEND' && !payload?.teamInvitation)).toBe(false)
+    expect(runCommand.mock.calls.some(([type]) => type === 'GROUP_PROJECT_START')).toBe(false)
+    expect(document.querySelector('.team-card-dialog')).toBeNull()
+  })
+
   it('renames everyone to their position, records the persona, and sends the kickoff with personas to discuss first', async () => {
     const store = makeStore()
     store.chatsById.c1.teamFormation = { ...store.chatsById.c1.teamFormation!, status: 'claiming', nextRound: 1, invitationIds: ['inv1'], rounds: [['r1', 'r2']] }

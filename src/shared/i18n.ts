@@ -177,6 +177,7 @@ const UI_TRANSLATIONS: Record<string, string> = {
   '互相审阅上一轮的回答': "Review each other's answers",
   '空': 'Empty',
   '恢复会话': 'Restore session',
+  '让 AI 按任务挑': 'Let AI pick for a task',
   '改成协作群聊': 'Make collaborative',
   '改成独立专家': 'Make independent',
   '成员能看到彼此的回复': "Members read one another's replies",

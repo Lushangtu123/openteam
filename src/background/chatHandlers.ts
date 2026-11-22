@@ -13,9 +13,12 @@ import { messageTabId, type RuntimeMessage } from './runtimeClient'
 import type { RuntimeFrameRegistry } from './runtimeFrames'
 import { mutateStore, requireChat } from './storeAccess'
 
+const TEAM_MEMBERS_JOINING_MAX = 6
+
 export const CHAT_ROUTE_TYPES = [
   'GROUP_CHAT_CREATE',
   'GROUP_TEAM_CREATE',
+  'GROUP_TEAM_JOIN',
   'GROUP_TEAM_HANDBOOK_SAVE',
   'GROUP_TEAM_TEMPLATE_SAVE',
   'GROUP_TEAM_TEMPLATE_DELETE',
@@ -71,6 +74,14 @@ export function createChatHandlers(deps: ChatHandlersDependencies): BackgroundMe
   const handleTeamCreate = async (message: RuntimeMessage) => {
     const { store, result } = await mutateStore(store => createTeam(store, message, deps))
     deps.log.info('team-create:stored', { chatId: result.chat.id, roleIds: result.roles.map(role => role.id), rounds: result.chat.teamFormation?.rounds.length })
+    await deps.broadcastStoreUpdated(store)
+    return { ok: true, chat: result.chat, roles: result.roles, store }
+  }
+
+  // 添加成员 → 新成员自己认领: AIs join a group that has members, and claim positions as a team does.
+  const handleTeamJoin = async (message: RuntimeMessage) => {
+    const { store, result } = await mutateStore(store => joinTeam(store, message, deps))
+    deps.log.info('team-join:stored', { chatId: result.chat.id, roleIds: result.roles.map(role => role.id) })
     await deps.broadcastStoreUpdated(store)
     return { ok: true, chat: result.chat, roles: result.roles, store }
   }
@@ -335,6 +346,7 @@ export function createChatHandlers(deps: ChatHandlersDependencies): BackgroundMe
   return [
     { type: 'GROUP_CHAT_CREATE', handler: handleChatCreate },
     { type: 'GROUP_TEAM_CREATE', handler: handleTeamCreate },
+    { type: 'GROUP_TEAM_JOIN', handler: handleTeamJoin },
     { type: 'GROUP_TEAM_HANDBOOK_SAVE', handler: handleHandbookSave },
     { type: 'GROUP_TEAM_TEMPLATE_SAVE', handler: handleTeamTemplateSave },
     { type: 'GROUP_TEAM_TEMPLATE_DELETE', handler: handleTeamTemplateDelete },
@@ -451,6 +463,45 @@ function createTeam(store: OpenTeamStore, message: RuntimeMessage, deps: ChatHan
     createdAt: deps.now(),
   }, deps.now())
   chat.status = 'initializing'
+  return { chat, roles }
+}
+
+// New AIs in a group that has members: named after their model until they choose, invited round by
+// round like a new team's, with the members already there counted as positions taken.
+function joinTeam(store: OpenTeamStore, message: RuntimeMessage, deps: ChatHandlersDependencies): { chat: GroupChat; roles: GroupRole[] } {
+  const chat = requireChat(store, message.chatId)
+  if (chat.teamFormation && chat.teamFormation.status !== 'confirmed') throw new Error('这个群还在分工，等确认后再加人')
+  const task = requireString(message.task, '请先写下要做的事')
+  const members = (Array.isArray(message.members) ? message.members : []).map(member => readTeamMember(store, member))
+  if (members.length < 1 || members.length > TEAM_MEMBERS_JOINING_MAX) throw new Error(`请选择 1–${TEAM_MEMBERS_JOINING_MAX} 位新成员`)
+  const taken = new Set(chat.roleIds.map(roleId => store.rolesById[roleId]?.name.toLowerCase()).filter(Boolean))
+  const items: GroupRoleBatchInput[] = members.map(member => {
+    const label = member.label.replace(/[\s@]+/g, '') || 'AI'
+    let name = label
+    for (let index = 2; taken.has(name.toLowerCase()); index += 1) name = `${label}${index}`
+    taken.add(name.toLowerCase())
+    return {
+      source: 'temporary',
+      createdBy: 'team-formation',
+      name,
+      systemPrompt: '',
+      modelSource: member.modelSource,
+      ...(member.chatSite ? { chatSite: member.chatSite } : {}),
+      ...(member.externalModelId ? { externalModelId: member.externalModelId } : {}),
+    }
+  })
+  const roles = createGroupRolesBatch(store, chat.id, items, () => deps.newId('role'), deps.now())
+  chat.teamFormation = readTeamFormation({
+    task,
+    requiredPositions: [],
+    status: 'checking',
+    rounds: planTeamRounds(roles.map(role => ({ roleId: role.id, modelKey: teamModelKey(role) }))),
+    nextRound: 0,
+    invitationIds: [],
+    joiningRoleIds: roles.map(role => role.id),
+    createdAt: deps.now(),
+  }, deps.now())
+  chat.updatedAt = deps.now()
   return { chat, roles }
 }
 

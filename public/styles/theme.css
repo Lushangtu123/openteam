@@ -3283,3 +3283,123 @@ select.reply-compare-select {
 .team-card-panel textarea.team-card-panel-input {
   flex: 1 1 100%;
 }
+
+/* 添加成员 → 让 AI 按任务挑 (memberPickDialog.ts). */
+.member-pick-modal .team-setup-members {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr));
+}
+
+.member-pick-choices {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.member-pick-choices > legend {
+  padding: 0;
+  margin-bottom: 6px;
+}
+
+.member-pick-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.member-pick-choice:has(input:checked) {
+  border-color: rgba(var(--accent-rgb), 0.55);
+  background: var(--accent-soft);
+}
+
+.member-pick-choice input {
+  margin-top: 3px;
+  flex: none;
+}
+
+.member-pick-choice-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.member-pick-choice-label {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.member-pick-model {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  width: 100%;
+  cursor: pointer;
+}
+
+.member-pick-model .role-site-badge {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.member-pick-warning {
+  color: var(--warning);
+}
+
+.member-pick-status:empty,
+.member-pick-results[hidden] {
+  display: none;
+}
+
+.member-pick-results {
+  display: grid;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.member-pick-results-title {
+  margin: 0;
+  font-size: 14px;
+}
+
+.member-pick-row .select-row-content strong {
+  margin-right: 6px;
+}
+
+.member-pick-kind {
+  display: inline-block;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.member-pick-why {
+  color: var(--text);
+}
+
+.member-pick-row-model {
+  max-width: 180px;
+}
+
+@media (max-width: 520px) {
+  .member-pick-row {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .member-pick-row-model {
+    grid-column: 2;
+    max-width: none;
+  }
+}

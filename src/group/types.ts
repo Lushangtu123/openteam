@@ -561,6 +561,9 @@ export interface TeamFormation {
   previousPositions?: Array<{ position: string; holder: string }>
   // The message holding the files attached to the task; every invitation carries copies of them.
   materialsMessageId?: string
+  // Members added to a group that had members already (添加成员 → 新成员自己认领): only these choose
+  // positions; the others' roles count as taken.
+  joiningRoleIds?: string[]
   createdAt: number
   confirmedAt?: number
 }

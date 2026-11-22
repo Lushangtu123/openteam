@@ -33,6 +33,7 @@ describe('background chat handlers', () => {
     expect(CHAT_ROUTE_TYPES).toEqual([
       'GROUP_CHAT_CREATE',
       'GROUP_TEAM_CREATE',
+      'GROUP_TEAM_JOIN',
       'GROUP_TEAM_HANDBOOK_SAVE',
       'GROUP_TEAM_TEMPLATE_SAVE',
       'GROUP_TEAM_TEMPLATE_DELETE',
@@ -196,6 +197,31 @@ describe('background chat handlers', () => {
     await update(false)
     // Left out when on, as in a chat that never had it switched off.
     expect('memoryDisabled' in store.chatsById['chat-1']).toBe(false)
+  })
+
+  it('lets new AIs join a group with members and claim positions, the members there counted as taken', async () => {
+    vi.resetModules()
+    const store = createDefaultStore()
+    store.chatsById['chat-1'] = { id: 'chat-1', name: '记账', mode: 'collaborative', roleIds: ['role-1'], messageIds: [], nextMessageSeq: 1, status: 'ready', createdAt: 0, updatedAt: 0 }
+    store.rolesById['role-1'] = { id: 'role-1', chatId: 'chat-1', name: 'Kimi', chatSite: 'kimi', status: 'ready', contextCursor: 0, createdAt: 0, updatedAt: 0 }
+    vi.doMock('./storeAccess', async importOriginal => {
+      const actual = await importOriginal<typeof import('./storeAccess')>()
+      return { ...actual, mutateStore: async (mutator: (store: OpenTeamStore) => unknown) => ({ store, result: await mutator(store) }) }
+    })
+    const { createChatHandlers } = await import('./chatHandlers')
+    let id = 0
+    const routes = createChatHandlers({ broadcastStoreUpdated: vi.fn(), getChatStatusFromRoles: () => 'ready', log: { info: vi.fn(), warn: vi.fn() }, newId: vi.fn((prefix: string) => `${prefix}-n${++id}`), now: vi.fn(() => 100), runtimeFrames: { removeRole: vi.fn() } })
+    const join = (fields: Record<string, unknown>) => Promise.resolve(routes.find(route => route.type === 'GROUP_TEAM_JOIN')!.handler({ type: 'GROUP_TEAM_JOIN', chatId: 'chat-1', task: '加上预算提醒', ...fields }, {}))
+
+    await expect(join({ members: [] })).rejects.toThrow('请选择 1–6 位新成员')
+    await join({ members: [{ modelSource: 'site', chatSite: 'kimi' }, { modelSource: 'site', chatSite: 'deepseek' }] })
+    const chat = store.chatsById['chat-1']
+    const added = chat.roleIds.slice(1).map(roleId => store.rolesById[roleId])
+    // Named after their model, apart from the Kimi already there.
+    expect(added.map(role => role.name)).toEqual(['Kimi2', 'DeepSeek'])
+    expect(chat.teamFormation).toMatchObject({ task: '加上预算提醒', status: 'checking', joiningRoleIds: added.map(role => role.id), invitationIds: [] })
+    expect(chat.teamFormation!.rounds.flat().sort()).toEqual(added.map(role => role.id).sort())
+    await expect(join({ members: [{ modelSource: 'site', chatSite: 'kimi' }] })).rejects.toThrow('这个群还在分工，等确认后再加人')
   })
 
   it('changes a group\'s mode, and says why not while a member answers', async () => {

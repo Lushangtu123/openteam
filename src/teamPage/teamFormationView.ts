@@ -18,6 +18,7 @@ import {
   teamLabels,
   teamMemberNames,
   teamMemberResponsibility,
+  teamExistingPositions,
   teamModelKey,
   type TeamMember,
   type TeamResolution,
@@ -629,6 +630,20 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
     const confirm = button(t('确认分工，按项目开工', 'Confirm and run as a project'), 'btn btn-primary')
     confirm.disabled = blocked
     confirm.addEventListener('click', () => void confirmTeam(chat.id, members, positions, 'project'))
+    // New members joining a group: they are renamed and settle in; the group goes on as it was.
+    if (chat.teamFormation?.joiningRoleIds) {
+      const join = button(t('确认分工', 'Confirm positions'), 'btn btn-primary')
+      join.disabled = blocked
+      join.addEventListener('click', () => void confirmTeam(chat.id, members, positions, 'join'))
+      card.footer.replaceChildren(element('p', 'team-card-hint', pending
+        ? t('还有新成员在回答。', 'Some new members are still answering.')
+        : resolution.conflicts.length > 0
+          ? t('先解决重复的职位。', 'Settle the clashing positions first.')
+          : missing
+            ? t('给每位新成员填一个职位。', 'Give every new member a position.')
+            : t('确认后，每位新成员会改名为它的职位，之后和群里其他成员一起工作。', 'On confirm, each new member is renamed to its position and works with the others in the group.')), repick, join)
+      return
+    }
     const hint = element('p', 'team-card-hint', pending
       ? t('还有队员在回答。', 'Some members are still answering.')
       : resolution.conflicts.length > 0
@@ -748,7 +763,7 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
       }
       const members = collectTeamMembers(store, chat)
       const resolution = resolution_(chat, members)
-      const taken = Object.entries(resolution.assignments).map(([roleId, assignment]) => ({ position: assignment.position, holder: store.rolesById[roleId]?.name ?? roleId }))
+      const taken = [...teamExistingPositions(store, chat), ...Object.entries(resolution.assignments).map(([roleId, assignment]) => ({ position: assignment.position, holder: store.rolesById[roleId]?.name ?? roleId }))]
       const open = resolution.uncovered.slice(0, 6).map(entry => entry.position)
       const text = buildTeamInvitation({ task: formation.task, teamLabels: teamLabels(store, chatRoles(store, chat)), requiredPositions: formation.requiredPositions, taken, open, previous: formation.previousPositions, language: language() })
       await deps.runCommand('GROUP_MESSAGE_SEND', { chatId, raw: invitationRaw(store, roles, text), teamInvitation: true, teamRound: round, ...taskFilesPayload(chat) })
@@ -770,7 +785,7 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
     const roleIds = [...new Set(resolution.conflicts.flatMap(conflict => conflict.roleIds))]
     const roles = roleIds.map(id => store.rolesById[id]).filter((role): role is GroupRole => Boolean(role))
     if (roles.length === 0) return
-    const taken = Object.entries(resolution.assignments).map(([roleId, assignment]) => ({ position: assignment.position, holder: store.rolesById[roleId]?.name ?? roleId }))
+    const taken = [...teamExistingPositions(store, chat), ...Object.entries(resolution.assignments).map(([roleId, assignment]) => ({ position: assignment.position, holder: store.rolesById[roleId]?.name ?? roleId }))]
     const text = buildTeamInvitation({ task: formation.task, teamLabels: teamLabels(store, chatRoles(store, chat)), requiredPositions: formation.requiredPositions, taken, repick: true, language: language() })
     busy = true
     try {
@@ -783,13 +798,15 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
     }
   }
 
-  async function confirmTeam(chatId: string, members: TeamMember[], positions: Array<{ roleId: string; position: string }>, startAs: 'project' | 'discussion'): Promise<void> {
+  async function confirmTeam(chatId: string, members: TeamMember[], positions: Array<{ roleId: string; position: string }>, startAs: 'project' | 'discussion' | 'join'): Promise<void> {
     const chat = deps.getStore().chatsById[chatId]
     const formation = chat?.teamFormation
     if (!chat || !formation || busy) return
-    // A member the user named keeps its name; the others are named after their positions.
+    // A member the user named keeps its name; the others are named after their positions, apart from
+    // every name the group has (members that were there before new ones joined, too).
     const named = new Set(members.filter(member => deps.getStore().rolesById[member.roleId]?.userNamed).map(member => member.roleId))
-    const names = teamMemberNames(positions.filter(item => !named.has(item.roleId)), members.filter(member => named.has(member.roleId)).map(member => deps.getStore().rolesById[member.roleId]?.name ?? member.role.name))
+    const others = chat.roleIds.filter(roleId => !members.some(member => member.roleId === roleId)).map(roleId => deps.getStore().rolesById[roleId]?.name).filter((name): name is string => Boolean(name))
+    const names = teamMemberNames(positions.filter(item => !named.has(item.roleId)), [...others, ...members.filter(member => named.has(member.roleId)).map(member => deps.getStore().rolesById[member.roleId]?.name ?? member.role.name)])
     const lang = language()
     busy = true
     renderCard()
@@ -807,6 +824,13 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
         })
       }
       await deps.runCommand('GROUP_CHAT_UPDATE', { chatId, patch: { teamFormation: { status: 'confirmed', confirmedAt: Date.now() } } })
+      if (startAs === 'join') {
+        edits.delete(chatId)
+        panel = 'none'
+        closeCard()
+        deps.showSuccess(t(`${members.length} 位新成员已就位`, `${members.length} new members are in place`))
+        return
+      }
       const store = deps.getStore()
       const team = members.map(member => {
         const role = store.rolesById[member.roleId]

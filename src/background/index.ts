@@ -56,6 +56,7 @@ import { createLogger } from '../shared/logger'
 import type { BackgroundToRoleMessage } from '../group/runtimeProtocol'
 import { createControlActionExecutor } from './controlHandlers'
 import { createSiteCheckHandlers } from './siteCheckHandlers'
+import { createMemberPickHandlers } from './memberPickHandlers'
 import { createScheduledTaskHandlers } from './scheduledTaskHandlers'
 import { createSiteUsageHandlers } from './siteUsageHandlers'
 import { checkLinks } from './linkCheck'
@@ -443,6 +444,7 @@ const routeMessage = createMessageRouter([
   ...createLibraryHandlers({ broadcastStoreUpdated: store => broadcastStoreUpdated(store), newId, now }),
   ...createSiteCheckHandlers({ route: message => Promise.resolve(routeMessage(message, {})), broadcastStoreUpdated, runtimeFrames, waitFor: ms => new Promise(resolve => globalThis.setTimeout(resolve, ms)), now }),
   ...createExternalModelHandlers({ broadcastStoreUpdated, externalModelClient, checkLocalAgent, newId, now }),
+  ...createMemberPickHandlers({ loadStore, externalModelClient, log }),
   { type: 'LOCAL_AGENT_LIST', handler: async () => ({ ok: true, agents: await listLocalAgents() }) },
   {
     type: 'GROUP_LOCAL_AGENT_DECIDE',

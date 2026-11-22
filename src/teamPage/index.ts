@@ -34,6 +34,7 @@ import { applyTeamLanguage, createLanguageSettingsController } from './languageC
 import { createMessageSearchView } from './messageSearchView'
 import { createReplyComparisonView } from './replyComparisonView'
 import { createTeamFormationView } from './teamFormationView'
+import { openMemberPickDialog } from './memberPickDialog'
 import { createProjectView } from './projectView'
 import { createSiteCheckView } from './siteCheckView'
 import { createUpdateNotice } from './updateNotice'
@@ -773,6 +774,36 @@ function openUsage(): void {
     onClose: () => teamDomRefs.openUsageEl.focus(),
   })
 }
+
+// 添加成员 → 让 AI 按任务挑 (memberPickDialog.ts): an AI suggests members, or new AIs join and claim
+// positions (teamFormationView.ts).
+document.getElementById('open-member-pick')?.addEventListener('click', () => {
+  const chat = getCurrentChat()
+  if (!chat) return
+  openMemberPickDialog({
+    getStore: () => store,
+    getCurrentChat,
+    async request(type, payload) {
+      const response = await sendRuntimeMessage(type, payload) as Record<string, unknown> & { ok?: boolean; error?: string }
+      if (response.ok === false) throw new Error(response.error || translateUi('操作失败', normalizeLanguage(store.settings.language)))
+      return response
+    },
+    runCommand,
+    async onClaim(task, members) {
+      const list = members.flatMap(({ key, count }) => Array.from({ length: count }, () => key.startsWith('external:')
+        ? { modelSource: 'external', externalModelId: key.slice('external:'.length) }
+        : { modelSource: 'site', chatSite: key.slice('site:'.length) }))
+      await runCommand('GROUP_TEAM_JOIN', { chatId: chat.id, task, members: list })
+      closePeopleModals()
+      teamFormationView.openCard(chat.id)
+    },
+    onAdded(count) {
+      closePeopleModals()
+      showSuccess(normalizeLanguage(store.settings.language) === 'en' ? `Added ${count} members` : `已加入 ${count} 位成员`)
+    },
+    onClose: () => document.getElementById('open-member-pick')?.focus(),
+  })
+})
 
 // 附上网页 from the tabs open in this window (webPagesDialog.ts).
 teamDomRefs.attachPagesEl.addEventListener('click', () => {

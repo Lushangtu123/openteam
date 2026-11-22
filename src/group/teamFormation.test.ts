@@ -13,6 +13,7 @@ import {
   readTeamFormation,
   resolveTeamPositions,
   splitPositions,
+  teamExistingPositions,
   teamLabels,
   teamMemberNames,
   teamMemberResponsibility,
@@ -266,5 +267,22 @@ describe('team formation', () => {
     })
     expect(readTeamFormation({ task: '记账', preset: true, previousPositions: [{ position: 'PM', holder: 'Claude' }, { position: 3 }], confirmedAt: null }, 5)).toMatchObject({ preset: true, previousPositions: [{ position: 'PM', holder: 'Claude' }] })
     expect(readTeamFormation({ task: '记账', preset: false, confirmedAt: null }, 5)).not.toHaveProperty('preset')
+  })
+})
+
+describe('new members joining a group that has members', () => {
+  it('asks only the new ones, and gives the others as positions taken, with their model', () => {
+    const store = createDefaultStore()
+    store.rolesById.old = { id: 'old', chatId: 'c', name: '工程师', description: '负责实现', chatSite: 'deepseek', status: 'ready', contextCursor: 0, createdAt: 1, updatedAt: 1 }
+    store.rolesById.pm = { id: 'pm', chatId: 'c', name: '产品', teamPosition: '产品经理', chatSite: 'kimi', status: 'ready', contextCursor: 0, createdAt: 1, updatedAt: 1 }
+    store.rolesById.new1 = { id: 'new1', chatId: 'c', name: 'Gemini', chatSite: 'gemini', status: 'ready', contextCursor: 0, createdAt: 1, updatedAt: 1 }
+    const formation = readTeamFormation({ task: '加预算提醒', status: 'checking', rounds: [['new1']], nextRound: 0, invitationIds: [], joiningRoleIds: ['new1'] }, 5)!
+    expect(formation.joiningRoleIds).toEqual(['new1'])
+    const chat = { id: 'c', name: '群', mode: 'collaborative' as const, roleIds: ['old', 'pm', 'new1'], messageIds: [], nextMessageSeq: 1, status: 'ready' as const, createdAt: 1, updatedAt: 1, teamFormation: formation }
+    expect(collectTeamMembers(store, chat).map(member => member.roleId)).toEqual(['new1'])
+    expect(teamExistingPositions(store, chat)).toEqual([{ position: '工程师：负责实现', holder: 'DeepSeek' }, { position: '产品经理', holder: 'Kimi' }])
+    const { joiningRoleIds: _joining, ...whole } = formation
+    expect(teamExistingPositions(store, { ...chat, teamFormation: whole })).toEqual([])
+    expect(collectTeamMembers(store, { ...chat, teamFormation: whole })).toHaveLength(3)
   })
 })

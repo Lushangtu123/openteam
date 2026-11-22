@@ -355,7 +355,9 @@ export function collectTeamMembers(store: OpenTeamStore, chat: GroupChat): TeamM
   const formation = chat.teamFormation
   const options = roleMentionLabelOptionsFromSettings(store.settings)
   const invitations = (formation?.invitationIds ?? []).map(id => store.messagesById[id]).filter((message): message is GroupMessage => message?.type === 'user')
-  return chat.roleIds.flatMap((roleId): TeamMember[] => {
+  // Joining a group that had members: only the new ones choose.
+  const joining = formation?.joiningRoleIds ? new Set(formation.joiningRoleIds) : undefined
+  return chat.roleIds.filter(roleId => !joining || joining.has(roleId)).flatMap((roleId): TeamMember[] => {
     const role = store.rolesById[roleId]
     if (!role) return []
     const modelLabel = roleModelLabel(role, options)
@@ -368,6 +370,20 @@ export function collectTeamMembers(store: OpenTeamStore, chat: GroupChat): TeamM
     return [claim
       ? { roleId, role, modelLabel, status: 'claimed' as const, claim, claimOrder }
       : { roleId, role, modelLabel, status: 'unreadable' as const, replyText: reply.message.content }]
+  })
+}
+
+// The members a group had before others joined it, as positions already taken: their position (or
+// name) with what they cover, and the AI they run on.
+export function teamExistingPositions(store: OpenTeamStore, chat: GroupChat): Array<{ position: string; holder: string }> {
+  const joining = chat.teamFormation?.joiningRoleIds
+  if (!joining) return []
+  const options = roleMentionLabelOptionsFromSettings(store.settings)
+  return chat.roleIds.filter(roleId => !joining.includes(roleId)).flatMap(roleId => {
+    const role = store.rolesById[roleId]
+    if (!role) return []
+    const covers = role.description?.trim() && role.description.trim() !== role.name ? `：${role.description.trim().slice(0, 40)}` : ''
+    return [{ position: `${role.teamPosition?.trim() || role.name}${covers}`, holder: roleModelLabel(role, options) }]
   })
 }
 
@@ -504,6 +520,7 @@ export function readTeamFormation(value: unknown, now: number): TeamFormation | 
     ...(record.preset === true ? { preset: true } : {}),
     ...(previousPositions.length > 0 ? { previousPositions } : {}),
     ...(typeof record.materialsMessageId === 'string' && record.materialsMessageId ? { materialsMessageId: record.materialsMessageId } : {}),
+    ...(Array.isArray(record.joiningRoleIds) && record.joiningRoleIds.some(id => typeof id === 'string') ? { joiningRoleIds: record.joiningRoleIds.filter((id): id is string => typeof id === 'string') } : {}),
     createdAt: typeof record.createdAt === 'number' ? record.createdAt : now,
     ...(typeof record.confirmedAt === 'number' ? { confirmedAt: record.confirmedAt } : {}),
   }
