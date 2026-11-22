@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildUnsyncedContext } from './contextSync'
+import { buildEarlierExchange, buildUnsyncedContext } from './contextSync'
 import type { GroupChat, GroupMessage, GroupRole } from './types'
 
 describe('what a web member\'s site is told when it comes back', () => {
@@ -41,5 +41,27 @@ describe('a web member\'s context in a group made 协作 later', () => {
     ]
     const chat: GroupChat = { id: 'c', name: '调研', mode: 'collaborative', roleIds: ['r', 'e'], messageIds: messages.map(message => message.id), nextMessageSeq: 6, status: 'ready', sharedFromSeq: 3, createdAt: 1, updatedAt: 1 }
     expect(buildUnsyncedContext(chat, role, messages, messages[4], 6000, 'zh-CN').messages.map(message => message.id)).toEqual(['e2'])
+  })
+})
+
+describe('a member whose site conversation started over', () => {
+  const role: GroupRole = { id: 'r', chatId: 'c', name: '研究员', chatSite: 'kimi', status: 'ready', contextCursor: 0, conversationStartedAfterSeq: 3, createdAt: 1, updatedAt: 1 }
+  const messages: GroupMessage[] = [
+    { id: 'm1', chatId: 'c', seq: 1, type: 'user', content: '样本有多大？', targetRoleIds: ['r'], createdAt: 1, status: 'received' },
+    { id: 'a1', chatId: 'c', seq: 2, type: 'assistant', roleId: 'r', roleName: '研究员', content: '120 人。', createdAt: 2, status: 'received' },
+    { id: 'f1', chatId: 'c', seq: 3, type: 'assistant', roleId: 'r', roleName: '研究员', content: '回复失败：网页没有回答', createdAt: 3, status: 'error' },
+    { id: 'm2', chatId: 'c', seq: 4, type: 'user', content: '下一步？', targetRoleIds: ['r'], createdAt: 4, status: 'pending' },
+  ]
+  const chat: GroupChat = { id: 'c', name: '调研', mode: 'independent', roleIds: ['r'], messageIds: messages.map(message => message.id), nextMessageSeq: 5, status: 'ready', createdAt: 1, updatedAt: 1 }
+
+  it('is given its earlier exchange, its failed replies left out, the latest within the budget', () => {
+    expect(buildEarlierExchange(chat, role, messages, 6000, 'zh-CN')).toEqual({ text: '用户：样本有多大？\n\n你：120 人。', omitted: false })
+    expect(buildEarlierExchange(chat, role, messages, 8, 'zh-CN')).toEqual({ text: '你：120 人。', omitted: true })
+    expect(buildEarlierExchange(chat, role, messages, 6000, 'en')?.text).toContain('You: 120 人。')
+  })
+
+  it('is given nothing when it never started over, or had nothing before', () => {
+    expect(buildEarlierExchange(chat, { ...role, conversationStartedAfterSeq: undefined }, messages, 6000)).toBeUndefined()
+    expect(buildEarlierExchange(chat, { ...role, conversationStartedAfterSeq: 0 }, messages, 6000)).toBeUndefined()
   })
 })

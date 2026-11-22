@@ -180,3 +180,56 @@ describe('the prompt a web member\'s backup gets', () => {
     expect(delivery.backupPrompt).toBeUndefined()
   })
 })
+
+describe('a web member whose site conversation started over (another account, a lost conversation)', () => {
+  // 研究员 on Kimi answered twice; then its conversation could not be opened (cursor 0, started
+  // over after message 4), and another member answered in between.
+  function setup(mode: GroupChat['mode'], sentInNewChat = false) {
+    const store = createDefaultStore()
+    store.settings.language = 'zh-CN'
+    const role: GroupRole = { id: 'r', chatId: 'c', name: '研究员', systemPrompt: '你是严谨的数据研究员。', chatSite: 'kimi', status: 'ready', contextCursor: sentInNewChat ? 6 : 0, conversationStartedAfterSeq: 4, createdAt: 1, updatedAt: 1 }
+    const other: GroupRole = { id: 'e', chatId: 'c', name: '工程师', chatSite: 'chatgpt', status: 'ready', contextCursor: 0, createdAt: 1, updatedAt: 1 }
+    const messages: GroupMessage[] = [
+      { id: 'm1', chatId: 'c', seq: 1, type: 'user', content: '样本有多大？', targetRoleIds: ['r'], deliveryStatus: { r: 'received' }, createdAt: 1, status: 'received' },
+      { id: 'a1', chatId: 'c', seq: 2, type: 'assistant', roleId: 'r', roleName: '研究员', content: '样本只有 120 人。', createdAt: 2, status: 'received' },
+      { id: 'e1', chatId: 'c', seq: 3, type: 'assistant', roleId: 'e', roleName: '工程师', content: '工程师的旁白。', createdAt: 3, status: 'received' },
+      { id: 'a2', chatId: 'c', seq: 4, type: 'assistant', roleId: 'r', roleName: '研究员', content: '置信区间很宽。', createdAt: 4, status: 'received' },
+      { id: 'm2', chatId: 'c', seq: 5, type: 'user', content: '换个号继续：结论还能用吗？', targetRoleIds: ['r'], deliveryStatus: sentInNewChat ? { r: 'received' } : {}, createdAt: 5, status: 'received' },
+      { id: 'a3', chatId: 'c', seq: 6, type: 'assistant', roleId: 'r', roleName: '研究员', content: '只能当参考。', createdAt: 6, status: 'received' },
+      { id: 'm3', chatId: 'c', seq: 7, type: 'user', content: '那下一步呢？', targetRoleIds: ['r'], createdAt: 7, status: 'pending' },
+    ]
+    const used = sentInNewChat ? messages : messages.slice(0, 5)
+    const userMessage = used[used.length - 1]
+    if (!sentInNewChat) userMessage.status = 'pending'
+    const chat: GroupChat = { id: 'c', name: '调研', mode, roleIds: ['r', 'e'], messageIds: used.map(message => message.id), nextMessageSeq: used.length + 1, status: 'ready', createdAt: 1, updatedAt: 1 }
+    Object.assign(store, { chatsById: { c: chat }, rolesById: { r: role, e: other }, messagesById: Object.fromEntries(used.map(message => [message.id, message])) })
+    const prepared = prepareRolePromptDelivery({ store, chat, role, userMessage, roles: [role, other], messages: used, timestamp: 8, newId: () => 'attempt', runtimeFrames: { getByRole: () => ({ chatId: 'c', roleId: 'r', tabId: 1, frameId: 2, ready: true, lastSeenAt: 1 }) } })
+    return prepared.delivery!.message.content
+  }
+
+  it('in an 独立 group, gets its own earlier exchange with the user in its first prompt there, and the persona', () => {
+    const prompt = setup('independent')
+    expect(prompt).toContain('你现在在一个新对话里。下面是你之前在这个群里和用户的对话')
+    expect(prompt).toContain('用户：样本有多大？')
+    expect(prompt).toContain('你：样本只有 120 人。')
+    expect(prompt).toContain('你：置信区间很宽。')
+    expect(prompt).not.toContain('工程师的旁白')
+    expect(prompt).toContain('你是严谨的数据研究员。')
+    expect(prompt.indexOf('置信区间很宽')).toBeLessThan(prompt.indexOf('换个号继续'))
+  })
+
+  it('in a 协作 group, gets its own earlier answers with the group\'s messages', () => {
+    const prompt = setup('collaborative')
+    expect(prompt).toContain('你：样本只有 120 人。')
+    expect(prompt).toContain('工程师：工程师的旁白。')
+    expect(prompt).toContain('你：置信区间很宽。')
+  })
+
+  it('does not get them again once its new conversation has them', () => {
+    for (const mode of ['independent', 'collaborative'] as const) {
+      const prompt = setup(mode, true)
+      expect(prompt).not.toContain('样本只有 120 人')
+      expect(prompt).not.toContain('你现在在一个新对话里')
+    }
+  })
+})

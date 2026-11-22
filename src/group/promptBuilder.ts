@@ -11,6 +11,9 @@ export interface BuildPromptInput {
   roles: GroupRole[]
   unsyncedContext?: UnsyncedContextResult
   unsyncedMessages?: GroupMessage[]
+  // 独立 only: the member's earlier exchange with the user, when its conversation started over
+  // (contextSync.ts buildEarlierExchange).
+  earlierExchange?: { text: string; omitted: boolean }
   maxContextChars?: number
   reference?: MessageReference
   includePersona?: boolean
@@ -32,11 +35,23 @@ export function buildIndependentPrompt(input: BuildPromptInput): string {
   return joinSections([
     language === 'en' ? `You are "${input.role.name}".` : `你是「${input.role.name}」。`,
     buildRoleBlock(input.role, input.includePersona ?? true, language),
+    buildEarlierExchangeBlock(input.earlierExchange, language),
     buildReferenceBlock(reference, language),
     language === 'en' ? `User message:\n${input.userMessage.content}` : `用户消息：\n${input.userMessage.content}`,
     formatAttachedFilesForPrompt(input.userMessage, language),
     input.responseInstruction ?? independentResponseInstruction(input.role.name, Boolean(reference), language),
     input.extraInstruction,
+  ])
+}
+
+function buildEarlierExchangeBlock(exchange: BuildPromptInput['earlierExchange'], language: OpenTeamLanguage): string | undefined {
+  if (!exchange) return undefined
+  return joinSections([
+    language === 'en'
+      ? 'You are in a new chat now. Your earlier conversation with the user in this group, repeated so you can carry on:'
+      : '你现在在一个新对话里。下面是你之前在这个群里和用户的对话，补在这里，方便你接着回答：',
+    exchange.omitted ? (language === 'en' ? '[Some earlier context has been omitted]' : '[部分早期上下文已省略]') : undefined,
+    exchange.text,
   ])
 }
 

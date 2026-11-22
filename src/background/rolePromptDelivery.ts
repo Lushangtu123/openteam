@@ -1,5 +1,5 @@
 import { libraryPassagesForPrompt, noteLibraryPending, withLibraryBlock } from '../group/groupLibrary'
-import { buildUnsyncedContext } from '../group/contextSync'
+import { buildEarlierExchange, buildUnsyncedContext } from '../group/contextSync'
 import { contextCharBudgetForRole } from '../group/contextBudget'
 import { buildExternalModelPrompt, type ExternalMemoryPatch } from '../group/externalModelContext'
 import { buildOrchestrationReviewResponseInstruction } from '../group/orchestrationPrompts'
@@ -115,12 +115,18 @@ export function prepareRolePromptDelivery(input: PrepareRolePromptDeliveryInput)
   noteMemoryPending(input.role, input.userMessage.id, memoryItems)
   noteLibraryPending(input.role, input.userMessage.id, libraryPassages)
   const unsyncedContext = buildUnsyncedContext(input.chat, input.role, input.messages, input.userMessage, maxContextChars, input.store.settings.language)
+  // An 独立 member's first prompt in a conversation that started over carries its earlier exchange
+  // (a 协作 member gets it with the group's messages, above).
+  const earlierExchange = input.chat.mode !== 'collaborative' && roleHistoryCount === 0
+    ? buildEarlierExchange(input.chat, input.role, input.messages, maxContextChars, input.store.settings.language)
+    : undefined
   const content = summary ?? buildPrompt({
     chat: input.chat,
     role: input.role,
     userMessage: input.userMessage,
     roles: input.roles,
     unsyncedContext,
+    ...(earlierExchange ? { earlierExchange } : {}),
     reference: input.reference,
     includePersona: includesPersona,
     responseInstruction,
