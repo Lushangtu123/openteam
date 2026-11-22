@@ -1,6 +1,6 @@
 {
   "name": "@lushangtu123/openteamcli",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "OpenTeam local CLI for agent-controlled group chats",
   "license": "PolyForm-Noncommercial-1.0.0",
   "type": "module",
