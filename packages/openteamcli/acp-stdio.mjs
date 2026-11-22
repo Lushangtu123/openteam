@@ -269,6 +269,8 @@ export async function runStdioAcpAgent(agent, input) {
     }
     onEvent({ kind: 'started' })
     const result = await request('session/prompt', { sessionId, prompt: [{ type: 'text', text: input.prompt }] })
+    // An agent that answers the stop at the time limit ends its prompt as cancelled: still a timeout.
+    if (timedOut) throw new AcpError('本地智能体运行超时。')
     if (input.signal?.aborted) throw new AcpError('本地智能体运行已取消。')
     return { output, stopReason: typeof result?.stopReason === 'string' ? result.stopReason : 'end_turn', tools: [...tools.values()] }
   } catch (error) {

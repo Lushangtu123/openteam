@@ -2300,6 +2300,104 @@ describe('background message handlers', () => {
     await expect(sendRoute.handler({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '再看', attachmentsFrom: 'msg-gone' }, {})).rejects.toThrow('找不到要附带的资料')
   })
 
+  it('writes a reply piece held back by the update interval even when no other piece follows', async () => {
+    vi.resetModules()
+    const startingStore = createStoreWithReadyRole()
+    startingStore.settings.externalModelOrder = ['model-1']
+    startingStore.settings.externalModelsById = {
+      'model-1': { id: 'model-1', name: '本机智能体', format: 'openai', baseUrl: 'https://api.example.test/v1', apiKey: 'sk-test', modelName: 'm', createdAt: 1, updatedAt: 1 },
+    }
+    startingStore.rolesById['role-1'].modelSource = 'external'
+    startingStore.rolesById['role-1'].externalModelId = 'model-1'
+    let currentStore = structuredClone(startingStore)
+    vi.doMock('./storeAccess', async importOriginal => {
+      const actual = await importOriginal<typeof import('./storeAccess')>()
+      return {
+        ...actual,
+        mutateStore: vi.fn(async (mutator: (store: OpenTeamStore) => unknown) => {
+          const result = await mutator(currentStore)
+          currentStore = structuredClone(currentStore)
+          return { store: currentStore, result }
+        }),
+      }
+    })
+    const { createMessageHandlers } = await import('./messageHandlers')
+    let release: (() => void) | undefined
+    const externalModelClient = {
+      // Text, then at once the tool it starts, then nothing for a long while.
+      stream: vi.fn(async function* () {
+        yield '我先跑一下测试。'
+        yield '> 🛠 运行 npm test'
+        await new Promise<void>(resolve => { release = resolve })
+        yield '测试通过。'
+      }),
+    }
+    const broadcasts: OpenTeamStore[] = []
+    let messageIdSeq = 0
+    const routes = createMessageHandlers({
+      broadcastStoreUpdated: vi.fn(async (store: OpenTeamStore) => { broadcasts.push(structuredClone(store)) }),
+      externalModelClient: externalModelClient as never,
+      getChatStatusFromRoles: () => 'ready',
+      log: { debug: vi.fn(), info: vi.fn(), warn: vi.fn() },
+      newId: vi.fn((prefix: string) => prefix === 'msg' ? `${prefix}-${++messageIdSeq}` : `${prefix}-1`),
+      now: vi.fn(() => 100),
+      runtimeFrames: { bind: vi.fn(), getByAddress: vi.fn(), getByRole: vi.fn(() => undefined) },
+      sendRoleMessage: vi.fn(),
+      sendError: vi.fn(),
+      sendPrompt: vi.fn(),
+    })
+    const sending = routes.find(route => route.type === 'GROUP_MESSAGE_SEND')!.handler({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@all 跑测试' }, {})
+    await vi.waitFor(() => expect(broadcasts.some(store => store.messagesById['msg-2']?.content === '我先跑一下测试。> 🛠 运行 npm test' && store.messagesById['msg-2']?.status === 'pending')).toBe(true))
+    release?.()
+    await sending
+    await vi.waitFor(() => expect(currentStore.messagesById['msg-2']).toMatchObject({ content: '我先跑一下测试。> 🛠 运行 npm test测试通过。', status: 'received' }))
+  })
+
+  it('keeps what a local agent wrote when its run fails, with why it stopped after it', async () => {
+    vi.resetModules()
+    const startingStore = createStoreWithReadyRole()
+    startingStore.settings.externalModelOrder = ['agent-1']
+    startingStore.settings.externalModelsById = {
+      'agent-1': { id: 'agent-1', name: 'Claude Code', format: 'local-agent', baseUrl: '', apiKey: '', modelName: 'claude-code', localAgentId: 'claude-code', workspace: '/Users/me/app', createdAt: 1, updatedAt: 1 },
+    }
+    startingStore.rolesById['role-1'].modelSource = 'external'
+    startingStore.rolesById['role-1'].externalModelId = 'agent-1'
+    let currentStore = structuredClone(startingStore)
+    vi.doMock('./storeAccess', async importOriginal => {
+      const actual = await importOriginal<typeof import('./storeAccess')>()
+      return {
+        ...actual,
+        mutateStore: vi.fn(async (mutator: (store: OpenTeamStore) => unknown) => {
+          const result = await mutator(currentStore)
+          currentStore = structuredClone(currentStore)
+          return { store: currentStore, result }
+        }),
+      }
+    })
+    const { createMessageHandlers } = await import('./messageHandlers')
+    const externalModelClient = {
+      stream: vi.fn(async function* () {
+        yield '我先跑一下测试。\n\n> 📝 已写入 src/app.ts\n\n'
+        throw new Error('到了运行时限（30 分钟），已停止这次运行。')
+      }),
+    }
+    let messageIdSeq = 0
+    const routes = createMessageHandlers({
+      broadcastStoreUpdated: vi.fn(),
+      externalModelClient: externalModelClient as never,
+      getChatStatusFromRoles: () => 'ready',
+      log: { debug: vi.fn(), info: vi.fn(), warn: vi.fn() },
+      newId: vi.fn((prefix: string) => prefix === 'msg' ? `${prefix}-${++messageIdSeq}` : `${prefix}-1`),
+      now: vi.fn(() => 100),
+      runtimeFrames: { bind: vi.fn(), getByAddress: vi.fn(), getByRole: vi.fn(() => undefined) },
+      sendRoleMessage: vi.fn(),
+      sendError: vi.fn(),
+      sendPrompt: vi.fn(),
+    })
+    await routes.find(route => route.type === 'GROUP_MESSAGE_SEND')!.handler({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@all 跑测试' }, {})
+    await vi.waitFor(() => expect(currentStore.messagesById['msg-2']).toMatchObject({ status: 'error', content: '我先跑一下测试。\n\n> 📝 已写入 src/app.ts\n\n> ✗ 到了运行时限（30 分钟），已停止这次运行。' }))
+  })
+
   it('streams external model replies into a pending assistant message', async () => {
     vi.resetModules()
     const startingStore = createStoreWithReadyRole()

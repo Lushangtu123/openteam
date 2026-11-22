@@ -79,6 +79,7 @@ export async function sendExternalModelDelivery(deps: MessageHandlersDependencie
     // A local agent is never sent the same task again on its own: what it did cannot be undone.
     const retryDelays = delivery.model.format === 'local-agent' ? [] : deps.externalModelRetryDelaysMs ?? DEFAULT_EXTERNAL_MODEL_RETRY_DELAYS_MS
     const context = { chatId: delivery.chatId, roleId: delivery.roleId, messageId: delivery.messageId, roleName: delivery.roleName }
+    let stopHeldBack = async () => {}
     for (let attemptIndex = 0; attemptIndex <= retryDelays.length; attemptIndex += 1) {
       try {
         content = ''
@@ -88,6 +89,15 @@ export async function sendExternalModelDelivery(deps: MessageHandlersDependencie
         readPages = []
         searches = []
         let updatedAt = Number.NEGATIVE_INFINITY
+        // A piece held back by the update interval is written once the interval is over, even when
+        // no other piece follows (a local agent showing the tool it is stuck on).
+        let heldBack: ReturnType<typeof setTimeout> | undefined
+        let writing: Promise<void> = Promise.resolve()
+        stopHeldBack = async () => {
+          clearTimeout(heldBack)
+          heldBack = undefined
+          await writing
+        }
         const stream = typeof client.stream === 'function'
           ? client.stream({ model: delivery.model, prompt: delivery.prompt, images, abortSignal: controller.signal, onUsage, onFallback, context, ...(readWebPage ? { readWebPage } : {}), ...(searchWeb ? { searchWeb } : {}) })
           : streamCompleteFallback(client, { model: delivery.model, prompt: delivery.prompt, images, abortSignal: controller.signal, onUsage, context })
@@ -95,20 +105,37 @@ export async function sendExternalModelDelivery(deps: MessageHandlersDependencie
           throwIfAborted(controller.signal)
           if (!chunk) continue
           content += chunk
-          // The rest arrives with the next update, or with the finished reply (or the stopped one).
-          if (deps.now() - updatedAt < STREAM_UPDATE_INTERVAL_MS) continue
+          // Within the interval the piece waits for the next update, or for the held-back write.
+          if (deps.now() - updatedAt < STREAM_UPDATE_INTERVAL_MS) {
+            heldBack ??= setTimeout(() => {
+              heldBack = undefined
+              updatedAt = deps.now()
+              const replyId = replyMessageId
+              if (!replyId) return
+              writing = writing.then(async () => {
+                const update = await updateExternalAssistantContent(deps, delivery, replyId, content)
+                if (!update.ignored) await deps.broadcastStoreUpdated(update.store)
+              }).catch(error => deps.log.warn('external-model:stream:held-back-failed', { error: error instanceof Error ? error.message : String(error) }))
+            }, STREAM_UPDATE_INTERVAL_MS)
+            continue
+          }
+          clearTimeout(heldBack)
+          heldBack = undefined
           updatedAt = deps.now()
           const update = await updateExternalAssistantContent(deps, delivery, replyMessageId, content)
           if (update.ignored) {
             deps.log.warn('external-model:stream:ignored-stale', { chatId: delivery.chatId, roleId: delivery.roleId, messageId: delivery.messageId, reason: update.reason })
+            await stopHeldBack()
             return update.store
           }
           await deps.broadcastStoreUpdated(update.store)
         }
         throwIfAborted(controller.signal)
+        await stopHeldBack()
         if (!content.trim()) throw new Error('模型没有返回内容')
         break
       } catch (error) {
+        await stopHeldBack()
         if (isAbortError(error) || controller.signal.aborted) throw error
         if (content.trim()) throw error
         if (isPermanentModelError(error)) throw error
@@ -166,6 +193,12 @@ export async function sendExternalModelDelivery(deps: MessageHandlersDependencie
         // the reply offers 今天继续用 for the model that refused (a web member's backup, too).
         if ((error as { code?: unknown } | undefined)?.code === SPEND_CAP_CODE) {
           upsertErrorAssistantAfterPrompt(store, chat, role, delivery.messageId, reason, deps.now(), deps.newId).spendCapModelId = delivery.model.id
+          return
+        }
+        // A local agent's reply is the record of what it did (files written, commands run): it is
+        // kept, with why the run stopped after it.
+        if (delivery.model.format === 'local-agent' && content.trim()) {
+          upsertErrorAssistantAfterPrompt(store, chat, role, delivery.messageId, `${content.trimEnd()}\n\n> ✗ ${reason}`, deps.now(), deps.newId)
           return
         }
         upsertFailedAssistantAfterPrompt(store, chat, role, delivery.messageId, reason, deps.now(), deps.newId)

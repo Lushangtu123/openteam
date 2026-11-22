@@ -65,6 +65,8 @@ export function createLocalAgentClient(deps: LocalAgentClientDependencies) {
     if (runAnswer !== 'allow') throw new Error(en ? 'You refused this run.' : '你拒绝了这次执行。')
 
     const limitMinutes = model.runLimitMinutes ?? DEFAULT_RUN_LIMIT_MINUTES
+    const startedAt = Date.now()
+    const stoppedAtLimit = en ? `Stopped at its run time limit (${limitMinutes} min).` : `到了运行时限（${limitMinutes} 分钟），已停止这次运行。`
     const started = await deps.control.request('agent.run', { agentId: model.localAgentId, prompt: input.prompt, cwd: model.workspace, timeoutMs: limitMinutes * 60_000 })
     if (!started.ok) throw new Error([started.error?.message ?? '本机智能体没有启动', started.error?.hint].filter(Boolean).join(' '))
     const runId = (started.data as { runId?: unknown } | undefined)?.runId
@@ -124,13 +126,19 @@ export function createLocalAgentClient(deps: LocalAgentClientDependencies) {
           void answerPermission(runId, event)
           return
         case 'done':
+          // Stopped without the user asking: at the run time limit (a daemon before CLI 0.6.1 ends
+          // such a run as done, cancelled), or by the agent itself.
+          if (event.stopReason === 'cancelled' && !signal?.aborted) {
+            fail(new Error(Date.now() - startedAt >= limitMinutes * 60_000 - 5_000 ? stoppedAtLimit : en ? 'The agent stopped this run.' : '智能体中止了这次运行。'))
+            return
+          }
           if (!wroteText && !event.output.trim()) push(en ? '(The agent finished without writing anything.)' : '（智能体完成了，没有输出文字。）')
           finished = true
           wake?.()
           return
         case 'error':
         case 'cancelled':
-          fail(new Error(event.message))
+          fail(new Error(event.message === '本地智能体运行超时。' ? stoppedAtLimit : event.message))
           return
         default:
       }

@@ -200,3 +200,28 @@ describe('a local agent run that goes quiet', () => {
     await run
   })
 })
+
+describe('a local agent run that stops without the user asking', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('says it reached the run time limit, from the daemon\'s timeout or from an older daemon\'s cancelled end', async () => {
+    const timedOut = setup(['allow'], [{ kind: 'started' }, { kind: 'error', message: '本地智能体运行超时。' }])
+    await expect(collect(timedOut.client.stream({ model, prompt: 'x', context }))).rejects.toThrow('到了运行时限（30 分钟），已停止这次运行。')
+
+    vi.useFakeTimers()
+    const older = setup(['allow'], [{ kind: 'started' }, { kind: 'text', text: '开始' }])
+    const run = collect(older.client.stream({ model: { ...model, runLimitMinutes: 4 }, prompt: 'x', context }))
+    const failed = expect(run).rejects.toThrow('到了运行时限（4 分钟），已停止这次运行。')
+    await vi.advanceTimersByTimeAsync(4 * 60_000)
+    older.listeners.get('run-1')?.({ kind: 'done', output: '', stopReason: 'cancelled' })
+    await vi.advanceTimersByTimeAsync(10)
+    await failed
+  })
+
+  it('says the agent stopped it when that was well before the limit', async () => {
+    const early = setup(['allow'], [{ kind: 'started' }, { kind: 'done', output: '', stopReason: 'cancelled' }])
+    await expect(collect(early.client.stream({ model, prompt: 'x', context }))).rejects.toThrow('智能体中止了这次运行。')
+  })
+})

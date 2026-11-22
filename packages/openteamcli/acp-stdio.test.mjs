@@ -53,6 +53,10 @@ describe('ACP over stdio', () => {
     expect(existsSync('/tmp/openteam-escape-test.txt')).toBe(false)
   })
 
+  it('says a run stopped at its time limit timed out, also when the agent answers the stop', async () => {
+    await expect(runStdioAcpAgent(agent, { prompt: 'SLOW', cwd: workspace(), timeoutMs: 300 })).rejects.toThrow('本地智能体运行超时。')
+  })
+
   it('cancels a running prompt', async () => {
     const controller = new AbortController()
     const run = runStdioAcpAgent(agent, { prompt: 'SLOW', cwd: workspace(), timeoutMs: 10_000, signal: controller.signal })
