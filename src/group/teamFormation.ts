@@ -373,6 +373,17 @@ export function collectTeamMembers(store: OpenTeamStore, chat: GroupChat): TeamM
   })
 }
 
+// The members a group had before others joined it, holding their position (or name): a newcomer who
+// claims one of them clashes with its holder (resolveTeamPositions).
+export function teamExistingHolders(store: OpenTeamStore, chat: GroupChat): Array<{ roleId: string; position: string }> {
+  const joining = chat.teamFormation?.joiningRoleIds
+  if (!joining) return []
+  return chat.roleIds.filter(roleId => !joining.includes(roleId)).flatMap(roleId => {
+    const role = store.rolesById[roleId]
+    return role ? [{ roleId, position: role.teamPosition?.trim() || role.name }] : []
+  })
+}
+
 // The members a group had before others joined it, as positions already taken: their position (or
 // name) with what they cover, and the AI they run on.
 export function teamExistingPositions(store: OpenTeamStore, chat: GroupChat): Array<{ position: string; holder: string }> {

@@ -18,6 +18,7 @@ import {
   teamLabels,
   teamMemberNames,
   teamMemberResponsibility,
+  teamExistingHolders,
   teamExistingPositions,
   teamModelKey,
   type TeamMember,
@@ -594,7 +595,7 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
 
     const notes: HTMLElement[] = []
     if (!confirmed && resolution.conflicts.length > 0) {
-      const names = (roleIds: string[]) => roleIds.map(roleId => members.find(member => member.roleId === roleId)?.role.name ?? roleId).join(t('、', ', '))
+      const names = (roleIds: string[]) => roleIds.map(roleId => members.find(member => member.roleId === roleId)?.role.name ?? deps.getStore().rolesById[roleId]?.name ?? roleId).join(t('、', ', '))
       notes.push(element('div', 'team-card-note team-card-note-conflict', resolution.conflicts.map(conflict => conflict.holderRoleId
         ? t(`「${conflict.position}」已经是 ${names([conflict.holderRoleId])} 的了，${names(conflict.roleIds)} 也想要。改 ${names(conflict.roleIds)} 的职位，或让它重选。`, `"${conflict.position}" is already ${names([conflict.holderRoleId])}'s, and ${names(conflict.roleIds)} wants it too. Change ${names(conflict.roleIds)}'s position, or ask it to choose again.`)
         : t(`「${conflict.position}」有 ${conflict.roleIds.length} 位想要：${names(conflict.roleIds)}。改其中一位的职位，或让它们重选。`, `${conflict.roleIds.length} members want "${conflict.position}": ${names(conflict.roleIds)}. Change one of them, or ask them to choose again.`)).join('\n')))
@@ -742,7 +743,11 @@ export function createTeamFormationView(deps: TeamFormationViewDependencies): Te
 
   function resolution_(chat: GroupChat, members: TeamMember[]): TeamResolution {
     const editMap = chatEdits(chat.id)
-    return resolveTeamPositions(members.map(member => ({ roleId: member.roleId, claim: member.claim, claimOrder: member.claimOrder, position: editMap.get(member.roleId) })), chat.teamFormation?.requiredPositions ?? [])
+    // New members joining: the members there hold their positions, so a newcomer claiming one clashes.
+    const holders = teamExistingHolders(deps.getStore(), chat)
+    const resolution = resolveTeamPositions([...holders, ...members.map(member => ({ roleId: member.roleId, claim: member.claim, claimOrder: member.claimOrder, position: editMap.get(member.roleId) }))], chat.teamFormation?.requiredPositions ?? [])
+    for (const holder of holders) delete resolution.assignments[holder.roleId]
+    return resolution
   }
 
   // ----- Sending -----
