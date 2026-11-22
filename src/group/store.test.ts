@@ -321,7 +321,7 @@ describe('group store', () => {
   it('normalizes external model settings and drops incomplete configs', async () => {
     stored[STORE_KEY] = {
       settings: {
-        externalModelOrder: ['model-1', 'missing', 'model-bad'],
+        externalModelOrder: ['model-1', 'missing', 'model-bad', 'agent-1', 'agent-2'],
         externalModelsById: {
           'model-1': {
             id: 'model-1',
@@ -335,6 +335,8 @@ describe('group store', () => {
             createdAt: 1,
             updatedAt: 2,
           },
+          'agent-1': { id: 'agent-1', name: 'Claude Code', format: 'local-agent', localAgentId: 'claude-code', workspace: '/x', runLimitMinutes: 45, createdAt: 1, updatedAt: 2 },
+          'agent-2': { id: 'agent-2', name: 'Codex', format: 'local-agent', localAgentId: 'codex', workspace: '/x', runLimitMinutes: 9999, createdAt: 1, updatedAt: 2 },
           'model-bad': {
             id: 'model-bad',
             name: '',
@@ -347,9 +349,12 @@ describe('group store', () => {
       },
     }
 
+    const loaded = await loadStore()
+    expect(loaded.settings.externalModelsById['agent-1'].runLimitMinutes).toBe(45)
+    expect('runLimitMinutes' in loaded.settings.externalModelsById['agent-2']).toBe(false)
     await expect(loadStore()).resolves.toMatchObject({
       settings: {
-        externalModelOrder: ['model-1'],
+        externalModelOrder: ['model-1', 'agent-1', 'agent-2'],
         externalModelsById: {
           'model-1': {
             id: 'model-1',

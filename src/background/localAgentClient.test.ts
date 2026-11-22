@@ -1,7 +1,8 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ExternalModelConfig } from '../group/types'
 import type { ControlHttpResult, LocalAgentEvent } from '../shared/localControlProtocol'
 import { createLocalAgentClient } from './localAgentClient'
+import { STALL_NOTICE_MS, STALL_REPEAT_MS } from '../shared/localAgentLimits'
 
 const model: ExternalModelConfig = { id: 'm1', name: 'Claude Code', format: 'local-agent', baseUrl: '', apiKey: '', modelName: 'claude-code', localAgentId: 'claude-code', workspace: '/Users/me/app', createdAt: 0, updatedAt: 0 }
 const context = { chatId: 'chat-1', roleId: 'role-1', messageId: 'msg-1', roleName: '程序员' }
@@ -61,7 +62,7 @@ describe('local agent client', () => {
     listeners.get('run-1')?.({ kind: 'done', output: '我来改 README。改好了。' })
     const text = await run
 
-    expect(requests[0]).toEqual(['agent.run', { agentId: 'claude-code', prompt: '改一下 README', cwd: '/Users/me/app' }])
+    expect(requests[0]).toEqual(['agent.run', { agentId: 'claude-code', prompt: '改一下 README', cwd: '/Users/me/app', timeoutMs: 30 * 60_000 }])
     expect(requests).toContainEqual(['agent.permission', { runId: 'run-1', permissionId: 'p1', optionId: 'ok' }])
     expect(asked[1]).toMatchObject({ kind: 'permission', title: '「程序员」想要：编辑 README.md', options: [{ id: 'ok', label: '允许', kind: 'allow_once' }, { id: 'no', label: '拒绝' }] })
     expect(text).toContain('我来改 README。')
@@ -126,5 +127,76 @@ describe('local agent client', () => {
     const { client, control } = setup(['allow'])
     control.request.mockResolvedValueOnce({ id: 'r', ok: false, error: { code: 'workspace_not_allowed', message: '工作目录不在这个智能体允许的范围内。', hint: '用 openteamcli agent add 加入这个目录' } })
     await expect(collect(client.stream({ model, prompt: 'x', context }))).rejects.toThrow('工作目录不在这个智能体允许的范围内。 用 openteamcli agent add 加入这个目录')
+  })
+})
+
+describe('a local agent run that goes quiet', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('asks the daemon to stop it at the agent\'s run time limit, 30 minutes unless set', async () => {
+    const done: LocalAgentEvent[] = [{ kind: 'started' }, { kind: 'text', text: '好了' }, { kind: 'done', output: '好了' }]
+    const first = setup(['allow'], done)
+    await collect(first.client.stream({ model, prompt: 'x', context }))
+    expect(first.requests[0]).toEqual(['agent.run', { agentId: 'claude-code', prompt: 'x', cwd: '/Users/me/app', timeoutMs: 30 * 60_000 }])
+    const second = setup(['allow'], done)
+    await collect(second.client.stream({ model: { ...model, runLimitMinutes: 90 }, prompt: 'x', context }))
+    expect(second.requests[0][1]).toMatchObject({ timeoutMs: 90 * 60_000 })
+  })
+
+  it('says so in the reply after 3 minutes without news, naming the tool it may be stuck on, and again every 5', async () => {
+    vi.useFakeTimers()
+    const { client, listeners } = setup(['allow'], [{ kind: 'started' }, { kind: 'tool', id: 't1', title: '运行 npm test', toolKind: 'execute', status: 'in_progress' }])
+    const chunks: string[] = []
+    const run = (async () => { for await (const chunk of client.stream({ model, prompt: '跑测试', context })) chunks.push(chunk) })()
+    await vi.advanceTimersByTimeAsync(10)
+    expect(chunks.join('')).toContain('🛠 运行 npm test')
+    await vi.advanceTimersByTimeAsync(STALL_NOTICE_MS - 1_000)
+    expect(chunks.join('')).not.toContain('没有新动静')
+    await vi.advanceTimersByTimeAsync(1_000)
+    expect(chunks.join('')).toContain('> ⏳ 已经 3 分钟没有新动静，可能卡在「运行 npm test」。可以等它继续，或点「停止」结束这次运行（满 30 分钟会自动停止）。')
+    await vi.advanceTimersByTimeAsync(STALL_REPEAT_MS)
+    expect(chunks.join('')).toContain('已经 8 分钟没有新动静')
+    // News starts the clock again; a finished tool is no longer named.
+    listeners.get('run-1')?.({ kind: 'tool', id: 't1', title: '运行 npm test', status: 'completed' })
+    await vi.advanceTimersByTimeAsync(STALL_NOTICE_MS)
+    expect(chunks.join('').match(/没有新动静/g)).toHaveLength(3)
+    expect(chunks.join('').trim().endsWith('> ⏳ 已经 3 分钟没有新动静。可以等它继续，或点「停止」结束这次运行（满 30 分钟会自动停止）。')).toBe(true)
+    listeners.get('run-1')?.({ kind: 'done', output: '' })
+    await vi.advanceTimersByTimeAsync(10)
+    await run
+  })
+
+  it('does not count the time it waits for the user to allow something', async () => {
+    vi.useFakeTimers()
+    let answer: ((value: string) => void) | undefined
+    const listeners = new Map<string, (event: LocalAgentEvent) => void>()
+    const control = {
+      request: vi.fn(async (action: string): Promise<ControlHttpResult> => {
+        if (action === 'agent.run') {
+          setTimeout(() => listeners.get('run-1')?.({ kind: 'permission', permissionId: 'p1', title: '运行 rm -rf build', options: [{ optionId: 'ok', name: '允许', kind: 'allow_once' }] }), 0)
+          return { id: 'r', ok: true, data: { runId: 'run-1' } }
+        }
+        return { id: 'r', ok: true }
+      }),
+      onAgentEvents: vi.fn((runId: string, handler: (event: LocalAgentEvent) => void) => {
+        listeners.set(runId, handler)
+        return () => listeners.delete(runId)
+      }),
+    }
+    let asked = 0
+    const approvals = { ask: vi.fn(async () => (asked += 1) === 1 ? 'allow' : new Promise<string>(resolve => { answer = resolve })) }
+    const client = createLocalAgentClient({ control, approvals, getLanguage: () => 'en' })
+    const chunks: string[] = []
+    const run = (async () => { for await (const chunk of client.stream({ model, prompt: 'clean', context })) chunks.push(chunk) })()
+    await vi.advanceTimersByTimeAsync(10 * 60_000)
+    expect(chunks.join('')).not.toContain('Nothing new')
+    answer?.('ok')
+    await vi.advanceTimersByTimeAsync(STALL_NOTICE_MS)
+    expect(chunks.join('')).toContain('> ⏳ Nothing new for 3 min. You can wait, or click Stop to end this run (it stops on its own after 30 min).')
+    listeners.get('run-1')?.({ kind: 'done', output: 'ok' })
+    await vi.advanceTimersByTimeAsync(10)
+    await run
   })
 })

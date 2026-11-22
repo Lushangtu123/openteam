@@ -1,3 +1,4 @@
+import { readRunLimitMinutes } from '../shared/localAgentLimits'
 import type { ExternalModelConfig, ExternalModelFormat, OpenTeamStore, ModelPricing } from '../group/types'
 import { readModelPricing } from '../group/pricing'
 import { liftCapToday, readDailyCap } from '../group/spendCap'
@@ -106,7 +107,8 @@ function readExternalModelInput(message: RuntimeMessage, id: string, createdAt: 
     const localAgentId = requireString(message.localAgentId, '请选择本机智能体')
     const workspace = requireString(message.workspace, '请填写工作目录')
     if (!workspace.startsWith('/')) throw new Error('工作目录必须是完整路径，例如 /Users/me/projects/app')
-    return { id, name: requireString(message.name, '名称不能为空'), format: 'local-agent', baseUrl: '', apiKey: '', modelName: localAgentId, localAgentId, workspace, createdAt, updatedAt }
+    const runLimitMinutes = readRunLimitMinutes(message.runLimitMinutes)
+    return { id, name: requireString(message.name, '名称不能为空'), format: 'local-agent', baseUrl: '', apiKey: '', modelName: localAgentId, localAgentId, workspace, ...(runLimitMinutes ? { runLimitMinutes } : {}), createdAt, updatedAt }
   }
   return {
     id,

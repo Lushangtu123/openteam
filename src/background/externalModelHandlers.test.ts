@@ -143,6 +143,29 @@ describe('background external model handlers', () => {
     })
   })
 
+  it('saves a local agent\'s run time limit, or leaves it to the default', async () => {
+    vi.resetModules()
+    const currentStore = createDefaultStore()
+    vi.doMock('./storeAccess', async importOriginal => {
+      const actual = await importOriginal<typeof import('./storeAccess')>()
+      return {
+        ...actual,
+        mutateStore: vi.fn(async (mutator: (store: OpenTeamStore) => unknown) => ({ store: currentStore, result: await mutator(currentStore) })),
+      }
+    })
+    const { createExternalModelHandlers } = await import('./externalModelHandlers')
+    const routes = createExternalModelHandlers({ broadcastStoreUpdated: vi.fn(), newId: vi.fn((prefix: string) => `${prefix}-1`), now: () => 5 })
+    const create = routes.find(route => route.type === 'EXTERNAL_MODEL_CREATE')!
+    const update = routes.find(route => route.type === 'EXTERNAL_MODEL_UPDATE')!
+    const base = { type: 'EXTERNAL_MODEL_CREATE', name: 'Claude Code', format: 'local-agent', localAgentId: 'claude-code', workspace: '/Users/me/app' }
+
+    await expect(create.handler({ ...base, runLimitMinutes: '0' }, {})).rejects.toThrow('运行时限要写 1 到 240 之间的整数（分钟）')
+    await create.handler({ ...base, runLimitMinutes: ' 60 ' }, {})
+    expect(currentStore.settings.externalModelsById['external-model-1']).toMatchObject({ format: 'local-agent', runLimitMinutes: 60 })
+    await update.handler({ ...base, type: 'EXTERNAL_MODEL_UPDATE', modelId: 'external-model-1', runLimitMinutes: '' }, {})
+    expect('runLimitMinutes' in currentStore.settings.externalModelsById['external-model-1']).toBe(false)
+  })
+
   it('saves a daily spending cap with a priced model, and lifts it for today when asked', async () => {
     vi.resetModules()
     const currentStore = createDefaultStore()

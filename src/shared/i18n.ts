@@ -362,6 +362,8 @@ const UI_TRANSLATIONS: Record<string, string> = {
   '工作目录': 'Working folder',
   '智能体在本机运行，只能访问它允许的目录。': 'The agent runs on this computer and can reach only the folders it is allowed.',
   '在终端运行 openteamcli agent add --preset claude-code --cwd 你的项目目录，智能体就会出现在这里。需要在设置里打开「本机智能体控制」。': 'Run openteamcli agent add --preset claude-code --cwd <your project folder> in a terminal and the agent shows up here. Local agent control must be on in Settings.',
+  '运行时限（分钟，可选）': 'Run time limit (minutes, optional)',
+  '一次运行超过这个时间还没做完就停止，默认 30 分钟。它 3 分钟没有新动静时，回复里会提示可能卡在哪一步，你可以点「停止」。': 'A run still going after this long is stopped; 30 minutes unless set. When it shows nothing new for 3 minutes, the reply says which step it may be stuck on, and you can click Stop.',
   '每次执行前都会先问你。执行中它要改文件或运行命令时，会不会再来问你，取决于它的权限模式：Claude Code 预设每次都问。OpenTeam 替它读写文件时只限这个目录；它自己的工具按它自己的权限规则。': 'You are asked before every run. Whether it asks again before changing files or running commands depends on its permission mode; the Claude Code preset always asks. Files OpenTeam reads and writes for it stay in this folder; its own tools follow its own permission rules.',
   '你拒绝了这次执行。': 'You refused this run.',
   '这个请求已经失效（可能后台重启过），请重新发送任务。': 'This request is no longer valid (the background may have restarted); send the task again.',

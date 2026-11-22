@@ -750,6 +750,11 @@
             <p id="external-model-remote-workspace" class="tiny" hidden></p>
             <p class="tiny">每次执行前都会先问你。执行中它要改文件或运行命令时，会不会再来问你，取决于它的权限模式：Claude Code 预设每次都问。OpenTeam 替它读写文件时只限这个目录；它自己的工具按它自己的权限规则。</p>
           </div>
+          <div class="field local-agent-field" hidden>
+            <label for="external-model-run-limit">运行时限（分钟，可选）</label>
+            <input id="external-model-run-limit" type="number" min="1" max="240" step="1" inputmode="numeric" placeholder="30" />
+            <p class="tiny">一次运行超过这个时间还没做完就停止，默认 30 分钟。它 3 分钟没有新动静时，回复里会提示可能卡在哪一步，你可以点「停止」。</p>
+          </div>
           <div class="field api-model-field">
             <label for="external-model-provider">服务商</label>
             <select id="external-model-provider">

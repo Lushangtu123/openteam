@@ -354,6 +354,7 @@ function setupForm(options: { listModelNames?: (request: { format: string; baseU
       <input id="external-model-web-reading" type="checkbox" checked />
       <input id="external-model-web-search" type="checkbox" checked />
       <input id="external-model-daily-cap" />
+      <input id="external-model-run-limit" />
       <span id="external-model-daily-cap-unit">元 / 天</span>
       <p id="external-model-daily-cap-today" hidden></p>
       <button id="reset-external-model-form" type="button"></button>

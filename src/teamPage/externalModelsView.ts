@@ -50,6 +50,8 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
   const workspaceEl = form.querySelector<HTMLInputElement>('#external-model-workspace')
   const workspacesEl = form.querySelector<HTMLDataListElement>('#external-model-workspaces')
   const remoteWorkspaceEl = form.querySelector<HTMLElement>('#external-model-remote-workspace')
+  // 运行时限: empty is the default (src/shared/localAgentLimits.ts).
+  const runLimitEl = form.querySelector<HTMLInputElement>('#external-model-run-limit')
   const priceInputEl = form.querySelector<HTMLInputElement>('#external-model-price-input')
   const priceOutputEl = form.querySelector<HTMLInputElement>('#external-model-price-output')
   const priceCurrencyEl = form.querySelector<HTMLSelectElement>('#external-model-price-currency')
@@ -378,7 +380,7 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
     const modelId = deps.externalModelIdEl.value.trim()
     const format = readFormat()
     const payload = format === 'local-agent'
-      ? { name: deps.externalModelNameEl.value.trim(), format, localAgentId: localAgentEl?.value ?? '', workspace: workspaceEl?.value.trim() ?? '' }
+      ? { name: deps.externalModelNameEl.value.trim(), format, localAgentId: localAgentEl?.value ?? '', workspace: workspaceEl?.value.trim() ?? '', runLimitMinutes: runLimitEl?.value.trim() ?? '' }
       : {
           name: deps.externalModelNameEl.value.trim(),
           format,
@@ -533,6 +535,7 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
     clearPriceChoices()
     showPriceStatus('')
     if (workspaceEl) workspaceEl.value = model.workspace ?? ''
+    if (runLimitEl) runLimitEl.value = model.runLimitMinutes ? String(model.runLimitMinutes) : ''
     presetFilledName = ''
     clearModelNames()
     showProvider()
@@ -559,6 +562,7 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
     clearPriceChoices()
     showPriceStatus('')
     if (workspaceEl) workspaceEl.value = ''
+    if (runLimitEl) runLimitEl.value = ''
     presetFilledName = ''
     clearModelNames()
     showProvider()

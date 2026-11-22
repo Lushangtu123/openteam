@@ -178,6 +178,9 @@ export interface ExternalModelConfig {
   // For a local agent: its ID in the daemon's agent list, and the folder it works in.
   localAgentId?: string
   workspace?: string
+  // For a local agent: how long a run may take, in minutes (DEFAULT_RUN_LIMIT_MINUTES unless set,
+  // src/shared/localAgentLimits.ts).
+  runLimitMinutes?: number
   createdAt: number
   updatedAt: number
 }

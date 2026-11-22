@@ -10,6 +10,7 @@ import { readModelPricing } from './pricing'
 import { normalizeModelSpend, readDailyCap, type ModelSpend } from './spendCap'
 import { normalizeResultDestinations } from './resultDestinations'
 import { normalizeSiteCheckSchedule } from './siteCheckSchedule'
+import { normalizeRunLimitMinutes } from '../shared/localAgentLimits'
 import { normalizeWebSearchSettings } from '../shared/webSearch'
 import { normalizeWebSearchUsage, type WebSearchUsage } from '../shared/webSearchUsage'
 import { normalizeLibraryRecord } from './groupLibrary'
@@ -942,7 +943,8 @@ function normalizeExternalModelRecord(raw: unknown): Record<string, ExternalMode
       const localAgentId = readTrimmedString(value.localAgentId)
       const workspace = readTrimmedString(value.workspace)
       if (!id || !name || !localAgentId || !workspace) continue
-      normalized[id] = { id, name, format, baseUrl: '', apiKey: '', modelName: localAgentId, localAgentId, workspace, createdAt, updatedAt }
+      const runLimitMinutes = normalizeRunLimitMinutes(value.runLimitMinutes)
+      normalized[id] = { id, name, format, baseUrl: '', apiKey: '', modelName: localAgentId, localAgentId, workspace, ...(runLimitMinutes ? { runLimitMinutes } : {}), createdAt, updatedAt }
       continue
     }
     if (!id || !name || !baseUrl || !apiKey || !modelName || !format) continue
