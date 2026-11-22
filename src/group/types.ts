@@ -399,8 +399,10 @@ export interface GroupChat {
   discussion?: DiscussionRun
   // A 网站自检 group (src/group/siteCheck.ts): its result is shown at the end of the chat.
   // error: why the question could not be sent.
-  // scheduled: started by 定时自检, which removes the group when every site worked.
-  siteCheck?: { startedAt: number; error?: string; scheduled?: boolean }
+  // scheduled: started by 定时自检, which removes the group when every site worked, and the next run
+  // removes the group unless the user went on using it (siteCheckGroupInUse).
+  // kept: the user changed the group (renamed, pinned, made 协作…), so it stays.
+  siteCheck?: { startedAt: number; error?: string; scheduled?: boolean; kept?: boolean }
   // The group's latest 项目 (a coordinator plans tasks for the members and checks the results).
   project?: ProjectRun
   // No memory items are sent to this group's members.

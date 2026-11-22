@@ -201,7 +201,7 @@ describe('background chat handlers', () => {
   it('changes a group\'s mode, and says why not while a member answers', async () => {
     vi.resetModules()
     const store = createDefaultStore()
-    store.chatsById['chat-1'] = { id: 'chat-1', name: '架构评审', mode: 'independent', roleIds: ['role-1'], messageIds: [], nextMessageSeq: 4, status: 'ready', createdAt: 0, updatedAt: 0 }
+    store.chatsById['chat-1'] = { id: 'chat-1', name: '网站自检 11-17 13:56', mode: 'independent', roleIds: ['role-1'], messageIds: [], nextMessageSeq: 4, status: 'ready', siteCheck: { startedAt: 0, scheduled: true }, createdAt: 0, updatedAt: 0 }
     store.rolesById['role-1'] = { id: 'role-1', chatId: 'chat-1', name: '工程师', chatSite: 'chatgpt', status: 'ready', contextCursor: 0, createdAt: 0, updatedAt: 0 }
     vi.doMock('./storeAccess', async importOriginal => {
       const actual = await importOriginal<typeof import('./storeAccess')>()
@@ -223,6 +223,8 @@ describe('background chat handlers', () => {
 
     await update('collaborative')
     expect(store.chatsById['chat-1']).toMatchObject({ mode: 'collaborative', sharedFromSeq: 3, updatedAt: 100 })
+    // A 网站自检 group the user changed stays when 定时自检 runs again.
+    expect(store.chatsById['chat-1'].siteCheck).toEqual({ startedAt: 0, scheduled: true, kept: true })
     await expect(update('team')).rejects.toThrow('群聊模式无效')
     store.rolesById['role-1'].status = 'thinking'
     await expect(update('independent')).rejects.toThrow('成员还在回答，等这一轮结束再切换模式')

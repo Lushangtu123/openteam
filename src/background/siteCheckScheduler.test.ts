@@ -138,6 +138,26 @@ describe('定时自检 coming due', () => {
     expect(store.chatsById[schedule(store).lastRun!.chatId!]).toBeDefined()
   })
 
+  it('keeps an earlier check\'s group the user went on using: a message of their own, or changed in its settings', async () => {
+    const store = storeWith({})
+    const ctx = await setup(store, { replies: { kimi: 'error' } })
+    await ctx.scheduler.runNow()
+    const talked = schedule(store).lastRun!.chatId!
+    const note: GroupMessage = { id: 'mine', chatId: talked, seq: 3, type: 'user', content: '大家接着讨论', createdAt: 1, status: 'sent' }
+    store.messagesById.mine = note
+    store.chatsById[talked].messageIds.push('mine')
+    await ctx.scheduler.runNow()
+    const changed = schedule(store).lastRun!.chatId!
+    store.chatsById[changed].siteCheck!.kept = true
+    await ctx.scheduler.runNow()
+    const untouched = schedule(store).lastRun!.chatId!
+    await ctx.scheduler.runNow()
+    const deleted = ctx.route.mock.calls.filter(([message]) => message.type === 'GROUP_CHAT_DELETE').map(([message]) => message.chatId)
+    expect(deleted).toEqual([untouched])
+    expect(store.chatsById[talked]).toBeDefined()
+    expect(store.chatsById[changed]).toBeDefined()
+  })
+
   it('records a check that could not run, and sends that too', async () => {
     const store = storeWith({ destinationId: 'dest-1' })
     const ctx = await setup(store, { checkError: '没有一个网站的页面打开了。' })

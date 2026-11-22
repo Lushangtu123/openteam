@@ -33,6 +33,14 @@ export interface SiteCheckResult {
 
 const NEEDS_ATTENTION: ReadonlySet<SiteCheckOutcome> = new Set(['login', 'page-problem', 'failed', 'not-sent', 'no-reply'])
 
+// A 网站自检 group the user went on using: changed in its settings (renamed, pinned, made 协作…) or
+// sent a message of their own besides the check's question. 定时自检 removes only groups that were not
+// (src/background/siteCheckScheduler.ts).
+export function siteCheckGroupInUse(store: Pick<OpenTeamStore, 'messagesById'>, chat: GroupChat): boolean {
+  if (chat.siteCheck?.kept) return true
+  return chat.messageIds.filter(id => store.messagesById[id]?.type === 'user').length > 1
+}
+
 export function siteCheckNeedsAttention(outcome: SiteCheckOutcome): boolean {
   return NEEDS_ATTENTION.has(outcome)
 }

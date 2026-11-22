@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createDefaultStore } from './store'
-import { SITE_CHECK_SITES, SITE_CHECK_TIMEOUT_MS, siteCheckResults, siteCheckSummary } from './siteCheck'
+import { SITE_CHECK_SITES, SITE_CHECK_TIMEOUT_MS, siteCheckGroupInUse, siteCheckResults, siteCheckSummary } from './siteCheck'
 import type { ChatSite, GroupChat, GroupMessage, GroupRole, OpenTeamStore, RoleSiteHealth } from './types'
 
 const START = 1_000_000
@@ -87,5 +87,16 @@ describe('the site check', () => {
     reply('chatgpt', 'received', 'OK')
     expect(siteCheckSummary(siteCheckResults(store, chat, START + 5000), 'zh-CN')).toBe('检查完成：2 个正常，1 个需要处理')
     expect(siteCheckSummary(siteCheckResults(store, chat, START + 5000), 'en')).toBe('Check finished: 2 working, 1 needs attention')
+  })
+})
+
+describe('a 网站自检 group the user went on using', () => {
+  it('is one changed in its settings, or with a message of the user\'s own besides the check\'s question', () => {
+    const message = (id: string, type: 'user' | 'assistant'): GroupMessage => ({ id, chatId: 'c', seq: 1, type, content: 'x', createdAt: 1, status: 'received' })
+    const messagesById = { q: message('q', 'user'), a: message('a', 'assistant'), mine: message('mine', 'user') }
+    const chat = (messageIds: string[], kept?: boolean): GroupChat => ({ id: 'c', name: '网站自检 11-17 13:56', mode: 'independent', roleIds: [], messageIds, nextMessageSeq: 4, status: 'ready', siteCheck: { startedAt: 1, scheduled: true, ...(kept ? { kept } : {}) }, createdAt: 1, updatedAt: 1 })
+    expect(siteCheckGroupInUse({ messagesById }, chat(['q', 'a']))).toBe(false)
+    expect(siteCheckGroupInUse({ messagesById }, chat(['q', 'a', 'mine']))).toBe(true)
+    expect(siteCheckGroupInUse({ messagesById }, chat(['q', 'a'], true))).toBe(true)
   })
 })

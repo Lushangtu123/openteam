@@ -185,6 +185,9 @@ export function createChatHandlers(deps: ChatHandlersDependencies): BackgroundMe
         patchKeys.push('teamFormation')
       }
 
+      // A 网站自检 group the user changed stays when 定时自检 runs again (src/group/siteCheck.ts).
+      if (chat.siteCheck && patchKeys.length > 0) chat.siteCheck.kept = true
+
       // Pinning moves a group in the list without being news in it.
       if (patchKeys.some(key => key !== 'pinned')) chat.updatedAt = timestamp
       return { chat, patchKeys }

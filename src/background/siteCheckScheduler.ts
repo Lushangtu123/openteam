@@ -1,12 +1,12 @@
 // Runs 定时自检 (src/group/siteCheckSchedule.ts). An alarm wakes the background at its next time; on
 // waking, and whenever the background starts, a due time is run, or marked skipped when it was
 // missed by too long. A run shows OpenTeam (a hidden tab reads no replies), removes the previous
-// scheduled check's group, starts a 网站自检 as the settings button does, and follows it until every
+// scheduled checks' groups the user did not go on using, starts a 网站自检 as the settings button does, and follows it until every
 // site has an outcome. It then goes back to the group the user had open, removes the check's group
 // when every site worked, and otherwise keeps it and sends the sites that need attention to the
 // chosen destination. Also the page's commands to set it and to run it now.
 import { describeSchedule, findDueSlot, nextSlotAfter } from '../group/scheduledTasks'
-import { SITE_CHECK_TIMEOUT_MS, siteCheckNeedsAttention, siteCheckResults, type SiteCheckResult } from '../group/siteCheck'
+import { SITE_CHECK_TIMEOUT_MS, siteCheckGroupInUse, siteCheckNeedsAttention, siteCheckResults, type SiteCheckResult } from '../group/siteCheck'
 import { readSiteCheckScheduleInput, siteCheckReport, type SiteCheckRun } from '../group/siteCheckSchedule'
 import type { RoundResult } from '../group/resultDestinations'
 import type { OpenTeamStore } from '../group/types'
@@ -109,7 +109,9 @@ export function createSiteCheckScheduler(deps: SiteCheckSchedulerDependencies) {
     let results: SiteCheckResult[] = []
     try {
       for (const id of before.chatOrder) {
-        if (before.chatsById[id]?.siteCheck?.scheduled) await routeOk({ type: 'GROUP_CHAT_DELETE', chatId: id })
+        const old = before.chatsById[id]
+        // A group the user went on using stays (src/group/siteCheck.ts).
+        if (old?.siteCheck?.scheduled && !siteCheckGroupInUse(before, old)) await routeOk({ type: 'GROUP_CHAT_DELETE', chatId: id })
       }
       if (!deps.panelOpen()) {
         await deps.showTeamPage()
@@ -144,7 +146,11 @@ export function createSiteCheckScheduler(deps: SiteCheckSchedulerDependencies) {
     }
 
     await goBack(returnTo, chatId)
-    if (run.status === 'ok' && chatId) await deps.route({ type: 'GROUP_CHAT_DELETE', chatId }).catch(() => undefined)
+    if (run.status === 'ok' && chatId) {
+      const after = await deps.loadStore()
+      const chat = after.chatsById[chatId]
+      if (chat && !siteCheckGroupInUse(after, chat)) await deps.route({ type: 'GROUP_CHAT_DELETE', chatId }).catch(() => undefined)
+    }
     await record(run)
     if (run.status !== 'ok') await deliver(run, results)
   }
