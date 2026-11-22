@@ -3355,7 +3355,8 @@ select.reply-compare-select {
 }
 
 .member-pick-status:empty,
-.member-pick-results[hidden] {
+.member-pick-results[hidden],
+.member-pick-add-row[hidden] {
   display: none;
 }
 

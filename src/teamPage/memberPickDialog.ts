@@ -122,7 +122,7 @@ export function openMemberPickDialog(deps: MemberPickDialogDependencies): { clos
 
   const results = element('div', 'member-pick-results')
   results.setAttribute('aria-live', 'polite')
-  const resultActions = element('div', 'team-setup-actions')
+  const resultActions = element('div', 'team-setup-actions member-pick-add-row')
   const add = element('button', 'btn btn-primary', t('加入选中的成员', 'Add the ticked members'))
   add.type = 'button'
   add.addEventListener('click', () => void addPicks())

@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createDefaultStore } from '../group/store'
 import type { OpenTeamStore } from '../group/types'
@@ -86,5 +87,44 @@ describe('letting an AI pick members for a task', () => {
     ctx.button('加入并让它们认领').click()
     await vi.waitFor(() => expect(ctx.onClaim).toHaveBeenCalledWith('加上预算提醒', [{ key: 'site:kimi', count: 2 }]))
     await vi.waitFor(() => expect(currentMemberPickDialog()).toBeUndefined())
+  })
+
+  it('shows only the button that goes with what is on screen, with the real styles', async () => {
+    // jsdom lets the hidden attribute win over any rule; Chrome lets the page's own rules win (a
+    // display: flex shows a hidden element). So hidden is swapped for data-hidden, hidden by a rule
+    // that comes before the page's, as the browser's own rule does.
+    const style = document.createElement('style')
+    style.textContent = `[data-hidden] { display: none; }\n${readFileSync('public/styles/theme.css', 'utf8').replace(/\[hidden\]/g, '[data-hidden]')}`
+    document.head.append(style)
+    try {
+      const ctx = setup()
+      const shown = () => {
+        const hidden = [...document.querySelectorAll<HTMLElement>('.member-pick-dialog [hidden]')]
+        for (const node of hidden) {
+          node.hidden = false
+          node.setAttribute('data-hidden', '')
+        }
+        const labels = [...document.querySelectorAll<HTMLButtonElement>('.member-pick-dialog button.btn-primary')]
+          .filter(node => {
+            for (let at: HTMLElement | null = node; at; at = at.parentElement) if (getComputedStyle(at).display === 'none') return false
+            return true
+          })
+          .map(node => node.textContent)
+        for (const node of hidden) {
+          node.removeAttribute('data-hidden')
+          node.hidden = true
+        }
+        return labels
+      }
+      expect(shown()).toEqual(['让 AI 挑'])
+      ctx.$<HTMLInputElement>('input[name="member-pick-mode"][value="claim"]').click()
+      expect(shown()).toEqual(['加入并让它们认领'])
+      ctx.$<HTMLInputElement>('input[name="member-pick-mode"][value="list"]').click()
+      ctx.button('让 AI 挑').click()
+      await vi.waitFor(() => expect(document.querySelectorAll('.member-pick-row')).toHaveLength(2))
+      expect(shown()).toEqual(['让 AI 挑', '加入选中的成员'])
+    } finally {
+      style.remove()
+    }
   })
 })
