@@ -127,4 +127,24 @@ describe('letting an AI pick members for a task', () => {
       style.remove()
     }
   })
+
+  it('dims the page without blur, so it does not flash as it scrolls over 添加成员', () => {
+    const style = document.createElement('style')
+    style.textContent = ['base', 'theme', 'chatgpt', 'grok', 'refinements'].map(name => readFileSync(`public/styles/${name}.css`, 'utf8')).join('\n')
+    document.head.append(style)
+    try {
+      setup()
+      for (const [theme, style_] of [['dark', 'grok'], ['light', 'grok'], ['dark', undefined], ['light', undefined]] as const) {
+        document.documentElement.dataset.theme = theme
+        if (style_) document.documentElement.dataset.uiStyle = style_
+        else delete document.documentElement.dataset.uiStyle
+        expect(getComputedStyle(document.querySelector('.member-pick-modal')!).getPropertyValue('backdrop-filter')).toBe('none')
+        expect(getComputedStyle(document.querySelector('.member-pick-dialog')!).getPropertyValue('contain')).toBe('paint')
+      }
+    } finally {
+      style.remove()
+      delete document.documentElement.dataset.theme
+      delete document.documentElement.dataset.uiStyle
+    }
+  })
 })

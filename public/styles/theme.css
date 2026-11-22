@@ -3284,7 +3284,24 @@ select.reply-compare-select {
   flex: 1 1 100%;
 }
 
-/* 添加成员 → 让 AI 按任务挑 (memberPickDialog.ts). */
+/* 添加成员 → 让 AI 按任务挑 (memberPickDialog.ts). The window opens over 添加成员 and is scrolled: a
+   blurred backdrop over that window's own blurred one is painted again as it scrolls, which flashes
+   (seen live), so it dims without blur and paints on its own, as 用量 does. */
+.modal-backdrop.member-pick-modal,
+:root[data-theme] .modal-backdrop.member-pick-modal {
+  backdrop-filter: none;
+  background: rgba(1, 5, 12, 0.66);
+}
+
+:root[data-theme="light"] .modal-backdrop.member-pick-modal {
+  background: rgba(17, 24, 39, 0.42);
+}
+
+.modal.member-pick-dialog {
+  contain: paint;
+  overscroll-behavior: contain;
+}
+
 .member-pick-modal .team-setup-members {
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr));
 }
