@@ -48,8 +48,8 @@ The default JSON-RPC method sent to the ACP endpoint is `session/prompt` with `{
 
 ## Remaining UI Follow-Up
 
-- Add team page UI for local agent selection and run status.
-- Require explicit user action before sending page-derived prompts from the web UI to a local ACP agent.
+- ~~Add team page UI for local agent selection and run status.~~ Done: a model of the 本机智能体 format picks the agent and its folder in the models window, which shows whether the daemon and the agent are reachable; a member's reply shows the run as it goes (tools, files written, questions, stalls, the run time limit).
+- ~~Require explicit user action before sending page-derived prompts from the web UI to a local ACP agent.~~ Done: nothing runs before the user clicks 允许执行 on the run card, which shows the whole task (`src/background/localAgentClient.ts`); in a project, 这个项目都允许 is that click for the rest of the project.
 
 ## Security Boundaries
 
