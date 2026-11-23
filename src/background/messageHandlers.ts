@@ -31,6 +31,7 @@ export const MESSAGE_ROUTE_TYPES = [
   'GROUP_PROJECT_SET_OWNER',
   'GROUP_PROJECT_STOP',
   'GROUP_PROJECT_CONTINUE',
+  'GROUP_PROJECT_REVOKE_RUNS',
   'TEAM_FRAME_ROLE_READY',
   'TEAM_ROLE_CONVERSATION_UPDATED',
   'TEAM_SEND_ACK',
@@ -119,6 +120,7 @@ export function createMessageHandlers(baseDeps: MessageHandlersDependencies): Ba
     { type: 'GROUP_PROJECT_SET_OWNER', handler: projectRoute((chatId, message) => projectRunner.setTaskOwner(chatId, requireString(message.taskId, '缺少任务 ID'), requireString(message.roleId, '缺少成员 ID'))) },
     { type: 'GROUP_PROJECT_STOP', handler: projectRoute(chatId => projectRunner.stop(chatId)) },
     { type: 'GROUP_PROJECT_CONTINUE', handler: projectRoute(chatId => projectRunner.resume(chatId)) },
+    { type: 'GROUP_PROJECT_REVOKE_RUNS', handler: projectRoute((chatId, message) => projectRunner.revokeRuns(chatId, requireString(message.roleId, '缺少成员 ID'))) },
     {
       type: 'TEAM_FRAME_ROLE_READY',
       handler: (message, sender) => readOptionalString(message.chatId) ? handleFrameRoleReady(message, sender) : { ok: false, error: 'TEAM_FRAME_ROLE_READY 缺少 chatId' },

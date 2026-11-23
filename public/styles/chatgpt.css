@@ -1196,6 +1196,27 @@
   color: var(--text);
 }
 
+/* 这个项目都允许: who may run every task without asking, each with 收回. */
+:root[data-theme] .project-board-grants {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin: 0;
+  border-radius: 10px;
+  padding: 6px 10px;
+  background: var(--workspace-bg);
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+:root[data-theme] .project-board-grant {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text);
+}
+
 :root[data-theme] .project-task-list {
   display: grid;
   gap: 2px;

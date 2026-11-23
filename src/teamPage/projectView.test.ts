@@ -48,6 +48,27 @@ describe('project board', () => {
     expect(runCommand).toHaveBeenCalledWith('GROUP_PROJECT_APPROVE', { chatId: 'chat-1' })
   })
 
+  it('shows the members allowed to run every task of the project, each with 收回', () => {
+    const roles = [role('a', '架构师'), role('b', '产品经理', { modelSource: 'external' }), role('c', '设计师')]
+    const { chat, goal, view, runCommand } = setup({ runAllowedRoleIds: ['a', 'c', 'gone'] }, roles)
+    const board = view.renderBoard(chat, [goal])!
+    const grants = board.querySelector('.project-board-grants')!
+    expect(grants.querySelector('.project-board-grants-label')?.textContent).toBe('这个项目里已允许直接执行：')
+    // A member who left is not listed.
+    expect([...grants.querySelectorAll('.project-board-grant-name')].map(node => node.textContent)).toEqual(['架构师', '设计师'])
+    const takeBack = grants.querySelectorAll<HTMLButtonElement>('button')
+    expect([...takeBack].map(button => [button.textContent, button.getAttribute('aria-label')])).toEqual([
+      ['收回', '收回「架构师」的项目授权：下个任务开始前会再问你'],
+      ['收回', '收回「设计师」的项目授权：下个任务开始前会再问你'],
+    ])
+    takeBack[1].click()
+    expect(runCommand).toHaveBeenCalledWith('GROUP_PROJECT_REVOKE_RUNS', { chatId: 'chat-1', roleId: 'c' })
+
+    // None given, or only for members who left: no line.
+    const none = setup({ runAllowedRoleIds: ['gone'] })
+    expect(none.view.renderBoard(none.chat, [none.goal])!.querySelector('.project-board-grants')).toBeNull()
+  })
+
   it('shows progress, the coordinator’s question, and the end', () => {
     const running = setup({ status: 'running', tasks: [task('t1', { status: 'done', checked: true, summary: '方案写好了' }), task('t2', { status: 'doing' }), task('t3', { status: 'redo', note: '补上风险' })] })
     const board = running.view.renderBoard(running.chat, [running.goal])!

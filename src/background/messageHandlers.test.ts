@@ -419,6 +419,7 @@ describe('background message handlers', () => {
       'GROUP_PROJECT_SET_OWNER',
       'GROUP_PROJECT_STOP',
       'GROUP_PROJECT_CONTINUE',
+      'GROUP_PROJECT_REVOKE_RUNS',
       'TEAM_FRAME_ROLE_READY',
       'TEAM_ROLE_CONVERSATION_UPDATED',
       'TEAM_SEND_ACK',
@@ -2255,7 +2256,13 @@ describe('background message handlers', () => {
     await route('GROUP_PROJECT_APPROVE').handler({ type: 'GROUP_PROJECT_APPROVE', chatId: 'chat-1' }, {})
     await vi.waitFor(() => expect(project().status).toBe('waiting-user'))
     expect(project().question).toBe('预算上限是多少？')
-    // A local agent allowed to run for the whole project (projectRunGrants.ts): the grant ends with it.
+    // A local agent allowed to run for the whole project (projectRunGrants.ts): 收回 takes one member's
+    // grant back, and the rest ends with the project.
+    project().runAllowedRoleIds = ['role-1', 'role-2']
+    await route('GROUP_PROJECT_REVOKE_RUNS').handler({ type: 'GROUP_PROJECT_REVOKE_RUNS', chatId: 'chat-1', roleId: 'role-2' }, {})
+    expect(project().runAllowedRoleIds).toEqual(['role-1'])
+    await route('GROUP_PROJECT_REVOKE_RUNS').handler({ type: 'GROUP_PROJECT_REVOKE_RUNS', chatId: 'chat-1', roleId: 'role-1' }, {})
+    expect(project().runAllowedRoleIds).toBeUndefined()
     project().runAllowedRoleIds = ['role-1']
 
     // The answer goes in through the message box, as a note for the coordinator.

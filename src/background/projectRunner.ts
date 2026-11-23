@@ -462,6 +462,19 @@ export function createProjectRunner(ctx: ProjectRunnerContext) {
     })
   }
 
+  // 收回 on the board: the member is asked again before its next task (projectRunGrants.ts). A run
+  // going on now goes on; a project that has ended has no grant left to take back.
+  function revokeRuns(chatId: string, roleId: string) {
+    return act(chatId, (_store, _chat, project, timestamp) => {
+      if (!project.runAllowedRoleIds?.includes(roleId)) return []
+      const left = project.runAllowedRoleIds.filter(id => id !== roleId)
+      if (left.length) project.runAllowedRoleIds = left
+      else delete project.runAllowedRoleIds
+      project.updatedAt = timestamp
+      return []
+    })
+  }
+
   function stopProject(chatId: string) {
     return act(chatId, (_store, _chat, project, timestamp) => {
       if (!isProjectActive(project)) return []
@@ -517,7 +530,7 @@ export function createProjectRunner(ctx: ProjectRunnerContext) {
     return { note, answered: project.status === 'waiting-user' }
   }
 
-  return { start, approve, replan, setTaskOwner, stop: stopProject, resume, addNote, onSettled, advance }
+  return { start, approve, replan, setTaskOwner, revokeRuns, stop: stopProject, resume, addNote, onSettled, advance }
 }
 
 export type ProjectRunner = ReturnType<typeof createProjectRunner>
