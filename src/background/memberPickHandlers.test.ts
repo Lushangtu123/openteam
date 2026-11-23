@@ -3,7 +3,7 @@ import { createDefaultStore } from '../group/store'
 import type { OpenTeamStore } from '../group/types'
 import { createMemberPickHandlers, MEMBER_PICK_ROUTE_TYPES } from './memberPickHandlers'
 
-function setup(answers: string[], fields: (store: OpenTeamStore) => void = () => undefined) {
+function setup(answers: Array<string | { content: string; answeredBy?: string } | Error>, fields: (store: OpenTeamStore) => void = () => undefined) {
   const store = createDefaultStore()
   store.settings.language = 'zh-CN'
   store.settings.externalModelOrder = ['api']
@@ -11,11 +11,19 @@ function setup(answers: string[], fields: (store: OpenTeamStore) => void = () =>
   store.chatsById.c = { id: 'c', name: '群', mode: 'collaborative', roleIds: ['r1'], messageIds: [], nextMessageSeq: 1, status: 'ready', createdAt: 1, updatedAt: 1 }
   store.rolesById.r1 = { id: 'r1', chatId: 'c', name: '工程师', chatSite: 'deepseek', status: 'ready', contextCursor: 0, createdAt: 1, updatedAt: 1 }
   fields(store)
-  const complete = vi.fn(async (_input: { prompt: string }) => ({ content: answers.shift() ?? '' }))
+  const complete = vi.fn(async (_input: { prompt: string }) => {
+    const next = answers.shift() ?? ''
+    if (next instanceof Error) throw next
+    return typeof next === 'string' ? { content: next } : next
+  })
   const warn = vi.fn()
   const [route] = createMemberPickHandlers({ loadStore: async () => store, externalModelClient: { complete: complete as never }, log: { info: vi.fn(), warn } })
   const ask = (fields: Record<string, unknown> = {}) => Promise.resolve(route.handler({ type: 'GROUP_MEMBERS_SUGGEST', chatId: 'c', task: '做一个记账小程序', models: ['site:kimi', 'external:api'], ...fields }, {})) as Promise<Record<string, unknown>>
   return { ask, complete, warn }
+}
+
+function busy(message: string, status: number): Error {
+  return Object.assign(new Error(message), { status })
 }
 
 describe('asking an AI which members to add', () => {
@@ -66,6 +74,17 @@ describe('asking an AI which members to add', () => {
     const other = setup([answer], history)
     await other.ask({ models: ['external:api'] })
     expect(other.complete.mock.calls[0][0].prompt).not.toContain('以前在这些模型上的表现')
+  })
+
+  it('says when the backup model answered, and what to do when the model is busy or limited', async () => {
+    const list = JSON.stringify({ members: [{ name: '财务顾问', systemPrompt: 'x', model: 'site:kimi' }] })
+    expect(await setup([{ content: list, answeredBy: 'gemini-lite' }]).ask()).toMatchObject({ ok: true, planner: 'Gemini（备用模型 gemini-lite）' })
+
+    const busyNow = setup([busy('HTTP 503：This model is currently experiencing high demand.', 503)])
+    expect(await busyNow.ask({ plannerModelId: 'api' })).toEqual({ ok: true, error: 'HTTP 503：This model is currently experiencing high demand.。可以稍后再试，或在「由哪个模型来挑」里换一个模型。' })
+    // Logged, so it can be looked up afterwards.
+    expect(busyNow.warn).toHaveBeenCalledWith('member-pick:failed', { chatId: 'c', planner: 'api', reason: 'HTTP 503：This model is currently experiencing high demand.' })
+    expect(await setup([busy('Invalid API key', 401)]).ask()).toEqual({ ok: true, error: 'Invalid API key' })
   })
 
   it('says what is missing: the task, a ticked model, or an API model to plan with', async () => {

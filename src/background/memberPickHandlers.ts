@@ -42,13 +42,15 @@ export function createMemberPickHandlers(deps: MemberPickHandlerDependencies): B
     const recordLines = memberRecordLines(records, models, normalizeLanguage(store.settings.language) === 'en')
     const prompt = buildMemberPickPrompt({ task, members, library, models, source, ...(count ? { count } : {}), ...(recordLines.length ? { records: recordLines } : {}), language: store.settings.language })
     const read = (content: string) => parseMemberPicks(content, { library, models, source, takenNames: members.map(role => role.name), ...(count ? { count } : {}) })
+    // Named with its backup when that answered (the main model busy, limited or too slow).
+    const plannerName = (answer: { answeredBy?: string }) => answer.answeredBy ? `${planner.name}（备用模型 ${answer.answeredBy}）` : planner.name
     const first = await deps.externalModelClient.complete({ model: planner, prompt })
     try {
-      return { picks: read(first.content), planner: planner.name, ...(records.length ? { records } : {}) }
+      return { picks: read(first.content), planner: plannerName(first), ...(records.length ? { records } : {}) }
     } catch (error) {
       deps.log.warn('member-pick:unreadable', { reason: error instanceof Error ? error.message : String(error), length: first.content.length })
       const again = await deps.externalModelClient.complete({ model: planner, prompt: `${prompt}\n\n上一次的回答没有按要求的 JSON 格式给出能加入的成员。请只回答 JSON。` })
-      return { picks: read(again.content), planner: planner.name, ...(records.length ? { records } : {}) }
+      return { picks: read(again.content), planner: plannerName(again), ...(records.length ? { records } : {}) }
     }
   }
 
@@ -60,7 +62,13 @@ export function createMemberPickHandlers(deps: MemberPickHandlerDependencies): B
         deps.log.info('member-pick:suggested', { chatId: message.chatId, count: result.picks.length })
         return { ok: true, ...result }
       } catch (error) {
-        return { ok: true, error: error instanceof Error ? error.message : String(error) }
+        const reason = error instanceof Error ? error.message : String(error)
+        deps.log.warn('member-pick:failed', { chatId: message.chatId, planner: message.plannerModelId, reason })
+        // Busy or limited (after the model's own tries and its backup): it usually passes, and another
+        // model can pick meanwhile.
+        const status = (error as { status?: unknown } | undefined)?.status
+        const passing = status === 503 || status === 429 || status === 408
+        return { ok: true, error: passing ? `${reason}。可以稍后再试，或在「由哪个模型来挑」里换一个模型。` : reason }
       }
     },
   }]

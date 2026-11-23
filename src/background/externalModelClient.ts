@@ -60,6 +60,8 @@ export interface ExternalModelImage {
 
 export interface ExternalModelCompletionResult {
   content: string
+  // The model's backup answered (its name), the main model being busy, limited or too slow.
+  answeredBy?: string
 }
 
 export interface ExternalModelClient {
@@ -75,6 +77,8 @@ export interface ExternalModelClientOptions {
 
 // A server's "busy, try again later" (Gemini's 503 high demand) usually passes within seconds.
 const DEFAULT_BUSY_RETRY_DELAY_MS = 2_500
+// How often a one-shot request (complete) asks each model.
+const ONE_SHOT_TRIES = 3
 
 // How long a request may go without new text: before the first piece (a thinking model under load
 // can be slow to start) and between pieces. A long reply runs as long as text keeps coming.
@@ -100,33 +104,24 @@ export function createExternalModelClient(fetchImpl: typeof fetch = fetch, optio
     stream(input) {
       return streamWithFallback(input, wrappedFetch, timeoutMs, busyRetryDelayMs)
     },
+    // A one-shot request (picking members, writing a persona, a summary): each model is tried a few
+    // times, and the backup answers when the main model is still busy, limited or too slow, as it does
+    // for a group reply.
     async complete(input) {
-      const timeout = createTimedAbortSignal(input.abortSignal, timeoutMs)
-
-      try {
-        let content = ''
-        const normalizedUrl = normalizeBaseUrl(input.model.baseUrl, input.model.format)
-        const stream = streamExternalModel({ ...input, abortSignal: timeout.signal, ...pausingWhileReading(input, timeout) }, wrappedFetch)
-        for await (const chunk of stream) {
-          timeout.touch()
-          content += chunk
-        }
-        if (!content.trim()) {
-          throw new ExternalModelError(
-            `外部模型返回内容为空 (URL: ${normalizedUrl}, Model: ${input.model.modelName}, Response: ${JSON.stringify(lastResponseMetadata)})`
-          )
-        }
-        return { content }
-      } catch (error: any) {
-        if (isAbortError(error)) {
-          if (!timeout.timedOut()) throw error
-          throw new ExternalModelError('请求超时，模型响应时间过长', 408)
-        }
-        if (error instanceof ExternalModelError) throw error
-        throw new ExternalModelError(error.message || '未知外部模型错误')
-      } finally {
-        timeout.clear()
+      let content = ''
+      let answeredBy: string | undefined
+      const onFallback = (name: string, reason?: string) => {
+        answeredBy = name
+        input.onFallback?.(name, reason)
       }
+      for await (const chunk of streamWithFallback({ ...input, onFallback }, wrappedFetch, timeoutMs, busyRetryDelayMs, ONE_SHOT_TRIES)) content += chunk
+      if (!content.trim()) {
+        const normalizedUrl = normalizeBaseUrl(input.model.baseUrl, input.model.format)
+        throw new ExternalModelError(
+          `外部模型返回内容为空 (URL: ${normalizedUrl}, Model: ${answeredBy ?? input.model.modelName}, Response: ${JSON.stringify(lastResponseMetadata)})`
+        )
+      }
+      return { content, ...(answeredBy ? { answeredBy } : {}) }
     },
   }
 }
@@ -134,7 +129,10 @@ export function createExternalModelClient(fetchImpl: typeof fetch = fetch, optio
 // A group reply: when the main model fails before any text in a way another model may not (busy,
 // rate-limited, out of quota, too slow), its backup answers instead, once. A main model that says it
 // is busy (503) is first asked once more after a short wait: that usually passes.
-async function* streamWithFallback(input: ExternalModelCompletionInput, fetchImpl: typeof fetch, timeoutMs: number, busyRetryDelayMs: number): AsyncIterable<string> {
+// triesEach: how often each model is asked before giving up on it. A group reply asks once (OpenTeam's
+// reply loop retries it, showing the retries); a busy main model is then asked once more after a
+// short wait. A one-shot request asks each model a few times itself.
+async function* streamWithFallback(input: ExternalModelCompletionInput, fetchImpl: typeof fetch, timeoutMs: number, busyRetryDelayMs: number, triesEach = 1): AsyncIterable<string> {
   const fallback = input.model.fallbackModelName?.trim()
   const hasBackup = Boolean(fallback) && fallback !== input.model.modelName
   let sawText = false
@@ -142,14 +140,14 @@ async function* streamWithFallback(input: ExternalModelCompletionInput, fetchImp
   while (true) {
     tries += 1
     try {
-      for await (const chunk of streamExternalModelWithTimeout(input, fetchImpl, timeoutMs)) {
+      for await (const chunk of streamExternalModelWithTimeout(input, fetchImpl, timeoutMs, triesEach)) {
         sawText = true
         yield chunk
       }
       return
     } catch (error) {
       if (sawText || !hasBackup || input.abortSignal?.aborted || !isWorthAnotherModel(error)) throw error
-      if (tries === 1 && isBusy(error)) {
+      if (tries === 1 && triesEach === 1 && isBusy(error)) {
         await waitUnlessAborted(busyRetryDelayMs, input.abortSignal)
         if (input.abortSignal?.aborted) throw error
         continue
@@ -161,7 +159,7 @@ async function* streamWithFallback(input: ExternalModelCompletionInput, fetchImp
 
   async function* answerWithBackup(error: unknown): AsyncIterable<string> {
     input.onFallback?.(fallback!, (error as Error).message?.trim().slice(0, 200) || undefined)
-    yield* streamExternalModelWithTimeout({ ...input, model: { ...input.model, modelName: fallback! } }, fetchImpl, timeoutMs)
+    yield* streamExternalModelWithTimeout({ ...input, model: { ...input.model, modelName: fallback! } }, fetchImpl, timeoutMs, triesEach)
   }
 }
 
@@ -189,11 +187,10 @@ function isWorthAnotherModel(error: unknown): boolean {
   return status === 408 || status === 429 || (status !== undefined && status >= 500)
 }
 
-async function* streamExternalModelWithTimeout(input: ExternalModelCompletionInput, fetchImpl: typeof fetch, timeoutMs: number): AsyncIterable<string> {
+async function* streamExternalModelWithTimeout(input: ExternalModelCompletionInput, fetchImpl: typeof fetch, timeoutMs: number, tries = 1): AsyncIterable<string> {
   const timeout = createTimedAbortSignal(input.abortSignal, timeoutMs)
   try {
-    // A group reply: OpenTeam's reply loop retries it and says so on the reply, so one attempt here.
-    for await (const chunk of streamExternalModel({ ...input, abortSignal: timeout.signal, ...pausingWhileReading(input, timeout) }, fetchImpl, 1)) {
+    for await (const chunk of streamExternalModel({ ...input, abortSignal: timeout.signal, ...pausingWhileReading(input, timeout) }, fetchImpl, tries)) {
       timeout.touch()
       yield chunk
     }
@@ -340,10 +337,12 @@ async function* streamExternalModel(input: ExternalModelCompletionInput, fetchIm
       // The AI library reports the HTTP status as statusCode.
       const status = error.status || error.statusCode || error.response?.status
       const quotaExhausted = isQuotaExhausted(error)
-      const isRetryable = quotaExhausted ? false : status === 429 || (status >= 500 && status <= 599) || error.message?.includes('timeout') || error.message?.includes('Network')
+      const isRetryable = quotaExhausted ? false : status === 429 || (status >= 500 && status <= 599) || error.message?.includes('timeout') || error.message?.includes('Network') || isNetworkFailure(error)
 
       if (!isRetryable || attempt >= maxRetries) {
-        const message = requestErrorMessage(error, status, input.model.apiKey)
+        const message = isNetworkFailure(error) && !status
+          ? unreachableMessage(input.model, error)
+          : requestErrorMessage(error, status, input.model.apiKey)
         if (quotaExhausted) throw new ExternalModelError(`额度已用完：${message}`, status, QUOTA_EXHAUSTED_CODE)
         throw new ExternalModelError(message, status, error.code)
       }
@@ -465,6 +464,24 @@ function isQuotaExhausted(error: any): boolean {
 // What a failed request says. The server's own words come first: the AI library reads only the
 // OpenAI error shape and otherwise falls back to the status text, which HTTP/2 leaves empty (Gemini
 // answers a key with no quota with `[{"error": {...}}]`, which ended up as no message at all).
+// The browser's own words when a request does not reach the server at all ("Failed to fetch" in
+// Chrome): the connection dropped, or a proxy, firewall or blocker stopped it.
+function isNetworkFailure(error: any): boolean {
+  const said = (value: any) => typeof value?.message === 'string' && /^(Failed to fetch|NetworkError when attempting to fetch resource\.?|Load failed|fetch failed)$/i.test(value.message.trim())
+  return said(error) || said(error?.cause)
+}
+
+function unreachableMessage(model: ExternalModelConfig, error: any): string {
+  let host = model.baseUrl
+  try {
+    host = new URL(normalizeBaseUrl(model.baseUrl, model.format)).host
+  } catch {
+    // The address as entered.
+  }
+  const said = String(error?.cause?.message ?? error?.message ?? 'Failed to fetch').trim()
+  return `连不上 ${host}：网络断了，或被代理、防火墙拦下了（浏览器只说 ${said}）`
+}
+
 function requestErrorMessage(error: any, status: number | undefined, apiKey: string): string {
   const fromServer = serverErrorText(error?.responseBody)
   const text = fromServer

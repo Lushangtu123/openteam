@@ -258,6 +258,24 @@ describe('a backup model', () => {
     expect(stopped).toEqual(['main'])
   })
 
+  it('answers a one-shot request too (picking members, writing a persona), after the main model\'s own tries', async () => {
+    const asked: string[] = []
+    const client = createExternalModelClient(async (_url, init) => {
+      const name = await modelAsked(init)
+      asked.push(name)
+      return name === 'main' ? busy() : answer('from backup')
+    }, { busyRetryDelayMs: 1 })
+    const result = await client.complete({ model: { ...model, modelName: 'main', fallbackModelName: 'lite' }, prompt: 'Hi' })
+    expect(result).toEqual({ content: 'from backup', answeredBy: 'lite' })
+    expect(asked).toEqual(['main', 'main', 'main', 'lite'])
+
+    // Without a backup it fails as before, with the server's words.
+    const alone = createExternalModelClient(async () => busy(), { busyRetryDelayMs: 1 })
+    const failure = await alone.complete({ model: { ...model, modelName: 'main' }, prompt: 'Hi' }).catch(error => error)
+    expect(failure.status).toBe(503)
+    expect(failure.message).toBe('HTTP 503：This model is currently experiencing high demand.')
+  }, 15_000)
+
   it('is not asked when the main model refuses the request itself, or has no backup', async () => {
     const asked: string[] = []
     const refuses = createExternalModelClient(async (_url, init) => {
@@ -279,4 +297,24 @@ describe('a backup model', () => {
     const failure = await (async () => { for await (const part of client.stream!({ model: { ...model, modelName: 'main', fallbackModelName: 'lite' }, prompt: 'Hi' })) void part })().catch(error => error)
     expect(failure.message).toContain('lite is down')
   })
+})
+
+describe('a server that cannot be reached', () => {
+  const answer = (text: string) => sse(chunk({ content: text }), chunk({}, 'stop'))
+
+  it('is tried again, and says which address could not be reached instead of the browser\'s "Failed to fetch"', async () => {
+    let tries = 0
+    const flaky = createExternalModelClient(async () => {
+      tries += 1
+      if (tries === 1) throw new TypeError('Failed to fetch')
+      return answer('ok')
+    })
+    expect((await flaky.complete({ model, prompt: 'Hi' })).content).toBe('ok')
+    expect(tries).toBe(2)
+
+    const down = createExternalModelClient(async () => { throw new TypeError('Failed to fetch') })
+    const failure = await down.complete({ model, prompt: 'Hi' }).catch(error => error)
+    expect(failure).toBeInstanceOf(ExternalModelError)
+    expect(failure.message).toBe('连不上 api.example.test：网络断了，或被代理、防火墙拦下了（浏览器只说 Failed to fetch）')
+  }, 15_000)
 })
