@@ -512,6 +512,9 @@ export interface ProjectRun {
   reviewerRoleId?: string
   reviewTaskIds?: string[]
   finalMessageId?: string
+  // Local agent members the user let run every request of this project without asking each time
+  // (src/background/projectRunGrants.ts). Ends with the project: cleared when it stops or is done.
+  runAllowedRoleIds?: string[]
   createdAt: number
   updatedAt: number
 }

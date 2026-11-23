@@ -114,6 +114,8 @@ export function createProjectRunner(ctx: ProjectRunnerContext) {
 
   function stop(project: ProjectRun, reason: NonNullable<ProjectRun['stopReason']>, detail: string | undefined, timestamp: number): void {
     project.status = 'stopped'
+    // 这个项目都允许 was for this run: continued, the local agents are asked again.
+    delete project.runAllowedRoleIds
     project.stopReason = reason
     if (detail) project.stopDetail = detail
     else delete project.stopDetail
@@ -350,6 +352,7 @@ export function createProjectRunner(ctx: ProjectRunnerContext) {
         project.finalMessageId = reply.id
         project.status = 'done'
         delete project.stopReason
+        delete project.runAllowedRoleIds
       } else {
         stop(project, 'failed', '最终交付没有写出来', timestamp)
       }

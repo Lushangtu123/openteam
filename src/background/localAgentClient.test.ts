@@ -7,7 +7,7 @@ import { STALL_NOTICE_MS, STALL_REPEAT_MS } from '../shared/localAgentLimits'
 const model: ExternalModelConfig = { id: 'm1', name: 'Claude Code', format: 'local-agent', baseUrl: '', apiKey: '', modelName: 'claude-code', localAgentId: 'claude-code', workspace: '/Users/me/app', createdAt: 0, updatedAt: 0 }
 const context = { chatId: 'chat-1', roleId: 'role-1', messageId: 'msg-1', roleName: '程序员' }
 
-function setup(answers: Array<string | undefined>, events: LocalAgentEvent[] = []) {
+function setup(answers: Array<string | undefined>, events: LocalAgentEvent[] = [], project?: 'allowed' | 'can-allow') {
   const listeners = new Map<string, (event: LocalAgentEvent) => void>()
   const requests: Array<[string, Record<string, unknown> | undefined]> = []
   const control = {
@@ -27,8 +27,9 @@ function setup(answers: Array<string | undefined>, events: LocalAgentEvent[] = [
   }
   const asked: unknown[] = []
   const approvals = { ask: vi.fn(async (_context: unknown, question: unknown) => { asked.push(question); return answers.shift() }) }
-  const client = createLocalAgentClient({ control, approvals, getLanguage: () => 'zh-CN' })
-  return { client, control, requests, asked, listeners }
+  const projectRuns = { check: vi.fn(async () => project), allow: vi.fn(async () => true) }
+  const client = createLocalAgentClient({ control, approvals, getLanguage: () => 'zh-CN', projectRuns })
+  return { client, control, requests, asked, listeners, projectRuns }
 }
 
 async function collect(stream: AsyncIterable<string>): Promise<string> {
@@ -44,6 +45,28 @@ describe('local agent client', () => {
     expect(asked[0]).toMatchObject({ kind: 'run', title: '「程序员」要在 /Users/me/app 里执行这项任务', detail: '改一下 README', options: [{ id: 'allow' }, { id: 'deny' }] })
     expect(requests).toEqual([])
     await expect(collect(client.stream({ model, prompt: 'x' }))).rejects.toThrow('本机智能体只能作为群聊成员使用')
+  })
+
+  it('offers to allow the runs of the whole project for a project task, and then runs without asking', async () => {
+    const done: LocalAgentEvent[] = [{ kind: 'started' }, { kind: 'text', text: '做好了。' }, { kind: 'done', output: '做好了。' }]
+    const offered = setup(['allow-project'], done, 'can-allow')
+    const text = await collect(offered.client.stream({ model, prompt: '实现登录', context }))
+    expect(offered.asked[0]).toMatchObject({ kind: 'run', options: [{ id: 'allow' }, { id: 'allow-project', label: '这个项目都允许', kind: 'allow_always' }, { id: 'deny' }] })
+    expect(offered.projectRuns.allow).toHaveBeenCalledWith(context)
+    expect(offered.requests[0][0]).toBe('agent.run')
+    expect(text).toContain('做好了。')
+
+    // Allowed already: no question, and the reply says why it ran.
+    const allowed = setup([], done, 'allowed')
+    const next = await collect(allowed.client.stream({ model, prompt: '写测试', context }))
+    expect(allowed.asked).toEqual([])
+    expect(allowed.requests[0]).toEqual(['agent.run', expect.objectContaining({ prompt: '写测试' })])
+    expect(next).toContain('> ✅ 这个项目里已允许「程序员」执行任务')
+
+    // Outside a project only this run can be allowed.
+    const plain = setup(['deny'])
+    await expect(collect(plain.client.stream({ model, prompt: 'x', context }))).rejects.toThrow('你拒绝了这次执行。')
+    expect((plain.asked[0] as { options: unknown[] }).options).toHaveLength(2)
   })
 
   it('streams the run: text, tools, files, and asks the user for each permission', async () => {

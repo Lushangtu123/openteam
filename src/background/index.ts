@@ -44,6 +44,7 @@ import { requireApiModelAccess } from './apiModelAccess'
 import { createExternalModelClient, type ExternalModelClient } from './externalModelClient'
 import { createLocalAgentApprovals } from './localAgentApprovals'
 import { createLocalAgentClient } from './localAgentClient'
+import { createProjectRunGrants } from './projectRunGrants'
 import type { LocalAgentInfo } from '../shared/localControlProtocol'
 import type { ExternalModelConfig } from '../group/types'
 import { createPromptSender } from './promptDelivery'
@@ -133,6 +134,8 @@ const localAgentClient = createLocalAgentClient({
     onAgentEvents: (runId, handler) => controlClient.onAgentEvents(runId, handler),
   },
   approvals: localAgentApprovals,
+  // 这个项目都允许: a project's tasks run without a click each once the user allows it.
+  projectRuns: createProjectRunGrants({ loadStore, mutateStore, broadcastStoreUpdated: store => broadcastStoreUpdated(store) }),
   getLanguage: () => cachedLanguage,
 })
 let cachedLanguage: unknown

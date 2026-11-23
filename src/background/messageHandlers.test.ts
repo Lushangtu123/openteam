@@ -3,6 +3,8 @@ import { REPLY_STUCK_AFTER_MS } from '../group/replyTiming'
 import { createDefaultStore } from '../group/store'
 import { SITE_LIMIT_COOLDOWN_MS } from '../group/siteUsage'
 import type { GroupChat, GroupMessage, GroupRole, OpenTeamStore, OrchestrationFlow, RuntimeFrameBinding } from '../group/types'
+import type { LocalAgentEvent } from '../shared/localControlProtocol'
+import type { ExternalModelCompletionInput } from './externalModelClient'
 
 function createStoreWithReadyRole(): OpenTeamStore {
   const store = createDefaultStore()
@@ -2097,6 +2099,110 @@ describe('background message handlers', () => {
     expect(prompts.some(prompt => prompt.includes('你是「设计师」。下面这些任务是协调员「工程师」自己做的') && prompt.includes('这些新结果：t1、t2。'))).toBe(true)
   })
 
+  it('lets a local agent run every task of the project after one 这个项目都允许, and asks again in the next project', async () => {
+    vi.resetModules()
+    let currentStore = structuredClone(createStoreWithTwoApiRoles())
+    // 设计师 is a local agent; 工程师 (an API model) coordinates.
+    currentStore.settings.externalModelsById.agent = { id: 'agent', name: 'Claude Code', format: 'local-agent', baseUrl: '', apiKey: '', modelName: 'claude-code', localAgentId: 'claude-code', workspace: '/tmp/app', createdAt: 1, updatedAt: 1 }
+    currentStore.settings.externalModelOrder.push('agent')
+    currentStore.rolesById['role-2'].externalModelId = 'agent'
+    const mutateStore = vi.fn(async (mutator: (store: OpenTeamStore) => unknown) => {
+      const result = await mutator(currentStore)
+      currentStore = structuredClone(currentStore)
+      return { store: currentStore, result }
+    })
+    vi.doMock('./storeAccess', async importOriginal => ({ ...await importOriginal<typeof import('./storeAccess')>(), mutateStore }))
+    const { createMessageHandlers } = await import('./messageHandlers')
+    const { createLocalAgentClient } = await import('./localAgentClient')
+    const { createLocalAgentApprovals } = await import('./localAgentApprovals')
+    const { createProjectRunGrants } = await import('./projectRunGrants')
+
+    // The daemon: each run writes its task's result.
+    const listeners = new Map<string, (event: LocalAgentEvent) => void>()
+    const runs: string[] = []
+    const control = {
+      request: vi.fn(async (action: string, payload?: Record<string, unknown>) => {
+        if (action !== 'agent.run') return { id: 'r', ok: true }
+        const runId = `run-${runs.length + 1}`
+        const task = String(payload?.prompt).match(/你的任务（(t\d)/)?.[1]
+        runs.push(task ?? '?')
+        setTimeout(() => {
+          const text = `${task} 成果\n【状态】完成\n【摘要】${task} 摘要`
+          listeners.get(runId)?.({ kind: 'text', text })
+          listeners.get(runId)?.({ kind: 'done', output: text })
+        }, 0)
+        return { id: 'r', ok: true, data: { runId } }
+      }),
+      onAgentEvents: (runId: string, handler: (event: LocalAgentEvent) => void) => {
+        listeners.set(runId, handler)
+        return () => { listeners.delete(runId) }
+      },
+    }
+    let approvalSeq = 0
+    const mutate = mutateStore as unknown as <T>(mutator: (store: OpenTeamStore) => T | Promise<T>) => Promise<{ store: OpenTeamStore; result: T }>
+    const approvals = createLocalAgentApprovals({ newId: prefix => `${prefix}-${++approvalSeq}`, now: () => 100, mutateStore: mutate, broadcastStoreUpdated: vi.fn() })
+    const local = createLocalAgentClient({ control, approvals, projectRuns: createProjectRunGrants({ loadStore: async () => currentStore, mutateStore: mutate, broadcastStoreUpdated: vi.fn() }), getLanguage: () => 'zh-CN' })
+    const plan = '```json\n' + JSON.stringify({ tasks: [
+      { id: 't1', title: '登录页', owner: '设计师', dependsOn: [], detail: '做登录页', doneWhen: '能登录' },
+      { id: 't2', title: '设置页', owner: '设计师', dependsOn: [], detail: '做设置页', doneWhen: '能保存' },
+    ] }) + '\n```'
+    const coordinator = (prompt: string) => {
+      if (prompt.includes('请用完成目标所需的最少任务')) return plan
+      if (prompt.includes('任务和结果：')) return '```json\n' + JSON.stringify({ decisions: reviewOf(prompt).map(task => ({ task, verdict: 'pass', note: '查过' })), newTasks: [], finish: true }) + '\n```'
+      return '# 最终交付'
+    }
+    const externalModelClient = {
+      complete: vi.fn(async (input: { prompt: string }) => ({ content: coordinator(input.prompt) })),
+      stream: (input: ExternalModelCompletionInput) => input.model.format === 'local-agent'
+        ? local.stream(input)
+        : (async function* () { yield coordinator(input.prompt) })(),
+    }
+    let messageIdSeq = 0
+    const routes = createMessageHandlers({
+      broadcastStoreUpdated: vi.fn(),
+      externalModelClient,
+      getChatStatusFromRoles: () => 'ready',
+      log: { debug: vi.fn(), info: vi.fn(), warn: vi.fn() },
+      newId: vi.fn((prefix: string) => prefix === 'msg' ? `${prefix}-${++messageIdSeq}` : `${prefix}-${messageIdSeq}`),
+      now: vi.fn(() => 100),
+      runtimeFrames: { bind: vi.fn(), getByAddress: vi.fn(), getByRole: vi.fn(() => undefined) },
+      sendRoleMessage: vi.fn(),
+      sendError: vi.fn(),
+      sendPrompt: vi.fn(),
+      waitForRetry: vi.fn(async () => {}),
+    })
+    const route = (type: string) => routes.find(candidate => candidate.type === type)!
+    const project = () => currentStore.chatsById['chat-1'].project!
+
+    // The user: answers each question 设计师 asks, choosing 这个项目都允许 when it is offered.
+    const questions: Array<{ id: string; options: string[] }> = []
+    const user = setInterval(() => {
+      const approval = currentStore.rolesById['role-2']?.pendingApproval
+      if (!approval || questions.some(question => question.id === approval.id)) return
+      const options = approval.options.map(option => option.id)
+      questions.push({ id: approval.id, options })
+      void approvals.decide({ chatId: 'chat-1', roleId: 'role-2' }, approval.id, options.includes('allow-project') ? 'allow-project' : 'allow')
+    }, 2)
+    try {
+      for (const goal of ['第一个项目', '第二个项目']) {
+        await route('GROUP_PROJECT_START').handler({ type: 'GROUP_PROJECT_START', chatId: 'chat-1', goal }, {})
+        await vi.waitFor(() => expect(project().status).toBe('awaiting-approval'))
+        await route('GROUP_PROJECT_APPROVE').handler({ type: 'GROUP_PROJECT_APPROVE', chatId: 'chat-1' }, {})
+        await vi.waitFor(() => expect(project().status).toBe('done'), { timeout: 5_000 })
+        // Done: the grant went with the project.
+        expect(project().runAllowedRoleIds).toBeUndefined()
+      }
+    } finally {
+      clearInterval(user)
+    }
+    // Two tasks in each project, one question in each: the first, offering the whole project.
+    expect(runs).toEqual(['t1', 't2', 't1', 't2'])
+    expect(questions).toHaveLength(2)
+    for (const question of questions) expect(question.options).toEqual(['allow', 'allow-project', 'deny'])
+    const replies = Object.values(currentStore.messagesById).filter(message => message.roleId === 'role-2' && message.type === 'assistant')
+    expect(replies.filter(message => message.content.includes('> ✅ 这个项目里已允许「设计师」执行任务'))).toHaveLength(2)
+  })
+
   it('waits for the user when the coordinator asks, goes on with the answer, and can be stopped and continued', async () => {
     vi.resetModules()
     let currentStore = structuredClone(createStoreWithTwoApiRoles())
@@ -2149,17 +2255,23 @@ describe('background message handlers', () => {
     await route('GROUP_PROJECT_APPROVE').handler({ type: 'GROUP_PROJECT_APPROVE', chatId: 'chat-1' }, {})
     await vi.waitFor(() => expect(project().status).toBe('waiting-user'))
     expect(project().question).toBe('预算上限是多少？')
+    // A local agent allowed to run for the whole project (projectRunGrants.ts): the grant ends with it.
+    project().runAllowedRoleIds = ['role-1']
 
     // The answer goes in through the message box, as a note for the coordinator.
     await route('GROUP_MESSAGE_SEND').handler({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@all 预算 5 万' }, {})
     expect(Object.values(currentStore.messagesById).find(message => message.projectNoteOf)).toMatchObject({ content: '@all 预算 5 万', targetRoleIds: [] })
     await vi.waitFor(() => expect(project().status).toBe('done'))
+    expect(project().runAllowedRoleIds).toBeUndefined()
 
     // A new project can start once this one is done; stopping and continuing work on it.
     await route('GROUP_PROJECT_START').handler({ type: 'GROUP_PROJECT_START', chatId: 'chat-1', goal: '第二个项目' }, {})
+    project().runAllowedRoleIds = ['role-1']
     await route('GROUP_PROJECT_STOP').handler({ type: 'GROUP_PROJECT_STOP', chatId: 'chat-1' }, {})
     await new Promise(resolve => setTimeout(resolve, 20))
     expect(project()).toMatchObject({ status: 'stopped', stopReason: 'user' })
+    // Continued, it asks again: the grant was for the run that stopped.
+    expect(project().runAllowedRoleIds).toBeUndefined()
     await route('GROUP_PROJECT_CONTINUE').handler({ type: 'GROUP_PROJECT_CONTINUE', chatId: 'chat-1' }, {})
     await vi.waitFor(() => expect(project().status).toBe('awaiting-approval'))
   })

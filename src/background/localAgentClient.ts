@@ -8,6 +8,7 @@ import type { ControlHttpResult, ExtensionRequest, LocalAgentEvent } from '../sh
 import type { ExternalModelCompletionInput } from './externalModelClient'
 import { DEFAULT_RUN_LIMIT_MINUTES, STALL_NOTICE_MS, STALL_REPEAT_MS } from '../shared/localAgentLimits'
 import type { LocalAgentApprovals } from './localAgentApprovals'
+import type { ProjectRunGrants } from './projectRunGrants'
 import { createWorkspaceQueue, type WorkspaceQueue } from './workspaceQueue'
 
 export interface LocalAgentControl {
@@ -18,6 +19,8 @@ export interface LocalAgentControl {
 export interface LocalAgentClientDependencies {
   control: LocalAgentControl
   approvals: Pick<LocalAgentApprovals, 'ask'>
+  // 这个项目都允许 (projectRunGrants.ts): a project's requests run without asking once it is given.
+  projectRuns?: Pick<ProjectRunGrants, 'check' | 'allow'>
   getLanguage(): unknown
   // Shared by every run of this client: one agent at a time in a folder.
   workspaces?: WorkspaceQueue
@@ -55,14 +58,25 @@ export function createLocalAgentClient(deps: LocalAgentClientDependencies) {
     const model = { ...input.model, workspace }
     const context = input.context!
 
-    const runAnswer = await deps.approvals.ask(context, {
-      kind: 'run',
-      title: en ? `${who} wants to work in ${model.workspace}` : `「${who}」要在 ${model.workspace} 里执行这项任务`,
-      detail: input.prompt.length > PROMPT_PREVIEW_CHARS ? `${input.prompt.slice(0, PROMPT_PREVIEW_CHARS)}\n…` : input.prompt,
-      options: [{ id: 'allow', label: en ? 'Allow this run' : '允许执行', kind: 'allow_once' }, { id: 'deny', label: en ? 'Refuse' : '拒绝', kind: 'reject_once' }],
-    }, signal)
-    throwIfAborted(signal)
-    if (runAnswer !== 'allow') throw new Error(en ? 'You refused this run.' : '你拒绝了这次执行。')
+    // A request of the running project: allowed already for the whole project, or that can be offered.
+    const project = await deps.projectRuns?.check(context)
+    const allowedForProject = project === 'allowed'
+    if (!allowedForProject) {
+      const runAnswer = await deps.approvals.ask(context, {
+        kind: 'run',
+        title: en ? `${who} wants to work in ${model.workspace}` : `「${who}」要在 ${model.workspace} 里执行这项任务`,
+        detail: input.prompt.length > PROMPT_PREVIEW_CHARS ? `${input.prompt.slice(0, PROMPT_PREVIEW_CHARS)}\n…` : input.prompt,
+        options: [
+          { id: 'allow', label: en ? 'Allow this run' : '允许执行', kind: 'allow_once' },
+          ...(project === 'can-allow' ? [{ id: 'allow-project', label: en ? 'Allow for this project' : '这个项目都允许', kind: 'allow_always' }] : []),
+          { id: 'deny', label: en ? 'Refuse' : '拒绝', kind: 'reject_once' },
+        ],
+      }, signal)
+      throwIfAborted(signal)
+      // The project may have ended while the question waited: then this run alone is allowed.
+      if (runAnswer === 'allow-project') await deps.projectRuns?.allow(context)
+      else if (runAnswer !== 'allow') throw new Error(en ? 'You refused this run.' : '你拒绝了这次执行。')
+    }
 
     const limitMinutes = model.runLimitMinutes ?? DEFAULT_RUN_LIMIT_MINUTES
     const startedAt = Date.now()
@@ -84,6 +98,8 @@ export function createLocalAgentClient(deps: LocalAgentClientDependencies) {
       failure = error
       wake?.()
     }
+    // Run without a question: the reply says why.
+    if (allowedForProject) push(en ? `> ✅ ${who} may work on every task of this project\n\n` : `> ✅ 这个项目里已允许「${who}」执行任务\n\n`)
     const seenTools = new Set<string>()
     let wroteText = false
     // Going quiet: the last sign of work, the tools not yet ended (by title), and the questions the
