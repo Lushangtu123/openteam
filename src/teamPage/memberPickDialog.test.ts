@@ -33,6 +33,34 @@ function setup(fields: (store: OpenTeamStore) => void = () => undefined) {
   return { store, request, runCommand, onClaim, onAdded, $, button }
 }
 
+describe('what members did before, shown under the picks', () => {
+  it('says how the role did on its model, and says it again when another model is chosen', async () => {
+    const ctx = setup()
+    ctx.request.mockResolvedValueOnce({
+      ok: true,
+      planner: 'Gemini',
+      picks: [
+        { kind: 'library', templateId: 'builtin-x', name: '安全审计员2', model: 'site:kimi', why: '把关' },
+        { kind: 'new', name: '预算设计师', systemPrompt: '你设计预算提醒。', model: 'site:kimi' },
+      ],
+      records: [
+        { key: 'template:builtin-x|site:kimi', name: '安全审计员', templateId: 'builtin-x', model: 'site:kimi', replies: 8, kept: 5, redone: 1 },
+        { key: 'template:builtin-x|external:api', name: '安全审计员', templateId: 'builtin-x', model: 'external:api', replies: 4, kept: 0, redone: 0 },
+      ],
+    })
+    ctx.button('让 AI 挑').click()
+    await vi.waitFor(() => expect(document.querySelectorAll('.member-pick-row')).toHaveLength(2))
+    const [first, second] = [...document.querySelectorAll<HTMLElement>('.member-pick-row')]
+    expect(first.querySelector('.member-pick-record')!.textContent).toBe('过去 8 次回答，你留用了 5 次，重答 1 次')
+    expect(second.querySelector('.member-pick-record')).toBeNull()
+    const model = first.querySelector<HTMLSelectElement>('.member-pick-row-model')!
+    model.append(new Option('API · Gemini', 'external:api'))
+    model.value = 'external:api'
+    model.dispatchEvent(new Event('change'))
+    expect(first.querySelector('.member-pick-record')!.textContent).toBe('过去 4 次回答，你留用了 0 次')
+  })
+})
+
 describe('letting an AI pick members for a task', () => {
   it('starts from the latest request and the models the group uses, asks, and lists the picks', async () => {
     const ctx = setup()

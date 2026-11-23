@@ -76,6 +76,8 @@ export function buildMemberPickPrompt(input: {
   models: MemberPickModel[]
   source: MemberPickSource
   count?: number
+  // How roles did before on these models (src/group/memberRecord.ts memberRecordLines).
+  records?: string[]
   language?: OpenTeamLanguage
 }): string {
   const en = normalizeLanguage(input.language) === 'en'
@@ -93,6 +95,10 @@ export function buildMemberPickPrompt(input: {
     lines.push(`${en ? 'Role library (use the id to pick one)' : '角色库（用 id 选用）'}:\n${library.map(template => `- id=${template.id} | ${template.name}${template.description ? ` | ${template.description.slice(0, LIBRARY_DESCRIPTION_IN_PROMPT)}` : ''}`).join('\n')}`)
   }
   lines.push(`${en ? 'Models you may give members (use the key exactly)' : '可以分配给成员的模型（key 照抄）'}:\n${input.models.map(model => `- key=${model.key} | ${model.label}`).join('\n')}`)
+  const records = input.records ?? []
+  if (records.length) {
+    lines.push(`${en ? 'How these roles did before on these models (from replies the user kept or asked again)' : '这些角色以前在这些模型上的表现（来自用户留用或要求重答的回答）'}:\n${records.join('\n')}`)
+  }
   const rule = input.source === 'library-only'
     ? (en ? 'Pick only from the role library, by id.' : '只能从角色库里选，用 id。')
     : input.source === 'new'
@@ -103,6 +109,9 @@ export function buildMemberPickPrompt(input: {
     en ? `Suggest 1 to ${most} members, only as many as the task needs; none of them may duplicate a role already in the group.` : `建议 1 到 ${most} 位成员，任务需要几位就几位；不要和群里已有的角色重复。`,
     en ? 'Give each one the model that suits its role best; different models for different roles help the group see more sides.' : '给每位成员选最适合它角色的模型；不同角色用不同模型，群里能看到更多角度。',
     en ? 'Say in "why" in one sentence what this member adds to the task.' : '在 why 里用一句话说这位成员对任务的作用。',
+    ...(records.length ? [en
+      ? 'A role on a model with replies the user kept has proven itself: prefer it when it fits the task. Many replies asked again mean the user was not satisfied with that role on that model.'
+      : '用户留用过回答的角色和模型组合更可靠：适合任务时优先用。要求重答多的，说明用户对这个角色用这个模型不满意。'] : []),
   ].join('\n'))
   lines.push(en
     ? 'Answer with JSON only, in this form:\n{"members":[{"templateId":"library id, or empty for a new role","name":"name","description":"one line","systemPrompt":"persona, for a new role","model":"model key","why":"one sentence"}]}'

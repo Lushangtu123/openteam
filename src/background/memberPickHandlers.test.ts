@@ -38,6 +38,36 @@ describe('asking an AI which members to add', () => {
     expect(await setup(['不知道', '还是不知道']).ask()).toEqual({ ok: true, error: '模型没有按格式给出成员名单' })
   })
 
+  it('tells the planner how roles did before on the ticked models, and answers those records for the window', async () => {
+    const history = (store: OpenTeamStore) => {
+      store.chatsById.old = { id: 'old', name: '旧群', mode: 'collaborative', roleIds: ['s1', 'w1'], messageIds: [], nextMessageSeq: 1, status: 'ready', createdAt: 1, updatedAt: 1 }
+      store.chatOrder.push('old')
+      store.rolesById.s1 = { id: 's1', chatId: 'old', name: '芒格', templateId: 'builtin-munger', chatSite: 'kimi', status: 'ready', contextCursor: 0, createdAt: 1, updatedAt: 1 }
+      store.rolesById.w1 = { id: 'w1', chatId: 'old', name: '文案', chatSite: 'kimi', status: 'ready', contextCursor: 0, createdAt: 1, updatedAt: 1 }
+      for (const [index, roleId] of ['s1', 's1', 's1', 'w1', 'w1', 'w1'].entries()) {
+        store.messagesById[`m${index}`] = { id: `m${index}`, chatId: 'old', seq: index + 1, type: 'assistant', roleId, content: '回答', createdAt: 1, status: 'received' }
+        store.chatsById.old.messageIds.push(`m${index}`)
+      }
+      store.messageHighlightsById = { m0: [{ id: 'h', messageId: 'm0', text: '好', startOffset: 0, endOffset: 1, createdAt: 2 }] }
+    }
+    const answer = JSON.stringify({ members: [{ templateId: 'builtin-munger', model: 'site:kimi' }] })
+    const ctx = setup([answer], history)
+    const response = await ctx.ask()
+    const prompt = ctx.complete.mock.calls[0][0].prompt
+    expect(prompt).toContain('· Kimi：3 次回答，留用 1 次')
+    expect(prompt).toContain('- 文案 · Kimi：3 次回答，留用 0 次')
+    expect(response.records).toEqual(expect.arrayContaining([expect.objectContaining({ templateId: 'builtin-munger', model: 'site:kimi', replies: 3, kept: 1 })]))
+    // Roles written fresh are not library roles: the planner is told only about roles by name.
+    const fresh = setup([JSON.stringify({ members: [{ name: '新角色', systemPrompt: 'x', model: 'site:kimi' }] })], history)
+    await fresh.ask({ source: 'new' })
+    expect(fresh.complete.mock.calls[0][0].prompt).not.toContain('id=builtin-munger')
+    expect(fresh.complete.mock.calls[0][0].prompt).toContain('- 文案 · Kimi')
+    // Nothing on a model not ticked.
+    const other = setup([answer], history)
+    await other.ask({ models: ['external:api'] })
+    expect(other.complete.mock.calls[0][0].prompt).not.toContain('以前在这些模型上的表现')
+  })
+
   it('says what is missing: the task, a ticked model, or an API model to plan with', async () => {
     expect(await setup([]).ask({ task: ' ' })).toEqual({ ok: true, error: '先写下要做的事' })
     expect(await setup([]).ask({ models: [] })).toEqual({ ok: true, error: '至少勾选一个可以用的模型' })

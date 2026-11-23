@@ -25,6 +25,19 @@ describe('the prompt that asks an AI to pick members for a task', () => {
     expect(fresh).toContain('建议 1 到 3 位成员')
     expect(buildMemberPickPrompt({ task: 't', members: [], library, models, source: 'library-only', language: 'en' })).toContain('Pick only from the role library, by id.')
   })
+
+  it('tells how roles did before on the models, when it is known, and to weigh it', () => {
+    const lines = ['- 安全审计员（角色库 id=builtin-security）· DeepSeek：6 次回答，留用 4 次']
+    const prompt = buildMemberPickPrompt({ task: 't', members: [], library, models, source: 'library-first', records: lines, language: 'zh-CN' })
+    expect(prompt).toContain('这些角色以前在这些模型上的表现（来自用户留用或要求重答的回答）:\n- 安全审计员（角色库 id=builtin-security）· DeepSeek：6 次回答，留用 4 次')
+    expect(prompt).toContain('用户留用过回答的角色和模型组合更可靠')
+    const english = buildMemberPickPrompt({ task: 't', members: [], library, models, source: 'library-first', records: ['- x'], language: 'en' })
+    expect(english).toContain('How these roles did before on these models')
+    expect(english).toContain('replies the user kept')
+    const none = buildMemberPickPrompt({ task: 't', members: [], library, models, source: 'library-first', records: [], language: 'zh-CN' })
+    expect(none).not.toContain('以前在这些模型上的表现')
+    expect(none).not.toContain('更可靠')
+  })
 })
 
 describe('reading the members the AI picked', () => {

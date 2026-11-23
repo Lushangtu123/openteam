@@ -4,6 +4,7 @@
 // model, then added as members. The second way, 新成员自己认领, adds AIs and lets them claim
 // positions as 按任务组队 does (onClaim).
 import { latestTaskText, MEMBER_PICK_MAX, memberPickModelKey, memberPickModels, memberPickPlanners, type MemberPick, type MemberPickSource } from '../group/memberPicker'
+import { recordFor, recordText, type MemberRecord } from '../group/memberRecord'
 import type { GroupChat, GroupRole, OpenTeamStore } from '../group/types'
 import { normalizeLanguage } from '../shared/i18n'
 import { createIcon } from './icons'
@@ -42,6 +43,8 @@ export function openMemberPickDialog(deps: MemberPickDialogDependencies): { clos
   const counts = new Map<string, number>()
   let mode: 'list' | 'claim' = 'list'
   let picks: Array<MemberPick & { keep: boolean }> = []
+  // How each role did before on each model (src/group/memberRecord.ts), as the planner was told.
+  let records: MemberRecord[] = []
   let busy = false
 
   const backdrop = element('div', 'modal-backdrop member-pick-modal')
@@ -213,11 +216,22 @@ export function openMemberPickDialog(deps: MemberPickDialogDependencies): { clos
       content.append(element('span', 'member-pick-kind', pick.kind === 'library' ? t('角色库', 'Library') : t('新写', 'New')))
       if (pick.why) content.append(element('div', 'template-description member-pick-why', pick.why))
       if (pick.description) content.append(element('div', 'template-description', pick.description))
+      const record = element('div', 'tiny member-pick-record')
+      const showRecord = () => {
+        const found = recordFor(records, { ...(pick.kind === 'library' ? { templateId: pick.templateId } : {}), name: pick.name, model: pick.model })
+        record.textContent = found ? recordText(found, en) : ''
+        if (found) content.append(record)
+        else record.remove()
+      }
+      showRecord()
       const model = element('select', 'member-pick-row-model')
       model.setAttribute('aria-label', t(`「${pick.name}」用的模型`, `Model for "${pick.name}"`))
       for (const option of options.some(item => item.key === pick.model) ? options : [...models.filter(item => item.key === pick.model), ...options]) model.append(new Option(option.label, option.key))
       model.value = pick.model
-      model.addEventListener('change', () => { pick.model = model.value })
+      model.addEventListener('change', () => {
+        pick.model = model.value
+        showRecord()
+      })
       row.append(box, content, model)
       return row
     }))
@@ -244,6 +258,7 @@ export function openMemberPickDialog(deps: MemberPickDialogDependencies): { clos
       })
       if (typeof answer.error === 'string') throw new Error(answer.error)
       picks = (Array.isArray(answer.picks) ? answer.picks as MemberPick[] : []).map(pick => ({ ...pick, keep: true }))
+      records = Array.isArray(answer.records) ? answer.records as MemberRecord[] : []
       status.textContent = t(`${String(answer.planner ?? '')} 建议了 ${picks.length} 位，看过后加入。`, `${String(answer.planner ?? '')} suggested ${picks.length}; add those you keep.`)
     } catch (caught) {
       status.textContent = ''

@@ -4,7 +4,9 @@
 // answered, not thrown: the window shows it, and a thrown error would also pop up over the page.
 import { buildMemberPickPrompt, isMemberPickSource, memberPickModels, memberPickPlanners, MEMBER_PICK_MAX, parseMemberPicks, type MemberPick } from '../group/memberPicker'
 import { getAllRoleTemplates } from '../group/roleTemplates'
+import { memberRecordLines, memberRecords, type MemberRecord } from '../group/memberRecord'
 import type { OpenTeamStore } from '../group/types'
+import { normalizeLanguage } from '../shared/i18n'
 import type { ExternalModelClient } from './externalModelClient'
 import type { BackgroundMessageRoute } from './messageRouter'
 import type { RuntimeMessage } from './runtimeClient'
@@ -19,7 +21,7 @@ export interface MemberPickHandlerDependencies {
 }
 
 export function createMemberPickHandlers(deps: MemberPickHandlerDependencies): BackgroundMessageRoute[] {
-  async function suggest(message: RuntimeMessage): Promise<{ picks: MemberPick[]; planner: string }> {
+  async function suggest(message: RuntimeMessage): Promise<{ picks: MemberPick[]; planner: string; records?: MemberRecord[] }> {
     const store = await deps.loadStore()
     const chat = requireChat(store, message.chatId)
     const task = typeof message.task === 'string' ? message.task.trim() : ''
@@ -33,15 +35,20 @@ export function createMemberPickHandlers(deps: MemberPickHandlerDependencies): B
     const count = typeof message.count === 'number' && Number.isInteger(message.count) && message.count >= 1 ? Math.min(message.count, MEMBER_PICK_MAX) : undefined
     const members = getChatRoles(store, chat)
     const library = getAllRoleTemplates(store)
-    const prompt = buildMemberPickPrompt({ task, members, library, models, source, ...(count ? { count } : {}), language: store.settings.language })
+    // How roles did before on the ticked models: library roles only when the library is used, roles
+    // by name only when roles may be written (a new role may take a name that did well).
+    const keys = new Set(models.map(model => model.key))
+    const records = memberRecords(store).filter(record => keys.has(record.model) && (record.templateId ? source !== 'new' : source !== 'library-only'))
+    const recordLines = memberRecordLines(records, models, normalizeLanguage(store.settings.language) === 'en')
+    const prompt = buildMemberPickPrompt({ task, members, library, models, source, ...(count ? { count } : {}), ...(recordLines.length ? { records: recordLines } : {}), language: store.settings.language })
     const read = (content: string) => parseMemberPicks(content, { library, models, source, takenNames: members.map(role => role.name), ...(count ? { count } : {}) })
     const first = await deps.externalModelClient.complete({ model: planner, prompt })
     try {
-      return { picks: read(first.content), planner: planner.name }
+      return { picks: read(first.content), planner: planner.name, ...(records.length ? { records } : {}) }
     } catch (error) {
       deps.log.warn('member-pick:unreadable', { reason: error instanceof Error ? error.message : String(error), length: first.content.length })
       const again = await deps.externalModelClient.complete({ model: planner, prompt: `${prompt}\n\n上一次的回答没有按要求的 JSON 格式给出能加入的成员。请只回答 JSON。` })
-      return { picks: read(again.content), planner: planner.name }
+      return { picks: read(again.content), planner: planner.name, ...(records.length ? { records } : {}) }
     }
   }
 

@@ -614,6 +614,9 @@ export interface GroupRole {
   userNamed?: boolean
   // The position the member holds in a confirmed team.
   teamPosition?: string
+  // How many of its finished replies the user asked again (重新回复); 让 AI 按任务挑 weighs it
+  // (src/group/memberRecord.ts). The reply asked again is gone, so it is counted here.
+  redoneReplies?: number
   status: RoleStatus
   contextCursor: number
   // Messages up to this seq were in an earlier conversation of this member (another model or site,

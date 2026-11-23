@@ -3602,6 +3602,12 @@ describe('background message handlers', () => {
     }))
     expect(getByRole).not.toHaveBeenCalled()
     expect(sendRoleMessage).not.toHaveBeenCalled()
+    // A finished reply asked again counts on the member (让 AI 按任务挑 weighs it); a failed one does not.
+    expect(response.store.rolesById['role-1'].redoneReplies).toBe(1)
+    currentStore.messagesById['msg-new-1'].status = 'error'
+    const again = await retryRoute?.handler({ type: 'GROUP_ROLE_RETRY_REPLY', chatId: 'chat-1', roleId: 'role-1', messageId: 'msg-new-1' }, {}) as { ok: boolean; store: OpenTeamStore }
+    expect(again.ok).toBe(true)
+    expect(again.store.rolesById['role-1'].redoneReplies).toBe(1)
   })
 })
 

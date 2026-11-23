@@ -31,7 +31,11 @@ export function createMessageActionHandlers(ctx: MessageHandlerContext) {
       const userMessage = retryTarget?.userMessage
       if (!userMessage) throw new Error(requestedMessageId ? '该消息没有发送给这位成员' : '找不到可重试的用户消息')
       if (retryTarget?.discardMessageId) {
-        discardedAttachmentIds = readyAttachmentIds(store.messagesById[retryTarget.discardMessageId]?.attachments)
+        const discarded = store.messagesById[retryTarget.discardMessageId]
+        // A finished reply asked again: the user wanted a better one. Counted on the member, as the
+        // reply itself goes (让 AI 按任务挑 weighs it, src/group/memberRecord.ts).
+        if (discarded?.status === 'received' && discarded.content.trim()) role.redoneReplies = (role.redoneReplies ?? 0) + 1
+        discardedAttachmentIds = readyAttachmentIds(discarded?.attachments)
         discardMessage(store, chat, retryTarget.discardMessageId)
       }
 
