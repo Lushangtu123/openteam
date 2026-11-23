@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "OpenTeam",
-  "version": "1.37.0",
+  "version": "1.38.0",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAqxgkfzcDw0zQNilJyCd93/llDm941pSFusZJiFMTSN1MqZtC1XEsbKxqeBwQhT4MXpYbW3toEEMKC9rQA+m4oC9siPUk7wgYI2aCreKT70r5rmJCHzG/Fj1FVXmc/kajvYi9R2CnxP8PXuuw2DOAos2+dvRzp0S3+irSDZVCu/NwL2Gmidg4tMMqzD6xSl2rbf6PMS5jpHqMsT6S2ap8FQmWFN4jFkHOo2ANDJr/xqqzsC9/kLMYFZ6BtC0PKANYRs8USJhdMmlQj6dwTTghQG0hBeQyP9DDTZ7epqne5cOFmZkluVHKXLhwBP1QHJ43MMpodSzqQJ7nYVRA1bfGpQIDAQAB",
   "description": "Multi-site AI team discussion panel",
   "background": {
