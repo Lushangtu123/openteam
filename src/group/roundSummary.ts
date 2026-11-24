@@ -28,7 +28,7 @@ export function keyPointsInstruction(languageInput: OpenTeamLanguage | undefined
 // easy to scan. Orchestration steps, team invitations and summary requests keep their own formats.
 export function wantsKeyPoints(settings: Pick<OpenTeamSettings, 'replyKeyPoints'>, chat: GroupChat | undefined, message: GroupMessage): boolean {
   if (settings.replyKeyPoints === false) return false
-  if (message.type !== 'user' || message.orchestrationKind || message.roundSummaryOf || message.crossReviewOf || message.factCheckOf) return false
+  if (message.type !== 'user' || message.orchestrationKind || message.roundSummaryOf || message.crossReviewOf || message.factCheckOf || message.siteCheckQuestion) return false
   // A vote is answered in its own short form (src/group/poll.ts).
   if (message.poll) return false
   if (chat?.teamFormation?.invitationIds.includes(message.id)) return false

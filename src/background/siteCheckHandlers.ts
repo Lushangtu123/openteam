@@ -146,7 +146,7 @@ export function createSiteCheckHandlers(deps: SiteCheckHandlerDependencies): Bac
   }
 
   async function ask(chatId: string, to: string): Promise<string> {
-    const sent = await routeOk({ type: 'GROUP_MESSAGE_SEND', chatId, raw: `${to} ${SITE_CHECK_PROMPT}` })
+    const sent = await routeOk({ type: 'GROUP_MESSAGE_SEND', chatId, raw: `${to} ${SITE_CHECK_PROMPT}`, siteCheckQuestion: true })
     const id = sent.message?.id
     if (!id) throw new Error('网站自检的提问没有发出')
     return id

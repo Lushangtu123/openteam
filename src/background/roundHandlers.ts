@@ -95,6 +95,8 @@ export function createRoundHandlers(ctx: MessageHandlerContext) {
   function scheduleAfterRound(store: OpenTeamStore, chatId: string, questionId: string): void {
     const chat = store.chatsById[chatId]
     const question = store.messagesById[questionId]
+    // A site check's question is answered OK, and that is all.
+    if (question?.siteCheckQuestion) return
     // Asked with sources: its links are checked, then one member checks the facts (no summary).
     if (question?.wantsSources) {
       if (chat && readCheckableRound(store, chat, question) && !hasFactCheck(store, chat, questionId)) scheduleSourcesCheck(chatId, questionId)

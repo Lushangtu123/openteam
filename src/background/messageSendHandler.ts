@@ -181,6 +181,7 @@ export function createMessageSendHandler(ctx: MessageHandlerContext, roundHandle
         references: reference ? [reference] : undefined,
         ...(uploads.length > 0 ? { attachments: uploads.map(({ id, upload }) => uploadAttachment(id, upload)) } : {}),
         ...(message.refreshPersona === true ? { refreshPersona: true } : {}),
+        ...(message.siteCheckQuestion === true && chat.siteCheck ? { siteCheckQuestion: true } : {}),
         createdAt: timestamp,
         status: finalTargetRoleIds.length > 0 ? 'pending' : 'received',
         deliveryStatus: Object.fromEntries(finalTargetRoleIds.map(roleId => [roleId, unavailable.some(role => role.id === roleId) || limited.some(role => role.id === roleId) ? 'error' : 'pending'])),

@@ -1730,6 +1730,58 @@ describe('background message handlers', () => {
     expect(complete).toHaveBeenCalledTimes(4)
   })
 
+  it('sends a site check\'s question as it is: no 要点 form, and no summary or review after the round', async () => {
+    vi.resetModules()
+    const startingStore = createStoreWithTwoApiRoles()
+    let currentStore = structuredClone(startingStore)
+    vi.doMock('./storeAccess', async importOriginal => {
+      const actual = await importOriginal<typeof import('./storeAccess')>()
+      return {
+        ...actual,
+        mutateStore: vi.fn(async (mutator: (store: OpenTeamStore) => unknown) => {
+          const result = await mutator(currentStore)
+          currentStore = structuredClone(currentStore)
+          return { store: currentStore, result }
+        }),
+      }
+    })
+
+    const { createMessageHandlers } = await import('./messageHandlers')
+    const complete = vi.fn(async (_input: { prompt: string }) => ({ content: 'OK' }))
+    let messageIdSeq = 0
+    const routes = createMessageHandlers({
+      broadcastStoreUpdated: vi.fn(),
+      externalModelClient: { complete },
+      getChatStatusFromRoles: () => 'ready',
+      log: { debug: vi.fn(), info: vi.fn(), warn: vi.fn() },
+      newId: vi.fn((prefix: string) => prefix === 'msg' ? `${prefix}-${++messageIdSeq}` : `${prefix}-${messageIdSeq}`),
+      now: vi.fn(() => 100),
+      runtimeFrames: { bind: vi.fn(), getByAddress: vi.fn(), getByRole: vi.fn(() => undefined) },
+      sendRoleMessage: vi.fn(),
+      sendError: vi.fn(),
+      sendPrompt: vi.fn(),
+      waitForRetry: vi.fn(async () => {}),
+    })
+    const send = routes.find(route => route.type === 'GROUP_MESSAGE_SEND')!
+
+    // Outside a check group the mark is not taken.
+    await send.handler({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@all 只回复 OK', siteCheckQuestion: true }, {})
+    expect(currentStore.messagesById['msg-1'].siteCheckQuestion).toBeUndefined()
+    await vi.waitFor(() => expect(Object.values(currentStore.messagesById).some(message => message.roundSummaryOf === 'msg-1')).toBe(true))
+    // The two answers and the summary.
+    await vi.waitFor(() => expect(complete).toHaveBeenCalledTimes(3))
+
+    currentStore.chatsById['chat-1'].siteCheck = { startedAt: 0 }
+    const before = complete.mock.calls.length
+    const sent = await send.handler({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@all 只回复 OK', siteCheckQuestion: true }, {}) as { message: GroupMessage }
+    await new Promise(resolve => setTimeout(resolve, 20))
+    expect(currentStore.messagesById[sent.message.id].siteCheckQuestion).toBe(true)
+    // The two members answer, and that is all.
+    expect(complete.mock.calls.length - before).toBe(2)
+    expect(complete.mock.calls.slice(before).map(([input]) => input.prompt).join('\n')).not.toContain('**要点**')
+    expect(Object.values(currentStore.messagesById).some(message => message.roundSummaryOf === sent.message.id || message.crossReviewOf === sent.message.id)).toBe(false)
+  })
+
   it('runs a discussion turn by turn, hands the turn over on @, passes the user’s notes on, and summarizes it', async () => {
     vi.resetModules()
     const startingStore = createStoreWithTwoApiRoles()

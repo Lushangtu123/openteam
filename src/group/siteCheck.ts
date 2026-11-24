@@ -7,6 +7,7 @@
 // fails is asked once more, its page loaded again (SiteCheckState.retry), before it is reported:
 // a slow page or a passing server error is not the site having changed.
 import { CHAT_SITE_INFO, CHAT_SITES, type ChatSite } from './chatSites'
+import { isOpenTeamRequest } from './roundSummary'
 import type { GroupChat, GroupMessage, OpenTeamLanguage, OpenTeamStore } from './types'
 
 // Every AI site OpenTeam opens. A site that refuses to run inside the page shows as a page problem.
@@ -56,7 +57,12 @@ export function siteCheckQuestionIds(store: Pick<OpenTeamStore, 'messagesById'>,
 export function siteCheckGroupInUse(store: Pick<OpenTeamStore, 'messagesById'>, chat: GroupChat): boolean {
   if (chat.siteCheck?.kept) return true
   const questions = new Set(siteCheckQuestionIds(store, chat))
-  return chat.messageIds.some(id => store.messagesById[id]?.type === 'user' && !questions.has(id))
+  // What OpenTeam asked by itself (a check's question; a summary of a check's round, from before
+  // checks were left without one) is not the user's either.
+  return chat.messageIds.some(id => {
+    const message = store.messagesById[id]
+    return message?.type === 'user' && !questions.has(id) && !message.siteCheckQuestion && !isOpenTeamRequest(message)
+  })
 }
 
 export function siteCheckNeedsAttention(outcome: SiteCheckOutcome): boolean {

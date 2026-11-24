@@ -160,5 +160,10 @@ describe('a 网站自检 group the user went on using', () => {
     expect(siteCheckGroupInUse({ messagesById }, chat(['q', 'a']))).toBe(false)
     expect(siteCheckGroupInUse({ messagesById }, chat(['q', 'a', 'mine']))).toBe(true)
     expect(siteCheckGroupInUse({ messagesById }, chat(['q', 'a'], true))).toBe(true)
+    // What OpenTeam asked by itself is not the user's: a summary of the check's round (checks from
+    // before had one), and a check's question.
+    const summary: GroupMessage = { ...message('sum', 'user'), roundSummaryOf: 'q' }
+    const asked: GroupMessage = { ...message('again', 'user'), siteCheckQuestion: true }
+    expect(siteCheckGroupInUse({ messagesById: { ...messagesById, sum: summary, again: asked } }, chat(['q', 'a', 'sum', 'again']))).toBe(false)
   })
 })

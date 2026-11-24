@@ -132,7 +132,7 @@ describe('background site check', () => {
     const items = routed[1].items as Array<Record<string, unknown>>
     expect(items.map(item => item.chatSite)).toEqual(['gemini', 'chatgpt', 'claude', 'deepseek', 'grok', 'qwen', 'kimi'])
     expect(items[0]).toMatchObject({ source: 'temporary', name: 'Gemini', modelSource: 'site' })
-    expect(routed[3]).toMatchObject({ chatId: chat.id, raw: expect.stringMatching(/^@all .*OK/) })
+    expect(routed[3]).toMatchObject({ chatId: chat.id, raw: expect.stringMatching(/^@all .*OK/), siteCheckQuestion: true })
     // DeepSeek's page was the last to be ready, after three looks.
     expect(sentAtLook()).toBe(3)
     // Every site replied: no second try.
@@ -146,10 +146,11 @@ describe('background site check', () => {
 
   it('asks a site that failed once more, its page loaded again, and reports only what failed twice', async () => {
     const answers: Record<string, Answer[]> = { gemini: ['error', 'ok'], deepseek: ['none', 'none'], qwen: ['page-error', 'ok'] }
-    const { store, check, outcomes, sends, recoverMember } = await setup({ answers })
+    const { store, check, outcomes, sends, recoverMember, routed } = await setup({ answers })
     const chat = await check()
     expect(recoverMember.mock.calls.map(([, roleId]) => store.rolesById[roleId].chatSite)).toEqual(['gemini', 'deepseek', 'qwen'])
     expect(sends()).toEqual([expect.stringMatching(/^@all /), expect.stringMatching(/^@Gemini @DeepSeek @Qwen .*OK/)])
+    expect(routed.filter(message => message.type === 'GROUP_MESSAGE_SEND').every(message => message.siteCheckQuestion === true)).toBe(true)
     expect(chat.siteCheck?.retry).toMatchObject({ roleIds: ['gemini', 'deepseek', 'qwen'].map(site => `${chat.id}-${site}`), messageId: expect.any(String) })
     expect(chat.siteCheck?.questionIds).toHaveLength(2)
     expect(outcomes(chat)).toMatchObject({ gemini: 'ok (again)', deepseek: 'no-reply (again)', qwen: 'ok (again)', chatgpt: 'ok', kimi: 'ok' })

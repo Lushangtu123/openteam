@@ -776,6 +776,9 @@ export interface GroupMessage {
   poll?: MessagePoll
   // On the user's message that asks members to give sources (src/group/sources.ts).
   wantsSources?: boolean
+  // A 网站自检's question (src/background/siteCheckHandlers.ts): sent by OpenTeam, answered as it is,
+  // with nothing after the round (no 要点 form, summary or review).
+  siteCheckQuestion?: boolean
   // On a reply to such a message: what OpenTeam found opening each of its source links.
   linkChecks?: Record<string, LinkCheck>
   // On a request OpenTeam sends to one member to check the facts of a round asked with sources:
