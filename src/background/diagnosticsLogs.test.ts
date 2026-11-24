@@ -71,6 +71,8 @@ describe('keeping warnings and errors for a week', () => {
     await keepProblemLogs(storage)
     const log = createLogger('background', {}, { debugEnabled: false })
     log.info('ordinary')
+    // A step that went well, logged as a warning to follow deliveries: not a problem to keep.
+    log.warn('orchestration-diagnostic:delivery-attempt', { chatId: 'c' })
     log.warn('site-fault:noticed', { site: 'kimi' })
     log.error('broke', { apiKey: 'sk-secret' })
     await vi.advanceTimersByTimeAsync(2000)

@@ -37,6 +37,17 @@ export async function keepLogsAcrossRestarts(storage: LogStorageArea | undefined
 export const PROBLEM_LOGS_KEY = 'openteamProblemLogs'
 export const PROBLEM_LOGS_KEEP_MS = 7 * 24 * 3600_000
 export const PROBLEM_LOGS_MAX = 2000
+// Logged as warnings at every step that goes well (each delivery, each page asked to load again),
+// to follow a delivery while it happens: kept for a week, they would push the problems out.
+const ROUTINE_WARNINGS: ReadonlySet<string> = new Set([
+  'orchestration-diagnostic:delivery-attempt',
+  'orchestration-diagnostic:stage-deliveries-start',
+  'orchestration-diagnostic:role-recovery-request:start',
+  'orchestration-diagnostic:role-recovery-request:response',
+  'orchestration-diagnostic:role-error:mark-result',
+  'message-resync-reply:request',
+  'message-resync-reply:updated-store',
+])
 
 let problems: RecentLogEntry[] = []
 let stopKeeping: (() => void) | undefined
@@ -52,7 +63,7 @@ export async function keepProblemLogs(storage: LogStorageArea | undefined): Prom
   let timer: ReturnType<typeof setTimeout> | undefined
   stopKeeping?.()
   stopKeeping = onLogRecorded(entry => {
-    if (entry.level !== 'warn' && entry.level !== 'error') return
+    if ((entry.level !== 'warn' && entry.level !== 'error') || ROUTINE_WARNINGS.has(entry.event)) return
     problems = lastWeek([...problems, entry])
     if (timer) return
     timer = setTimeout(() => {
