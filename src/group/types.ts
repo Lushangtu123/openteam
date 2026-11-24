@@ -9,6 +9,7 @@ import type { ModelSpend } from './spendCap'
 import type { ResultDestination } from './resultDestinations'
 import type { SiteFaultRecord } from './siteFaults'
 import type { SiteCheckSchedule } from './siteCheckSchedule'
+import type { SiteCheckOutcome } from './siteCheck'
 import type { WebSearchSettings } from '../shared/webSearch'
 import type { WebSearchUsage } from '../shared/webSearchUsage'
 import type { LibraryDoc } from './groupLibrary'
@@ -505,7 +506,8 @@ export interface SiteCheckState {
   questionIds?: string[]
   // The second try for the sites that failed: their pages loaded again and asked once more. A site
   // whose page did not come back is left out, keeping its first result; error: none could be asked.
-  retry?: { roleIds: string[]; messageId?: string; error?: string }
+  // firstTry: what each showed the first time (loading its page again clears what the page said).
+  retry?: { roleIds: string[]; messageId?: string; error?: string; firstTry?: Record<string, { outcome: SiteCheckOutcome; detail?: string }> }
   // Every site has its result, the second try included.
   finishedAt?: number
   // Members whose page was hidden at some time during the check (the OpenTeam window minimized, the

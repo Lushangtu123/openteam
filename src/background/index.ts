@@ -65,8 +65,7 @@ import { checkLinks } from './linkCheck'
 import { ACCOUNT_BALANCE_ALARM, createAccountBalances } from './accountBalances'
 import { createScheduledTaskRunner, SCHEDULED_TASK_ALARM } from './scheduledTaskRunner'
 import { createSiteCheckScheduler, SITE_CHECK_ALARM } from './siteCheckScheduler'
-import { keepLogsAcrossRestarts } from './diagnosticsLogs'
-import { recentLogs } from '../shared/logger'
+import { backgroundLogs, keepLogsAcrossRestarts, keepProblemLogs } from './diagnosticsLogs'
 import { createControlClient } from './controlClient'
 import { createTeamPageShower } from './teamPageTab'
 import { createImageAttachmentService } from './imageAttachments'
@@ -82,6 +81,7 @@ const log = createLogger('background')
 const pageVisibility = createPageVisibility(() => Date.now())
 // 导出诊断信息 reads these; they outlive the worker in session storage.
 void keepLogsAcrossRestarts(chrome.storage?.session)
+void keepProblemLogs(chrome.storage?.local)
 const CONTROL_KEEPALIVE_ALARM = 'openteam-control-keepalive'
 const CONTROL_KEEPALIVE_PERIOD_MINUTES = 0.4
 
@@ -418,7 +418,7 @@ const siteCheckScheduler = createSiteCheckScheduler({
 const routeMessage = createMessageRouter([
   { type: 'GROUP_STORE_GET', handler: handleStoreGet },
   // The background's recent log entries, for 导出诊断信息 (already cleaned: src/shared/logger.ts).
-  { type: 'DIAGNOSTICS_LOGS_GET', handler: async () => ({ ok: true, logs: recentLogs() }) },
+  { type: 'DIAGNOSTICS_LOGS_GET', handler: async () => ({ ok: true, logs: backgroundLogs() }) },
   ...webPageOffers.handlers,
   // OpenTeam in the side panel (see openSidePanel below): an OpenTeam tab asks on opening whether a
   // panel holds the members' pages now.
@@ -501,7 +501,7 @@ const executeControlCommand = createControlActionExecutor({
     return new Promise(resolve => globalThis.setTimeout(resolve, ms))
   },
   now,
-  readLogs: () => recentLogs(),
+  readLogs: () => backgroundLogs(),
 })
 
 log.info('control-client:create', {

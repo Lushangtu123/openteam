@@ -1,6 +1,6 @@
 // The result of a 网站自检 (src/group/siteCheck.ts), at the end of the check's group, in the project
 // board's card so that it matches both looks and both themes.
-import { siteCheckDeadline, siteCheckExplanation, siteCheckResults, siteCheckSummary, type SiteCheckOutcome, type SiteCheckResult } from '../group/siteCheck'
+import { siteCheckDeadline, siteCheckExplanation, siteCheckTimeline, siteCheckResults, siteCheckSummary, type SiteCheckOutcome, type SiteCheckResult } from '../group/siteCheck'
 import type { GroupChat, OpenTeamStore } from '../group/types'
 import { normalizeLanguage } from '../shared/i18n'
 
@@ -58,6 +58,9 @@ export function createSiteCheckView(deps: SiteCheckViewDependencies): SiteCheckV
     const row = element('li', `project-task project-task-${status.tone}`)
     const main = element('div', 'project-task-main')
     main.append(element('div', 'project-task-title', result.label), element('p', 'project-board-detail', siteCheckExplanation(result, en)))
+    // What it went through: when asked, what came of it, the second try.
+    const timeline = siteCheckTimeline(result, en)
+    if (timeline) main.append(element('p', 'project-board-detail site-check-timeline', timeline))
     row.append(element('span', 'project-task-status', en ? status.en : status.zh), main)
     return row
   }

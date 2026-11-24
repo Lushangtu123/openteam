@@ -36,6 +36,14 @@ describe('what a 定时自检 sends', () => {
     expect(siteCheckReport(results, '', true).question).toBe('2 of 3 sites need attention; the others work.')
   })
 
+  it('says for each site what it went through, so a report can be looked into', () => {
+    const askedAt = new Date(2026, 10, 23, 9, 0, 12).getTime()
+    const results: SiteCheckResult[] = [
+      { roleId: 'r2', site: 'kimi', label: 'Kimi', outcome: 'no-reply', retried: true, tries: [{ askedAt, outcome: 'no-reply' }, { askedAt: askedAt + 330_000, outcome: 'no-reply' }] },
+    ]
+    expect(siteCheckReport(results, '', false).answers[0].text).toBe('提问已送进页面，但 5 分钟内没读到回复，网站可能改版了。重新打开页面再问了一次，还是这样。\n09:00:12 提问，等了 5 分钟没读到回复；09:05:42 重新打开页面再问，等了 5 分钟没读到回复。')
+  })
+
   it('says which sites were not checked because the OpenTeam page was not on screen', () => {
     const hidden: SiteCheckResult[] = [
       { roleId: 'r1', site: 'chatgpt', label: 'ChatGPT', outcome: 'ok' },

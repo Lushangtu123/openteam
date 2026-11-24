@@ -44,6 +44,10 @@ describe('site check card', () => {
     expect(rows[1].className).toContain('project-task-blocked')
     expect(rows[1].textContent).toContain('DeepSeek')
     expect(rows[1].textContent).toContain('打开网站')
+    // Under each, what it went through.
+    const asked = new Date(START).toTimeString().slice(0, 8)
+    expect(rows[0].querySelector('.site-check-timeline')?.textContent).toBe(`${asked} 提问，1 秒后读到回复。`)
+    expect(rows[1].querySelector('.site-check-timeline')?.textContent).toBe(`${asked} 提问，网站要求登录。`)
   })
 
   it("says why the question could not be sent", () => {

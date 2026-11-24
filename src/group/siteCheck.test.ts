@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createDefaultStore } from './store'
-import { SITE_CHECK_SITES, SITE_CHECK_TIMEOUT_MS, siteCheckDeadline, siteCheckExplanation, siteCheckGroupInUse, siteCheckQuestionIds, siteCheckResults, siteCheckRetries, siteCheckSummary } from './siteCheck'
+import { SITE_CHECK_SITES, SITE_CHECK_TIMEOUT_MS, siteCheckDeadline, siteCheckExplanation, siteCheckTimeline, siteCheckGroupInUse, siteCheckQuestionIds, siteCheckResults, siteCheckRetries, siteCheckSummary } from './siteCheck'
 import type { ChatSite, GroupChat, GroupMessage, GroupRole, OpenTeamStore, RoleSiteHealth } from './types'
 
 const START = 1_000_000
@@ -87,6 +87,57 @@ describe('the site check', () => {
     reply('chatgpt', 'received', 'OK')
     expect(siteCheckSummary(siteCheckResults(store, chat, START + 5000), 'zh-CN')).toBe('检查完成：2 个正常，1 个需要处理')
     expect(siteCheckSummary(siteCheckResults(store, chat, START + 5000), 'en')).toBe('Check finished: 2 working, 1 needs attention')
+  })
+})
+
+// "09:00:12", in the computer's own time.
+const clock = (at: number) => { const date = new Date(at); return [date.getHours(), date.getMinutes(), date.getSeconds()].map(value => String(value).padStart(2, '0')).join(':') }
+
+describe('what each site went through', () => {
+  it('says when it was asked and what came of it', () => {
+    const { store, chat, question, reply, health } = checkStore(['gemini', 'chatgpt', 'deepseek', 'kimi', 'qwen'])
+    reply('gemini', 'received', 'OK')
+    reply('chatgpt', 'error', '回复失败：发送失败：找不到发送按钮\n\n可以点击下方的重新回复按钮再试一次。')
+    health('deepseek', { status: 'unauthorized', reason: 'login' })
+    question.deliveryStatus!['role-kimi'] = 'sent'
+    const asked = clock(START + 500)
+    const now = START + 500 + SITE_CHECK_TIMEOUT_MS + 1
+    const lines = Object.fromEntries(siteCheckResults(store, chat, now).map(result => [result.site, siteCheckTimeline(result, false)]))
+    // The replies came 0.5 s after the question: at least a second.
+    expect(lines).toEqual({
+      gemini: `${asked} 提问，1 秒后读到回复。`,
+      chatgpt: `${asked} 提问，1 秒后失败（发送失败：找不到发送按钮）。`,
+      deepseek: `${asked} 提问，网站要求登录。`,
+      kimi: `${asked} 提问，等了 5 分钟没读到回复。`,
+      qwen: `${asked} 提问，5 分钟内没送进页面。`,
+    })
+    expect(siteCheckTimeline(siteCheckResults(store, chat, now)[0], true)).toBe(`Asked at ${asked}, reply read after 1 s.`)
+  })
+
+  it('tells both tries apart, the first as it was before its page was loaded again, and a hidden page', () => {
+    const { store, chat, health } = checkStore(['qwen'])
+    health('qwen', { status: 'blocked', reason: 'http-error', detail: '504 Gateway Time-out' })
+    chat.siteCheck!.retry = { roleIds: ['role-qwen'], firstTry: { 'role-qwen': { outcome: 'page-problem', detail: '504 Gateway Time-out' } } }
+    // Loaded again: the page is fine now.
+    delete store.rolesById['role-qwen'].siteHealth
+    const loading = siteCheckResults(store, chat, START + 2000)[0]
+    expect(siteCheckTimeline(loading, false)).toBe(`${clock(START + 500)} 提问，页面出错（504 Gateway Time-out）；正在重新打开页面。`)
+
+    const again: GroupMessage = { id: 'msg-again', chatId: chat.id, seq: 5, type: 'user', content: '@Qwen OK', createdAt: START + 60_000, status: 'sent', deliveryStatus: { 'role-qwen': 'sent' } }
+    store.messagesById[again.id] = again
+    chat.messageIds.push(again.id)
+    chat.siteCheck!.retry.messageId = again.id
+    chat.siteCheck!.hiddenRoleIds = ['role-qwen']
+    const result = siteCheckResults(store, chat, START + 60_000 + SITE_CHECK_TIMEOUT_MS + 1)[0]
+    expect(result.outcome).toBe('page-hidden')
+    expect(siteCheckTimeline(result, false)).toBe(`${clock(START + 500)} 提问，页面出错（504 Gateway Time-out）；${clock(START + 60_000)} 重新打开页面再问，等了 5 分钟没读到回复；检查期间 OpenTeam 页面有一段时间不在前台。`)
+    expect(siteCheckTimeline(result, true)).toBe(`Asked at ${clock(START + 500)}, the page showed an error (504 Gateway Time-out); asked again at ${clock(START + 60_000)} with its page loaded again, no reply read in 5 minutes; the OpenTeam page was not on screen for a while during the check.`)
+  })
+
+  it('has nothing to say before the question is out', () => {
+    const { store, chat } = checkStore(['gemini'])
+    chat.messageIds = []
+    expect(siteCheckTimeline(siteCheckResults(store, chat, START + 5000)[0], false)).toBeUndefined()
   })
 })
 

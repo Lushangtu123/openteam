@@ -156,6 +156,8 @@ describe('background site check', () => {
     expect(routed.filter(message => message.type === 'GROUP_MESSAGE_SEND').every(message => message.siteCheckQuestion === true)).toBe(true)
     expect(chat.siteCheck?.retry).toMatchObject({ roleIds: ['gemini', 'deepseek', 'qwen'].map(site => `${chat.id}-${site}`), messageId: expect.any(String) })
     expect(chat.siteCheck?.questionIds).toHaveLength(2)
+    // The first try as it was, before the pages were loaded again.
+    expect(chat.siteCheck?.retry?.firstTry).toEqual({ [`${chat.id}-gemini`]: { outcome: 'failed', detail: 'RESPONSE_NOT_FOUND' }, [`${chat.id}-deepseek`]: { outcome: 'no-reply' }, [`${chat.id}-qwen`]: { outcome: 'page-problem', detail: '504 Gateway Time-out' } })
     expect(outcomes(chat)).toMatchObject({ gemini: 'ok (again)', deepseek: 'no-reply (again)', qwen: 'ok (again)', chatgpt: 'ok', kimi: 'ok' })
   })
 

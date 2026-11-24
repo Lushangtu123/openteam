@@ -9,7 +9,7 @@
 import { CHAT_SITE_INFO, CHAT_SITES, type ChatSite } from './chatSites'
 import { textReadBeforeInterruption } from './replyInterruption'
 import { isOpenTeamRequest } from './roundSummary'
-import type { GroupChat, GroupMessage, OpenTeamLanguage, OpenTeamStore } from './types'
+import type { GroupChat, GroupMessage, GroupRole, OpenTeamLanguage, OpenTeamStore } from './types'
 
 // Every AI site OpenTeam opens. A site that refuses to run inside the page shows as a page problem.
 export const SITE_CHECK_SITES: ChatSite[] = [...CHAT_SITES]
@@ -39,6 +39,19 @@ export interface SiteCheckResult {
   detail?: string
   // Asked the second time, its page loaded again: this is that try's result.
   retried?: boolean
+  // What each try went through, for the line under the result (siteCheckTimeline).
+  tries?: SiteCheckTry[]
+  // Its page was hidden at some time during the check.
+  pageHidden?: boolean
+}
+
+// One question to a site and what came of it.
+export interface SiteCheckTry {
+  askedAt: number
+  outcome: SiteCheckOutcome
+  detail?: string
+  // When its reply (or failure) was read.
+  repliedAt?: number
 }
 
 const NEEDS_ATTENTION: ReadonlySet<SiteCheckOutcome> = new Set(['login', 'page-problem', 'failed', 'not-sent', 'no-reply', 'page-hidden'])
@@ -96,8 +109,9 @@ export function siteCheckDeadline(store: Pick<OpenTeamStore, 'messagesById'>, ch
 export function siteCheckResults(store: Pick<OpenTeamStore, 'messagesById' | 'rolesById'>, chat: GroupChat, now: number): SiteCheckResult[] {
   const hidden = new Set(chat.siteCheck?.hiddenRoleIds ?? [])
   return siteResults(store, chat, now).map(result => {
-    if (!hidden.has(result.roleId) || !HIDDEN_PAGE_FAILS.has(result.outcome)) return result
-    const { detail: _said, ...rest } = result
+    const marked = hidden.has(result.roleId) ? { ...result, pageHidden: true } : result
+    if (!hidden.has(result.roleId) || !HIDDEN_PAGE_FAILS.has(result.outcome)) return marked
+    const { detail: _said, ...rest } = marked
     return { ...rest, outcome: 'page-hidden' as const }
   })
 }
@@ -112,27 +126,85 @@ function siteResults(store: Pick<OpenTeamStore, 'messagesById' | 'rolesById'>, c
     const site = role.chatSite
     const retried = Boolean(retry?.roleIds.includes(roleId) && !retry.error)
     const base = { roleId, site, label: CHAT_SITE_INFO[site].label, ...(retried ? { retried: true } : {}) }
+    if (!first) return [{ ...base, outcome: 'waiting' }]
+    const firstTry = attempt(messages, role, first, now)
+    // The first try as it was before its page was loaded again for the second.
+    const before = retried ? retry?.firstTry?.[roleId] : undefined
+    const tries: SiteCheckTry[] = [before ? { ...firstTry, outcome: before.outcome, ...(before.detail ? { detail: before.detail } : {}) } : firstTry]
+    if (!retried) return [{ ...base, outcome: firstTry.outcome, ...(firstTry.detail ? { detail: firstTry.detail } : {}), tries }]
     // Being asked again: its page is loading.
-    if (retried && !retry?.messageId) return [{ ...base, outcome: 'waiting' }]
-    const question = retried ? store.messagesById[retry!.messageId!] : first
-    if (!question) return [{ ...base, outcome: 'waiting' }]
-
-    const reply = messages.filter(message => message.type === 'assistant' && message.roleId === roleId && message.sourceMessageId === question.id).slice(-1)[0]
-    // What the reply says outranks what the page last reported. A reply whose page went before any
-    // of it was read holds only OpenTeam's note about that.
-    if (reply?.status === 'received' && textReadBeforeInterruption(reply.content).trim()) return [{ ...base, outcome: 'ok' }]
-    if (reply?.status === 'received' && reply.content.trim()) return [{ ...base, outcome: 'failed', detail: '回复没读完，成员页面就关闭或重新加载了' }]
-    if (reply?.status === 'error') return [{ ...base, outcome: 'failed', detail: failureReason(reply.content) }]
-
-    const health = role.siteHealth
-    if (health?.status === 'unauthorized') return [{ ...base, outcome: 'login' }]
-    if (health?.status === 'blocked' || health?.status === 'error') return [{ ...base, outcome: 'page-problem', detail: health.detail || health.reason }]
-
-    const delivery = question.deliveryStatus?.[roleId]
-    if (delivery === 'error') return [{ ...base, outcome: 'failed' }]
-    if (now - question.createdAt > SITE_CHECK_TIMEOUT_MS) return [{ ...base, outcome: delivery === 'pending' || !delivery ? 'not-sent' as const : 'no-reply' }]
-    return [{ ...base, outcome: 'waiting' }]
+    const again = retry?.messageId ? store.messagesById[retry.messageId] : undefined
+    if (!again) return [{ ...base, outcome: 'waiting', tries }]
+    const secondTry = attempt(messages, role, again, now)
+    return [{ ...base, outcome: secondTry.outcome, ...(secondTry.detail ? { detail: secondTry.detail } : {}), tries: [...tries, secondTry] }]
   })
+}
+
+// What came of one question to a member.
+function attempt(messages: GroupMessage[], role: GroupRole, question: GroupMessage, now: number): SiteCheckTry {
+  const askedAt = question.createdAt
+  const reply = messages.filter(message => message.type === 'assistant' && message.roleId === role.id && message.sourceMessageId === question.id).slice(-1)[0]
+  const replied = reply ? { repliedAt: reply.createdAt } : {}
+  // What the reply says outranks what the page last reported. A reply whose page went before any
+  // of it was read holds only OpenTeam's note about that.
+  if (reply?.status === 'received' && textReadBeforeInterruption(reply.content).trim()) return { askedAt, outcome: 'ok', ...replied }
+  if (reply?.status === 'received' && reply.content.trim()) return { askedAt, outcome: 'failed', detail: '回复没读完，成员页面就关闭或重新加载了', ...replied }
+  if (reply?.status === 'error') {
+    const detail = failureReason(reply.content)
+    return { askedAt, outcome: 'failed', ...(detail ? { detail } : {}), ...replied }
+  }
+
+  const health = role.siteHealth
+  if (health?.status === 'unauthorized') return { askedAt, outcome: 'login' }
+  if (health?.status === 'blocked' || health?.status === 'error') {
+    const detail = health.detail || health.reason
+    return { askedAt, outcome: 'page-problem', ...(detail ? { detail } : {}) }
+  }
+
+  const delivery = question.deliveryStatus?.[role.id]
+  if (delivery === 'error') return { askedAt, outcome: 'failed' }
+  if (now - askedAt > SITE_CHECK_TIMEOUT_MS) return { askedAt, outcome: delivery === 'pending' || !delivery ? 'not-sent' : 'no-reply' }
+  return { askedAt, outcome: 'waiting' }
+}
+
+// The line under a site's result: when it was asked, what came of it, the second try, and whether
+// the OpenTeam page was hidden. Nothing before the question is out.
+export function siteCheckTimeline(result: SiteCheckResult, en: boolean): string | undefined {
+  const [first, second] = result.tries ?? []
+  if (!first) return undefined
+  const parts = [en ? `Asked at ${clockTime(first.askedAt)}, ${tryText(first, en)}` : `${clockTime(first.askedAt)} 提问，${tryText(first, en)}`]
+  if (second) parts.push(en ? `asked again at ${clockTime(second.askedAt)} with its page loaded again, ${tryText(second, en)}` : `${clockTime(second.askedAt)} 重新打开页面再问，${tryText(second, en)}`)
+  else if (result.retried) parts.push(en ? 'its page is being loaded again' : '正在重新打开页面')
+  if (result.pageHidden) parts.push(en ? 'the OpenTeam page was not on screen for a while during the check' : '检查期间 OpenTeam 页面有一段时间不在前台')
+  return `${parts.join(en ? '; ' : '；')}${en ? '.' : '。'}`
+}
+
+function tryText(attempt: SiteCheckTry, en: boolean): string {
+  const seconds = attempt.repliedAt === undefined ? undefined : Math.max(1, Math.round((attempt.repliedAt - attempt.askedAt) / 1000))
+  const detail = attempt.detail ? (en ? ` (${attempt.detail})` : `（${attempt.detail}）`) : ''
+  switch (attempt.outcome) {
+    case 'ok':
+      return en ? `reply read after ${seconds ?? 1} s` : `${seconds ?? 1} 秒后读到回复`
+    case 'failed':
+      if (seconds !== undefined) return en ? `failed after ${seconds} s${detail}` : `${seconds} 秒后失败${detail}`
+      return detail ? (en ? `failed${detail}` : `失败${detail}`) : (en ? 'it did not reach the page' : '没能送进页面')
+    case 'login':
+      return en ? 'the site asks to sign in' : '网站要求登录'
+    case 'page-problem':
+      return en ? `the page showed an error${detail}` : `页面出错${detail}`
+    case 'not-sent':
+      return en ? 'it did not reach the page in 5 minutes' : '5 分钟内没送进页面'
+    case 'no-reply':
+      return en ? 'no reply read in 5 minutes' : '等了 5 分钟没读到回复'
+    default:
+      return en ? 'waiting for its reply' : '正在等回复'
+  }
+}
+
+// "09:00:12", in the computer's own time.
+function clockTime(timestamp: number): string {
+  const date = new Date(timestamp)
+  return [date.getHours(), date.getMinutes(), date.getSeconds()].map(value => String(value).padStart(2, '0')).join(':')
 }
 
 // A failed reply's text without the note that it failed or the hint to retry.

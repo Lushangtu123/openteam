@@ -33,7 +33,7 @@ const LOG_LIST_MAX_ITEMS = 10
 const REMOVED_FIELDS = /^(content|contents|prompt|text|raw|body|snapshot|contentSnapshot|systemPrompt|persona|apiKey|key|token|authorization|password|cookie|cookies|name|roleName|chatName|groupName|title|topic|goal|task|question|description|note|summary|fileName)$/i
 
 let recent: RecentLogEntry[] = []
-const recordListeners = new Set<() => void>()
+const recordListeners = new Set<(entry: RecentLogEntry) => void>()
 
 export function recentLogs(): RecentLogEntry[] {
   return [...recent]
@@ -49,7 +49,7 @@ export function restoreRecentLogs(entries: RecentLogEntry[]): void {
 }
 
 // Told after each kept entry (the background saves them, so a restart does not lose them).
-export function onLogRecorded(listener: () => void): () => void {
+export function onLogRecorded(listener: (entry: RecentLogEntry) => void): () => void {
   recordListeners.add(listener)
   return () => recordListeners.delete(listener)
 }
@@ -100,9 +100,10 @@ function sanitizeText(text: string): string {
 function keepRecent(level: ConsoleLevel, scope: string, event: string, details: LogDetails): void {
   if (level === 'debug') return
   try {
-    recent.push({ at: Date.now(), level, scope, event, details: sanitizeLogDetails(details) })
+    const entry: RecentLogEntry = { at: Date.now(), level, scope, event, details: sanitizeLogDetails(details) }
+    recent.push(entry)
     if (recent.length > LOG_BUFFER_SIZE) recent = recent.slice(-LOG_BUFFER_SIZE)
-    for (const listener of recordListeners) listener()
+    for (const listener of recordListeners) listener(entry)
   } catch {
     // Keeping a log entry must never affect what is being logged.
   }

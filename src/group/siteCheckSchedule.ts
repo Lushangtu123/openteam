@@ -4,7 +4,7 @@
 // site worked; when some did not, the group stays for the user to look at and, if a destination is
 // chosen, those sites are sent there. Nothing is sent when every site worked.
 import { readWeeklyTimes } from './scheduledTasks'
-import { siteCheckExplanation, siteCheckNeedsAttention, type SiteCheckOutcome, type SiteCheckResult } from './siteCheck'
+import { siteCheckExplanation, siteCheckTimeline, siteCheckNeedsAttention, type SiteCheckOutcome, type SiteCheckResult } from './siteCheck'
 import type { RoundResult } from './resultDestinations'
 import { CHAT_SITES, type ChatSite } from './chatSites'
 import type { ScheduledTaskDelivery } from './types'
@@ -66,7 +66,7 @@ export function siteCheckReport(results: SiteCheckResult[], schedule: string, en
         ? `${attention ? `${attention} of ${results.length} sites need attention; ${hidden}` : `${hidden} of ${results.length} sites`} were not checked: the OpenTeam page was not on screen. The others work.`
         : `${problems.length} of ${results.length} sites need attention; the others work.`
       : `${results.length} 个网站里有 ${[attention ? `${attention} 个需要处理` : '', hidden ? `${hidden} 个没查成：检查时 OpenTeam 页面不在前台。` : ''].filter(Boolean).join('，')}${hidden ? '' : '，'}其余正常。`,
-    answers: problems.map(result => ({ member: result.label, text: siteCheckExplanation(result, english), failed: true })),
+    answers: problems.map(result => ({ member: result.label, text: [siteCheckExplanation(result, english), siteCheckTimeline(result, english)].filter(Boolean).join('\n'), failed: true })),
   }
 }
 

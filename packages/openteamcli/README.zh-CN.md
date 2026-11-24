@@ -156,7 +156,7 @@ openteamcli site-check [--no-wait] [--timeout <毫秒>]
 openteamcli logs [--search <文字>] [--level warn|error] [--since 30m|2h|1d] [--limit <条数>]
 ```
 
-读出 OpenTeam 后台最近记下的日志（最近 400 条，浏览器开着时一直保留：后台重启不丢，刷新扩展或关闭浏览器后清空）：比如 API 模型为什么换成了备用模型（`external-model:fallback`）、资料库网页为什么没更新成功（`library-refresh:failed`）、成员网页报的错等。`--search` 只留事件名或详情里含这段文字的，`--level warn` 只留警告和错误，`--since` 只留最近一段时间的，`--limit` 只留最后几条（默认 100）。日志在记下时就已清理过，和「导出诊断信息」一样：不含消息内容、提示词和名字，链接只留网站，不含任何 Key。这是扩展的日志；`daemon logs` 是本机守护进程自己的日志。
+读出 OpenTeam 后台最近记下的日志（最近 400 条，浏览器开着时一直保留：后台重启不丢，刷新扩展或关闭浏览器后清空；警告和错误另外保留一周，刷新扩展、重开浏览器都不丢）：比如 API 模型为什么换成了备用模型（`external-model:fallback`）、资料库网页为什么没更新成功（`library-refresh:failed`）、成员网页报的错等。`--search` 只留事件名或详情里含这段文字的，`--level warn` 只留警告和错误，`--since` 只留最近一段时间的，`--limit` 只留最后几条（默认 100）。日志在记下时就已清理过，和「导出诊断信息」一样：不含消息内容、提示词和名字，链接只留网站，不含任何 Key。这是扩展的日志；`daemon logs` 是本机守护进程自己的日志。
 
 ## 发布检查
 

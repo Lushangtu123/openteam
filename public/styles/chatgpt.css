@@ -1189,6 +1189,13 @@
   white-space: pre-line;
 }
 
+/* 网站自检: what a site went through (when asked, how long, the second try), under its result. */
+:root[data-theme] .project-board-detail.site-check-timeline {
+  margin-top: 2px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
 :root[data-theme] .project-board-detail.question {
   border-radius: 10px;
   padding: 8px 10px;

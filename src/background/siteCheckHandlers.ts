@@ -147,16 +147,19 @@ export function createSiteCheckHandlers(deps: SiteCheckHandlerDependencies): Bac
     const store = await deps.loadStore()
     const chat = store.chatsById[chatId]
     if (!chat) return
-    const failed = siteCheckResults(store, chat, deps.now()).filter(result => siteCheckRetries(result.outcome)).map(result => result.roleId)
+    const failedResults = siteCheckResults(store, chat, deps.now()).filter(result => siteCheckRetries(result.outcome))
+    const failed = failedResults.map(result => result.roleId)
     if (!failed.length) return
-    await setCheck(chatId, check => { check.retry = { roleIds: failed } })
+    // What the first try showed, kept: loading the page again clears what the page said.
+    const firstTry = Object.fromEntries(failedResults.map(result => [result.roleId, { outcome: result.outcome, ...(result.detail ? { detail: result.detail } : {}) }]))
+    await setCheck(chatId, check => { check.retry = { roleIds: failed, firstTry } })
     await recover(chatId, failed)
     const ready = await readyRoles(chatId, failed)
     if (!ready.length) throw new Error('重新打开的网站页面都没有加载好')
     const names = await deps.loadStore().then(store => ready.map(roleId => `@${store.rolesById[roleId]?.name ?? ''}`))
     const messageId = await ask(chatId, names.join(' '))
     await setCheck(chatId, check => {
-      check.retry = { roleIds: ready, messageId }
+      check.retry = { roleIds: ready, messageId, ...(check.retry?.firstTry ? { firstTry: check.retry.firstTry } : {}) }
       check.questionIds = [...(check.questionIds ?? []), messageId]
     })
     await untilAnswered(chatId)
