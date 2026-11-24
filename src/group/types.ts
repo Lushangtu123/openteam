@@ -490,6 +490,9 @@ export interface ProjectTask {
   checked?: boolean
 }
 
+// Reading and searching; editing files. A command, a delete or a move is asked every time.
+export type ProjectToolKind = 'read' | 'edit'
+
 export interface ProjectRun {
   id: string
   goalMessageId: string
@@ -515,6 +518,9 @@ export interface ProjectRun {
   // Local agent members the user let run every request of this project without asking each time
   // (src/background/projectRunGrants.ts). Ends with the project: cleared when it stops or is done.
   runAllowedRoleIds?: string[]
+  // The kinds of a local agent member's own actions the user let through for the rest of this
+  // project, by member (src/background/projectRunGrants.ts). Ends with the project too.
+  toolAllowedKinds?: Record<string, ProjectToolKind[]>
   createdAt: number
   updatedAt: number
 }

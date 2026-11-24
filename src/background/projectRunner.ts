@@ -1,6 +1,7 @@
 // Runs 项目模式 in the background: the coordinator's plan, the user's approval, handing tasks out as
 // they become ready, the coordinator's checks after each wave, and the final write-up. Every step is
 // a request to one member; replies arrive like any other and move the project on.
+import { clearProjectGrants, revokeProjectGrants } from './projectRunGrants'
 import {
   allTasksDone,
   isProjectActive,
@@ -114,8 +115,8 @@ export function createProjectRunner(ctx: ProjectRunnerContext) {
 
   function stop(project: ProjectRun, reason: NonNullable<ProjectRun['stopReason']>, detail: string | undefined, timestamp: number): void {
     project.status = 'stopped'
-    // 这个项目都允许 was for this run: continued, the local agents are asked again.
-    delete project.runAllowedRoleIds
+    // 这个项目都允许 and the kinds let through were for this run: continued, the local agents are asked again.
+    clearProjectGrants(project)
     project.stopReason = reason
     if (detail) project.stopDetail = detail
     else delete project.stopDetail
@@ -352,7 +353,7 @@ export function createProjectRunner(ctx: ProjectRunnerContext) {
         project.finalMessageId = reply.id
         project.status = 'done'
         delete project.stopReason
-        delete project.runAllowedRoleIds
+        clearProjectGrants(project)
       } else {
         stop(project, 'failed', '最终交付没有写出来', timestamp)
       }
@@ -462,14 +463,12 @@ export function createProjectRunner(ctx: ProjectRunnerContext) {
     })
   }
 
-  // 收回 on the board: the member is asked again before its next task (projectRunGrants.ts). A run
-  // going on now goes on; a project that has ended has no grant left to take back.
+  // 收回 on the board: the member is asked again before its next task, and for each of its actions
+  // (projectRunGrants.ts). A run going on now goes on; a project that has ended has no grant left.
   function revokeRuns(chatId: string, roleId: string) {
     return act(chatId, (_store, _chat, project, timestamp) => {
-      if (!project.runAllowedRoleIds?.includes(roleId)) return []
-      const left = project.runAllowedRoleIds.filter(id => id !== roleId)
-      if (left.length) project.runAllowedRoleIds = left
-      else delete project.runAllowedRoleIds
+      if (!revokeProjectGrants(project, roleId)) return []
+      ctx.log.info('project-grant:revoked', { chatId, roleId })
       project.updatedAt = timestamp
       return []
     })

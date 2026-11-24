@@ -135,7 +135,7 @@ const localAgentClient = createLocalAgentClient({
   },
   approvals: localAgentApprovals,
   // 这个项目都允许: a project's tasks run without a click each once the user allows it.
-  projectRuns: createProjectRunGrants({ loadStore, mutateStore, broadcastStoreUpdated: store => broadcastStoreUpdated(store) }),
+  projectRuns: createProjectRunGrants({ loadStore, mutateStore, broadcastStoreUpdated: store => broadcastStoreUpdated(store), log }),
   getLanguage: () => cachedLanguage,
 })
 let cachedLanguage: unknown

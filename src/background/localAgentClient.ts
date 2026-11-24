@@ -1,6 +1,7 @@
 // Runs a local agent member's prompt through the OpenTeam daemon (ACP) and streams its work as the
 // member's reply. Nothing runs before the user allows it; each permission the agent asks for (to edit
-// a file, run a command) is asked of the user too. A run is never retried on its own: what an agent
+// a file, run a command) is asked of the user too, unless the user let that kind (reading, editing)
+// through for the running project (projectRunGrants.ts). A run is never retried on its own: what an agent
 // did cannot be undone by sending it again. A run that goes quiet (a tool that does not end) says so
 // in the reply, naming the tool, and stops at the agent's 运行时限 (src/shared/localAgentLimits.ts).
 import { normalizeLanguage } from '../shared/i18n'
@@ -8,7 +9,7 @@ import type { ControlHttpResult, ExtensionRequest, LocalAgentEvent } from '../sh
 import type { ExternalModelCompletionInput } from './externalModelClient'
 import { DEFAULT_RUN_LIMIT_MINUTES, STALL_NOTICE_MS, STALL_REPEAT_MS } from '../shared/localAgentLimits'
 import type { LocalAgentApprovals } from './localAgentApprovals'
-import type { ProjectRunGrants } from './projectRunGrants'
+import { projectToolKind, type ProjectRunGrants } from './projectRunGrants'
 import { createWorkspaceQueue, type WorkspaceQueue } from './workspaceQueue'
 
 export interface LocalAgentControl {
@@ -19,14 +20,17 @@ export interface LocalAgentControl {
 export interface LocalAgentClientDependencies {
   control: LocalAgentControl
   approvals: Pick<LocalAgentApprovals, 'ask'>
-  // 这个项目都允许 (projectRunGrants.ts): a project's requests run without asking once it is given.
-  projectRuns?: Pick<ProjectRunGrants, 'check' | 'allow'>
+  // 这个项目都允许 (projectRunGrants.ts): a project's requests run without asking once it is given,
+  // and the kinds of the agent's actions let through for the project are answered without asking.
+  projectRuns?: Pick<ProjectRunGrants, 'check' | 'allow' | 'checkTool' | 'allowTool'>
   getLanguage(): unknown
   // Shared by every run of this client: one agent at a time in a folder.
   workspaces?: WorkspaceQueue
 }
 
 const PROMPT_PREVIEW_CHARS = 6000
+// The card's own option, next to the agent's: let this kind through for the rest of the project.
+const PROJECT_TOOLS_OPTION = 'openteam-allow-project-tools'
 
 export function createLocalAgentClient(deps: LocalAgentClientDependencies) {
   const workspaces = deps.workspaces ?? createWorkspaceQueue()
@@ -161,19 +165,52 @@ export function createLocalAgentClient(deps: LocalAgentClientDependencies) {
     })
 
     async function answerPermission(id: string, event: Extract<LocalAgentEvent, { kind: 'permission' }>): Promise<void> {
+      // Reading or editing let through for the rest of the project (projectRunGrants.ts): answered
+      // with the agent's "allow this once", so the grant stays OpenTeam's and 收回 can take it back.
+      const toolKind = projectToolKind(event.toolKind)
+      const allowOnce = event.options.find(option => option.kind === 'allow_once') ?? event.options.find(option => option.kind === 'allow_always')
+      const grant = toolKind && allowOnce ? await deps.projectRuns?.checkTool(context!, toolKind) : undefined
+      const kindLabel = toolKind === 'read' ? (en ? 'reading and searching' : '读取和搜索') : (en ? 'editing files' : '编辑文件')
+      if (grant === 'allowed' && allowOnce) {
+        push(en ? `\n\n> ✅ Allowed for this project (${kindLabel}): ${event.title}\n\n` : `\n\n> ✅ 项目授权（${kindLabel}）：${event.title}\n\n`)
+        await tellAgent(id, event.permissionId, allowOnce.optionId)
+        return
+      }
+
       waitingForUser += 1
+      const options = event.options.map(option => ({ id: option.optionId, label: option.name, kind: option.kind }))
+      const offered = grant === 'can-allow'
+      if (offered) {
+        // After the agent's own allow options, before its refusals.
+        const at = options.findIndex(option => !option.kind.startsWith('allow'))
+        options.splice(at === -1 ? options.length : at, 0, { id: PROJECT_TOOLS_OPTION, label: en ? `Allow ${kindLabel} for this project` : `这个项目里都允许${kindLabel}`, kind: 'allow_always' })
+      }
+      const kindLine = event.toolKind ? (en ? `Kind: ${event.toolKind}` : `类型：${event.toolKind}`) : undefined
+      const editNote = offered && toolKind === 'edit'
+        ? (en ? `"Allow editing files for this project": it no longer asks you before changing a file in this project. Its file tools follow its own rules, not OpenTeam's folder.` : '选「这个项目里都允许编辑文件」，之后它在这个项目里改文件不再问你。它的文件工具只受它自己的规则约束，不受 OpenTeam 的文件夹限制。')
+        : undefined
       const optionId = await deps.approvals.ask(context!, {
         kind: 'permission',
         title: en ? `${who} wants to: ${event.title}` : `「${who}」想要：${event.title}`,
-        detail: event.toolKind ? (en ? `Kind: ${event.toolKind}` : `类型：${event.toolKind}`) : undefined,
-        options: event.options.map(option => ({ id: option.optionId, label: option.name, kind: option.kind })),
+        detail: [kindLine, editNote].filter(Boolean).join('\n') || undefined,
+        options,
       }, signal).finally(() => {
         waitingForUser -= 1
         touch()
       })
+      if (optionId === PROJECT_TOOLS_OPTION && toolKind && allowOnce) {
+        await deps.projectRuns?.allowTool(context!, toolKind)
+        push(en ? `\n\n> ✅ Allow ${kindLabel} for this project: ${event.title}\n\n` : `\n\n> ✅ 这个项目里都允许${kindLabel}：${event.title}\n\n`)
+        await tellAgent(id, event.permissionId, allowOnce.optionId)
+        return
+      }
       const chosen = event.options.find(option => option.optionId === optionId)
       if (chosen) push(`\n\n> ${chosen.kind.startsWith('allow') ? '✅' : '⛔'} ${chosen.name}：${event.title}\n\n`)
-      const answered = await deps.control.request('agent.permission', { runId: id, permissionId: event.permissionId, ...(optionId ? { optionId } : {}) })
+      await tellAgent(id, event.permissionId, optionId)
+    }
+
+    async function tellAgent(id: string, permissionId: string, optionId: string | undefined): Promise<void> {
+      const answered = await deps.control.request('agent.permission', { runId: id, permissionId, ...(optionId ? { optionId } : {}) })
       if (!answered.ok && !signal?.aborted) fail(new Error(answered.error?.message ?? '没能把你的决定告诉本机智能体'))
     }
 

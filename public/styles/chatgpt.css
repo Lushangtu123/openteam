@@ -1196,7 +1196,7 @@
   color: var(--text);
 }
 
-/* 这个项目都允许: who may run every task without asking, each with 收回. */
+/* 这个项目都允许 and the kinds let through: what each member may do without asking, each with 收回. */
 :root[data-theme] .project-board-grants {
   display: flex;
   flex-wrap: wrap;
@@ -1215,6 +1215,16 @@
   align-items: center;
   gap: 4px;
   color: var(--text);
+}
+
+/* What it may do, after the name: quieter, wrapping on a narrow board. */
+:root[data-theme] .project-board-grant-what {
+  color: var(--muted);
+}
+
+:root[data-theme] .project-board-grant-what::before {
+  content: '·' / '';
+  margin-right: 4px;
 }
 
 :root[data-theme] .project-task-list {
@@ -1377,6 +1387,8 @@
   margin: 0;
   color: var(--muted);
   font-size: 12.5px;
+  /* The kind on one line, what a project grant means on the next. */
+  white-space: pre-line;
 }
 
 :root[data-theme] .approval-card-actions {

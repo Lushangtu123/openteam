@@ -2233,12 +2233,13 @@ describe('background message handlers', () => {
       }
       return { content: '最终交付' }
     })
+    const log = { debug: vi.fn(), info: vi.fn(), warn: vi.fn() }
     let messageIdSeq = 0
     const routes = createMessageHandlers({
       broadcastStoreUpdated: vi.fn(),
       externalModelClient: { complete },
       getChatStatusFromRoles: () => 'ready',
-      log: { debug: vi.fn(), info: vi.fn(), warn: vi.fn() },
+      log,
       newId: vi.fn((prefix: string) => prefix === 'msg' ? `${prefix}-${++messageIdSeq}` : `${prefix}-${messageIdSeq}`),
       now: vi.fn(() => 100),
       runtimeFrames: { bind: vi.fn(), getByAddress: vi.fn(), getByRole: vi.fn(() => undefined) },
@@ -2259,26 +2260,33 @@ describe('background message handlers', () => {
     // A local agent allowed to run for the whole project (projectRunGrants.ts): 收回 takes one member's
     // grant back, and the rest ends with the project.
     project().runAllowedRoleIds = ['role-1', 'role-2']
+    project().toolAllowedKinds = { 'role-2': ['read', 'edit'] }
     await route('GROUP_PROJECT_REVOKE_RUNS').handler({ type: 'GROUP_PROJECT_REVOKE_RUNS', chatId: 'chat-1', roleId: 'role-2' }, {})
     expect(project().runAllowedRoleIds).toEqual(['role-1'])
+    expect(project().toolAllowedKinds).toBeUndefined()
+    expect(log.info).toHaveBeenCalledWith('project-grant:revoked', { chatId: 'chat-1', roleId: 'role-2' })
     await route('GROUP_PROJECT_REVOKE_RUNS').handler({ type: 'GROUP_PROJECT_REVOKE_RUNS', chatId: 'chat-1', roleId: 'role-1' }, {})
     expect(project().runAllowedRoleIds).toBeUndefined()
     project().runAllowedRoleIds = ['role-1']
+    project().toolAllowedKinds = { 'role-1': ['read'] }
 
     // The answer goes in through the message box, as a note for the coordinator.
     await route('GROUP_MESSAGE_SEND').handler({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@all 预算 5 万' }, {})
     expect(Object.values(currentStore.messagesById).find(message => message.projectNoteOf)).toMatchObject({ content: '@all 预算 5 万', targetRoleIds: [] })
     await vi.waitFor(() => expect(project().status).toBe('done'))
     expect(project().runAllowedRoleIds).toBeUndefined()
+    expect(project().toolAllowedKinds).toBeUndefined()
 
     // A new project can start once this one is done; stopping and continuing work on it.
     await route('GROUP_PROJECT_START').handler({ type: 'GROUP_PROJECT_START', chatId: 'chat-1', goal: '第二个项目' }, {})
     project().runAllowedRoleIds = ['role-1']
+    project().toolAllowedKinds = { 'role-1': ['edit'] }
     await route('GROUP_PROJECT_STOP').handler({ type: 'GROUP_PROJECT_STOP', chatId: 'chat-1' }, {})
     await new Promise(resolve => setTimeout(resolve, 20))
     expect(project()).toMatchObject({ status: 'stopped', stopReason: 'user' })
     // Continued, it asks again: the grant was for the run that stopped.
     expect(project().runAllowedRoleIds).toBeUndefined()
+    expect(project().toolAllowedKinds).toBeUndefined()
     await route('GROUP_PROJECT_CONTINUE').handler({ type: 'GROUP_PROJECT_CONTINUE', chatId: 'chat-1' }, {})
     await vi.waitFor(() => expect(project().status).toBe('awaiting-approval'))
   })

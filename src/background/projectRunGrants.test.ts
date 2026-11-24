@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createDefaultStore } from '../group/store'
 import type { OpenTeamStore, ProjectRun } from '../group/types'
-import { allowProjectRuns, createProjectRunGrants, projectRunAllowance } from './projectRunGrants'
+import { allowProjectRuns, allowProjectTools, clearProjectGrants, createProjectRunGrants, projectRunAllowance, projectToolAllowance, projectToolKind, revokeProjectGrants } from './projectRunGrants'
 
 // A group with a project running: two local agent members, the task sent to 程序员, an ordinary
 // question to it, and a task message left from an earlier project.
@@ -72,5 +72,82 @@ describe('letting a local agent run for the whole project', () => {
     expect(await grants.allow(devTask)).toBe(true)
     expect(broadcastStoreUpdated).toHaveBeenCalledWith(store)
     expect(await grants.check(devTask)).toBe('allowed')
+  })
+})
+
+describe('letting a local agent read or edit for the whole project', () => {
+  it('groups the agent\'s tools: reading and searching, editing; anything else (a command, a delete) is asked every time', () => {
+    expect(projectToolKind('read')).toBe('read')
+    expect(projectToolKind('search')).toBe('read')
+    expect(projectToolKind('edit')).toBe('edit')
+    for (const kind of ['execute', 'delete', 'move', 'fetch', 'think', 'other', undefined]) expect(projectToolKind(kind)).toBeUndefined()
+  })
+
+  it('can be offered for a request of the running project, and once given holds for that member and that kind only', () => {
+    const store = setup()
+    expect(projectToolAllowance(store, devTask, 'read')).toBe('can-allow')
+    expect(allowProjectTools(store, devTask, 'read')).toBe(true)
+    allowProjectTools(store, devTask, 'read')
+    expect(store.chatsById.c.project!.toolAllowedKinds).toEqual({ dev: ['read'] })
+    expect(projectToolAllowance(store, devTask, 'read')).toBe('allowed')
+    expect(projectToolAllowance(store, devTask, 'edit')).toBe('can-allow')
+    expect(projectToolAllowance(store, { chatId: 'c', roleId: 'qa', messageId: 'qa-task' }, 'read')).toBe('can-allow')
+    allowProjectTools(store, devTask, 'edit')
+    expect(store.chatsById.c.project!.toolAllowedKinds).toEqual({ dev: ['read', 'edit'] })
+
+    // Outside the running project: not offered, and a grant does not hold.
+    expect(projectToolAllowance(store, { chatId: 'c', roleId: 'dev', messageId: 'ask' }, 'read')).toBeUndefined()
+    expect(projectToolAllowance(store, { chatId: 'c', roleId: 'dev', messageId: 'old-task' }, 'read')).toBeUndefined()
+    expect(allowProjectTools(store, { chatId: 'c', roleId: 'qa', messageId: 'ask' }, 'read')).toBe(false)
+    const ended = setup({ status: 'done', toolAllowedKinds: { dev: ['read'] } })
+    expect(projectToolAllowance(ended, devTask, 'read')).toBeUndefined()
+  })
+
+  it('is taken back with 收回 together with the runs, one member at a time, and ends with the project', () => {
+    const store = setup({ runAllowedRoleIds: ['dev', 'qa'], toolAllowedKinds: { dev: ['read', 'edit'], qa: ['read'] } })
+    const project = store.chatsById.c.project!
+    expect(revokeProjectGrants(project, 'dev')).toBe(true)
+    expect(project.runAllowedRoleIds).toEqual(['qa'])
+    expect(project.toolAllowedKinds).toEqual({ qa: ['read'] })
+    expect(revokeProjectGrants(project, 'dev')).toBe(false)
+    expect(revokeProjectGrants(project, 'qa')).toBe(true)
+    expect(project.runAllowedRoleIds).toBeUndefined()
+    expect(project.toolAllowedKinds).toBeUndefined()
+    // Only some tools allowed, the runs asked each time: 收回 takes those back too.
+    const tools = setup({ toolAllowedKinds: { qa: ['edit'] } }).chatsById.c.project!
+    expect(revokeProjectGrants(tools, 'qa')).toBe(true)
+    expect(tools.toolAllowedKinds).toBeUndefined()
+    const all = setup({ runAllowedRoleIds: ['dev'], toolAllowedKinds: { dev: ['read'] } }).chatsById.c.project!
+    clearProjectGrants(all)
+    expect(all.runAllowedRoleIds).toBeUndefined()
+    expect(all.toolAllowedKinds).toBeUndefined()
+  })
+
+  it('reads and writes the store, telling the page, and logs each grant', async () => {
+    let store = setup()
+    const broadcastStoreUpdated = vi.fn()
+    const log = { info: vi.fn() }
+    const grants = createProjectRunGrants({
+      loadStore: async () => store,
+      mutateStore: async mutator => {
+        const next = structuredClone(store)
+        const result = await mutator(next)
+        store = next
+        return { store, result }
+      },
+      broadcastStoreUpdated,
+      log,
+    })
+    expect(await grants.checkTool(devTask, 'edit')).toBe('can-allow')
+    expect(await grants.allowTool(devTask, 'edit')).toBe(true)
+    expect(broadcastStoreUpdated).toHaveBeenCalledWith(store)
+    expect(await grants.checkTool(devTask, 'edit')).toBe('allowed')
+    expect(log.info).toHaveBeenCalledWith('project-grant:tools-allowed', { chatId: 'c', roleId: 'dev', kind: 'edit' })
+    await grants.allow(devTask)
+    expect(log.info).toHaveBeenCalledWith('project-grant:runs-allowed', { chatId: 'c', roleId: 'dev' })
+    // Not the project's request: nothing given, nothing logged.
+    log.info.mockClear()
+    expect(await grants.allowTool({ chatId: 'c', roleId: 'dev', messageId: 'ask' }, 'read')).toBe(false)
+    expect(log.info).not.toHaveBeenCalled()
   })
 })

@@ -7,7 +7,7 @@ import { STALL_NOTICE_MS, STALL_REPEAT_MS } from '../shared/localAgentLimits'
 const model: ExternalModelConfig = { id: 'm1', name: 'Claude Code', format: 'local-agent', baseUrl: '', apiKey: '', modelName: 'claude-code', localAgentId: 'claude-code', workspace: '/Users/me/app', createdAt: 0, updatedAt: 0 }
 const context = { chatId: 'chat-1', roleId: 'role-1', messageId: 'msg-1', roleName: '程序员' }
 
-function setup(answers: Array<string | undefined>, events: LocalAgentEvent[] = [], project?: 'allowed' | 'can-allow') {
+function setup(answers: Array<string | undefined>, events: LocalAgentEvent[] = [], project?: 'allowed' | 'can-allow', tools: Partial<Record<'read' | 'edit', 'allowed' | 'can-allow'>> = {}) {
   const listeners = new Map<string, (event: LocalAgentEvent) => void>()
   const requests: Array<[string, Record<string, unknown> | undefined]> = []
   const control = {
@@ -27,7 +27,12 @@ function setup(answers: Array<string | undefined>, events: LocalAgentEvent[] = [
   }
   const asked: unknown[] = []
   const approvals = { ask: vi.fn(async (_context: unknown, question: unknown) => { asked.push(question); return answers.shift() }) }
-  const projectRuns = { check: vi.fn(async () => project), allow: vi.fn(async () => true) }
+  const projectRuns = {
+    check: vi.fn(async () => project),
+    allow: vi.fn(async () => true),
+    checkTool: vi.fn(async (_context: unknown, kind: 'read' | 'edit') => tools[kind]),
+    allowTool: vi.fn(async () => true),
+  }
   const client = createLocalAgentClient({ control, approvals, getLanguage: () => 'zh-CN', projectRuns })
   return { client, control, requests, asked, listeners, projectRuns }
 }
@@ -94,6 +99,52 @@ describe('local agent client', () => {
     expect(text).toContain('> 📝 已写入 README.md')
     expect(text).toContain('改好了。')
     expect(requests.map(([action]) => action)).not.toContain('agent.cancel')
+  })
+
+  it('offers to allow reading or editing for the rest of the project, and then answers those itself; commands are still asked', async () => {
+    const options = [{ optionId: 'always', name: 'Always Allow', kind: 'allow_always' }, { optionId: 'yes', name: 'Yes', kind: 'allow_once' }, { optionId: 'no', name: 'No', kind: 'reject_once' }]
+    const permission = (id: string, title: string, toolKind: string): LocalAgentEvent => ({ kind: 'permission', permissionId: id, title, toolKind, options })
+    const finish = async (client: ReturnType<typeof setup>, events: LocalAgentEvent[], count: number) => {
+      const run = collect(client.client.stream({ model, prompt: '写 notes.md', context }))
+      await vi.waitFor(() => expect(client.requests.filter(([action]) => action === 'agent.permission')).toHaveLength(count))
+      for (const event of events) client.listeners.get('run-1')?.(event)
+      client.listeners.get('run-1')?.({ kind: 'done', output: '' })
+      return run
+    }
+
+    // Asked: the card offers it next to the agent's own allow options, and says what editing means.
+    const offered = setup(['allow-project', 'openteam-allow-project-tools'], [{ kind: 'started' }, permission('p1', 'Write notes.md', 'edit')], 'can-allow', { edit: 'can-allow' })
+    const text = await finish(offered, [], 1)
+    expect(offered.asked[1]).toMatchObject({
+      kind: 'permission',
+      options: [
+        { id: 'always', label: 'Always Allow' },
+        { id: 'yes', label: 'Yes' },
+        { id: 'openteam-allow-project-tools', label: '这个项目里都允许编辑文件', kind: 'allow_always' },
+        { id: 'no', label: 'No' },
+      ],
+    })
+    expect((offered.asked[1] as { detail: string }).detail).toContain('之后它在这个项目里改文件不再问你')
+    expect(offered.projectRuns.allowTool).toHaveBeenCalledWith(context, 'edit')
+    // The agent is told "yes" for this time: OpenTeam keeps the grant, not the agent.
+    expect(offered.requests).toContainEqual(['agent.permission', { runId: 'run-1', permissionId: 'p1', optionId: 'yes' }])
+    expect(text).toContain('> ✅ 这个项目里都允许编辑文件：Write notes.md')
+
+    // Given: reading and editing go through without a card, a command is asked.
+    const given = setup(['yes'], [{ kind: 'started' }, permission('p1', 'Read hello.md', 'read'), permission('p2', 'Write notes.md', 'edit'), permission('p3', 'shasum hello.md', 'execute')], 'allowed', { read: 'allowed', edit: 'allowed' })
+    const next = await finish(given, [], 3)
+    expect(given.asked).toHaveLength(1)
+    expect(given.asked[0]).toMatchObject({ kind: 'permission', title: '「程序员」想要：shasum hello.md', options: [{ id: 'always' }, { id: 'yes' }, { id: 'no' }] })
+    expect(given.requests).toContainEqual(['agent.permission', { runId: 'run-1', permissionId: 'p1', optionId: 'yes' }])
+    expect(given.requests).toContainEqual(['agent.permission', { runId: 'run-1', permissionId: 'p2', optionId: 'yes' }])
+    expect(next).toContain('> ✅ 项目授权（读取和搜索）：Read hello.md')
+    expect(next).toContain('> ✅ 项目授权（编辑文件）：Write notes.md')
+    expect(next).toContain('> ✅ Yes：shasum hello.md')
+
+    // Outside a project, or a kind that is not grouped: the agent's options only.
+    const plain = setup(['allow', 'yes'], [{ kind: 'started' }, permission('p1', 'Read hello.md', 'read')])
+    await finish(plain, [], 1)
+    expect((plain.asked[1] as { options: unknown[] }).options).toHaveLength(3)
   })
 
   it('reports a failed run and cancels a stopped one', async () => {

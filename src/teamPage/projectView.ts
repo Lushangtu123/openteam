@@ -204,17 +204,25 @@ export function createProjectView(deps: ProjectViewDependencies) {
     const detail = statusDetail(project, store)
     if (detail) board.append(element('p', `project-board-detail${project.status === 'waiting-user' ? ' question' : ''}`, detail))
 
-    // 这个项目都允许 (src/background/projectRunGrants.ts): who may run every task without asking, each
-    // with 收回, so the grant is seen while it holds and can be taken back without stopping the project.
-    const allowed = (project.runAllowedRoleIds ?? []).map(id => roles.find(member => member.id === id)).filter((member): member is GroupRole => Boolean(member))
-    if (allowed.length) {
+    // 这个项目都允许 and the kinds let through (src/background/projectRunGrants.ts): what each member
+    // may do without asking, with 收回, so a grant is seen while it holds and can be taken back
+    // without stopping the project.
+    const granted = roles.flatMap(member => {
+      const what = [
+        ...(project.runAllowedRoleIds?.includes(member.id) ? [t('执行任务', 'run tasks')] : []),
+        ...(project.toolAllowedKinds?.[member.id]?.includes('read') ? [t('读取和搜索', 'read and search')] : []),
+        ...(project.toolAllowedKinds?.[member.id]?.includes('edit') ? [t('编辑文件', 'edit files')] : []),
+      ]
+      return what.length ? [{ member, what }] : []
+    })
+    if (granted.length) {
       const grants = element('div', 'project-board-grants')
-      grants.append(element('span', 'project-board-grants-label', t('这个项目里已允许直接执行：', 'May run every task of this project:')))
-      for (const member of allowed) {
+      grants.append(element('span', 'project-board-grants-label', t('这个项目里不再逐个问：', 'Not asked each time in this project:')))
+      for (const { member, what } of granted) {
         const item = element('span', 'project-board-grant')
         const takeBack = element('button', 'btn btn-small', t('收回', 'Take back'))
         takeBack.type = 'button'
-        takeBack.setAttribute('aria-label', t(`收回「${member.name}」的项目授权：下个任务开始前会再问你`, `Take back ${member.name}'s project permission: you are asked again before its next task`))
+        takeBack.setAttribute('aria-label', t(`收回「${member.name}」在这个项目里的授权：之后会再问你`, `Take back what ${member.name} may do in this project: you are asked again`))
         takeBack.addEventListener('click', () => {
           takeBack.disabled = true
           deps.runCommand('GROUP_PROJECT_REVOKE_RUNS', { chatId: chat.id, roleId: member.id })
@@ -223,7 +231,7 @@ export function createProjectView(deps: ProjectViewDependencies) {
               deps.showError(error instanceof Error ? error.message : String(error))
             })
         })
-        item.append(element('span', 'project-board-grant-name', member.name), takeBack)
+        item.append(element('span', 'project-board-grant-name', member.name), element('span', 'project-board-grant-what', what.join(t('、', ', '))), takeBack)
         grants.append(item)
       }
       board.append(grants)
