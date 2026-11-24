@@ -37,6 +37,7 @@ const roleSession = createRoleSession({
     replyObserver?.resetForAssignedRole()
     conversationMonitor?.reportConversationUpdate(true)
     reportSiteStatus(true)
+    reportVisibility(true)
   },
 })
 
@@ -78,7 +79,27 @@ const memberLink = createMemberLink({
 function startStatusHeartbeat(): void {
   const HEARTBEAT_INTERVAL_MS = 3000
 
-  setInterval(() => reportSiteStatus(false), HEARTBEAT_INTERVAL_MS)
+  setInterval(() => {
+    reportSiteStatus(false)
+    reportVisibility(false)
+  }, HEARTBEAT_INTERVAL_MS)
+  document.addEventListener('visibilitychange', () => reportVisibility(false))
+}
+
+// Whether this page is hidden (the OpenTeam tab not on screen), for the assigned role: once assigned,
+// on each change, and again with each heartbeat while hidden, so a background that started again
+// knows it (src/background/pageVisibility.ts). A hidden page reads no replies.
+let lastReportedVisibility: string | undefined
+function reportVisibility(force: boolean): void {
+  const assignedRole = roleSession.getAssignedRole()
+  const chatId = roleSession.getAssignedChatId(assignedRole)
+  if (!assignedRole || !chatId) return
+  const hidden = document.visibilityState === 'hidden'
+  const key = [chatId, assignedRole.roleId, hidden].join('|')
+  if (!force && !hidden && lastReportedVisibility === key) return
+  lastReportedVisibility = key
+  sendBackgroundMessage({ type: 'TEAM_FRAME_VISIBILITY', chatId, roleId: assignedRole.roleId, hidden })
+    .catch(error => log.warn('visibility:report-failed', { error: error instanceof Error ? error.message : String(error) }))
 }
 
 // Reports the page's health for the role this frame was assigned: right after the assignment, and

@@ -27,6 +27,9 @@ import type { MessageHandlerContext } from './messageHandlerDeps'
 // A live reply longer than this is cut; the finished reply always arrives in full.
 const LIVE_REPLY_MAX_CHARS = 60_000
 
+// A failure with no question to date it: was the page hidden in the time a reply takes.
+const FAULT_HIDDEN_LOOKBACK_MS = 5 * 60_000
+
 export function createMemberPageHandlers(ctx: MessageHandlerContext) {
   const { deps, roleErrorRetryCounts, deliverExternal, externalModelRuns } = ctx
 
@@ -259,6 +262,14 @@ export function createMemberPageHandlers(ctx: MessageHandlerContext) {
 
     await deps.broadcastStoreUpdated(store)
     return { ok: true, role: result, store }
+  }
+
+  // Whether the member's page is hidden (pageVisibility.ts). Kept in memory, not in the store.
+  const handleFrameVisibility = async (message: RuntimeMessage, sender: chrome.runtime.MessageSender) => {
+    const identity = readIdentityOptional(deps, message, sender)
+    if (!identity || typeof message.hidden !== 'boolean') return { ok: false, error: '缺少页面是否隐藏' }
+    deps.pageVisibility?.record(identity.chatId, identity.roleId, message.hidden)
+    return { ok: true }
   }
 
   const handleSiteStatusUpdate = async (message: RuntimeMessage, sender: chrome.runtime.MessageSender) => {
@@ -569,7 +580,8 @@ export function createMemberPageHandlers(ctx: MessageHandlerContext) {
     const replyAttemptId = readOptionalString(message.replyAttemptId)
     deps.log.warn('role-error:received', { ...identity, promptMessageId, replyAttemptId, reason, senderUrl: sender.url, tabId: messageTabId(message, sender), frameId: senderFrameId(sender) })
 
-    // 网站失效提醒: a failure that points at the site's page having changed is counted for the site.
+    // 网站失效提醒: a failure that points at the site's page having changed is counted for the site,
+    // unless the page was hidden while the reply was due: a hidden page reads no replies.
     const faultStep = layoutFaultStep(reason)
     if (faultStep) {
       const { store: faultStore, result: noticed } = await mutateStore(store => {
@@ -577,10 +589,13 @@ export function createMemberPageHandlers(ctx: MessageHandlerContext) {
         const role = requireRole(store, chat.id, identity.roleId)
         const site = memberSite(store, role)
         if (!site) return false
+        const askedAt = promptMessageId ? store.messagesById[promptMessageId]?.createdAt : undefined
+        if (deps.pageVisibility?.wasHidden(chat.id, role.id, askedAt ?? deps.now() - FAULT_HIDDEN_LOOKBACK_MS)) return 'hidden' as const
         const shown = recordSiteFault(store, site, { key: `${role.id}:${promptMessageId ?? deps.now()}`, step: faultStep, detail: reason, now: deps.now() })
         return shown ? site : false
       })
-      if (noticed) {
+      if (noticed === 'hidden') deps.log.warn('site-fault:skipped-hidden-page', { ...identity, promptMessageId, reason })
+      else if (noticed) {
         deps.log.warn('site-fault:noticed', { ...identity, site: noticed, step: faultStep, reason })
         await deps.broadcastStoreUpdated(faultStore)
       }
@@ -665,7 +680,7 @@ export function createMemberPageHandlers(ctx: MessageHandlerContext) {
     return { ok: true, store }
   }
 
-  return { handleFrameRoleReady, handleConversationUpdated, handleSendAck, handleRoleStatus, handleSiteStatusUpdate, handleRoleReply, handleRoleReplyProgress, handleRoleReplyResync, handleRepliesInterrupted, handleRoleReplyEnd, handleRoleResumeFailed, handleRoleError }
+  return { handleFrameRoleReady, handleConversationUpdated, handleSendAck, handleRoleStatus, handleFrameVisibility, handleSiteStatusUpdate, handleRoleReply, handleRoleReplyProgress, handleRoleReplyResync, handleRepliesInterrupted, handleRoleReplyEnd, handleRoleResumeFailed, handleRoleError }
 }
 
 export type MemberPageHandlers = ReturnType<typeof createMemberPageHandlers>

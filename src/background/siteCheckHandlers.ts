@@ -11,6 +11,7 @@ import { dismissSiteFault } from '../group/siteFaults'
 import { CHAT_SITE_INFO, CHAT_SITES, type ChatSite } from '../group/chatSites'
 import type { GroupChat, OpenTeamStore, RuntimeFrameBinding } from '../group/types'
 import type { BackgroundMessageRoute } from './messageRouter'
+import type { PageVisibility } from './pageVisibility'
 import type { RuntimeMessage } from './runtimeClient'
 import { mutateStore } from './storeAccess'
 
@@ -34,6 +35,8 @@ export interface SiteCheckHandlerDependencies {
   // Asks the open OpenTeam page to load a member's page again, resolving once it is back
   // (runtimeClient.requestRoleRecovery).
   recoverMember(chatId: string, roleId: string): Promise<boolean>
+  // Whether a member's page was hidden while the check asked it (pageVisibility.ts).
+  pageVisibility?: Pick<PageVisibility, 'wasHidden'>
   waitFor(ms: number): Promise<void>
   now(): number
 }
@@ -47,6 +50,8 @@ interface RouteResponse {
 }
 
 export function createSiteCheckHandlers(deps: SiteCheckHandlerDependencies): BackgroundMessageRoute[] {
+  // Each running check's members.
+  const checkRoles = new Map<string, string[]>()
   const routeOk = async (message: RuntimeMessage): Promise<RouteResponse> => {
     const response = await deps.route(message) as RouteResponse | undefined
     if (!response || response.ok === false) throw new Error(response?.error || `${message.type} 没有完成`)
@@ -105,6 +110,7 @@ export function createSiteCheckHandlers(deps: SiteCheckHandlerDependencies): Bac
     try {
       await recover(chatId, stuck)
       const roleIds = await checkRoleIds(chatId)
+      checkRoles.set(chatId, roleIds)
       if (await readyRoles(chatId, roleIds).then(ready => ready.length === 0)) throw new Error('没有一个网站的页面打开了。请确认 OpenTeam 页面开着、停在这个群，再重新检查。')
       const questionId = await ask(chatId, '@all')
       await setCheck(chatId, check => {
@@ -113,15 +119,26 @@ export function createSiteCheckHandlers(deps: SiteCheckHandlerDependencies): Bac
       })
       await untilAnswered(chatId)
       await retryFailures(chatId)
-      await setCheck(chatId, check => { check.finishedAt = deps.now() })
+      await setCheck(chatId, check => finish(chatId, check))
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error)
       await setCheck(chatId, check => {
         if (!check.questionId) check.error = reason
         else if (check.retry && !check.retry.messageId) check.retry.error = reason
-        check.finishedAt = deps.now()
+        finish(chatId, check)
       })
     }
+  }
+
+  // The members whose page was hidden at some time during the check: one that failed then was not
+  // checked. Then the check is finished.
+  function finish(chatId: string, check: NonNullable<GroupChat['siteCheck']>): void {
+    const roleIds = checkRoles.get(chatId) ?? []
+    const hidden = roleIds.filter(roleId => deps.pageVisibility?.wasHidden(chatId, roleId, check.startedAt))
+    if (hidden.length) check.hiddenRoleIds = hidden
+    else delete check.hiddenRoleIds
+    check.finishedAt = deps.now()
+    checkRoles.delete(chatId)
   }
 
   // The sites that failed: their pages loaded again, and asked once more. One whose page does not

@@ -44,6 +44,7 @@ import { requireApiModelAccess } from './apiModelAccess'
 import { createExternalModelClient, type ExternalModelClient } from './externalModelClient'
 import { createLocalAgentApprovals } from './localAgentApprovals'
 import { createLocalAgentClient } from './localAgentClient'
+import { createPageVisibility } from './pageVisibility'
 import { createProjectRunGrants } from './projectRunGrants'
 import type { LocalAgentInfo } from '../shared/localControlProtocol'
 import type { ExternalModelConfig } from '../group/types'
@@ -77,6 +78,8 @@ import type { CapturedWebPage } from '../group/webPage'
 
 const runtimeFrames = createRuntimeFrameRegistry()
 const log = createLogger('background')
+// Whether members' pages were hidden (pageVisibility.ts).
+const pageVisibility = createPageVisibility(() => Date.now())
 // 导出诊断信息 reads these; they outlive the worker in session storage.
 void keepLogsAcrossRestarts(chrome.storage?.session)
 const CONTROL_KEEPALIVE_ALARM = 'openteam-control-keepalive'
@@ -445,7 +448,7 @@ const routeMessage = createMessageRouter([
   ...webSearcher.routes,
   ...libraryRefresher.routes,
   ...createLibraryHandlers({ broadcastStoreUpdated: store => broadcastStoreUpdated(store), newId, now }),
-  ...createSiteCheckHandlers({ route: message => Promise.resolve(routeMessage(message, {})), loadStore, broadcastStoreUpdated, runtimeFrames, recoverMember: (chatId, roleId) => requestRoleRecovery(chatId, roleId, 'site-check-retry'), waitFor: ms => new Promise(resolve => globalThis.setTimeout(resolve, ms)), now }),
+  ...createSiteCheckHandlers({ route: message => Promise.resolve(routeMessage(message, {})), loadStore, broadcastStoreUpdated, runtimeFrames, recoverMember: (chatId, roleId) => requestRoleRecovery(chatId, roleId, 'site-check-retry'), pageVisibility, waitFor: ms => new Promise(resolve => globalThis.setTimeout(resolve, ms)), now }),
   ...createExternalModelHandlers({ broadcastStoreUpdated, externalModelClient, checkLocalAgent, newId, now }),
   ...createMemberPickHandlers({ loadStore, externalModelClient, log }),
   { type: 'LOCAL_AGENT_LIST', handler: async () => ({ ok: true, agents: await listLocalAgents() }) },
@@ -463,7 +466,7 @@ const routeMessage = createMessageRouter([
   },
   ...createRoleHandlers({ broadcastStoreUpdated, externalModelClient, log, newId, now, runtimeFrames, sendPrompt }),
   ...createOrchestrationHandlers({ broadcastStoreUpdated, broadcastAutoGenerateStream, externalModelClient, getChatStatusFromRoles, log, newId, now, promptDeliveryLimiter, requestRoleRecovery, runtimeFrames, sendPrompt }),
-  ...createMessageHandlers({ webPageReader, webSearcher, broadcastStoreUpdated, checkLinks: urls => checkLinks(urls, { fetch: (url, init) => fetch(url, init), hasAccess: pattern => chrome.permissions.contains({ origins: [pattern] }), now }), externalModelClient, getChatStatusFromRoles, imageAttachments, log, newId, now, onPromptSettled: (store, chatId, promptMessageId) => Promise.all([notifyWhenAnswered(store, chatId, promptMessageId), resultSender.onPromptSettled(store, chatId, promptMessageId)]), promptDeliveryLimiter, requestRoleRecovery, runtimeFrames, sendError, sendPrompt, sendRoleMessage }),
+  ...createMessageHandlers({ webPageReader, webSearcher, pageVisibility, broadcastStoreUpdated, checkLinks: urls => checkLinks(urls, { fetch: (url, init) => fetch(url, init), hasAccess: pattern => chrome.permissions.contains({ origins: [pattern] }), now }), externalModelClient, getChatStatusFromRoles, imageAttachments, log, newId, now, onPromptSettled: (store, chatId, promptMessageId) => Promise.all([notifyWhenAnswered(store, chatId, promptMessageId), resultSender.onPromptSettled(store, chatId, promptMessageId)]), promptDeliveryLimiter, requestRoleRecovery, runtimeFrames, sendError, sendPrompt, sendRoleMessage }),
 ])
 
 // Replies their members can no longer give, ended at these moments (see interruptedReplies.ts).

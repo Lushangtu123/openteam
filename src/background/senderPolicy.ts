@@ -14,6 +14,7 @@ export const ROLE_FRAME_MESSAGE_TYPES: ReadonlySet<string> = new Set([
   'TEAM_ROLE_REPLY_RESYNC',
   'TEAM_ROLE_RESUME_FAILED',
   'TEAM_SITE_STATUS_UPDATE',
+  'TEAM_FRAME_VISIBILITY',
 ])
 
 export type RuntimeSenderKind = 'extension-page' | 'team-page-frame' | 'untrusted'

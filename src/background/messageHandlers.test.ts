@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { REPLY_STUCK_AFTER_MS } from '../group/replyTiming'
 import { createDefaultStore } from '../group/store'
 import { SITE_LIMIT_COOLDOWN_MS } from '../group/siteUsage'
+import { createPageVisibility } from './pageVisibility'
 import type { GroupChat, GroupMessage, GroupRole, OpenTeamStore, OrchestrationFlow, RuntimeFrameBinding } from '../group/types'
 import type { LocalAgentEvent } from '../shared/localControlProtocol'
 import type { ExternalModelCompletionInput } from './externalModelClient'
@@ -425,6 +426,7 @@ describe('background message handlers', () => {
       'TEAM_SEND_ACK',
       'TEAM_ROLE_STATUS',
       'TEAM_SITE_STATUS_UPDATE',
+      'TEAM_FRAME_VISIBILITY',
       'TEAM_ROLE_REPLY',
       'TEAM_ROLE_REPLY_PROGRESS',
       'TEAM_ROLE_REPLY_RESYNC',
@@ -4090,6 +4092,7 @@ describe('a web member whose site is limiting', () => {
     const complete = vi.fn(async (): Promise<{ content: string }> => ({ content: '一个回答' }))
     const sendPrompt = vi.fn(options.sendPrompt ?? (async () => undefined))
     const kimiBinding: RuntimeFrameBinding = { chatId: 'chat-1', roleId: 'role-3', tabId: 101, frameId: 7, ready: true, lastSeenAt: 100 }
+    const pageVisibility = createPageVisibility(() => 1_000)
     let messageIdSeq = 0
     const routes = createMessageHandlers({
       broadcastStoreUpdated: vi.fn(),
@@ -4099,6 +4102,7 @@ describe('a web member whose site is limiting', () => {
       newId: vi.fn((prefix: string) => prefix === 'msg' ? `${prefix}-${++messageIdSeq}` : `${prefix}-${messageIdSeq}`),
       now: vi.fn(() => 1_000),
       roleErrorRetryDelaysMs: [5],
+      pageVisibility,
       runtimeFrames: { bind: vi.fn(), getByAddress: vi.fn(), getByRole: vi.fn((_chatId: string, roleId: string) => roleId === 'role-3' ? kimiBinding : undefined) },
       sendRoleMessage: vi.fn(),
       sendError: vi.fn(),
@@ -4109,7 +4113,7 @@ describe('a web member whose site is limiting', () => {
     const send = (raw: string) => route('GROUP_MESSAGE_SEND', { chatId: 'chat-1', raw })
     const question = (text: string) => Object.values(currentStore.messagesById).find(message => message.type === 'user' && message.content.includes(text))!
     const kimiReply = () => Object.values(currentStore.messagesById).find(message => message.type === 'assistant' && message.roleId === 'role-3')
-    return { store: () => currentStore, route, send, question, kimiReply, complete, sendPrompt }
+    return { store: () => currentStore, route, send, question, kimiReply, complete, sendPrompt, pageVisibility }
   }
 
   it('is not sent the message and says so in the chat, while the others answer', async () => {
@@ -4210,6 +4214,22 @@ describe('a web member whose site is limiting', () => {
       addPrompt(ctx, 'msg-b')
       await ctx.route('TEAM_ROLE_ERROR', { chatId: 'chat-1', roleId: 'role-3', messageId: 'msg-b', reason: 'RESPONSE_NOT_FOUND' })
       expect(ctx.store().siteFaultsBySite?.kimi?.count).toBe(2)
+    })
+
+    it('does not count a failure while the member\'s page was hidden: a hidden page reads no replies', async () => {
+      const ctx = await setupKimi()
+      await ctx.route('TEAM_FRAME_VISIBILITY', { chatId: 'chat-1', roleId: 'role-3', hidden: true })
+      expect(ctx.pageVisibility.wasHidden('chat-1', 'role-3', 0)).toBe(true)
+      addPrompt(ctx, 'msg-a')
+      await ctx.route('TEAM_ROLE_ERROR', { chatId: 'chat-1', roleId: 'role-3', messageId: 'msg-a', reason: 'RESPONSE_NOT_FOUND' })
+      expect(ctx.store().siteFaultsBySite?.kimi).toBeUndefined()
+      // Shown again: counted.
+      await ctx.route('TEAM_FRAME_VISIBILITY', { chatId: 'chat-1', roleId: 'role-3', hidden: false })
+      const shown = await setupKimi()
+      addPrompt(shown, 'msg-b')
+      await shown.route('TEAM_ROLE_ERROR', { chatId: 'chat-1', roleId: 'role-3', messageId: 'msg-b', reason: 'RESPONSE_NOT_FOUND' })
+      expect(shown.store().siteFaultsBySite?.kimi?.count).toBe(1)
+      await expect(ctx.route('TEAM_FRAME_VISIBILITY', { chatId: 'chat-1', roleId: 'role-3' })).resolves.toMatchObject({ ok: false })
     })
 
     it('counts a page that has no input box when it comes to that, not each time it says so again', async () => {

@@ -16,6 +16,8 @@ interface Options {
   answers?: Record<string, Answer[]>
   // Pages that do not come back when loaded again.
   noComeback?: string[]
+  // Sites whose page was hidden during the check (the OpenTeam window minimized, say).
+  hidden?: string[]
   store?: OpenTeamStore
 }
 
@@ -107,7 +109,8 @@ async function setup(options: Options = {}) {
     return { ok: true, store }
   })
   const { SITE_CHECK_ROUTE_TYPES, createSiteCheckHandlers } = await import('./siteCheckHandlers')
-  const routes = createSiteCheckHandlers({ route, loadStore: async () => store, broadcastStoreUpdated, runtimeFrames, recoverMember, waitFor, now: () => clock })
+  const pageVisibility = { wasHidden: vi.fn((_chatId: string, roleId: string) => Boolean(options.hidden?.includes(store.rolesById[roleId]?.chatSite ?? ''))) }
+  const routes = createSiteCheckHandlers({ route, loadStore: async () => store, broadcastStoreUpdated, runtimeFrames, recoverMember, pageVisibility, waitFor, now: () => clock })
   const start = (fields: Record<string, unknown> = {}) => Promise.resolve(routes.find(entry => entry.type === 'GROUP_SITE_CHECK_START')!.handler({ type: 'GROUP_SITE_CHECK_START', ...fields }, {})) as Promise<{ ok: boolean; chatId: string }>
   // Started, and followed to its end.
   const check = async (fields: Record<string, unknown> = {}) => {
@@ -154,6 +157,14 @@ describe('background site check', () => {
     expect(chat.siteCheck?.retry).toMatchObject({ roleIds: ['gemini', 'deepseek', 'qwen'].map(site => `${chat.id}-${site}`), messageId: expect.any(String) })
     expect(chat.siteCheck?.questionIds).toHaveLength(2)
     expect(outcomes(chat)).toMatchObject({ gemini: 'ok (again)', deepseek: 'no-reply (again)', qwen: 'ok (again)', chatgpt: 'ok', kimi: 'ok' })
+  })
+
+  it('says a site was not checked when it failed while the OpenTeam page was hidden', async () => {
+    const { check, outcomes } = await setup({ answers: { gemini: ['none', 'none'], kimi: ['none', 'ok'] }, hidden: ['gemini', 'kimi', 'claude'] })
+    const chat = await check()
+    // Hidden and failing twice: not checked. Answered the second time, or answering at once: working.
+    expect(chat.siteCheck?.hiddenRoleIds).toEqual(['gemini', 'claude', 'kimi'].map(site => `${chat.id}-${site}`))
+    expect(outcomes(chat)).toMatchObject({ gemini: 'page-hidden (again)', kimi: 'ok (again)', claude: 'ok', chatgpt: 'ok' })
   })
 
   it('leaves signing in to the user, without a second try', async () => {

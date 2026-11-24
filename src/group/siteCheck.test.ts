@@ -90,6 +90,37 @@ describe('the site check', () => {
   })
 })
 
+describe('what a check cannot vouch for', () => {
+  it('does not take a reply that was cut off before any of it was read as working', () => {
+    const notice = '⚠️ 这条回复还没有读完，成员页面就关闭或重新加载了（OpenTeam 页面被关闭或刷新，或浏览器被关闭）。站点上可能已经写完。\n\n可以点击下方的重新同步完整回复按钮把它读回来。'
+    const { store, chat, reply } = checkStore(['chatgpt', 'kimi'])
+    reply('chatgpt', 'received', notice)
+    reply('kimi', 'received', `OK\n\n${notice}`)
+    const results = siteCheckResults(store, chat, START + 5000)
+    expect(results[0]).toMatchObject({ site: 'chatgpt', outcome: 'failed', detail: '回复没读完，成员页面就关闭或重新加载了' })
+    expect(siteCheckRetries(results[0].outcome)).toBe(true)
+    // What was read before the page went is a reply.
+    expect(results[1].outcome).toBe('ok')
+  })
+
+  it('says a site that failed while the OpenTeam page was hidden was not checked, rather than blaming it', () => {
+    const { store, chat, reply, health } = checkStore(['gemini', 'deepseek', 'kimi', 'claude', 'grok'])
+    reply('gemini', 'error', '回复失败：RESPONSE_NOT_FOUND')
+    reply('kimi', 'received', 'OK')
+    health('claude', { status: 'unauthorized', reason: 'login' })
+    health('grok', { status: 'blocked', reason: 'verification' })
+    chat.siteCheck!.hiddenRoleIds = ['role-gemini', 'role-deepseek', 'role-kimi', 'role-claude', 'role-grok']
+    const results = siteCheckResults(store, chat, START + 500 + SITE_CHECK_TIMEOUT_MS + 1)
+    // Failed and not answering: not checked. Working, signing in and a page in the way: as they are.
+    expect(results.map(result => [result.site, result.outcome])).toEqual([['gemini', 'page-hidden'], ['deepseek', 'page-hidden'], ['kimi', 'ok'], ['claude', 'login'], ['grok', 'page-problem']])
+    expect(siteCheckExplanation(results[0], false)).toBe('检查时 OpenTeam 页面不在前台（窗口最小化、屏幕锁定或切到了别的标签页），网页读不到回复，不能说明网站有问题。让 OpenTeam 显示在屏幕上再查一次。')
+    expect(siteCheckExplanation(results[0], true)).toContain('The OpenTeam page was not on screen')
+    expect(siteCheckRetries('page-hidden')).toBe(false)
+    expect(siteCheckSummary(results, 'zh-CN')).toBe('检查完成：1 个正常，2 个需要处理，2 个没查成（OpenTeam 页面不在前台）')
+    expect(siteCheckSummary(results, 'en')).toBe('Check finished: 1 working, 2 needs attention, 2 not checked (OpenTeam was not on screen)')
+  })
+})
+
 describe('a site asked a second time', () => {
   it('is waiting while its page loads again, then reports that try, saying so', () => {
     const { store, chat, reply } = checkStore(['gemini', 'kimi'])

@@ -508,6 +508,9 @@ export interface SiteCheckState {
   retry?: { roleIds: string[]; messageId?: string; error?: string }
   // Every site has its result, the second try included.
   finishedAt?: number
+  // Members whose page was hidden at some time during the check (the OpenTeam window minimized, the
+  // screen locked): one failing then was not checked, rather than failed.
+  hiddenRoleIds?: string[]
 }
 
 export interface ProjectRun {

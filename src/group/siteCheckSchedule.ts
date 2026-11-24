@@ -56,18 +56,22 @@ export function readSiteCheckScheduleInput(value: unknown): SiteCheckScheduleInp
 // What goes to the destination: one entry for each site that needs attention.
 export function siteCheckReport(results: SiteCheckResult[], schedule: string, english: boolean): RoundResult {
   const problems = results.filter(result => siteCheckNeedsAttention(result.outcome))
+  const hidden = problems.filter(result => result.outcome === 'page-hidden').length
+  const attention = problems.length - hidden
   return {
     chatName: english ? 'Site check' : '网站自检',
     schedule,
     question: english
-      ? `${problems.length} of ${results.length} sites need attention; the others work.`
-      : `${results.length} 个网站里有 ${problems.length} 个需要处理，其余正常。`,
+      ? hidden
+        ? `${attention ? `${attention} of ${results.length} sites need attention; ${hidden}` : `${hidden} of ${results.length} sites`} were not checked: the OpenTeam page was not on screen. The others work.`
+        : `${problems.length} of ${results.length} sites need attention; the others work.`
+      : `${results.length} 个网站里有 ${[attention ? `${attention} 个需要处理` : '', hidden ? `${hidden} 个没查成：检查时 OpenTeam 页面不在前台。` : ''].filter(Boolean).join('，')}${hidden ? '' : '，'}其余正常。`,
     answers: problems.map(result => ({ member: result.label, text: siteCheckExplanation(result, english), failed: true })),
   }
 }
 
 const RUN_STATUSES: ReadonlySet<SiteCheckRun['status']> = new Set(['ok', 'problems', 'failed', 'skipped'])
-const OUTCOMES: ReadonlySet<SiteCheckOutcome> = new Set(['ok', 'waiting', 'login', 'page-problem', 'failed', 'not-sent', 'no-reply'])
+const OUTCOMES: ReadonlySet<SiteCheckOutcome> = new Set(['ok', 'waiting', 'login', 'page-problem', 'failed', 'not-sent', 'no-reply', 'page-hidden'])
 
 export function normalizeSiteCheckSchedule(raw: unknown): SiteCheckSchedule | undefined {
   if (!isRecord(raw)) return undefined

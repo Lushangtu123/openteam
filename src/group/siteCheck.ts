@@ -7,6 +7,7 @@
 // fails is asked once more, its page loaded again (SiteCheckState.retry), before it is reported:
 // a slow page or a passing server error is not the site having changed.
 import { CHAT_SITE_INFO, CHAT_SITES, type ChatSite } from './chatSites'
+import { textReadBeforeInterruption } from './replyInterruption'
 import { isOpenTeamRequest } from './roundSummary'
 import type { GroupChat, GroupMessage, OpenTeamLanguage, OpenTeamStore } from './types'
 
@@ -28,6 +29,7 @@ export type SiteCheckOutcome =
   | 'failed' // sending or reading the reply failed
   | 'not-sent' // the question never reached the page
   | 'no-reply' // it was sent, but no reply was read
+  | 'page-hidden' // it failed while the OpenTeam page was not on screen: a hidden page reads no replies
 
 export interface SiteCheckResult {
   roleId: string
@@ -39,7 +41,9 @@ export interface SiteCheckResult {
   retried?: boolean
 }
 
-const NEEDS_ATTENTION: ReadonlySet<SiteCheckOutcome> = new Set(['login', 'page-problem', 'failed', 'not-sent', 'no-reply'])
+const NEEDS_ATTENTION: ReadonlySet<SiteCheckOutcome> = new Set(['login', 'page-problem', 'failed', 'not-sent', 'no-reply', 'page-hidden'])
+// Failing this way while the page was hidden says nothing about the site.
+const HIDDEN_PAGE_FAILS: ReadonlySet<SiteCheckOutcome> = new Set(['failed', 'not-sent', 'no-reply'])
 // Tried again before it is reported. Signing in is the user's to do.
 const RETRIED: ReadonlySet<SiteCheckOutcome> = new Set(['page-problem', 'failed', 'not-sent', 'no-reply'])
 
@@ -90,6 +94,15 @@ export function siteCheckDeadline(store: Pick<OpenTeamStore, 'messagesById'>, ch
 }
 
 export function siteCheckResults(store: Pick<OpenTeamStore, 'messagesById' | 'rolesById'>, chat: GroupChat, now: number): SiteCheckResult[] {
+  const hidden = new Set(chat.siteCheck?.hiddenRoleIds ?? [])
+  return siteResults(store, chat, now).map(result => {
+    if (!hidden.has(result.roleId) || !HIDDEN_PAGE_FAILS.has(result.outcome)) return result
+    const { detail: _said, ...rest } = result
+    return { ...rest, outcome: 'page-hidden' as const }
+  })
+}
+
+function siteResults(store: Pick<OpenTeamStore, 'messagesById' | 'rolesById'>, chat: GroupChat, now: number): SiteCheckResult[] {
   const messages = chat.messageIds.map(id => store.messagesById[id]).filter(Boolean)
   const first = checkQuestion(store, chat)
   const retry = chat.siteCheck?.retry
@@ -105,8 +118,10 @@ export function siteCheckResults(store: Pick<OpenTeamStore, 'messagesById' | 'ro
     if (!question) return [{ ...base, outcome: 'waiting' }]
 
     const reply = messages.filter(message => message.type === 'assistant' && message.roleId === roleId && message.sourceMessageId === question.id).slice(-1)[0]
-    // What the reply says outranks what the page last reported.
-    if (reply?.status === 'received' && reply.content.trim()) return [{ ...base, outcome: 'ok' }]
+    // What the reply says outranks what the page last reported. A reply whose page went before any
+    // of it was read holds only OpenTeam's note about that.
+    if (reply?.status === 'received' && textReadBeforeInterruption(reply.content).trim()) return [{ ...base, outcome: 'ok' }]
+    if (reply?.status === 'received' && reply.content.trim()) return [{ ...base, outcome: 'failed', detail: '回复没读完，成员页面就关闭或重新加载了' }]
     if (reply?.status === 'error') return [{ ...base, outcome: 'failed', detail: failureReason(reply.content) }]
 
     const health = role.siteHealth
@@ -128,13 +143,14 @@ function failureReason(content: string): string | undefined {
 
 export function siteCheckSummary(results: SiteCheckResult[], language: OpenTeamLanguage): string {
   const ok = results.filter(result => result.outcome === 'ok').length
-  const attention = results.filter(result => siteCheckNeedsAttention(result.outcome)).length
+  const hidden = results.filter(result => result.outcome === 'page-hidden').length
+  const attention = results.filter(result => siteCheckNeedsAttention(result.outcome)).length - hidden
   const waiting = results.filter(result => result.outcome === 'waiting').length
   if (language === 'en') {
-    const parts = [`${ok} working`, attention ? `${attention} needs attention` : '', waiting ? `${waiting} waiting` : ''].filter(Boolean)
+    const parts = [`${ok} working`, attention ? `${attention} needs attention` : '', hidden ? `${hidden} not checked (OpenTeam was not on screen)` : '', waiting ? `${waiting} waiting` : ''].filter(Boolean)
     return `${waiting ? 'Checking' : 'Check finished'}: ${parts.join(', ')}`
   }
-  const parts = [`${ok} 个正常`, attention ? `${attention} 个需要处理` : '', waiting ? `${waiting} 个等待中` : ''].filter(Boolean)
+  const parts = [`${ok} 个正常`, attention ? `${attention} 个需要处理` : '', hidden ? `${hidden} 个没查成（OpenTeam 页面不在前台）` : '', waiting ? `${waiting} 个等待中` : ''].filter(Boolean)
   return `${waiting ? '检查中' : '检查完成'}：${parts.join('，')}`
 }
 
@@ -142,7 +158,7 @@ export function siteCheckSummary(results: SiteCheckResult[], language: OpenTeamL
 export function siteCheckExplanation(result: SiteCheckResult, en: boolean): string {
   if (result.retried && result.outcome === 'waiting') return en ? 'The first try did not work: its page was loaded again and it is asked once more.' : '第一次没成功，已重新打开页面，正在再问一次。'
   const said = outcomeExplanation(result, en)
-  if (!result.retried || !siteCheckNeedsAttention(result.outcome)) return said
+  if (!result.retried || !siteCheckNeedsAttention(result.outcome) || result.outcome === 'page-hidden') return said
   return en ? `${said} Same on a second try with the page loaded again.` : `${said}重新打开页面再问了一次，还是这样。`
 }
 
@@ -163,5 +179,9 @@ function outcomeExplanation(result: SiteCheckResult, en: boolean): string {
       return en ? 'The question did not reach the page in 5 minutes.' : '5 分钟内没能把提问送进页面。'
     case 'no-reply':
       return en ? 'The question reached the page, but no reply was read in 5 minutes. The site may have changed.' : '提问已送进页面，但 5 分钟内没读到回复，网站可能改版了。'
+    case 'page-hidden':
+      return en
+        ? 'The OpenTeam page was not on screen during the check (a minimized window, a locked screen or another tab in front), and a hidden page reads no replies: this says nothing about the site. Check again with OpenTeam on screen.'
+        : '检查时 OpenTeam 页面不在前台（窗口最小化、屏幕锁定或切到了别的标签页），网页读不到回复，不能说明网站有问题。让 OpenTeam 显示在屏幕上再查一次。'
   }
 }

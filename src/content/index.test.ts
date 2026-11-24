@@ -47,6 +47,36 @@ describe('content entrypoint site status heartbeat', () => {
     expect(statusReports()[1]).toEqual({ type: 'TEAM_SITE_STATUS_UPDATE', chatId: 'chat-1', roleId: 'role-1', siteId: 'chatgpt', status: 'ready' })
   })
 
+  it('says whether the page is hidden: once assigned, on each change, and again while hidden', async () => {
+    const { sendRuntimeMessage, handshake } = await bootContentEntrypoint({ embedded: true, directEmbedded: true })
+    const reports = () => sendRuntimeMessage.mock.calls.map(call => call[0]).filter(message => message.type === 'TEAM_FRAME_VISIBILITY')
+    let state: DocumentVisibilityState = 'visible'
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => state })
+
+    handshake().roleSession.assignRole({ chatId: 'chat-1', roleId: 'role-1', roleName: '工程师' })
+    expect(reports()).toEqual([{ type: 'TEAM_FRAME_VISIBILITY', chatId: 'chat-1', roleId: 'role-1', hidden: false }])
+    // Visible: said once.
+    await vi.advanceTimersByTimeAsync(6000)
+    expect(reports()).toHaveLength(1)
+
+    state = 'hidden'
+    document.dispatchEvent(new Event('visibilitychange'))
+    expect(reports()).toHaveLength(2)
+    expect(reports()[1]).toMatchObject({ hidden: true })
+    // Hidden: said again with each heartbeat, so a background that started again knows.
+    await vi.advanceTimersByTimeAsync(6000)
+    expect(reports().length).toBeGreaterThanOrEqual(4)
+    expect(reports().every((report, index) => index === 0 || report.hidden === true)).toBe(true)
+
+    state = 'visible'
+    document.dispatchEvent(new Event('visibilitychange'))
+    const count = reports().length
+    expect(reports()[count - 1]).toMatchObject({ hidden: false })
+    await vi.advanceTimersByTimeAsync(6000)
+    expect(reports()).toHaveLength(count)
+    delete (document as unknown as Record<string, unknown>).visibilityState
+  })
+
   it('tells the adapter how long the page has been loading', async () => {
     const { handshake, checkStatus } = await bootContentEntrypoint({ embedded: true, directEmbedded: true })
     await vi.advanceTimersByTimeAsync(4000)

@@ -37,6 +37,7 @@ export const MESSAGE_ROUTE_TYPES = [
   'TEAM_SEND_ACK',
   'TEAM_ROLE_STATUS',
   'TEAM_SITE_STATUS_UPDATE',
+  'TEAM_FRAME_VISIBILITY',
   'TEAM_ROLE_REPLY',
   'TEAM_ROLE_REPLY_PROGRESS',
   'TEAM_ROLE_REPLY_RESYNC',
@@ -101,7 +102,7 @@ export function createMessageHandlers(baseDeps: MessageHandlersDependencies): Ba
   const { scheduleAfterRound, scheduleDiscussionAdvance, handleDiscussionStop, handleDiscussionContinue, projectRunner, handleProjectStart, projectRoute, handleRoundSummaryRequest, handleLinksCheck } = roundHandlers
   const { handleMessageSend } = createMessageSendHandler(ctx, roundHandlers)
   const { handleRoleRetryReply, handleRoleStopReply, handleNoteSave, handleMessageHighlightCreate, handleMessageResyncReply } = createMessageActionHandlers(ctx)
-  const { handleFrameRoleReady, handleConversationUpdated, handleSendAck, handleRoleStatus, handleSiteStatusUpdate, handleRoleReply, handleRoleReplyProgress, handleRoleReplyResync, handleRepliesInterrupted, handleRoleReplyEnd, handleRoleResumeFailed, handleRoleError } = createMemberPageHandlers(ctx)
+  const { handleFrameRoleReady, handleConversationUpdated, handleSendAck, handleRoleStatus, handleFrameVisibility, handleSiteStatusUpdate, handleRoleReply, handleRoleReplyProgress, handleRoleReplyResync, handleRepliesInterrupted, handleRoleReplyEnd, handleRoleResumeFailed, handleRoleError } = createMemberPageHandlers(ctx)
 
   return [
     { type: 'GROUP_ROLE_RETRY_REPLY', handler: handleRoleRetryReply },
@@ -129,6 +130,7 @@ export function createMessageHandlers(baseDeps: MessageHandlersDependencies): Ba
     { type: 'TEAM_SEND_ACK', handler: handleSendAck },
     { type: 'TEAM_ROLE_STATUS', handler: handleRoleStatus },
     { type: 'TEAM_SITE_STATUS_UPDATE', handler: handleSiteStatusUpdate },
+    { type: 'TEAM_FRAME_VISIBILITY', handler: handleFrameVisibility },
     { type: 'TEAM_ROLE_REPLY', handler: handleRoleReply },
     { type: 'TEAM_ROLE_REPLY_PROGRESS', handler: handleRoleReplyProgress },
     { type: 'TEAM_ROLE_REPLY_RESYNC', handler: handleRoleReplyResync },

@@ -1,4 +1,5 @@
 // What the message handlers are given, and the shapes they share with the modules they use.
+import type { PageVisibility } from './pageVisibility'
 import type { WebPageReader } from './webPageReader'
 import type { SearchDone, SearchWeb } from './webSearcher'
 import type { WebSearchSettings } from '../shared/webSearch'
@@ -57,6 +58,8 @@ export interface MessageHandlersDependencies {
   externalModelRetryDelaysMs?: readonly number[]
   roleErrorRetryDelaysMs?: readonly number[]
   requestRoleRecovery?(chatId: string, roleId: string, reason?: string): Promise<boolean>
+  // Whether members' pages were hidden (pageVisibility.ts): a failure then is not counted for the site.
+  pageVisibility?: PageVisibility
   waitForRetry?(ms: number): Promise<void>
   // Opens source links to see whether they hold up (linkCheck.ts); without it, links stay unchecked.
   checkLinks?(urls: string[]): Promise<Record<string, LinkCheck>>

@@ -24,6 +24,7 @@ const STATUS: Record<SiteCheckOutcome, { zh: string; en: string; tone: string }>
   failed: { zh: '失败', en: 'Failed', tone: 'failed' },
   'not-sent': { zh: '未发出', en: 'Not sent', tone: 'blocked' },
   'no-reply': { zh: '没回复', en: 'No reply', tone: 'failed' },
+  'page-hidden': { zh: '没查成', en: 'Not checked', tone: 'blocked' },
 }
 
 export function createSiteCheckView(deps: SiteCheckViewDependencies): SiteCheckView {

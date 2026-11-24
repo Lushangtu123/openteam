@@ -100,6 +100,9 @@ export type RoleToBackgroundMessage =
       stalledWhileGenerating?: boolean
     }
   | { type: 'TEAM_SITE_STATUS_UPDATE'; chatId?: string; roleId?: string; siteId: string; status: SiteStatus; reason?: RoleSiteHealthReason; detail?: string }
+  // Whether the page is hidden (the OpenTeam tab not on screen): on each change, and again with each
+  // heartbeat while hidden (src/background/pageVisibility.ts).
+  | { type: 'TEAM_FRAME_VISIBILITY'; chatId: string; roleId: string; hidden: boolean }
   // The reply this page was asked to go on reading (FrameRoleReadyResponse.resumeReply) is not on the site.
   | { type: 'TEAM_ROLE_RESUME_FAILED'; chatId: string; roleId: string; messageId: string; replyAttemptId?: string; reason: string }
 

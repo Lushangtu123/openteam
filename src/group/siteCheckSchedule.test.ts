@@ -35,4 +35,20 @@ describe('what a 定时自检 sends', () => {
     expect(report.answers[0]).toMatchObject({ failed: true, text: expect.stringContaining('网站可能改版了') })
     expect(siteCheckReport(results, '', true).question).toBe('2 of 3 sites need attention; the others work.')
   })
+
+  it('says which sites were not checked because the OpenTeam page was not on screen', () => {
+    const hidden: SiteCheckResult[] = [
+      { roleId: 'r1', site: 'chatgpt', label: 'ChatGPT', outcome: 'ok' },
+      { roleId: 'r2', site: 'kimi', label: 'Kimi', outcome: 'page-hidden' },
+      { roleId: 'r3', site: 'gemini', label: 'Gemini', outcome: 'page-hidden' },
+    ]
+    const report = siteCheckReport(hidden, '每天 09:00', false)
+    expect(report.question).toBe('3 个网站里有 2 个没查成：检查时 OpenTeam 页面不在前台。其余正常。')
+    expect(report.answers.map(answer => answer.member)).toEqual(['Kimi', 'Gemini'])
+    expect(siteCheckReport(hidden, '', true).question).toBe('2 of 3 sites were not checked: the OpenTeam page was not on screen. The others work.')
+    const both = siteCheckReport([...hidden, { roleId: 'r4', site: 'claude', label: 'Claude', outcome: 'login' }], '', false)
+    expect(both.question).toBe('4 个网站里有 1 个需要处理，2 个没查成：检查时 OpenTeam 页面不在前台。其余正常。')
+    // Kept and read back.
+    expect(normalizeSiteCheckSchedule({ days: [1], time: '09:00', lastRun: { at: 1, status: 'problems', problems: [{ site: 'kimi', outcome: 'page-hidden' }] } })?.lastRun?.problems).toEqual([{ site: 'kimi', outcome: 'page-hidden' }])
+  })
 })
