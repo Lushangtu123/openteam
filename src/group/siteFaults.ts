@@ -2,8 +2,8 @@
 // where the reply shows), so a redesign of the site shows as a member failing in one of those ways.
 // Each such failure is counted per site; a reply read from the site clears the count. Once a site
 // has failed SITE_FAULT_THRESHOLD times (different prompts or members) with no reply in between, the
-// page shows a notice for it. A failure in a 网站自检 group is enough on its own: the check asks
-// nothing but "reply OK". Signing in, a verification page, a site that is limiting or busy, or a
+// page shows a notice for it. A 网站自检 asks a failing site a second time, its page loaded again
+// (src/group/siteCheck.ts), so a site failing both shows the notice. Signing in, a verification page, a site that is limiting or busy, or a
 // connection that dropped are not counted: they are not the site's layout.
 import { chatSiteLabel, CHAT_SITES, type ChatSite } from './chatSites'
 import { isSiteLimitMessage } from './siteUsage'
@@ -57,18 +57,16 @@ export interface SiteFaultInput {
   step: SiteFaultStep
   detail?: string
   now: number
-  // A failure in a 网站自检: the notice shows at once.
-  decisive?: boolean
 }
 
 // Counts a failure. Resolves to whether this one makes the notice show.
 export function recordSiteFault(store: OpenTeamStore, site: ChatSite, input: SiteFaultInput): boolean {
   const record = store.siteFaultsBySite ??= {}
   const before = record[site]
-  if (before?.keys.includes(input.key) && !input.decisive) return false
+  if (before?.keys.includes(input.key)) return false
   const wasShown = Boolean(before && before.count >= SITE_FAULT_THRESHOLD && !before.dismissed)
   const keys = [...(before?.keys ?? []).filter(key => key !== input.key), input.key].slice(-KEYS_KEPT)
-  const count = input.decisive ? Math.max((before?.count ?? 0) + 1, SITE_FAULT_THRESHOLD) : (before?.count ?? 0) + 1
+  const count = (before?.count ?? 0) + 1
   const detail = input.detail?.trim().slice(0, DETAIL_MAX)
   record[site] = {
     count,

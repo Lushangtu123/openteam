@@ -62,8 +62,8 @@ export function openSiteCheckScheduleDialog(deps: SiteCheckScheduleDialogDepende
   const title = element('h2', '', t('定时自检', 'Scheduled site check'))
   title.id = 'site-check-schedule-title'
   heading.append(title, element('p', 'tiny', t(
-    '到点时 OpenTeam 会打开并切到它所在窗口的前面，像点「开始检查」一样给每个网站发一句「只回复 OK」（用你的账号，各一条），查完回到你原来打开的群。都正常时删掉检查用的群；有网站要处理时保留它到下次自检，并把这些网站发到你选的推送地址。都正常时不发。你在检查用的群里发过消息、改过名字或模式的，会一直保留。',
-    'At its time OpenTeam opens and becomes the shown tab of its window, then asks every site to reply OK, as Start check does (one message on each, with your accounts), and goes back to the group you had open. When every site works the check\'s group is removed; when some need attention it is kept until the next check, and those sites go to the destination you choose. Nothing is sent when every site works. A check\'s group you wrote in, renamed or changed the mode of is kept for good.',
+    '到点时 OpenTeam 会打开并切到它所在窗口的前面，像点「开始检查」一样在「网站自检」群里给每个网站发一句「只回复 OK」（用你的账号），查完回到你原来打开的群。失败的网站会重新打开页面再问一次，还不行才算要处理，并把这些网站发到你选的推送地址；都正常时不发。每次都用同一个群，每个网站一直是同一个对话。你在检查用的群里发过消息、改过名字或模式的，会留给你，下次另建一个。',
+    'At its time OpenTeam opens and becomes the shown tab of its window, then asks every site to reply OK in the site check group, as Start check does (with your accounts), and goes back to the group you had open. A site that fails is asked once more with its page loaded again; only then does it need attention, and those sites go to the destination you choose. Nothing is sent when every site works. Every check uses the same group, so each site keeps one conversation. A check\'s group you wrote in, renamed or changed the mode of is left to you, and the next check makes a new one.',
   )))
   const closeButton = element('button', 'icon-btn modal-close')
   closeButton.type = 'button'

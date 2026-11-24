@@ -19,7 +19,8 @@ function storeWith(schedule: Partial<SiteCheckSchedule> | undefined): OpenTeamSt
 }
 
 // replies: what each check member does — reply OK, fail, or never answer.
-async function setup(store: OpenTeamStore, options: { replies?: Record<string, 'ok' | 'error' | 'none'>; startError?: string; checkError?: string; panelOpen?: boolean; sendDetail?: string } = {}) {
+// finishAfter: how many waits pass before the check marks itself finished (its second try).
+async function setup(store: OpenTeamStore, options: { replies?: Record<string, 'ok' | 'error' | 'none'>; startError?: string; checkError?: string; panelOpen?: boolean; sendDetail?: string; finishAfter?: number } = {}) {
   vi.resetModules()
   vi.doMock('./storeAccess', async importOriginal => {
     const actual = await importOriginal<typeof import('./storeAccess')>()
@@ -27,6 +28,8 @@ async function setup(store: OpenTeamStore, options: { replies?: Record<string, '
   })
   const { createSiteCheckScheduler, SITE_CHECK_ALARM } = await import('./siteCheckScheduler')
   let clock = at(16, 9)
+  let waits = 0
+  let checkChatId: string | undefined
   let pageOpen = false
   const replies = options.replies ?? { chatgpt: 'ok', kimi: 'ok' }
   // The start, switch and delete act on the store as the real routes do.
@@ -46,7 +49,10 @@ async function setup(store: OpenTeamStore, options: { replies?: Record<string, '
         store.messagesById[id] = { id, chatId, seq: 2, type: 'assistant', roleId, sourceMessageId: question.id, content: reply === 'ok' ? 'OK' : '回复失败：RESPONSE_NOT_FOUND', createdAt: clock, status: reply === 'ok' ? 'received' : 'error' }
         messageIds.push(id)
       }
-      store.chatsById[chatId] = { id: chatId, name: '网站自检', mode: 'independent', requireManualMention: false, roleIds, messageIds, nextMessageSeq: 3, status: 'ready', createdAt: clock, updatedAt: clock, siteCheck: { startedAt: clock, ...(message.scheduled ? { scheduled: true } : {}), ...(options.checkError ? { error: options.checkError } : {}) } }
+      const finished = options.finishAfter ? {} : { finishedAt: clock }
+      store.chatsById[chatId] = { id: chatId, name: '网站自检', mode: 'independent', requireManualMention: false, roleIds, messageIds, nextMessageSeq: 3, status: 'ready', createdAt: clock, updatedAt: clock, siteCheck: { startedAt: clock, ...finished, ...(message.scheduled ? { scheduled: true } : {}), ...(options.checkError ? { error: options.checkError } : {}) } }
+      checkChatId = chatId
+      waits = 0
       store.chatOrder.unshift(chatId)
       store.currentChatId = chatId
       return { ok: true, chatId }
@@ -78,7 +84,12 @@ async function setup(store: OpenTeamStore, options: { replies?: Record<string, '
     showTeamPage,
     sendReport,
     alarms,
-    waitFor: async ms => { clock += ms },
+    waitFor: async ms => {
+      clock += ms
+      waits += 1
+      const check = checkChatId ? store.chatsById[checkChatId]?.siteCheck : undefined
+      if (check && options.finishAfter && waits >= options.finishAfter) check.finishedAt = clock
+    },
     now: () => clock,
     log: { info: vi.fn(), warn: vi.fn() },
   })
@@ -89,14 +100,16 @@ async function setup(store: OpenTeamStore, options: { replies?: Record<string, '
 const schedule = (store: OpenTeamStore) => store.settings.siteCheckSchedule!
 
 describe('定时自检 coming due', () => {
-  it('shows OpenTeam, checks, goes back to the open group and removes the check when every site worked', async () => {
+  it('shows OpenTeam, checks, goes back to the open group and keeps the check\'s group for the next check', async () => {
     const store = storeWith({ destinationId: 'dest-1' })
     const ctx = await setup(store)
     await ctx.scheduler.checkDue()
     expect(ctx.showTeamPage).toHaveBeenCalledTimes(1)
     expect(ctx.route).toHaveBeenCalledWith({ type: 'GROUP_SITE_CHECK_START', scheduled: true })
     expect(store.currentChatId).toBe('chat-work')
-    expect(store.chatOrder).toEqual(['chat-work'])
+    // Asked again next time, so each site keeps its conversation (siteCheckHandlers.ts).
+    expect(store.chatOrder).toEqual(['chat-check-1', 'chat-work'])
+    expect(ctx.route.mock.calls.map(([message]) => message.type)).not.toContain('GROUP_CHAT_DELETE')
     expect(schedule(store)).toMatchObject({ lastSlotAt: at(16, 9), lastRun: { status: 'ok', slotAt: at(16, 9) } })
     expect(schedule(store).lastRun?.chatId).toBeUndefined()
     // Nothing is sent when every site worked.
@@ -125,37 +138,13 @@ describe('定时自检 coming due', () => {
     expect(schedule(store).lastRun?.delivery).toMatchObject({ status: 'failed', detail: 'HTTP 404' })
   })
 
-  it('removes the previous scheduled check\'s group before checking again, and leaves checks the user started', async () => {
-    const store = storeWith({})
-    const ctx = await setup(store, { replies: { kimi: 'error' } })
-    await ctx.scheduler.runNow()
-    const first = schedule(store).lastRun!.chatId!
-    store.chatsById['chat-manual'] = { ...store.chatsById[first], id: 'chat-manual', siteCheck: { startedAt: 0 } }
-    store.chatOrder.push('chat-manual')
-    await ctx.scheduler.runNow()
-    expect(store.chatsById[first]).toBeUndefined()
-    expect(store.chatsById['chat-manual']).toBeDefined()
-    expect(store.chatsById[schedule(store).lastRun!.chatId!]).toBeDefined()
-  })
-
-  it('keeps an earlier check\'s group the user went on using: a message of their own, or changed in its settings', async () => {
-    const store = storeWith({})
-    const ctx = await setup(store, { replies: { kimi: 'error' } })
-    await ctx.scheduler.runNow()
-    const talked = schedule(store).lastRun!.chatId!
-    const note: GroupMessage = { id: 'mine', chatId: talked, seq: 3, type: 'user', content: '大家接着讨论', createdAt: 1, status: 'sent' }
-    store.messagesById.mine = note
-    store.chatsById[talked].messageIds.push('mine')
-    await ctx.scheduler.runNow()
-    const changed = schedule(store).lastRun!.chatId!
-    store.chatsById[changed].siteCheck!.kept = true
-    await ctx.scheduler.runNow()
-    const untouched = schedule(store).lastRun!.chatId!
-    await ctx.scheduler.runNow()
-    const deleted = ctx.route.mock.calls.filter(([message]) => message.type === 'GROUP_CHAT_DELETE').map(([message]) => message.chatId)
-    expect(deleted).toEqual([untouched])
-    expect(store.chatsById[talked]).toBeDefined()
-    expect(store.chatsById[changed]).toBeDefined()
+  it('waits for the check to finish, its second try included, before it reports', async () => {
+    const store = storeWith({ destinationId: 'dest-1' })
+    // Every site has a result at once, but the check is still asking a site again.
+    const ctx = await setup(store, { replies: { chatgpt: 'ok', kimi: 'error' }, finishAfter: 3 })
+    await ctx.scheduler.checkDue()
+    expect(ctx.sendReport).toHaveBeenCalledTimes(1)
+    expect(schedule(store).lastRun).toMatchObject({ status: 'problems', at: at(16, 9) + 3 * 5_000 })
   })
 
   it('records a check that could not run, and sends that too', async () => {

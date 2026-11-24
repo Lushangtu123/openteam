@@ -346,6 +346,8 @@ describe('the site check through the control interface', () => {
     const openTeamPage = vi.fn(async () => undefined)
     const executor = createControlActionExecutor({
       loadStore: async () => {
+        // The check marks itself finished once every site has replied.
+        if (Object.values(replyAt).every(at => clock >= at)) store.chatsById['chat-check'].siteCheck!.finishedAt ??= clock
         for (const [site, at] of Object.entries(replyAt)) {
           const id = `a-${site}`
           if (clock >= at && !store.messagesById[id]) {

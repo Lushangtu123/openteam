@@ -281,7 +281,7 @@ const UI_TRANSLATIONS: Record<string, string> = {
   '同一地址、同一 Key 下的另一个模型。主模型繁忙、限流、额度用完或太慢时，由它回答群聊消息，回复上会注明。': 'Another model at the same address with the same key. When the main model is busy, rate-limited, out of quota or too slow, it answers group messages instead, and the reply says so.',
   '备用': 'Backup',
   '网站自检': 'Site check',
-  '新建一个临时群，给每个 AI 网站发一句「只回复 OK」，看 OpenTeam 还能不能在上面收发消息。网站改版后先查这里。会用你的账号在每个网站各发一条消息。': 'Makes a throwaway group and asks every AI site to reply OK, to see whether OpenTeam can still send and read there. Check here first after a site changes. Sends one message on each site with your account.',
+  '在「网站自检」群里给每个 AI 网站发一句「只回复 OK」，看 OpenTeam 还能不能在上面收发消息。网站改版后先查这里。每次都用同一个群，每个网站一直是同一个对话；失败的网站会重新打开页面再问一次。会用你的账号在每个网站发消息。': 'Asks every AI site to reply OK in the site check group, to see whether OpenTeam can still send and read there. Check here first after a site changes. Every check uses the same group, so each site keeps one conversation; a site that fails is asked once more with its page loaded again. Sends messages on each site with your account.',
   '开始检查': 'Start check',
   '定时自检': 'Scheduled site check',
   '联网搜索': 'Web search',

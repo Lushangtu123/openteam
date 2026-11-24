@@ -4,7 +4,8 @@ import type { GroupChat, GroupMessage, GroupRole, MemoryItem, OpenTeamStore, Roo
 import type { RuntimeMessage } from './runtimeClient'
 import { readNewChatCollaboration } from '../group/collaboration'
 import { MEMORY_MAX_RETRIEVED, memoryModeForChat, pinnedMemoryItems, searchMemoryItems, visibleMemoryItems } from '../group/memoryRetrieval'
-import { SITE_CHECK_TIMEOUT_MS, siteCheckNeedsAttention, siteCheckResults } from '../group/siteCheck'
+import { siteCheckNeedsAttention, siteCheckResults } from '../group/siteCheck'
+import { SITE_CHECK_LONGEST_MS } from './siteCheckHandlers'
 import type { RecentLogEntry } from '../shared/logger'
 import { queryLogs, readLogQuery } from '../shared/logQuery'
 
@@ -43,9 +44,9 @@ type RuntimeResponse = { ok?: boolean; error?: string; [key: string]: unknown }
 
 const DEFAULT_WAIT_TIMEOUT_MS = 300_000
 const WAIT_POLL_INTERVAL_MS = 500
-// A site check waits for the pages to load (up to 45 s) and then up to SITE_CHECK_TIMEOUT_MS for
-// replies; a little more than that by default, and it looks every few seconds.
-export const SITE_CHECK_COMMAND_TIMEOUT_MS = SITE_CHECK_TIMEOUT_MS + 90_000
+// A site check waits for the pages and the replies, twice for the sites asked a second time
+// (siteCheckHandlers.ts); a little more than that by default, and it looks every few seconds.
+export const SITE_CHECK_COMMAND_TIMEOUT_MS = SITE_CHECK_LONGEST_MS + 90_000
 const SITE_CHECK_POLL_INTERVAL_MS = 2_000
 
 export function createControlActionExecutor(deps: ControlActionExecutorDependencies): (command: ControlHttpCommand) => Promise<ControlHttpResult> {
@@ -218,7 +219,8 @@ async function runSiteCheck(payload: unknown, deps: ControlActionExecutorDepende
     if (!chat) throw new Error('网站自检的群聊不见了')
     const results = siteCheckResults(store, chat, deps.now())
     const error = chat.siteCheck?.error
-    const finished = Boolean(error) || !results.some(result => result.outcome === 'waiting')
+    // Finished: every site has its result, the second try included.
+    const finished = Boolean(error) || Boolean(chat.siteCheck?.finishedAt)
     if (finished || deps.now() - start >= timeoutMs) {
       return {
         chatId,

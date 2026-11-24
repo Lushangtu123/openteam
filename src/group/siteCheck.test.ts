@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createDefaultStore } from './store'
-import { SITE_CHECK_SITES, SITE_CHECK_TIMEOUT_MS, siteCheckGroupInUse, siteCheckResults, siteCheckSummary } from './siteCheck'
+import { SITE_CHECK_SITES, SITE_CHECK_TIMEOUT_MS, siteCheckDeadline, siteCheckExplanation, siteCheckGroupInUse, siteCheckQuestionIds, siteCheckResults, siteCheckRetries, siteCheckSummary } from './siteCheck'
 import type { ChatSite, GroupChat, GroupMessage, GroupRole, OpenTeamStore, RoleSiteHealth } from './types'
 
 const START = 1_000_000
@@ -87,6 +87,68 @@ describe('the site check', () => {
     reply('chatgpt', 'received', 'OK')
     expect(siteCheckSummary(siteCheckResults(store, chat, START + 5000), 'zh-CN')).toBe('检查完成：2 个正常，1 个需要处理')
     expect(siteCheckSummary(siteCheckResults(store, chat, START + 5000), 'en')).toBe('Check finished: 2 working, 1 needs attention')
+  })
+})
+
+describe('a site asked a second time', () => {
+  it('is waiting while its page loads again, then reports that try, saying so', () => {
+    const { store, chat, reply } = checkStore(['gemini', 'kimi'])
+    reply('gemini', 'error', '回复失败：RESPONSE_NOT_FOUND')
+    reply('kimi', 'received', 'OK')
+    expect(siteCheckResults(store, chat, START + 5000).map(result => result.outcome)).toEqual(['failed', 'ok'])
+    expect(siteCheckRetries('failed')).toBe(true)
+    expect(siteCheckRetries('login')).toBe(false)
+
+    chat.siteCheck!.retry = { roleIds: ['role-gemini'] }
+    const loading = siteCheckResults(store, chat, START + 6000)[0]
+    expect(loading).toMatchObject({ outcome: 'waiting', retried: true })
+    expect(siteCheckExplanation(loading, false)).toBe('第一次没成功，已重新打开页面，正在再问一次。')
+
+    const again: GroupMessage = { id: 'msg-again', chatId: chat.id, seq: 9, type: 'user', content: '@Gemini OK', createdAt: START + 60_000, status: 'sent', deliveryStatus: { 'role-gemini': 'sent' } }
+    store.messagesById[again.id] = again
+    chat.messageIds.push(again.id)
+    chat.siteCheck!.retry.messageId = again.id
+    expect(siteCheckResults(store, chat, START + 61_000)[0]).toMatchObject({ outcome: 'waiting', retried: true })
+    // Its time is the second question's.
+    expect(siteCheckDeadline(store, chat)).toBe(START + 60_000 + SITE_CHECK_TIMEOUT_MS)
+    const failedAgain = siteCheckResults(store, chat, START + 60_000 + SITE_CHECK_TIMEOUT_MS + 1)[0]
+    expect(failedAgain).toMatchObject({ outcome: 'no-reply', retried: true })
+    expect(siteCheckExplanation(failedAgain, false)).toBe('提问已送进页面，但 5 分钟内没读到回复，网站可能改版了。重新打开页面再问了一次，还是这样。')
+    expect(siteCheckExplanation(failedAgain, true)).toContain('Same on a second try with the page loaded again.')
+
+    // Answered the second time: working.
+    const ok: GroupMessage = { id: 'msg-ok', chatId: chat.id, seq: 10, type: 'assistant', roleId: 'role-gemini', sourceMessageId: again.id, content: 'OK', createdAt: START + 70_000, status: 'received' }
+    store.messagesById[ok.id] = ok
+    chat.messageIds.push(ok.id)
+    expect(siteCheckResults(store, chat, START + 70_000)[0]).toMatchObject({ outcome: 'ok', retried: true })
+    expect(siteCheckExplanation(siteCheckResults(store, chat, START + 70_000)[0], false)).toBe('能发送，也能读到回复。')
+  })
+
+  it('keeps its first result when the second try could not be asked', () => {
+    const { store, chat, reply } = checkStore(['gemini'])
+    reply('gemini', 'error', '回复失败：RESPONSE_NOT_FOUND')
+    chat.siteCheck!.retry = { roleIds: ['role-gemini'], error: '重新打开的网站页面都没有加载好' }
+    expect(siteCheckResults(store, chat, START + 5000)[0]).toEqual(expect.objectContaining({ outcome: 'failed' }))
+    expect(siteCheckResults(store, chat, START + 5000)[0].retried).toBeUndefined()
+  })
+})
+
+describe('a check group asked again', () => {
+  it('reads this check\'s question, and is waiting until it is asked', () => {
+    const { store, chat, reply } = checkStore(['gemini'])
+    reply('gemini', 'received', 'OK')
+    // The next check: the earlier question is one of the group's, not this check's.
+    chat.siteCheck = { startedAt: START + 100_000, questionIds: ['msg-q'] }
+    expect(siteCheckResults(store, chat, START + 100_001)[0].outcome).toBe('waiting')
+    expect(siteCheckDeadline(store, chat)).toBeUndefined()
+    const next: GroupMessage = { id: 'msg-q2', chatId: chat.id, seq: 9, type: 'user', content: '@all OK', createdAt: START + 100_500, status: 'sent', deliveryStatus: { 'role-gemini': 'sent' } }
+    store.messagesById[next.id] = next
+    chat.messageIds.push(next.id)
+    chat.siteCheck = { ...chat.siteCheck, questionId: next.id, questionIds: ['msg-q', next.id] }
+    expect(siteCheckResults(store, chat, START + 100_600)[0].outcome).toBe('waiting')
+    expect(siteCheckQuestionIds(store, chat)).toEqual(['msg-q', 'msg-q2'])
+    // Every check's questions are the checks', not the user's.
+    expect(siteCheckGroupInUse(store, chat)).toBe(false)
   })
 })
 

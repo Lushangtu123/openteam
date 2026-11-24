@@ -10,9 +10,9 @@ import { chooseNodePath, createLaunchAgent, daemonEnvironment, describeLaunchAge
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const DAEMON_SCRIPT = resolve(__dirname, 'openteam-daemon.mjs')
 const DEFAULT_COMMAND_TIMEOUT_MS = 300_000
-// The extension's own limit for a site check (pages loading, then replies), and the daemon's on top
-// of it, so the daemon never gives up first.
-const SITE_CHECK_DEFAULT_TIMEOUT_MS = 390_000
+// The extension's own limit for a site check (pages loading, then replies, and again for the sites
+// asked a second time), and the daemon's on top of it, so the daemon never gives up first.
+const SITE_CHECK_DEFAULT_TIMEOUT_MS = 790_000
 const SITE_CHECK_DAEMON_MARGIN_MS = 30_000
 
 export function buildCliRequest(argv) {

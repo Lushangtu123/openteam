@@ -290,7 +290,7 @@ export function createMemberPageHandlers(ctx: MessageHandlerContext) {
       const site = memberSite(store, role)
       const wasNoEditor = role.siteHealth?.status === 'error' && role.siteHealth.reason === 'no-editor'
       if (site && status === 'error' && reason === 'no-editor' && !wasNoEditor) {
-        if (recordSiteFault(store, site, { key: `${role.id}:no-editor:${timestamp}:${store.siteFaultsBySite?.[site]?.count ?? 0}`, step: 'input', now: timestamp, decisive: Boolean(chat.siteCheck) })) deps.log.warn('site-fault:noticed', { ...identity, site, step: 'input' })
+        if (recordSiteFault(store, site, { key: `${role.id}:no-editor:${timestamp}:${store.siteFaultsBySite?.[site]?.count ?? 0}`, step: 'input', now: timestamp })) deps.log.warn('site-fault:noticed', { ...identity, site, step: 'input' })
       }
       role.siteHealth = {
         siteId,
@@ -577,7 +577,7 @@ export function createMemberPageHandlers(ctx: MessageHandlerContext) {
         const role = requireRole(store, chat.id, identity.roleId)
         const site = memberSite(store, role)
         if (!site) return false
-        const shown = recordSiteFault(store, site, { key: `${role.id}:${promptMessageId ?? deps.now()}`, step: faultStep, detail: reason, now: deps.now(), decisive: Boolean(chat.siteCheck) })
+        const shown = recordSiteFault(store, site, { key: `${role.id}:${promptMessageId ?? deps.now()}`, step: faultStep, detail: reason, now: deps.now() })
         return shown ? site : false
       })
       if (noticed) {

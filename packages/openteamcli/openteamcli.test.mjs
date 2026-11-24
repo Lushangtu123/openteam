@@ -182,8 +182,9 @@ describe('openteamcli site-check', () => {
   it('asks the extension to run the check, waiting long enough for every site', () => {
     const request = buildCliRequest(['site-check'])
     expect(request).toMatchObject({ kind: 'command', command: { action: 'site.check', payload: {} } })
-    // The check may take over six minutes: the daemon must not give up before it does.
-    expect(request.command.timeoutMs).toBeGreaterThanOrEqual(420_000)
+    // The check may take about thirteen minutes, a failing site asked a second time: the daemon must
+    // not give up before the extension does (its limit is the check's longest and a minute and a half).
+    expect(request.command.timeoutMs).toBeGreaterThanOrEqual(790_000 + 30_000)
   })
 
   it('can return as soon as the check starts, and take a time limit', () => {

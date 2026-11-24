@@ -1,6 +1,6 @@
 // The result of a 网站自检 (src/group/siteCheck.ts), at the end of the check's group, in the project
 // board's card so that it matches both looks and both themes.
-import { SITE_CHECK_TIMEOUT_MS, siteCheckExplanation, siteCheckResults, siteCheckSummary, type SiteCheckOutcome, type SiteCheckResult } from '../group/siteCheck'
+import { siteCheckDeadline, siteCheckExplanation, siteCheckResults, siteCheckSummary, type SiteCheckOutcome, type SiteCheckResult } from '../group/siteCheck'
 import type { GroupChat, OpenTeamStore } from '../group/types'
 import { normalizeLanguage } from '../shared/i18n'
 
@@ -62,11 +62,10 @@ export function createSiteCheckView(deps: SiteCheckViewDependencies): SiteCheckV
   }
 
   function scheduleTimeout(chat: GroupChat): void {
-    const store = deps.getStore()
-    const question = chat.messageIds.map(id => store.messagesById[id]).find(message => message?.type === 'user')
-    if (!question || scheduled.has(chat.id)) return
+    const deadline = siteCheckDeadline(deps.getStore(), chat)
+    if (deadline === undefined || scheduled.has(chat.id)) return
     scheduled.add(chat.id)
-    const wait = Math.max(0, question.createdAt + SITE_CHECK_TIMEOUT_MS + 1 - deps.now())
+    const wait = Math.max(0, deadline + 1 - deps.now())
     window.setTimeout(() => {
       scheduled.delete(chat.id)
       deps.requestRender()

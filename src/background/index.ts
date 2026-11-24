@@ -445,7 +445,7 @@ const routeMessage = createMessageRouter([
   ...webSearcher.routes,
   ...libraryRefresher.routes,
   ...createLibraryHandlers({ broadcastStoreUpdated: store => broadcastStoreUpdated(store), newId, now }),
-  ...createSiteCheckHandlers({ route: message => Promise.resolve(routeMessage(message, {})), broadcastStoreUpdated, runtimeFrames, waitFor: ms => new Promise(resolve => globalThis.setTimeout(resolve, ms)), now }),
+  ...createSiteCheckHandlers({ route: message => Promise.resolve(routeMessage(message, {})), loadStore, broadcastStoreUpdated, runtimeFrames, recoverMember: (chatId, roleId) => requestRoleRecovery(chatId, roleId, 'site-check-retry'), waitFor: ms => new Promise(resolve => globalThis.setTimeout(resolve, ms)), now }),
   ...createExternalModelHandlers({ broadcastStoreUpdated, externalModelClient, checkLocalAgent, newId, now }),
   ...createMemberPickHandlers({ loadStore, externalModelClient, log }),
   { type: 'LOCAL_AGENT_LIST', handler: async () => ({ ok: true, agents: await listLocalAgents() }) },

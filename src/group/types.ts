@@ -401,11 +401,10 @@ export interface GroupChat {
   // The group's latest discussion.
   discussion?: DiscussionRun
   // A 网站自检 group (src/group/siteCheck.ts): its result is shown at the end of the chat.
-  // error: why the question could not be sent.
-  // scheduled: started by 定时自检, which removes the group when every site worked, and the next run
-  // removes the group unless the user went on using it (siteCheckGroupInUse).
-  // kept: the user changed the group (renamed, pinned, made 协作…), so it stays.
-  siteCheck?: { startedAt: number; error?: string; scheduled?: boolean; kept?: boolean }
+  // error: why the question could not be sent. scheduled: the last check was 定时自检's.
+  // kept: the user changed the group (renamed, pinned, made 协作…), so it is theirs now: the next
+  // check makes a new group, as it does when the user sent a message of their own in it.
+  siteCheck?: SiteCheckState
   // The group's latest 项目 (a coordinator plans tasks for the members and checks the results).
   project?: ProjectRun
   // No memory items are sent to this group's members.
@@ -492,6 +491,24 @@ export interface ProjectTask {
 
 // Reading and searching; editing files. A command, a delete or a move is asked every time.
 export type ProjectToolKind = 'read' | 'edit'
+
+// A 网站自检 group's check (src/group/siteCheck.ts). The group stays and is asked again by the next
+// check, so each site keeps one conversation.
+export interface SiteCheckState {
+  startedAt: number
+  error?: string
+  scheduled?: boolean
+  kept?: boolean
+  // This check's question, and every question the checks of this group asked, so that the user's
+  // own messages tell from them. A group from before has neither: its first message is the question.
+  questionId?: string
+  questionIds?: string[]
+  // The second try for the sites that failed: their pages loaded again and asked once more. A site
+  // whose page did not come back is left out, keeping its first result; error: none could be asked.
+  retry?: { roleIds: string[]; messageId?: string; error?: string }
+  // Every site has its result, the second try included.
+  finishedAt?: number
+}
 
 export interface ProjectRun {
   id: string

@@ -4149,11 +4149,14 @@ describe('a web member whose site is limiting', () => {
       expect(ctx.store().siteFaultsBySite ?? {}).toEqual({})
     })
 
-    it('takes one failure in a site check as enough', async () => {
+    it('counts a site check\'s failure once: the check\'s second try, failing too, shows the notice', async () => {
       const ctx = await setupKimi()
       ctx.store().chatsById['chat-1'].siteCheck = { startedAt: 0 }
       addPrompt(ctx, 'msg-a')
       await ctx.route('TEAM_ROLE_ERROR', { chatId: 'chat-1', roleId: 'role-3', messageId: 'msg-a', reason: 'RESPONSE_NOT_FOUND' })
+      expect(ctx.store().siteFaultsBySite?.kimi?.count).toBe(1)
+      addPrompt(ctx, 'msg-b')
+      await ctx.route('TEAM_ROLE_ERROR', { chatId: 'chat-1', roleId: 'role-3', messageId: 'msg-b', reason: 'RESPONSE_NOT_FOUND' })
       expect(ctx.store().siteFaultsBySite?.kimi?.count).toBe(2)
     })
 

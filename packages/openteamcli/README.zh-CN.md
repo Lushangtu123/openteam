@@ -140,7 +140,7 @@ openteamcli memory add --scope global|chat|role [--chat <chatId>] [--role name:<
 openteamcli site-check [--no-wait] [--timeout <毫秒>]
 ```
 
-和「设置 → AI 网页 → 网站自检」一样：新建一个群，每个 AI 网站一位成员，各发一句「只回复 OK」。它会打开 OpenTeam 页面（成员的网页在那里加载），等到每个网站都有结果：一切正常时约一分钟，最长约六分半钟。结果逐个列出网站：`ok`、`login`（需要登录）、`page-problem`（页面被挡住或出错）、`failed`（发送或读取回复失败）、`not-sent`（没发出去）、`no-reply`（提问送到了但没读到回复，网站改版后最常见）。`--no-wait` 在检查开始后立即返回。
+和「设置 → AI 网页 → 网站自检」一样：一个群里每个 AI 网站一位成员，各发一句「只回复 OK」。它会打开 OpenTeam 页面（成员的网页在那里加载），等到每个网站都有结果。某个网站失败时，会重新打开它的页面再问一次，第二次还失败才报告。一切正常时约一分钟，最长约十三分钟。结果逐个列出网站：`ok`、`login`（需要登录）、`page-problem`（页面被挡住或出错）、`failed`（发送或读取回复失败）、`not-sent`（没发出去）、`no-reply`（提问送到了但没读到回复，网站改版后最常见）。`--no-wait` 在检查开始后立即返回。
 
 退出码：所有网站正常为 0；有网站需要处理或没在时限内回复为 2；命令本身失败为 1，方便定时任务判断。运行时 Chrome 要开着，装着 OpenTeam，并开启了本机智能体控制。比如用 cron 每天 9 点检查一次：
 
@@ -148,7 +148,7 @@ openteamcli site-check [--no-wait] [--timeout <毫秒>]
 0 9 * * * openteamcli site-check > ~/openteam-site-check.json || osascript -e 'display notification "有 AI 网站需要处理" with title "OpenTeam"'
 ```
 
-每次运行都会新建一个以时间命名的「网站自检」群，旧的可以在群聊列表里用「选择多个…」一次删掉。
+每次运行都会再问同一个「网站自检」群，所以每个 AI 网站一直用同一个对话，不会每次在你的账号里多出一个新聊天；群里保留上一次检查的记录。你接着用过的「网站自检」群（改过名，或发过自己的消息）不会被动，会另建一个新的。
 
 ## 扩展的日志
 

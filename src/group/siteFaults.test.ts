@@ -39,9 +39,10 @@ describe('counting a site\'s failures', () => {
     expect(siteFaultMessage(notice, true)).toContain('ChatGPT may have changed its pages: 3 failures in a row')
   })
 
-  it('takes a site check\'s failure as enough', () => {
+  it('counts a site check\'s failure like any other: the check asks a failing site once more, and that second failure shows it', () => {
     const store = createDefaultStore()
-    expect(recordSiteFault(store, 'kimi', { key: 'role-1:msg-1', step: 'reply', now: at, decisive: true })).toBe(true)
+    expect(recordSiteFault(store, 'kimi', { key: 'role-1:msg-1', step: 'reply', now: at })).toBe(false)
+    expect(recordSiteFault(store, 'kimi', { key: 'role-1:msg-2', step: 'reply', now: at + 1 })).toBe(true)
     expect(store.siteFaultsBySite?.kimi?.count).toBe(SITE_FAULT_THRESHOLD)
   })
 

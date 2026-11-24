@@ -1,27 +1,27 @@
 // Runs 定时自检 (src/group/siteCheckSchedule.ts). An alarm wakes the background at its next time; on
 // waking, and whenever the background starts, a due time is run, or marked skipped when it was
-// missed by too long. A run shows OpenTeam (a hidden tab reads no replies), removes the previous
-// scheduled checks' groups the user did not go on using, starts a 网站自检 as the settings button does, and follows it until every
-// site has an outcome. It then goes back to the group the user had open, removes the check's group
-// when every site worked, and otherwise keeps it and sends the sites that need attention to the
-// chosen destination. Also the page's commands to set it and to run it now.
+// missed by too long. A run shows OpenTeam (a hidden tab reads no replies), starts a 网站自检 as the
+// settings button does (it asks the check's group again, so each site keeps one conversation, and
+// asks a failing site a second time), and follows it until it is finished. It then goes back to the
+// group the user had open, and sends the sites that need attention to the chosen destination. Also
+// the page's commands to set it and to run it now.
 import { describeSchedule, findDueSlot, nextSlotAfter } from '../group/scheduledTasks'
-import { SITE_CHECK_TIMEOUT_MS, siteCheckGroupInUse, siteCheckNeedsAttention, siteCheckResults, type SiteCheckResult } from '../group/siteCheck'
+import { siteCheckNeedsAttention, siteCheckResults, type SiteCheckResult } from '../group/siteCheck'
 import { readSiteCheckScheduleInput, siteCheckReport, type SiteCheckRun } from '../group/siteCheckSchedule'
 import type { RoundResult } from '../group/resultDestinations'
 import type { OpenTeamStore } from '../group/types'
 import { normalizeLanguage } from '../shared/i18n'
 import type { BackgroundMessageRoute } from './messageRouter'
 import type { RuntimeMessage } from './runtimeClient'
-import { SITE_CHECK_PAGE_WAIT_MS } from './siteCheckHandlers'
+import { SITE_CHECK_LONGEST_MS } from './siteCheckHandlers'
 import { mutateStore } from './storeAccess'
 
 export const SITE_CHECK_ALARM = 'openteam-site-check'
 export const SITE_CHECK_SCHEDULE_ROUTE_TYPES = ['SITE_CHECK_SCHEDULE_SAVE', 'SITE_CHECK_SCHEDULE_RUN', 'SITE_CHECK_SCHEDULE_TEST', 'SITE_CHECK_NOTICE_DISMISS'] as const
 const PAGE_WAIT_MS = 30_000
 const POLL_MS = 5_000
-// The check's own wait for the pages, its wait for the replies, and a little more.
-const CHECK_WAIT_MS = SITE_CHECK_PAGE_WAIT_MS + SITE_CHECK_TIMEOUT_MS + 30_000
+// The check's own longest (its second try included), and a little more.
+const CHECK_WAIT_MS = SITE_CHECK_LONGEST_MS + 30_000
 
 export interface SiteCheckSchedulerDependencies {
   loadStore(): Promise<OpenTeamStore>
@@ -108,11 +108,6 @@ export function createSiteCheckScheduler(deps: SiteCheckSchedulerDependencies) {
     let run: SiteCheckRun
     let results: SiteCheckResult[] = []
     try {
-      for (const id of before.chatOrder) {
-        const old = before.chatsById[id]
-        // A group the user went on using stays (src/group/siteCheck.ts).
-        if (old?.siteCheck?.scheduled && !siteCheckGroupInUse(before, old)) await routeOk({ type: 'GROUP_CHAT_DELETE', chatId: id })
-      }
       if (!deps.panelOpen()) {
         await deps.showTeamPage()
         await waitUntil(() => deps.teamPageOpen(), PAGE_WAIT_MS)
@@ -128,7 +123,7 @@ export function createSiteCheckScheduler(deps: SiteCheckSchedulerDependencies) {
         if (!chat) throw new Error('网站自检的群聊不见了')
         results = siteCheckResults(store, chat, deps.now())
         error = chat.siteCheck?.error
-        if (error || !results.some(result => result.outcome === 'waiting') || deps.now() >= deadline) break
+        if (error || chat.siteCheck?.finishedAt || deps.now() >= deadline) break
         await deps.waitFor(POLL_MS)
       }
       // Still waiting when the time is up: no reply was read.
@@ -145,12 +140,8 @@ export function createSiteCheckScheduler(deps: SiteCheckSchedulerDependencies) {
       run = { at: deps.now(), status: 'failed', ...timing, ...(chatId ? { chatId } : {}), detail }
     }
 
+    // The check's group stays: the next check asks it again.
     await goBack(returnTo, chatId)
-    if (run.status === 'ok' && chatId) {
-      const after = await deps.loadStore()
-      const chat = after.chatsById[chatId]
-      if (chat && !siteCheckGroupInUse(after, chat)) await deps.route({ type: 'GROUP_CHAT_DELETE', chatId }).catch(() => undefined)
-    }
     await record(run)
     if (run.status !== 'ok') await deliver(run, results)
   }

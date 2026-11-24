@@ -1,8 +1,13 @@
-// 网站自检: a throwaway group with one member on each AI website, asked to reply OK. Whether each
-// one's reply is read back tells whether OpenTeam can still send to and read from that site, which
-// is what a site's redesign breaks. The result is read from the group as it stands.
+// 网站自检: a group with one member on each AI website, asked to reply OK. Whether each one's reply
+// is read back tells whether OpenTeam can still send to and read from that site, which is what a
+// site's redesign breaks. The result is read from the group as it stands.
+//
+// The group stays, and the next check asks it again (src/background/siteCheckHandlers.ts): each site
+// keeps one conversation, instead of a new chat in the user's account at every check. A site that
+// fails is asked once more, its page loaded again (SiteCheckState.retry), before it is reported:
+// a slow page or a passing server error is not the site having changed.
 import { CHAT_SITE_INFO, CHAT_SITES, type ChatSite } from './chatSites'
-import type { GroupChat, OpenTeamLanguage, OpenTeamStore } from './types'
+import type { GroupChat, GroupMessage, OpenTeamLanguage, OpenTeamStore } from './types'
 
 // Every AI site OpenTeam opens. A site that refuses to run inside the page shows as a page problem.
 export const SITE_CHECK_SITES: ChatSite[] = [...CHAT_SITES]
@@ -29,30 +34,68 @@ export interface SiteCheckResult {
   label: string
   outcome: SiteCheckOutcome
   detail?: string
+  // Asked the second time, its page loaded again: this is that try's result.
+  retried?: boolean
 }
 
 const NEEDS_ATTENTION: ReadonlySet<SiteCheckOutcome> = new Set(['login', 'page-problem', 'failed', 'not-sent', 'no-reply'])
+// Tried again before it is reported. Signing in is the user's to do.
+const RETRIED: ReadonlySet<SiteCheckOutcome> = new Set(['page-problem', 'failed', 'not-sent', 'no-reply'])
+
+// The questions the checks of this group asked. A group from before marks none: its first message
+// is the question.
+export function siteCheckQuestionIds(store: Pick<OpenTeamStore, 'messagesById'>, chat: GroupChat): string[] {
+  if (chat.siteCheck?.questionIds?.length) return chat.siteCheck.questionIds
+  const first = chat.messageIds.map(id => store.messagesById[id]).find(message => message?.type === 'user')
+  return first ? [first.id] : []
+}
 
 // A 网站自检 group the user went on using: changed in its settings (renamed, pinned, made 协作…) or
-// sent a message of their own besides the check's question. 定时自检 removes only groups that were not
-// (src/background/siteCheckScheduler.ts).
+// sent a message of their own besides the checks' questions. The next check neither asks it again
+// nor removes it (src/background/siteCheckHandlers.ts).
 export function siteCheckGroupInUse(store: Pick<OpenTeamStore, 'messagesById'>, chat: GroupChat): boolean {
   if (chat.siteCheck?.kept) return true
-  return chat.messageIds.filter(id => store.messagesById[id]?.type === 'user').length > 1
+  const questions = new Set(siteCheckQuestionIds(store, chat))
+  return chat.messageIds.some(id => store.messagesById[id]?.type === 'user' && !questions.has(id))
 }
 
 export function siteCheckNeedsAttention(outcome: SiteCheckOutcome): boolean {
   return NEEDS_ATTENTION.has(outcome)
 }
 
+export function siteCheckRetries(outcome: SiteCheckOutcome): boolean {
+  return RETRIED.has(outcome)
+}
+
+// This check's question: marked, or in a group from before, its first message. A group asked again
+// has none until this check asks.
+function checkQuestion(store: Pick<OpenTeamStore, 'messagesById'>, chat: GroupChat): GroupMessage | undefined {
+  const check = chat.siteCheck
+  if (check?.questionId) return store.messagesById[check.questionId]
+  if (check?.questionIds?.length) return undefined
+  return chat.messageIds.map(id => store.messagesById[id]).find(message => message?.type === 'user')
+}
+
+// When the last question asked has had its time: the page redraws then.
+export function siteCheckDeadline(store: Pick<OpenTeamStore, 'messagesById'>, chat: GroupChat): number | undefined {
+  const retry = chat.siteCheck?.retry?.messageId ? store.messagesById[chat.siteCheck.retry.messageId] : undefined
+  const question = retry ?? checkQuestion(store, chat)
+  return question ? question.createdAt + SITE_CHECK_TIMEOUT_MS : undefined
+}
+
 export function siteCheckResults(store: Pick<OpenTeamStore, 'messagesById' | 'rolesById'>, chat: GroupChat, now: number): SiteCheckResult[] {
   const messages = chat.messageIds.map(id => store.messagesById[id]).filter(Boolean)
-  const question = messages.find(message => message.type === 'user')
+  const first = checkQuestion(store, chat)
+  const retry = chat.siteCheck?.retry
   return chat.roleIds.flatMap((roleId): SiteCheckResult[] => {
     const role = store.rolesById[roleId]
     if (!role?.chatSite || role.modelSource === 'external') return []
     const site = role.chatSite
-    const base = { roleId, site, label: CHAT_SITE_INFO[site].label }
+    const retried = Boolean(retry?.roleIds.includes(roleId) && !retry.error)
+    const base = { roleId, site, label: CHAT_SITE_INFO[site].label, ...(retried ? { retried: true } : {}) }
+    // Being asked again: its page is loading.
+    if (retried && !retry?.messageId) return [{ ...base, outcome: 'waiting' }]
+    const question = retried ? store.messagesById[retry!.messageId!] : first
     if (!question) return [{ ...base, outcome: 'waiting' }]
 
     const reply = messages.filter(message => message.type === 'assistant' && message.roleId === roleId && message.sourceMessageId === question.id).slice(-1)[0]
@@ -91,6 +134,13 @@ export function siteCheckSummary(results: SiteCheckResult[], language: OpenTeamL
 
 // What a site's result means, and what to do about it.
 export function siteCheckExplanation(result: SiteCheckResult, en: boolean): string {
+  if (result.retried && result.outcome === 'waiting') return en ? 'The first try did not work: its page was loaded again and it is asked once more.' : '第一次没成功，已重新打开页面，正在再问一次。'
+  const said = outcomeExplanation(result, en)
+  if (!result.retried || !siteCheckNeedsAttention(result.outcome)) return said
+  return en ? `${said} Same on a second try with the page loaded again.` : `${said}重新打开页面再问了一次，还是这样。`
+}
+
+function outcomeExplanation(result: SiteCheckResult, en: boolean): string {
   const detail = result.detail ? (en ? ` (${result.detail})` : `（${result.detail}）`) : ''
   switch (result.outcome) {
     case 'ok':
