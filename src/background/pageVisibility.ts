@@ -4,7 +4,8 @@
 // with each heartbeat while hidden, so a background that started again learns it soon. Kept in
 // memory only: it matters for the minutes a reply takes.
 export interface PageVisibility {
-  record(chatId: string, roleId: string, hidden: boolean): void
+  // Whether this changed what was known (a page said hidden again while hidden: no change).
+  record(chatId: string, roleId: string, hidden: boolean): boolean
   // Hidden at some time between from and to (now when left out).
   wasHidden(chatId: string, roleId: string, from: number, to?: number): boolean
 }
@@ -26,12 +27,14 @@ export function createPageVisibility(now: () => number): PageVisibility {
       const page = pages.get(key(chatId, roleId)) ?? { spans: [] }
       pages.set(key(chatId, roleId), page)
       if (hidden) {
-        page.hiddenSince ??= now()
-        return
+        if (page.hiddenSince !== undefined) return false
+        page.hiddenSince = now()
+        return true
       }
-      if (page.hiddenSince === undefined) return
+      if (page.hiddenSince === undefined) return false
       page.spans = [...page.spans, [page.hiddenSince, now()] as [number, number]].slice(-SPANS_KEPT)
       delete page.hiddenSince
+      return true
     },
     wasHidden(chatId, roleId, from, to = now()) {
       const page = pages.get(key(chatId, roleId))

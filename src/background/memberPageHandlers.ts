@@ -268,7 +268,7 @@ export function createMemberPageHandlers(ctx: MessageHandlerContext) {
   const handleFrameVisibility = async (message: RuntimeMessage, sender: chrome.runtime.MessageSender) => {
     const identity = readIdentityOptional(deps, message, sender)
     if (!identity || typeof message.hidden !== 'boolean') return { ok: false, error: '缺少页面是否隐藏' }
-    deps.pageVisibility?.record(identity.chatId, identity.roleId, message.hidden)
+    if (deps.pageVisibility?.record(identity.chatId, identity.roleId, message.hidden)) deps.log.info('frame-visibility:changed', { ...identity, hidden: message.hidden })
     return { ok: true }
   }
 

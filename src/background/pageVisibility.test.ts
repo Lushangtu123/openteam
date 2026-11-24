@@ -5,16 +5,16 @@ describe('whether a member\'s page was hidden', () => {
   it('remembers when each member\'s page was hidden, and tells whether that was during a time', () => {
     let clock = 1_000
     const pages = createPageVisibility(() => clock)
-    pages.record('chat-1', 'role-1', false)
+    expect(pages.record('chat-1', 'role-1', false)).toBe(false)
     expect(pages.wasHidden('chat-1', 'role-1', 0)).toBe(false)
 
     clock = 2_000
-    pages.record('chat-1', 'role-1', true)
+    expect(pages.record('chat-1', 'role-1', true)).toBe(true)
     clock = 2_500
     // Said again while hidden: still the same time hidden.
-    pages.record('chat-1', 'role-1', true)
+    expect(pages.record('chat-1', 'role-1', true)).toBe(false)
     clock = 5_000
-    pages.record('chat-1', 'role-1', false)
+    expect(pages.record('chat-1', 'role-1', false)).toBe(true)
 
     expect(pages.wasHidden('chat-1', 'role-1', 1_000)).toBe(true)
     expect(pages.wasHidden('chat-1', 'role-1', 4_000)).toBe(true)
